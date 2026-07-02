@@ -89,6 +89,33 @@
         "Severity P1 for the flaky hydration failure",
         "Summary table included"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Debug the Playwright test failures in evals/files/results-error-swallowing.json. The spec source is provided at evals/files/error-swallowing.spec.ts — audit the passing tests' source for P0 silent-pass patterns before reporting.",
+      "expected_output": "One failure, one P0 silent pass, one clean pass. 'banner shows the unread count' timed out waiting for the unread badge while GET /api/notifications returned 500 — F3 Network Dependency or a real product regression (the notifications API is down). 'mark-all-read clears the badge' PASSED in 340ms but is the P0: in the source (lines 13-14) both the waitForResponse and the final expect are silenced with .catch(() => {}), so a failing notifications API can never fail this test — F13 Error Swallowing. 'rejects an oversized attachment upload' also passes and must NOT be flagged: expect(...).rejects.toThrow('413') is a legitimate expected-rejection assertion, not suppression.",
+      "files": ["evals/files/results-error-swallowing.json", "evals/files/error-swallowing.spec.ts"],
+      "assertions": [
+        "Flags the PASSING test 'mark-all-read clears the badge' (340ms) as P0 F13 (Error Swallowing) — .catch(() => {}) on both the waitForResponse and the expect at error-swallowing.spec.ts lines 13-14 means the broken notifications API cannot fail it",
+        "Classifies 'banner shows the unread count' as F3 (Network Dependency) or a real product regression, citing the GET /api/notifications 500 in the error message",
+        "Does NOT flag 'rejects an oversized attachment upload' as F13 — expect(...).rejects.toThrow('413') at line 19 asserts on the rejection instead of discarding it",
+        "Reports the F13 finding with severity P0, ordered before lower-severity findings",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Debug the Playwright test failures in evals/files/results-condition-branch.json. The spec source is provided at evals/files/condition-branch.spec.ts — audit the passing tests' source for P0 silent-pass patterns before reporting.",
+      "expected_output": "One failure, one P0 silent pass, one clean conditional. 'cookie banner links to the privacy policy' timed out — the cookie banner never rendered (locator resolved to 0 elements): product regression or F2 territory. 'dismisses the cookie banner when shown' PASSED in 480ms but is the P0: its only assertions live inside if (await ...isVisible()) (lines 6-9), so with the banner missing — which the failing sibling proves — the test asserted nothing: F6 Condition Branch Missing. 'shows account menu when logged in and sign-in button otherwise' must NOT be flagged: both branches of its conditional (lines 19-23) end in an assertion.",
+      "files": ["evals/files/results-condition-branch.json", "evals/files/condition-branch.spec.ts"],
+      "assertions": [
+        "Flags the PASSING test 'dismisses the cookie banner when shown' (480ms) as P0 F6 (Condition Branch Missing) — all assertions sit inside the isVisible() conditional at condition-branch.spec.ts lines 6-9, so the test passes silently when the banner never renders",
+        "Connects the failing sibling to the F6 finding: 'locator resolved to 0 elements' proves the passing test's condition was false, i.e. its silent pass hid the same missing banner",
+        "Classifies 'cookie banner links to the privacy policy' as F2 (Selector Broken) or a real product regression (banner never rendered)",
+        "Does NOT flag 'shows account menu when logged in and sign-in button otherwise' as F6 — both branches of its conditional (lines 19-23) end in an assertion",
+        "Reports the F6 finding with severity P0",
+        "Summary table included"
+      ]
     }
   ]
 }

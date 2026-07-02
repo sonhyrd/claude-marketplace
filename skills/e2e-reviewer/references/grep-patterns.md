@@ -9,6 +9,8 @@ A hit is intentional and must be **skipped** when `// JUSTIFIED:` appears in any
 
 When raw grep output is the only thing you have, always read 1–3 lines of surrounding context before flagging — most false positives come from JUSTIFIED comments sitting just above the visible match.
 
+**Phase-0 e2e-file scope filter (Tier 3):** the scanner drops hits in files that carry no Playwright/Cypress marker — a file is in scope only when its basename contains `.cy.`, its path has a `cypress/` component, it imports `@playwright/test`, or it references Cypress (import/require or `cy.<cmd>(` usage). This kills backend/unit-suite false positives that share the `*.test.*` suffix (e.g. Knex `.first()` flagged as #10a in a backend Vitest file). Skipped files are counted and reported on a `Scope filter:` line before the Summary — never silently.
+
 ---
 
 ## Group 1 — error swallowing, focus leaks, sleeps, raw DOM
@@ -26,17 +28,17 @@ When raw grep output is the only thing you have, always read 1–3 lines of surr
 | Check | Pattern | Glob | What it detects |
 |-------|---------|------|-----------------|
 | #4a Always-true math | `toBeGreaterThanOrEqual\(0\)` | `*.{ts,js,cy.*}` | Mathematically always true |
-| #4b Vacuous attached | `toBeAttached\(\)` | `*.{ts,js,cy.*}` | Flag every hit; confirm in Phase 2 whether the element is unconditionally rendered (→ P0 vacuous) or CSS-hidden (`// JUSTIFIED:` → skip) |
-| #4c One-shot isVisible | `expect\(await.*\.isVisible\([^)]*\)\)` (state/text/attribute reads accept arguments, e.g. `getAttribute('src')`) | `*.{spec.*,test.*}` | One-shot boolean, no auto-retry |
-| #4d One-shot state | `expect\(await.*\.(isDisabled\|isEnabled\|isChecked\|isHidden)\(\)\)` | `*.{spec.*,test.*}` | Same one-shot boolean problem |
-| #4e One-shot content | `expect\(await.*\.(textContent\|innerText\|getAttribute\|inputValue\|allTextContents)\([^)]*\)\)` | `*.{spec.*,test.*}` | Resolves immediately; use `toHaveText()`, `toHaveAttribute()`, `toHaveValue()`. (One-shot `.count()` is left to the Tier-2 ast-grep `sg-4ce-count` rule — a bare regex `count` over-flags ORM/array `.count()`.) |
+| #4b Vacuous attached | `(?<!not\.)toBeAttached\(\)` (positive form only — `.not.toBeAttached()` is never flagged) | `*.{ts,js,cy.*}` | Grep-undecidable: the scanner tags each hit `[P0?][LLM-TRIAGE]` and routes it to a separate LLM-triage count OUTSIDE the P0 exit gate (documented severity stays P0). Phase 2 must confirm destructive-action context (the element should have been removed) before reporting P0 — on client-rendered apps a positive `toBeAttached()` is usually a legitimate render-gate (~90% FP); CSS-hidden intent takes `// JUSTIFIED:` → skip |
+| #4c One-shot isVisible | `expect(… await <locator>.isVisible(…) …)` — the scanner runs #4c/#4d/#4e as ONE combined `#4c-4e` check whose leading `(?:[!(\s+-]\|[A-Za-z_$][\w$.]*\()*` group also admits wrapped forms: `expect((await …).trim())`, `expect(Number(await …))`, `expect(!(await …))` | `*.{spec.*,test.*}` | One-shot boolean, no auto-retry. Sync-matcher reads like these are #4c-4e, NOT #15 — the `await` resolves a value, nothing floats (see #15 row) |
+| #4d One-shot state | `expect(… await <locator>.(isDisabled\|isEnabled\|isChecked\|isHidden\|isEditable)(…) …)` (part of the combined `#4c-4e` check) | `*.{spec.*,test.*}` | Same one-shot boolean problem |
+| #4e One-shot content | `expect(… await <locator>.(textContent\|innerText\|getAttribute\|inputValue\|allTextContents\|allInnerTexts\|count)(…) …)` (part of the combined `#4c-4e` check) | `*.{spec.*,test.*}` | Resolves immediately; use `toHaveText()`, `toHaveAttribute()`, `toHaveValue()`, `toHaveCount()`. One-shot `.count()` is caught here because the regex anchors it inside `expect(await ….count())` — a bare `count` regex would over-flag ORM/array `.count()`; the Tier-2 ast-grep `sg-4ce-count` rule additionally covers matcher-on-next-line/AST-only shapes |
 | #4h One-shot URL | `expect\(page\.url\(\)\)` | `*.{spec.*,test.*}` | `page.url()` reads URL at one instant with no retry; use `await expect(page).toHaveURL(...)` |
 
 ## Group 3 — truthiness traps, bypasses, ordering
 
 | Check | Pattern | Glob | What it detects |
 |-------|---------|------|-----------------|
-| #4f Locator always-true | `\.toBeTruthy\(\)` / `\.toBeDefined\(\)` / `\.not\.toBeNull\(\)` / `\.not\.to\.equal\(null\)` | `*.{ts,js,cy.*}` | Flag hits where the subject is a Locator: a Locator is always a truthy, non-null, defined JS object regardless of element existence, so `toBeTruthy`/`toBeDefined`/`not.toBeNull`/`not.to.equal(null)` on it never fail. Non-Locator subjects (e.g., boolean variables, a `textContent()` string that can legitimately be null) are fine — confirm in Phase 2. |
+| #4f Locator always-true | `\.toBeTruthy\(\)` / `\.toBeDefined\(\)` / `\.not\.toBeNull\(\)` / `\.not\.toBeUndefined\(\)` / `\.not\.to\.equal\(null\)` / `\.not\.to\.be\.null` | `*.{ts,js,cy.*}` | Flag hits where the subject is a Locator: a Locator is always a truthy, non-null, defined JS object regardless of element existence, so `toBeTruthy`/`toBeDefined`/`not.toBeNull`/`not.toBeUndefined`/`not.to.equal(null)`/`not.to.be.null` on it never fail. Non-Locator subjects (e.g., boolean variables, a `textContent()` string that can legitimately be null) are fine — confirm in Phase 2. |
 | #4g Timeout zero | `timeout:\s*0` | `*.{ts,js,cy.*}` | Disables auto-retry entirely; flag unless `// JUSTIFIED:` on line above |
 | #5a Conditional bypass | `if.*(isVisible\(\|is\(.*:visible.*\))` | `*.{spec.*,test.*,cy.*}` | `expect()` gated behind runtime `if` — silently skips assertions. Requires the `.isVisible(` call form, so a bare boolean variable named `isVisible` is not matched. |
 | #5b Force true | `force:\s*true` | `*.{ts,js,cy.*}` | Bypasses actionability checks (visibility, enabled state) |
@@ -57,7 +59,7 @@ When raw grep output is the only thing you have, always read 1–3 lines of surr
 
 | Check | Pattern | Glob | What it detects |
 |-------|---------|------|-----------------|
-| #15 Missing await on expect | `^\s*expect\(` excluding `expect(await ...)`, **plus** the awaited-locator form `expect(await <locator>).<web-first matcher>(` (value-resolving one-shot reads like `expect(await x.isVisible())` still belong to #4c-4e) | `*.{spec.*,test.*}` | `[Playwright]` — `expect(locator).toBeVisible()` without `await`, or `expect(await locator).toBeVisible()` (await on the locator is a no-op), silently resolves to a Promise that is never checked. Always P0. |
+| #15 Missing await on expect | Two runs, BOTH bounded to a trailing web-first matcher whitelist (`toBeVisible`, `toBeHidden`, `toHaveText`, `toHaveURL`, `toHaveCount`, …): (1) `^\s*expect\(` without `await`, with a Locator/`page` subject; (2) the awaited-locator form `expect(await <locator>).<web-first matcher>(`. The whitelist stops the old conflation: sync-matcher one-shot reads — `expect(await x.isVisible()).toBe(true)`, wrapped forms like `expect(Number(await getRowCount(page))).toBe(4)` — are rerouted to #4c-4e, not #15. Matcher-on-next-line splits are covered by Tier 2 (`sg-15`). | `*.{spec.*,test.*}` | `[Playwright]` — `expect(locator).toBeVisible()` without `await`, or `expect(await locator).toBeVisible()` (await on the locator is a no-op), silently resolves to a Promise that is never checked. Always P0. |
 | #16 Missing await on action | `^\s*page\.(locator\|getBy\w+)\(.*\)\.(click\|fill\|type\|press\|check\|uncheck\|selectOption\|setInputFiles\|hover\|focus\|blur)\(` | `*.{spec.*,test.*}` | `[Playwright]` — Action without `await` creates an unresolved Promise. Always P0. Confirm in Phase 2 that the hit line lacks a leading `await`. |
 | #17 Direct page action API | `page\.(click\|fill\|type\|check\|uncheck\|selectOption)\(["'\`]` | `*.{spec.*,test.*}` | `[Playwright]` — prefer locator-based `page.locator(selector).click()` / `.fill()` for composition and clearer failures. P1. |
 | #9c Networkidle | `waitForLoadState('networkidle')` / `waitUntil: 'networkidle'` (API shapes only, e2e-scoped) | `*.{ts,js}` | Playwright docs warn against `networkidle` — unreliable on modern SPAs. P1. |

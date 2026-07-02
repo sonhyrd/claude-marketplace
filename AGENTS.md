@@ -18,7 +18,7 @@ The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.
 ## Verification gate (must pass before commit)
 
 ```
-[ ] bash scripts/ci/ci-local.sh          # 10 review checks + 14 drift smoke checks + 0 P0 smell hits
+[ ] bash scripts/ci/ci-local.sh          # 11 review checks + 24 drift smoke checks + 0 P0 smell hits
 [ ] bash scripts/ci/pre-push-security.sh # secrets and credential leak guard
 ```
 
@@ -66,7 +66,7 @@ Each `skills/<name>/SKILL.md` is the contract. Everything in the skill body shou
 - **Failure category IDs**: 15 codes (`F1`–`F15`) used by both debuggers. Codes are stable.
 - **JUSTIFIED comments**: `// JUSTIFIED: <reason>` on the line above (or above the enclosing block / multi-line chain) suppresses scanner findings. Suppress for documented intent, never to hide a real finding.
 - **Severity-first organization**: tables in SKILL.md, README, and `docs/e2e-test-smells.md` group by P0/P1/P2 in the same order.
-- **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check).
+- **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check). Sanctioned exception: root-level `README.<lang>.md` translations (`README.ko.md`, `README.ja.md`, `README.zh-cn.md`) and the language-switcher line in `README.md` that links to them. `README.md` (English) is canonical; translations follow it.
 
 ## Frameworks in Scope
 
@@ -83,6 +83,7 @@ bash scripts/ci/review.sh           # parity, language, links, framework scope, 
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
 bash scripts/validate-evals.sh      # eval JSON schema
 bash scripts/ci/pre-push-security.sh
+bash scripts/ci/codex-smoke.sh      # manual Codex cross-host smoke (skips if codex absent)
 bash skills/e2e-reviewer/scripts/scan.sh path/to/tests   # standalone scanner
 
 # Plugin manifest sanity
@@ -96,8 +97,8 @@ python3 -m json.tool .claude-plugin/marketplace.json
 
 ```bash
 # Clone any real Playwright/Cypress repo into testbed/ (gitignored) to exercise the skills
-git clone --depth 1 https://github.com/calcom/cal.com testbed/cal.com
-bash skills/e2e-reviewer/scripts/scan.sh testbed/cal.com
+git clone --depth 1 https://github.com/calcom/cal.diy testbed/cal.diy
+bash skills/e2e-reviewer/scripts/scan.sh testbed/cal.diy
 # Invoke e2e-reviewer / playwright-debugger via the agent runtime as usual.
 
 # Install the four skills from this repo as real copies (one-time setup; also cleans up any prior symlink install)
@@ -138,12 +139,14 @@ When you bump the bundle version, touch all three manifests in one commit. The d
 
 ## Installation Paths Documented for Users
 
-- **Claude Code marketplace**: `/plugin marketplace add voidmatcha/e2e-skills` → `/plugin install e2e-skills@voidmatcha` (reads `.claude-plugin/plugin.json` + `marketplace.json`).
-- **Codex plugin marketplace**: `codex plugin marketplace add voidmatcha/e2e-skills` → `codex plugin add e2e-skills@voidmatcha` (reads `.codex-plugin/plugin.json` for the interface block and installs the shared `skills/` bundle).
-- **Cross-agent (55 hosts via the `vercel-labs/skills` npm CLI)**: `npx skills add voidmatcha/e2e-skills --skill '*' -g -a claude-code -a codex` — pick specific agents with repeat `-a` flags or use `--agent '*'` to install everywhere. The bundle lands in `~/.agents/skills/`, where Codex/omx also auto-discovers it; verified empirically by a 10-repo Codex review run loading `~/.agents/skills/e2e-reviewer/SKILL.md`.
+`README.md` organizes the Install section as per-host subsections (superpowers-style anchor list at the top, one short subsection per host). Keep this list and those subsections in lock-step:
+
+- **Claude Code**: plugin marketplace — `/plugin marketplace add voidmatcha/e2e-skills` → `/plugin install e2e-skills@voidmatcha` (reads `.claude-plugin/plugin.json` + `marketplace.json`) — or the `skills` CLI with `-a claude-code`.
+- **Codex**: the `skills` CLI is the recommended path — `npx skills add voidmatcha/e2e-skills --skill '*' -g -a claude-code -a codex`. The bundle lands in `~/.agents/skills/`, where Codex/omx auto-discovers it and reads `.codex-plugin/plugin.json` for the interface block; verified empirically by a 10-repo Codex review run loading `~/.agents/skills/e2e-reviewer/SKILL.md`. Alternative: Codex plugin marketplace — `codex plugin marketplace add voidmatcha/e2e-skills` → `codex plugin add e2e-skills@voidmatcha`.
+- **All other agents (Cursor, OpenCode, Gemini CLI, and more)**: one generalized section — the global install `npx skills add voidmatcha/e2e-skills -g --all` is the primary command, with `-a <agent>` mentioned as the single-agent variant (agent names must be verified in the `vercel-labs/skills` supported-agents list; do not document names that are not in it).
 - **Manual clone for Claude Code**: `git clone https://github.com/voidmatcha/e2e-skills.git ~/.claude/skills/e2e-skills`.
 
-The install paths above cover every supported host. Use the Codex marketplace command for Codex plugin installs, or the cross-agent `skills` CLI route when installing across Codex, Claude Code, and the broader `vercel-labs/skills` ecosystem (55 agents).
+The install paths above cover every supported host. Use the `skills` CLI route as the default cross-agent path (Claude Code, Codex, and the broader `vercel-labs/skills` ecosystem); the Codex plugin marketplace remains a supported alternative for Codex plugin installs.
 
 ## License
 

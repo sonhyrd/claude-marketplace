@@ -1,118 +1,67 @@
 # Upstream Contributions: Track Record and Roadmap
 
-e2e-skills is validated by contributing real fixes upstream. This page is both the
-**track record** (the merged PRs below are the proof that the skill flags bugs
-maintainers agree are worth fixing) and the **contribution roadmap** (in review,
-queued, and backlog). It tracks the upstream pull requests that the `e2e-reviewer`
-skill surfaced across open-source Playwright and Cypress test suites.
+`e2e-skills` is validated by contributing real E2E test fixes upstream. This page is both a track record and a contribution roadmap: merged PRs prove maintainers accepted the findings, while open PRs show the next verification queue.
 
-Research runs in a local testbed with zero GitHub side effects (no forks or PRs
-opened during scanning). Only vetted fixes become PRs, under a strict bar: one
-anti-pattern family per PR, a small diff (roughly <=50 changed lines), assertions
-strengthened never removed, and a fresh check of each repo's contribution
-conventions before submission.
+**Goal:** at least 25 merged upstream PRs. Each merge should be a small, reviewable fix for a Playwright/Cypress test that previously passed while proving too little.
 
-## Cadence and goal
+## Cadence and status
 
-We keep about **10+ PRs open at a time**. Each time one merges (or is declined), we
-refresh the queue from the prepared and backlog lists below, so there is always a
-steady, reviewable flow rather than a one-time dump.
-
-**Goal: at least 25 merged PRs.** Each merge is independent, real-world proof that
-the skill flags genuine silent-always-pass anti-patterns that maintainers agree are
-worth fixing — validation no synthetic benchmark can provide.
+- **Merged:** 12 upstream PRs accepted in real projects.
+- **In review:** 8 active/open upstream PRs.
+- **Queue policy:** prefer high-signal P0 silent-pass fixes; avoid padding with subjective P1/P2 style findings.
+- **Submission policy:** one narrow anti-pattern per PR where possible, local verification first, and an `e2e-reviewer` footer only when it is useful context.
 
 ## Merged
 
-Selected merged PRs below are sorted by approximate repository recognition, not by chronology.
+Selected merged PRs below are sorted roughly by repository recognition, not chronology.
 
 | Repository | ★ | PR | What it fixed | Lesson |
 |------------|----|----|---------------|--------|
-| Storybook | ★90.4k | [storybookjs/storybook#34141](https://github.com/storybookjs/storybook/pull/34141) | Missing `await` on `fill()`/`blur()`, discarded `isVisible()` checks | Playwright promises must be awaited, and `isVisible()` is a point-in-time query, not a web-first assertion. |
-| code-server | ★78.1k | [coder/code-server#7845](https://github.com/coder/code-server/pull/7845) | An `it.only` that silently skipped 8 unit tests for 7 months (one had broken), 4x matcher-less `expect()`, a dangling locator, 16x one-shot `isVisible()` reads | A focused-test leak removes whole suites from CI without ever failing; the gap is invisible until something inside the skipped block regresses. |
-| Strapi | ★72.5k | [strapi/strapi#26630](https://github.com/strapi/strapi/pull/26630) | Discarded `isVisible()`/`isHidden()`/`isEnabled()` reads that were the sole assertion of each visibility test, plus one-shot reads and unawaited clicks | A discarded boolean read asserts nothing, so the test's whole visibility contract passed unconditionally. |
-| SvelteKit | ★20.6k | [sveltejs/kit#16068](https://github.com/sveltejs/kit/pull/16068) | Unawaited `expect(page)` web-first assertions in the basics client E2E tests | A floating web-first assertion never runs; the missing `await` is the whole bug, and adding it is what makes the check assert. |
-| Cal.com | ★45.8k | [calcom/cal.diy#28486](https://github.com/calcom/cal.diy/pull/28486) | Locator truthiness, no-op disabled checks, one-shot assertions, hard-coded waits | Green tests are not trustworthy if assertions do not wait for user-visible state. |
-| Ghost | ★54.1k | [TryGhost/Ghost#28712](https://github.com/TryGhost/Ghost/pull/28712) | `expect(likeButton.isDisabled()).toBeTruthy()` x3 plus a one-shot re-enable read in the comments-ui like-button suite | An un-awaited `isDisabled()` returns a Promise that is always truthy, so the debounce-guard tests passed no matter what the button did. |
-| bruno | ★45.2k | [usebruno/bruno#8317](https://github.com/usebruno/bruno/pull/8317) | A missing `await` on the sole web-first visibility assertion in the WebSocket spec — the floating Promise never ran | An un-awaited web-first `expect()` returns a Promise that is never observed, so the assertion never executes and the test passes no matter what the UI shows. |
-| Qwik | ★22k | [QwikDev/qwik#8777](https://github.com/QwikDev/qwik/pull/8777) | Non-asserting E2E checks — discarded assertion promises, `toBeDefined()` on locators, and bare locators that asserted nothing | A discarded assertion promise and `toBeDefined()` on a locator both pass unconditionally; only an awaited web-first matcher actually checks the rendered state. |
+| Storybook | ★90.4k | [storybookjs/storybook#34141](https://github.com/storybookjs/storybook/pull/34141) | Missing `await` on `fill()` / `blur()`, discarded `isVisible()` checks | Playwright promises must be awaited, and `isVisible()` is a point-in-time query, not a web-first assertion. |
+| code-server | ★78.1k | [coder/code-server#7845](https://github.com/coder/code-server/pull/7845) | `it.only` silently skipped tests for months, plus matcher-less `expect()`, dangling locators, and one-shot visibility reads | Focused-test leaks remove coverage without failing CI; weak checks hide inside the green suite. |
+| Strapi | ★72.5k | [strapi/strapi#26630](https://github.com/strapi/strapi/pull/26630) | Discarded `isVisible()` / `isHidden()` / `isEnabled()` reads and unawaited clicks | Discarded boolean reads assert nothing, even when they look like the test's main contract. |
+| Ghost | ★54.1k | [TryGhost/Ghost#28712](https://github.com/TryGhost/Ghost/pull/28712) | Promise-valued disabled-state checks passed without proving button state | Async state checks need awaited web-first assertions. |
+| Cal.com | ★45.8k | [calcom/cal.diy#28486](https://github.com/calcom/cal.diy/pull/28486) | Weak assertions and hard waits in E2E tests | Replacing timing sleeps with web-first checks makes the test fail on real regressions. |
+| Bruno | ★45.2k | [usebruno/bruno#8317](https://github.com/usebruno/bruno/pull/8317) | WebSocket visibility assertion was not awaited | Floating assertions can be skipped entirely. |
+| Qwik | ★22k | [QwikDev/qwik#8777](https://github.com/QwikDev/qwik/pull/8777) | Discarded assertion promises, `toBeDefined()` on locators, and bare locators | Locators are handles; only awaited web-first matchers prove rendered state. |
+| SvelteKit | ★20.6k | [sveltejs/kit#16068](https://github.com/sveltejs/kit/pull/16068) | Floating web-first assertions | Missing `await` can make the assertion never participate in the test outcome. |
 | Element Web | ★13.2k | [element-hq/element-web#32801](https://github.com/element-hq/element-web/pull/32801) | Always-passing assertions, unawaited checks, `toBeAttached()` misuse, dead code | Static review can find tests that pass while proving nothing in large E2E suites. |
-| mui-x | ★5.8k | [mui/mui-x#22982](https://github.com/mui/mui-x/pull/22982) | Always-true Locator null check replaced with a real dateTime-cell edit assertion | Locator objects are never null; the fix makes the edit prove user-visible state. |
+| Carbon Design System | ★9.2k | [carbon-design-system/carbon#22564](https://github.com/carbon-design-system/carbon/pull/22564) | `expect(locator).toBeTruthy()` used as CSS-state verification | Locator truthiness never proves an element exists or is visible. |
+| MUI X | ★5.8k | [mui/mui-x#22982](https://github.com/mui/mui-x/pull/22982) | Always-true Locator null check replaced with a real date-time cell edit assertion | Locator objects are never `null`; assert user-visible state instead. |
+| module-federation/core | ★2.6k | [module-federation/core#4826](https://github.com/module-federation/core/pull/4826) | Redundant blanket `uncaught:exception` suppression removed from a Cypress spec | Blanket exception handlers swallow real app errors; suppress only the specific expected error, with a comment. |
 
 ## In review
 
 | Repository | ★ | PR | Status | Anti-pattern family |
 |------------|----|----|--------|---------------------|
-| module-federation/core | ★2.6k | [module-federation/core#4826](https://github.com/module-federation/core/pull/4826) | Approved | Redundant blanket `uncaught:exception` suppression removed from the memory-router cypress spec |
-| hcengineering/platform | ★26.3k | [hcengineering/platform#10922](https://github.com/hcengineering/platform/pull/10922) | In review | `expect(locator).toBeDefined()` always-true checks in the recruiting navigator test (sole verification) replaced with web-first `toBeVisible()` |
-| TanStack Router | ★14.7k | [TanStack/router#7616](https://github.com/TanStack/router/pull/7616) | In review | `expect(locator).toBeTruthy()` (always true), masked expected-value typo |
-| voxel51/fiftyone | ★10.8k | [voxel51/fiftyone#7851](https://github.com/voxel51/fiftyone/pull/7851) | In review | `expect(this.svp.nameError()).toBeDefined()` (no `await`/matcher) replaced with web-first `toBeVisible()` in the saved-views duplicate-name path |
-| expo | ★50.3k | [expo/expo#46699](https://github.com/expo/expo/pull/46699) | Review requested | Unawaited web-first assertions in router E2E |
-| supabase | ★104.8k | [supabase/supabase#47053](https://github.com/supabase/supabase/pull/47053) | Review requested | Grid-cell `textContent()` to web-first `toHaveText` |
+| Supabase | ★104.8k | [supabase/supabase#47053](https://github.com/supabase/supabase/pull/47053) | Open | One-shot grid-cell text read replaced with web-first text assertion. |
+| Expo | ★50.3k | [expo/expo#46699](https://github.com/expo/expo/pull/46699) | Open | Router E2E assertions wait for UI state instead of racing. |
+| hcengineering/platform | ★26.3k | [hcengineering/platform#10922](https://github.com/hcengineering/platform/pull/10922) | Open | `expect(locator).toBeDefined()` checks replaced with `toBeVisible()`. |
+| TanStack Router | ★14.7k | [TanStack/router#7616](https://github.com/TanStack/router/pull/7616) | Open | Always-passing E2E assertions and missing awaits. |
+| FiftyOne | ★10.8k | [voxel51/fiftyone#7851](https://github.com/voxel51/fiftyone/pull/7851) | Open | Duplicate-name error assertion checks visible UI state instead of locator definition. |
+| Rancher Desktop | ★7.2k | [rancher-sandbox/rancher-desktop#10557](https://github.com/rancher-sandbox/rancher-desktop/pull/10557) | Open | Locator `not.toBeNull()` checks replaced with visible integration-name assertions. |
+| ngx-bootstrap | ★5.5k | [valor-software/ngx-bootstrap#6820](https://github.com/valor-software/ngx-bootstrap/pull/6820) | Open | Guarded / non-executing assertions converted into effective checks. |
+| DefGuard | ★2.7k | [DefGuard/defguard#3146](https://github.com/DefGuard/defguard/pull/3146) | Open | Async `find()` callback selected the wrong row; follow-up `toBeDefined()` was always true. |
 
 ## Queued
 
-Highest-conviction candidates: each was necessity-audited (adversarial skeptical-maintainer
-re-read of the actual code) and graded **NECESSARY** or **WORTHWHILE**. Re-screened 2026-06-20
-on three axes — policy blockers (frappe-style suspension / CLA / anti-AI), the finding still
-reproducing at the live default-branch HEAD, and the installed scanner actually detecting it.
-Re-sorted 2026-06-24 by **maintainer-acceptance likelihood**: rows are ordered best-first, and
-candidates whose acceptance was doubtful (solo maintainer with no external-PR precedent, or a
-finding a maintainer could reasonably defend as intentional) were dropped rather than padded.
-SUBMIT = clean-enough policy + live finding a maintainer should accept; CAUTION = a real finding
-behind a gate (CLA / issue-first) that must be cleared first. A fresh convention check runs
-before any submission. Candidates are gated to **>=1000 stars** to match the large-repo bar of
-the track record above; clean but smaller finds (for example trivy-vulnerability-explorer, ★176)
-are parked rather than queued.
+Queue entries must be re-verified against upstream `main` before submission.
 
-| Repository | ★ | Framework | Status | Why a maintainer must accept |
-|------------|----|-----------|--------|------------------------------|
-| carbon-design-system/carbon | ★9.2k | Playwright | SUBMIT | Two ProgressIndicator tests whose only assertion is `expect(page.locator(...)).toBeTruthy()` — always true on a Locator, so the CSS-class check never runs. Same file has real assertions; frame as the only broken lines. (DCO sign-off.) |
-| rancher-sandbox/rancher-desktop | ★7.2k | Playwright | SUBMIT | `expect(getByText('alpha'/'beta'/'gamma')).not.toBeNull()` is always true (a Locator is never null) and is the sole content check of the "should list integrations" test; a dropped or renamed integration ships green. (DCO sign-off.) |
-| ever-co/ever-gauzy | ★3.7k | Cypress | SUBMIT | The `Should be able to edit payment` test installs a blanket `cy.on('uncaught:exception', () => false)` (#3b) that swallows every app error, so a runtime exception in the edit flow is suppressed and the test passes regardless of whether the feature works. (★3,742; `PaymentsTest.ts:53`; confirm the test still passes after scoping the handler before submitting.) |
-| RocketChat/Rocket.Chat | ★45.7k | Playwright | CAUTION | Five bare matcher-less `expect(locator)` lines disable every assertion in three CI-gated admin import tests; an import regression passes green. (CLA bot blocks merge until signed.) |
-| lightdash | ★5.9k | Cypress | CAUTION | A committed `it.only` silently skips nine authorization tests in CI; removing it restores coverage. (Hard issue-first + #community-contributors Slack claim before any PR.) |
-| xyflow | ★37.3k | Cypress | CAUTION | `addEdge` never throws, so the lone assertion in graph-utils.cy.ts never executes and the test cannot fail. Semantic-only (no scanner/lint rule can detect it). (Issue-first / Discord contact before PR.) |
-| elastic/kibana | ★21.2k | Cypress | CAUTION | A committed `context.only` silently skips five sibling alert-workflow tests (open / acknowledge / close) on every security CI run; removing it restores coverage. (Elastic CLA + high review bar; file moved to `x-pack/solutions/security/.../changing_alert_status.cy.ts` — update path before PR.) |
-| DefGuard/defguard | ★2.7k | Playwright | SUBMIT | The `createNetworkDevice` e2e controller picks the target row with `deviceRows.find(async (val) => ...)` — an async callback always returns a truthy Promise, so `find` returns the first row regardless of name, and the follow-up `expect(row).toBeDefined()` is always true (a Locator is never undefined). The name match is silently ignored, so the helper can drive every later assertion against the wrong device. (★2,744; `e2e/utils/controllers/vpn/createNetworkDevice.ts:25`; verify CLA/DCO at submission; LLM Phase-2 verified.) |
-| valor-software/ngx-bootstrap | ★5.5k | Playwright + Jest | SUBMIT | Two silently-skipped-assertion findings. In the timepicker unit spec roughly twenty mousewheel / arrow-key tests bury their `expect().toEqual()` calls inside `jest.spyOn(...).mockImplementation(() => {...})` callbacks that are never invoked, so the assertions never execute and the tests pass unconditionally; and `e2e/issues/issue-823.spec.ts` wraps every assertion in `if (count > 0)` guards, so a selector that matches nothing passes having asserted nothing. (★5,519; `src/timepicker/testing/timepicker.component.spec.ts`, `e2e/issues/issue-823.spec.ts`; active org, verify conventions at submission; LLM Phase-2 verified.) |
-| perses/perses | ★2.2k | Playwright | CAUTION | `DashboardPage.isDarkMode()` / `isLightMode()` assert the active theme with `expect(this.themeToggle.locator('#dark')).toBeDefined()` (no `await`, no matcher) — a Locator is always defined, so the theme guard used by `forEachTheme` passes whether or not the theme actually switched. (★2,237; `ui/e2e/src/pages/DashboardPage.ts:159`; CNCF project, verify CLA/DCO and the review bar before PR; LLM Phase-2 verified.) |
+| Repository | ★ | Framework | Priority | Finding family |
+|------------|----|-----------|----------|----------------|
+| Rocket.Chat | ★45.7k | Playwright | P0 | Bare matcher-less `expect(locator)` lines. |
+| Kibana | ★21.2k | Cypress | P0 | Committed focused test skips sibling alert-workflow coverage. |
+| Astro | ★60.5k | Playwright | P0/P1 | One-shot state reads and assertion shape review. |
+| React Router | ★56.5k | Playwright | P0/P1 | One-shot state reads and weak locator assertions. |
+| Material UI | ★98.5k | Playwright | P0/P1 | Locator truthiness / one-shot state assertions. |
+| Superset | ★73.5k | Cypress | P0/P1 | Blanket exception suppression and one-shot URL reads. |
+| freeCodeCamp | ★450k+ | Playwright | P0/P1 | Weak assertions and guarded checks. |
+| Kong Insomnia | ★39k+ | Playwright | P1 | Hard waits and weak post-state checks. |
 
-## Backlog
+## Operating rules
 
-Necessity-audited as **WORTHWHILE**: real, idiom-aligned improvements a maintainer would
-likely accept, but the suite passes correctly today (the finding is backstopped by an
-adjacent assertion, or flakes red rather than silently green). Ordered most-convincing first.
-The `Patterns` column lists the anti-pattern IDs the scan surfaced (see
-[`docs/e2e-test-smells.md`](e2e-test-smells.md) for the ID legend).
-
-| Repository | ★ | Framework | Patterns |
-|------------|----|-----------|----------|
-| microsoft/fluentui | ★20.1k | Playwright | #4h |
-| penpot/penpot | ★53.6k | Playwright | #8b, #4c, #4h |
-| vercel/ai-chatbot | ★20.5k | Playwright | #2, #3, #10a |
-| surveyjs/survey-library | ★4.8k | Playwright | #4c-4e |
-| web-infra-dev/rspack | ★12.8k | Playwright | #4c-4e |
-| saleor/saleor-dashboard | ★1k | Playwright | #4c, #8b |
-| jupyterlab/jupyterlab | ★15.2k | Playwright | #4c-4e, #8b |
-| react-router | ★56.5k | Playwright | #4c-4e, #15 |
-| actual | ★27.2k | Playwright | #4c-4e, #4h |
-| mui/material-ui | ★98.5k | Playwright | #4c |
-| freeCodeCamp/freeCodeCamp | ★450.5k | Playwright | #4f, #8b |
-| WordPress/gutenberg | ★11.7k | Playwright | #4h |
-| Kong/insomnia | ★39.7k | Playwright | #8b |
-| handsontable/handsontable | ★21.9k | Playwright | #4c-4e, #9 |
-| vendure | ★8.2k | Playwright | #3, #5a |
-| nhost/nhost | ★9.2k | Playwright | #15 |
-| astro | ★60.5k | Playwright | #4c-4e |
-| openobserve/openobserve | ★19.4k | Playwright | #4c |
-| builderio | ★8.7k | Playwright | #4c-4e |
-| rallly | ★5.1k | Playwright | #3, #15 |
-| react-navigation | ★24.5k | Playwright | #4c |
-| superset | ★73.5k | Cypress | #3b, #4h |
-| semi-design | ★10k | Cypress | #3b, #5b, #9b |
-| kestra | ★27.1k | Playwright | #4f, #15 |
-| elementor | ★7k | Playwright | #4, #8b |
-| AgentOps-AI/agentops | ★5.6k | Cypress | #5a |
-| naomiaro/waveform-playlist | ★1.7k | Playwright | #2 |
-| katspaugh/wavesurfer.js | ★10.3k | Cypress | #2 |
+- Prefer merged-proof quality over volume: one clear P0 fix is better than several subjective cleanups.
+- Keep PRs small enough for maintainers to review in one pass.
+- Run the target repo's local test or the narrowest available verification before submission.
+- Mention `e2e-skills/e2e-reviewer` only as transparent provenance, not as a sales pitch.
+- Update this roadmap when a PR merges, closes, or moves from queue to review.

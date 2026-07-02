@@ -1,5 +1,29 @@
 ## [Unreleased]
 
+### Added
+
+- Localized READMEs at the repo root: `README.ko.md`, `README.ja.md`, `README.zh-cn.md` (English `README.md` stays canonical), with a language switcher in all four and a README i18n structural-parity guard (new `review.sh` check, pre-push hook guard, and drift-smoke case).
+- `CONTRIBUTING.md` (setup, verification gate, frozen-ID and parity conventions) and `docs/case-studies.md` (merged upstream PR write-ups).
+- `scripts/ci/codex-smoke.sh` — manual, reproducible Codex cross-host smoke with committed fixtures (self-skips when `codex` is absent).
+- Scanner: Phase-0 e2e-file scope filter with skipped-file reporting; `[LLM-TRIAGE]` tagging for positive `toBeAttached` (#4b) outside the P0 exit count.
+- Evals: coverage for #4g, #18, #20–#23, six documented false-positive exclusions, and debugger failure codes F6/F13 in both debuggers.
+
+### Changed
+
+- README reworked: merged-PR proof hook and the code-server war story in the lead, "See it run" section with real scanner output, install section generalized to per-host + one global `skills` CLI path, scanner network-behavior note, contribution pipeline stated as explicit counts.
+- e2e-reviewer Phase 2 now executes the LLM-only patterns #20–#23; sync-matcher `expect(await …)` reads rerouted from #15 to #4c-4e; Tier-1 ESLint findings now count into the scanner's exit gates.
+- Cypress debugger retry extraction rewritten to real mochawesome output (with a `mochawesome-merge` step for multi-spec runs); debugger instruction blocks brought to structural parity.
+- Plugin manifest descriptions trimmed of the trailing keyword sentence (24-pattern parity catalog unchanged); `marketing/` gitignored.
+- Public proof copy now uses the exact merged-PR count (12, from the roadmap tables) instead of the `10+` floor, and the proven-in-open-source table lists all merged fixes instead of a representative subset; counts are bumped together on every merge.
+- Korean README adopts English developer terminology (assertion, merge, suite, fixture, and the pattern/F-code names) while examples and fixes stay Korean.
+
+### Fixed
+
+- `// JUSTIFIED:` comments can no longer suppress #7 (focused tests), matching the documented no-exemption contract.
+- Scanner Tier-1 npx invocation pins `typescript@^5` so a target repo's `.npmrc` (`legacy-peer-deps`) cannot poison the shared npx cache.
+- `playwright-test-generator` wrong cross-reference (`4.1` → `#4b`); exploration-time auth/seed-data stop-and-ask gate defined.
+- The debugger note in all four READMEs wrongly claimed automatic CI-artifact fetching is unsupported; both debuggers fetch artifacts via `gh run download` with a user-confirmed run ID, and the note now matches that behavior.
+
 ### Documentation
 
 - Updated the public install docs to include the Codex plugin marketplace flow alongside the cross-agent `skills` CLI path.

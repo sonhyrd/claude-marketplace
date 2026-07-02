@@ -96,6 +96,12 @@ When no argument is given:
 
 **Auth for generated tests:** prefer programmatic auth — if the project has an API-login helper or a `setup` project, authenticate once and persist `storageState`, then reuse that state in specs via a fixture. UI-driven login belongs only in specs that test the login flow itself. Never hard-depend on a manually captured session file (a locally generated `auth/*.json` that another machine or CI won't have, and that silently expires) — generated tests must be able to recreate their session from code.
 
+**Auth & seed data for exploration (detect before navigating):**
+
+1. Detect existing auth setup: `storageState` in `playwright.config.*` (`use` block or per-project), a `setup` project or `globalSetup`, committed `auth/*.json` / `.auth/` state files, API-login helpers or auth fixtures.
+2. Detect seed data: `package.json` scripts (`seed`, `db:seed`, `db:reset`), fixture/seed directories, test-only seeding endpoints referenced in existing specs.
+3. **If the target flow requires credentials or seeded data you do not have** (no working setup project or documented test account, no `TEST_USER`/`TEST_PASSWORD`-style env vars set, no in-repo script that produces the required data): **stop and ask the user** for credentials or a seeding command before exploring. Never invent credentials, register real accounts, or mutate backend data to reach the target state.
+
 **Reachability probe (run first — fail fast, not mid-pipeline):** before any navigation, confirm the app actually answers at `baseURL`. A dev server that is down, returns 5xx, or is gated behind a `webServer` block produces opaque failures three steps later if you skip this.
 
 ```bash

@@ -32,13 +32,14 @@ fi
 total_hits=0
 p0_hits=0
 p1_hits=0
+llm_triage_hits=0
 eslint_ran=0
 playwright_lint_done=0
 cypress_lint_done=0
 
 # Coverage map — patterns the eslint plugin's `recommended` config catches reliably.
 # When the plugin runs successfully, Tier 2 (ast-grep) and Tier 3 (regex) skip the LINT_COVERS patterns to avoid duplicate reports.
-# Patterns OUTSIDE those lists (e.g. #4c-4e, #4f) are intentionally reported by every tier that matches; the Summary total/p0 is Tier-3-only (ast_total is a separate informational count).
+# Patterns OUTSIDE those lists (e.g. #4c-4e, #4f) are intentionally reported by every tier that matches; Tier-1 findings for the covered rules are mapped onto the same total/p0/p1 counters as Tier 3 (see the rule map in try_eslint) so skipping Tier 2/3 can never zero the exit gate. ast_total stays a separate count, but FAIL_ON=any gates on it too.
 # The ast-grep rules are language:TypeScript (.ts/.mts/.cts) by design; .js/.jsx/.tsx coverage is delegated to the always-on Tier-3 regex net.
 # Conservative: only includes patterns where the eslint rule covers the same surface as our regex
 # (binary patterns or full overlap). Partial-overlap patterns like #4 sub-variants stay in Tier 3 as safety net.
@@ -83,7 +84,13 @@ try_eslint() {
     return 1
   else
     mode="auto-downloaded via npx (set E2E_SMELL_NO_ESLINT_DOWNLOAD=1 to skip)"
-    npx_args=(--yes -p 'eslint@^9' -p "eslint-plugin-$plugin" -p '@typescript-eslint/parser' -p "eslint-plugin-$plugin-silent-pass")
+    # `typescript` MUST be a direct -p dep. It is only a PEER dep of @typescript-eslint/parser,
+    # and npx (re)materializes its shared cache env using the npmrc of the cwd it runs from:
+    # `cd "$ROOT"` into a repo whose .npmrc sets `legacy-peer-deps=true` (xyflow, many monorepos)
+    # installs the env WITHOUT peer deps, so the parser dies with "Cannot find module 'typescript'"
+    # (eslint rc=2) and Tier 1 silently never fires — for that repo AND for every later scan that
+    # reuses the poisoned cache env. A direct dep is installed under every peer-deps policy.
+    npx_args=(--yes -p 'eslint@^9' -p "eslint-plugin-$plugin" -p '@typescript-eslint/parser' -p 'typescript@^5' -p "eslint-plugin-$plugin-silent-pass")
     if [[ "$plugin" == "cypress" ]]; then
       npx_args+=(-p eslint-plugin-mocha)
     fi
@@ -227,6 +234,19 @@ EOFCFG
   else
     printf '  no findings\n'
   fi
+  # Tier-1 findings must reach the exit gate: Tier 2/3 skip the LINT_COVERS patterns when
+  # Tier 1 ran, so without these counters a repo whose only P0 is `test.only` exits 0 under
+  # FAIL_ON=p0 whenever Tier 1 runs. Map the covered eslint rule IDs onto the same counters
+  # Tier 3 uses (parsed from the full "$out", not the head-truncated display):
+  #   P0: no-focused-test (#7), missing-playwright-await (#15/#16),
+  #       mocha no-exclusive-tests (#7 Cypress), no-silent-pass (#4f companion plugin)
+  #   P1: no-wait-for-timeout (#9), no-unnecessary-waiting (#9b)
+  local _t1_p0 _t1_p1
+  _t1_p0=$(printf '%s\n' "$out" | grep -cE '/(no-focused-test|missing-playwright-await|no-exclusive-tests|no-silent-pass)[[:space:]]*$' || true)
+  _t1_p1=$(printf '%s\n' "$out" | grep -cE '/(no-wait-for-timeout|no-unnecessary-waiting)[[:space:]]*$' || true)
+  _t1_p0=${_t1_p0:-0}; _t1_p1=${_t1_p1:-0}
+  if [[ "$_t1_p0" -gt 0 ]]; then p0_hits=$((p0_hits + _t1_p0)); total_hits=$((total_hits + _t1_p0)); fi
+  if [[ "$_t1_p1" -gt 0 ]]; then p1_hits=$((p1_hits + _t1_p1)); total_hits=$((total_hits + _t1_p1)); fi
   eslint_ran=1
   [[ "$plugin" == "playwright" ]] && playwright_lint_done=1
   [[ "$plugin" == "cypress" ]] && cypress_lint_done=1
@@ -240,15 +260,30 @@ if [[ -f "$ROOT/.eslintrc" || -f "$ROOT/.eslintrc.json" || -f "$ROOT/.eslintrc.j
 fi
 
 # Detect each framework via actual imports, then opt into eslint-plugin-* if installed.
+pw_imports_found=0
+cy_imports_found=0
 if rg -lq '@playwright/test' "$ROOT" --glob '!node_modules/**' 2>/dev/null; then
+  pw_imports_found=1
   try_eslint playwright Playwright
 fi
 if rg -lq "from\s+['\"]cypress['\"]|[^A-Za-z0-9_]cy\.(visit|get|contains|request|intercept|session|origin|task|wait|fixture)\(" "$ROOT" --glob '!node_modules/**' --glob '*.{cy.ts,cy.js,ts,js}' 2>/dev/null; then
+  cy_imports_found=1
   try_eslint cypress Cypress
 fi
 
 if [[ "$eslint_ran" -eq 0 ]]; then
-  printf '\n[ESLint] Tier 1 not run (no Playwright/Cypress imports detected, or npx unavailable, or download disabled).\n'
+  # Single-cause skip report. The old message OR'ed three causes in one line, which made
+  # field failures undiagnosable (the real field cause was an eslint crash: missing
+  # `typescript` peer dep in the npx env — see the npx_args comment in try_eslint).
+  if [[ "$pw_imports_found" -eq 0 && "$cy_imports_found" -eq 0 ]]; then
+    printf '\n[ESLint] Tier 1 not run — no Playwright/Cypress imports detected under %s.\n' "$ROOT"
+  elif ! command -v npx >/dev/null 2>&1; then
+    printf '\n[ESLint] Tier 1 not run — npx is not on PATH.\n'
+  elif [[ "${E2E_SMELL_NO_ESLINT_DOWNLOAD:-}" == "1" ]]; then
+    printf '\n[ESLint] Tier 1 not run — E2E_SMELL_NO_ESLINT_DOWNLOAD=1 is set and no locally installed plugin was found.\n'
+  else
+    printf '\n[ESLint] Tier 1 not run — imports were detected but the eslint run failed; the [ESLint] line above names the exact failure (resolve error, crash exit code, or watchdog timeout).\n'
+  fi
 fi
 
 # Tier 2: ast-grep — Tree-sitter AST patterns. Lower FP rate than regex on the patterns it covers
@@ -289,6 +324,40 @@ if [[ -n "$AST_GREP" && -d "$ASTGREP_RULES_DIR" ]]; then
 fi
 
 printf '\n--- Tier 3: Bundled regex checks (universal fallback for grep-detectable patterns and gaps eslint/ast-grep miss) ---\n'
+
+# Phase-0 file scope filter (Tier 3): pattern checks only apply to files that are actually
+# E2E surface — basename contains `.cy.`, path has a `cypress/` component, the file imports
+# @playwright/test, or it references cypress (import/require or `cy.<cmd>(` usage). Kills
+# backend/unit-suite FPs that share the *.test.* suffix (observed in the field: Knex
+# `.first()` flagged as #10a and an `import type ... secret` line flagged as #14 in backend
+# Vitest files). Skipped files are counted and reported before the Summary — never silently.
+SCOPE_STATE_DIR=$(mktemp -d)
+: > "$SCOPE_STATE_DIR/in"
+: > "$SCOPE_STATE_DIR/out"
+
+file_in_e2e_scope() {
+  local f="$1"
+  case "$(basename "$f")" in
+    *.cy.*) return 0 ;;
+  esac
+  case "/$f/" in
+    */cypress/*) return 0 ;;
+  esac
+  rg -q "@playwright/test|from\s+['\"]cypress['\"]|require\(\s*['\"]cypress['\"]|(^|[^A-Za-z0-9_])cy\.[a-z]+\(" "$f" 2>/dev/null
+}
+
+# Cached IN/OUT lookup (exact-line grep — space-safe filenames; file appends survive the
+# command-substitution subshells run_check calls this from).
+scope_status() {
+  local f="$1"
+  if grep -qFx -e "$f" "$SCOPE_STATE_DIR/in" 2>/dev/null; then printf 'IN'; return 0; fi
+  if grep -qFx -e "$f" "$SCOPE_STATE_DIR/out" 2>/dev/null; then printf 'OUT'; return 0; fi
+  if file_in_e2e_scope "$f"; then
+    printf '%s\n' "$f" >> "$SCOPE_STATE_DIR/in"; printf 'IN'
+  else
+    printf '%s\n' "$f" >> "$SCOPE_STATE_DIR/out"; printf 'OUT'
+  fi
+}
 
 run_check() {
   local severity="$1"
@@ -350,10 +419,26 @@ run_check() {
       print
     }')
 
+  # Phase-0 scope filter: drop hits in files that carry no Playwright/Cypress marker at all
+  # (see file_in_e2e_scope above). Runs before the JUSTIFIED walk so out-of-scope files never
+  # cost per-hit sed/awk work.
+  if [[ -n "$output" ]]; then
+    local _sf _scopekeep
+    _scopekeep=$(mktemp)
+    while IFS= read -r _sf; do
+      [[ -z "$_sf" ]] && continue
+      if [[ "$(scope_status "$_sf")" == "IN" ]]; then printf '%s\n' "$_sf" >> "$_scopekeep"; fi
+    done <<< "$(printf '%s\n' "$output" | awk -F: '{print $1}' | sort -u)"
+    output=$(printf '%s\n' "$output" | awk -F: 'NR==FNR { if ($0 != "") k[$0] = 1; next } k[$1] { print }' "$_scopekeep" -)
+    rm -f "$_scopekeep"
+  fi
+
   # `// JUSTIFIED: <reason>` suppression (mechanical part): drop a hit when the marker is on
   # the hit line itself or the immediately preceding line. Block-level/multi-line-chain
   # placements remain Phase 2 LLM responsibility, per the SKILL.md suppression contract.
-  if [[ -n "$output" ]]; then
+  # No-exemption contract for #7: a committed focused test is never justifiable
+  # (grep-patterns.md / pattern-reference.md), so JUSTIFIED must not silence it.
+  if [[ -n "$output" && "$check_id" != '#7' ]]; then
     output=$(printf '%s\n' "$output" | while IFS= read -r _hit; do
       _hf=${_hit%%:*}
       _rest=${_hit#*:}
@@ -418,16 +503,24 @@ run_check() {
   fi
 
   if [[ -n "$output" ]]; then
-    local count
+    local count sev_label
     count=$(printf '%s\n' "$output" | wc -l | tr -d ' ')
     total_hits=$((total_hits + count))
-    if [[ "$severity" == "P0" ]]; then
+    sev_label="[$severity]"
+    if [[ "$flags" == *",triage,"* ]]; then
+      # Documented severity is unchanged, but grep alone cannot confirm the context that
+      # makes these hits real (e.g. #4b needs destructive-action context — ~90% FP rate on
+      # client-rendered apps where positive toBeAttached is a legitimate render-gate).
+      # Route to a separate Phase-2 LLM-triage count instead of the p0 exit gate.
+      llm_triage_hits=$((llm_triage_hits + count))
+      sev_label="[$severity?][LLM-TRIAGE]"
+    elif [[ "$severity" == "P0" ]]; then
       p0_hits=$((p0_hits + count))
     else
       p1_hits=$((p1_hits + count))
     fi
 
-    printf '\n[%s] %s %s (%s hit%s)\n' "$severity" "$check_id" "$title" "$count" "$([[ "$count" == "1" ]] && printf '' || printf 's')"
+    printf '\n%s %s %s (%s hit%s)\n' "$sev_label" "$check_id" "$title" "$count" "$([[ "$count" == "1" ]] && printf '' || printf 's')"
     printf '%s\n' "$output" | sed 's/^/  /'
   fi
 }
@@ -444,8 +537,17 @@ run_check P1 '#9b' 'Cypress hard-coded sleep' 'cy\.wait\(\d' '*.{cy.ts,cy.js}'";
 run_check P1 '#6' 'Raw DOM query inside test code' 'document\.querySelector' '*.{ts,js,tsx,jsx,cy.ts,cy.js}' e2e
 
 run_check P0 '#4a' 'Always-true numeric assertion' 'toBeGreaterThanOrEqual\(0\)' '*.{ts,js,tsx,jsx,cy.ts,cy.js}' e2e
-run_check P0 '#4b' 'Vacuous toBeAttached assertion (positive form only)' '(?<!not\.)toBeAttached\(\)' '*.{ts,js,tsx,jsx,cy.ts,cy.js}' e2e
-run_check P0 '#4c-4e' 'One-shot Playwright state/content assertion' 'expect\(await.*\.(isVisible|isDisabled|isEnabled|isChecked|isHidden|textContent|innerText|getAttribute|inputValue|allTextContents)\([^)]*\)\)' '*.{spec.ts,spec.js,test.ts,test.js}'
+# #4b is grep-undecidable: positive toBeAttached is only vacuous when a destructive action
+# should have removed the element; on client-rendered apps it is usually a legitimate
+# render-gate (field data: ~90% FP). The `triage` flag reports it as [P0?][LLM-TRIAGE] and
+# keeps it out of the p0 exit count — Phase 2 confirms destructive-action context.
+run_check P0 '#4b' 'Vacuous toBeAttached assertion (positive form only; Phase 2 confirms destructive-action context)' '(?<!not\.)toBeAttached\(\)' '*.{ts,js,tsx,jsx,cy.ts,cy.js}' e2e,triage
+# #4c-4e: one-shot reads (`expect(await <locator>.textContent()/count()/inputValue()...)`
+# + sync matcher) are P0 one-shot assertions, NOT #15 — the await resolves a value, nothing
+# floats. The leading `(?:...)*` group admits wrapped forms (`expect((await ...).trim())`,
+# `expect(Number(await ...))`, `expect(!(await ...))`) that field runs showed being
+# misfiled under #15 by the old locator-substring heuristic.
+run_check P0 '#4c-4e' 'One-shot Playwright state/content assertion' 'expect\((?:[!(\s+-]|[A-Za-z_$][\w$.]*\()*await\b.*\.(isVisible|isDisabled|isEnabled|isChecked|isHidden|isEditable|textContent|innerText|getAttribute|inputValue|allTextContents|allInnerTexts|count)\([^)]*\)\)' '*.{spec.ts,spec.js,test.ts,test.js}'
 run_check P0 '#4f' 'Locator always-true assertion (truthy/defined/not-null)' 'expect\(.*(locator|getBy[A-Za-z]+).*(\.toBeTruthy\(\)|\.toBeDefined\(\)|\.not\.toBeNull\(\)|\.not\.toBeUndefined\(\)|\.not\.to\.equal\(null\)|\.not\.to\.be\.null)' '*.{ts,js,tsx,jsx}' e2e
 run_check P0 '#4g' 'Retry disabled with timeout zero' 'timeout:\s*0' '*.{ts,js,tsx,jsx,cy.ts,cy.js}' e2e
 run_check P0 '#4h' 'One-shot page.url assertion' 'expect\(page\.url\(\)\)' '*.{spec.ts,spec.js,test.ts,test.js}'
@@ -457,7 +559,11 @@ run_check P0 '#8b' 'Boolean state result discarded' '^\s*await .*\.(isVisible|is
 run_check P1 '#10a' 'Positional selector' '\.(nth\(|first\(\)|last\(\))' '*.{spec.ts,spec.js,test.ts,test.js,cy.ts,cy.js}'";$CYI"
 run_check P1 '#10b' 'Serial Playwright suite' '\.describe\.serial\(' '*.{spec.ts,spec.js,test.ts,test.js}'
 run_check P1 '#14' 'Hardcoded credentials' '(login|fill|type).*(["'"'"'].*password|["'"'"'].*secret|["'"'"']admin["'"'"'])' '*.{spec.ts,spec.js,test.ts,test.js,cy.ts,cy.js}'";$CYI"
-run_check P0 '#15' 'Missing await on Playwright expect' '^\s*expect\(\s*+(?!await\b).*(locator|getBy[A-Z][A-Za-z]*|(?<![.\w])page\))' '*.{spec.ts,spec.js,test.ts,test.js}' e2e
+# #15 keeps ONLY unawaited web-first matchers: the trailing matcher whitelist stops the old
+# conflation where sync-matcher one-shot reads (e.g. `expect(Number(await getRowCount(page)))
+# .toBe(4)` — the `page)` substring) were misfiled as #15 (ag-grid field run: 25 of 33 #15
+# hits were really #4c-4e). Matcher-on-next-line splits are covered by Tier 2 (sg-15).
+run_check P0 '#15' 'Missing await on Playwright expect' '^\s*expect\(\s*+(?!await\b).*(locator|getBy[A-Z][A-Za-z]*|(?<![.\w])page\)).*\.(toBeVisible|toBeHidden|toHaveText|toContainText|toHaveValue|toHaveValues|toHaveClass|toHaveAttribute|toBeChecked|toBeEnabled|toBeDisabled|toBeEditable|toBeFocused|toBeEmpty|toHaveCount|toHaveCSS|toHaveId|toHaveJSProperty|toHaveScreenshot|toHaveURL|toHaveTitle)\(' '*.{spec.ts,spec.js,test.ts,test.js}' e2e
 # #15 variant: the await is misplaced INSIDE expect() onto the locator (a no-op, since a Locator
 # is not thenable) instead of on expect itself, so the web-first matcher promise still floats and
 # the assertion never settles. The base #15 above skips `expect(await ...` by design, so this
@@ -475,14 +581,20 @@ run_check P1 '#18' 'Soft assertion usage' 'expect\.soft\(' '*.{spec.ts,spec.js,t
 run_check P0 '#3b' 'Cypress uncaught exception suppression (Phase 2 confirms blanket vs scoped)' "on\(\s*['\"]uncaught:exception['\"]" '*.{cy.ts,cy.js,ts,js}'
 run_check P1 '#19' 'Module-level mutable state in test code' '^let\s+' '*.{ts,js,tsx,jsx,cy.ts,cy.js}' e2e
 
-printf '\nSummary: %s total hit(s), %s P0, %s P1/P2 heuristic; %s AST hit(s).\n' "$total_hits" "$p0_hits" "$p1_hits" "${ast_total:-0}"
+# Out-of-scope report: one explicit line so Phase-0 skips are never a silent truncation.
+scope_skipped=$(wc -l < "$SCOPE_STATE_DIR/out" | tr -d ' ')
+printf '\nScope filter: %s out-of-scope file(s) skipped (pattern hits in files without Playwright/Cypress markers).\n' "$scope_skipped"
+rm -rf "$SCOPE_STATE_DIR"
+
+printf '\nSummary: %s total hit(s), %s P0, %s P1/P2 heuristic, %s LLM-triage; %s AST hit(s).\n' "$total_hits" "$p0_hits" "$p1_hits" "$llm_triage_hits" "${ast_total:-0}"
 
 case "$FAIL_ON" in
   none)
     exit 0
     ;;
   any)
-    [[ "$total_hits" -eq 0 ]]
+    # `any` means anything found by any tier — Tier-2 AST hits gate here too.
+    [[ "$((total_hits + ${ast_total:-0}))" -eq 0 ]]
     ;;
   p0)
     [[ "$p0_hits" -eq 0 ]]

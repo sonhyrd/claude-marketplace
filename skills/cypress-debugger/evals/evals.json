@@ -105,14 +105,42 @@
     },
     {
       "id": 7,
-      "prompt": "Analyze retries in the Cypress report at evals/files/mochawesome-retries.json. Identify which tests passed only on retry, which failed every attempt, and which ran cleanly the first time.",
-      "expected_output": "Three tests with attempts[] data. 'Dashboard loads widgets after login' failed attempt 1 and passed attempt 2 (attempts length 2, final passed) — a passes-on-retry F1 flaky signal verifiable from the data, NOT a hard failure. 'Payment charges the card' failed all 3 attempts (attempts length 3, final failed) — a consistent failure, NOT flaky. 'Home page renders the hero heading' passed on the first attempt (attempts length 1) and must NOT be flagged as flaky or failed. This fixture guards the gap where per-attempt data was never extracted, so 'passes on retry' was invisible.",
-      "files": ["evals/files/mochawesome-retries.json"],
+      "prompt": "Analyze retries for the Cypress run reported in evals/files/mochawesome-retries.json. The project also saves Cypress's own run results via an after:run hook to evals/files/cypress-run-results-retries.json. Identify which tests passed only on retry, which failed every attempt, and which ran cleanly the first time.",
+      "expected_output": "Stock mochawesome carries NO per-attempt data — 'Dashboard loads widgets after login' appears as a plain pass in mochawesome-retries.json. The retry evidence lives in the after:run results (runs[].tests[].attempts[]) and in the screenshot filenames. Dashboard: attempts [failed, passed] plus a '(failed).png' screenshot despite the passing final state → passed on retry, an F1 flaky signal, NOT a hard failure. 'Payment charges the card': attempts [failed, failed, failed] with '(attempt 2)'/'(attempt 3)' screenshots → consistent failure across every retry, NOT flaky. 'Home page renders the hero heading': a single passed attempt and no failure screenshots → ran cleanly, must not be flagged. This fixture guards against inventing an attempts[] or currentRetry field in mochawesome JSON: per-attempt data must come from the module-API/after:run shape or the screenshot names, never from mochawesome.",
+      "files": ["evals/files/mochawesome-retries.json", "evals/files/cypress-run-results-retries.json"],
       "assertions": [
-        "Identifies 'Dashboard loads widgets after login' as passed-on-retry (F1 Flaky/Timing) using the attempts[] data (failed then passed)",
-        "Identifies 'Payment charges the card' as a consistent failure across all 3 attempts — NOT flaky",
-        "Does NOT flag 'Home page renders the hero heading' as flaky — it passed on the first attempt (attempts length 1)",
-        "Distinguishes flaky (passes on retry) from consistent failure using attempt count and final state, not just the final pass/fail",
+        "Identifies 'Dashboard loads widgets after login' as passed-on-retry (F1 Flaky/Timing) using the after:run attempts[] data (failed then passed) and/or the '(failed).png' screenshot recorded for a test the mochawesome report marks passed",
+        "Does NOT claim mochawesome JSON contains attempts[] or currentRetry fields — sources per-attempt data from the after:run/module-API results or the '(failed)'/'(attempt N)' screenshot filenames instead",
+        "Identifies 'Payment charges the card' as a consistent failure across all 3 attempts (attempts all failed; '(attempt 2)' and '(attempt 3)' screenshots) — NOT flaky",
+        "Does NOT flag 'Home page renders the hero heading' — single passed attempt, no failure screenshots",
+        "Distinguishes flaky (passes on retry) from consistent failure using per-attempt states plus final state, not just the final pass/fail",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Debug the Cypress test failures in evals/files/mochawesome-error-swallowing.json. One test fails; also audit the passing tests' code fields for P0 silent-pass patterns before reporting.",
+      "expected_output": "One failure, one P0 silent pass, one clean pass. 'Checkout shows the order total' failed with Cypress's uncaught:exception error (TypeError: Cannot read properties of undefined (reading 'total') from application code) — a real product regression in the checkout flow, not a test to weaken. 'Checkout completes the order' PASSED but is the P0: its code registers a blanket cy.on('uncaught:exception', () => false) and has no assertion after the click, so the exact TypeError that failed the sibling test is silently suppressed — F13 Error Swallowing. 'Checkout surfaces checkout crashes containing undefined as failures (regression guard)' also passes but must NOT be flagged: its handler asserts on the error message (expect(err.message.includes('undefined')).to.be.false), the scoped negative-regression form the F13 row explicitly excludes.",
+      "files": ["evals/files/mochawesome-error-swallowing.json"],
+      "assertions": [
+        "Flags the PASSING test 'Checkout completes the order' as P0 F13 (Error Swallowing) — blanket cy.on('uncaught:exception', () => false) plus no post-click assertion suppresses the same TypeError that failed the sibling test",
+        "Classifies 'Checkout shows the order total' as an application code bug surfaced via Cypress's uncaught:exception failure — a real product regression, and does NOT suggest weakening its assertion",
+        "Does NOT flag the regression-guard test as F13 — its uncaught:exception handler asserts on error properties (expect(err.message.includes('undefined')).to.be.false) rather than suppressing them",
+        "Reports the F13 finding with severity P0, ordered before lower-severity findings",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Debug the Cypress test failures in evals/files/mochawesome-condition-branch.json. One test fails; also audit the passing tests' code fields for P0 silent-pass patterns before reporting.",
+      "expected_output": "One failure, one P0 silent pass, one clean conditional. 'Promo banner shows the discount code in the banner' failed — '[data-testid=\"promo-banner\"]' never found — the banner never rendered (product regression or F2 territory). 'Promo banner dismisses the promo banner when shown' PASSED in 450ms but is the P0: every command and assertion sits inside if ($body.find('[data-testid=\"promo-banner\"]').length), so with the banner missing (which the failing sibling proves) the test asserted nothing — F6 Condition Branch Missing. 'shows the user menu when logged in and the login button otherwise' must NOT be flagged: both branches of its conditional end in an assertion, so no input silently skips verification.",
+      "files": ["evals/files/mochawesome-condition-branch.json"],
+      "assertions": [
+        "Flags the PASSING test 'Promo banner dismisses the promo banner when shown' as P0 F6 (Condition Branch Missing) — all assertions are inside the $body.find('[data-testid=\"promo-banner\"]') conditional, so the test passes silently when the banner never renders",
+        "Connects the failing sibling to the F6 finding: the 'never found it' failure proves the passing test's condition was false, i.e. its silent pass hid the same missing banner",
+        "Classifies 'Promo banner shows the discount code in the banner' as F2 (Selector Broken) or a real product regression (banner never rendered)",
+        "Does NOT flag 'shows the user menu when logged in and the login button otherwise' as F6 — both branches of its conditional end in an assertion",
+        "Reports the F6 finding with severity P0",
         "Summary table included"
       ]
     }

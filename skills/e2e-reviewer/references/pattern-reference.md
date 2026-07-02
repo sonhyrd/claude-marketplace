@@ -131,14 +131,17 @@ expect(page.locator('.selector')).toBeTruthy();
 
 // BAD — a Locator is never null/undefined, so these never fail either (same #4f family)
 expect(page.getByText('1/31/2025')).not.toBeNull();
+expect(page.getByText('1/31/2025')).not.toBeUndefined();
 expect(page.getByText('1/31/2025')).not.to.equal(null);
+expect(page.getByText('1/31/2025')).not.to.be.null;
 expect(page.locator('.selector')).toBeDefined();
-
-// BAD — disables auto-retry entirely
-await expect(el).toHaveCount(0, { timeout: 0 });
 ```
 
+**Sub-IDs reported by the scanner:** `#4a` always-true math, `#4b` vacuous `toBeAttached()` (LLM-TRIAGE — see below), `#4c-4e` one-shot state/content reads (one combined check), `#4f` Locator truthiness/nullness, `#4g` `timeout: 0` (dedicated block below), `#4h` one-shot `page.url()`.
+
 **Rule:** `toBeAttached()` on an unconditionally rendered element (always in the static HTML shell) is vacuous → P0. The only legitimate use is asserting that an element exists in the DOM but is CSS-hidden (`visibility:hidden`, not `display:none`) — add `// JUSTIFIED: visibility:hidden` in that case.
+
+**#4b scanner semantics (LLM-TRIAGE):** grep alone cannot confirm the context that makes a `toBeAttached()` hit real. The scanner matches the positive form only (`.not.toBeAttached()` is never flagged), tags each hit `[P0?][LLM-TRIAGE]`, and routes it to a separate LLM-triage count that does NOT gate the P0 exit code. Phase 2 confirms destructive-action context (the element should have been removed) before reporting P0 — on client-rendered apps a positive `toBeAttached()` is usually a legitimate render-gate (field data: ~90% FP). Documented severity remains P0 once confirmed.
 
 **Fix:**
 - `toBeGreaterThanOrEqual(0)` → `toBeGreaterThan(0)`
@@ -148,11 +151,25 @@ await expect(el).toHaveCount(0, { timeout: 0 });
 - `expect(await el.getAttribute('x')).toBe(y)` → `await expect(el).toHaveAttribute('x', y)`
 - `expect(await el.allTextContents()).toContain(x)` → `await expect(el).toContainText(x)`
 - `expect(locator).toBeTruthy()` → `await expect(locator).toBeVisible()`
-- `expect(locator).not.toBeNull()` / `.not.to.equal(null)` / `.toBeDefined()` → `await expect(locator).toBeVisible()` (a Locator is never null/undefined; assert the user-visible state instead)
-- `{ timeout: 0 }` on assertions → remove unless preceded by an explicit wait; add `// JUSTIFIED:` if intentional
+- `expect(locator).not.toBeNull()` / `.not.toBeUndefined()` / `.not.to.equal(null)` / `.not.to.be.null` / `.toBeDefined()` → `await expect(locator).toBeVisible()` (a Locator is never null/undefined; assert the user-visible state instead)
+- `{ timeout: 0 }` on assertions → see the 4g block below
 - `expect(page.url()).toContain(x)` → `await expect(page).toHaveURL(x)` (one-shot URL read with no retry)
 - **Multiple `expect(page.url()).toContain(...)` in sequence** → replace each call with its **own** `await expect(page).toHaveURL(/.../) `. Do NOT combine them into a single regex with `.*` (e.g., `toHaveURL(/A.*B/)`) — that adds an ordering constraint not present in the original substring checks.
 - **Compound boolean expression** like `expect(visible1 || visible2).toBe(true)` is the same one-shot anti-pattern as `expect(await el.isVisible()).toBe(true)`. Prefer a locator-level web-first assertion such as `await expect(page.locator('.a, .b')).toBeVisible()`. If both branches require independent assertions (e.g., different post-actions per branch), gate the test with `test.skip()` on the unsupported branch rather than collapsing into a single boolean check.
+
+**Boundary with #15 (one-shot reads vs floating promises):** in #4c-4e the `await` sits INSIDE `expect()` and resolves a real value against a sync matcher — `expect(await el.textContent()).toBe(x)`, including wrapped forms `expect((await …).trim())`, `expect(Number(await …))`, `expect(!(await …))` — nothing floats; the bug is a one-shot read with no auto-retry. The scanner reroutes these shapes here even when they superficially resemble #15. An unawaited web-first matcher (`expect(locator).toBeVisible()` with no leading `await`) is #15, not #4.
+
+**Retry-wrapper skip (false-positive exclusion — applies to #4c-4e and #4h):** when a hit's enclosing function is the callback of `await expect(async () => { … }).toPass({…})` or `await expect.poll(async () => { … }).toX(…)`, Playwright re-runs the callback until it passes or times out — one-shot reads inside are not silent-always-pass. SKIP P0 reporting for those hits. In practice a large share of raw #4h hits sit inside `.toPass(…)` callbacks — always check the enclosing wrapper before counting.
+
+<!-- 4g stays a bold sub-block, NOT a "#### 4g." header: CI Check 3c (scripts/ci/review.sh) requires the set of "#### <id>." headers in this file to exactly equal the 24 Quick Reference base IDs. Sub-IDs (4g — like 5a/5b, 8a/8b, 10a/10b) live inside their parent's block. -->
+**4g. Retry disabled with `{ timeout: 0 }`** `[grep-detectable]` — a zero timeout on a web-first assertion or wait disables auto-retry entirely, collapsing the retrying check into a one-shot read.
+
+```typescript
+// BAD — disables auto-retry entirely
+await expect(el).toHaveCount(0, { timeout: 0 });
+```
+
+**Rule:** flag every `timeout: 0` in e2e code (P0). Remove it unless an explicit wait for the same condition immediately precedes. If intentional — asserting the *current* state where no settling is expected — add `// JUSTIFIED:` on the line above; the scanner suppresses justified hits.
 
 #### 5. Bypass Patterns `[grep-detectable]` (5a P0, 5b P1)
 
@@ -252,7 +269,11 @@ await expect(page.locator('.toast')).toBeVisible();
 
 **Why it matters:** This is a silent P0. The test compiles and runs green, but zero verification happens. Extremely common mistake, especially when converting from non-async test frameworks.
 
-**Rule:** Every `expect()` on a Playwright Locator must be `await`ed. Grep flags two forms: lines starting with `expect(` without `await`, and the awaited-locator form `expect(await <locator>).<web-first matcher>(` where the `await` sits on the locator instead of on `expect`. Confirm in Phase 2 that the subject is a Locator (non-Locator expects like `expect(count).toBe(3)` don't need `await`, and value-resolving one-shot reads like `expect(await x.isVisible()).toBe(true)` are #4c-4e, not this). Flag P0.
+**Rule:** Every `expect()` on a Playwright Locator must be `await`ed. Grep flags two forms, BOTH bounded to a trailing web-first matcher whitelist (`toBeVisible`, `toBeHidden`, `toHaveText`, `toHaveURL`, `toHaveCount`, …): lines starting with `expect(` without `await` on a Locator/`page` subject, and the awaited-locator form `expect(await <locator>).<web-first matcher>(` where the `await` sits on the locator instead of on `expect`. Confirm in Phase 2 that the subject is a Locator (non-Locator expects like `expect(count).toBe(3)` don't need `await`). Flag P0.
+
+**Boundary with #4c-4e (the #15/#4 split):** the matcher whitelist exists to stop sync-matcher one-shot reads from being misfiled here. `expect(await x.isVisible()).toBe(true)`, `expect(Number(await getRowCount(page))).toBe(4)`, and other value-resolving reads (including wrapped forms) resolve a real value — nothing floats — and are #4c-4e, not #15; the scanner reroutes them. Matcher-on-next-line splits are covered by Tier 2 (`sg-15`).
+
+**Retry-wrapper skip (false-positive exclusion):** an unawaited `expect()` whose enclosing function is the callback of `await expect(async () => { … }).toPass({…})` or `await expect.poll(async () => { … }).toX(…)` is re-run by the harness until it passes or times out — not silent-always-pass. SKIP P0 reporting for those hits.
 
 #### 16. Missing `await` on Playwright Actions `[grep-detectable]`
 
@@ -269,6 +290,10 @@ await page.locator('#submit').click();
 **Why it matters:** Silent no-op. The test passes because it never waits for the action. Subsequent assertions may run against stale page state.
 
 **Rule:** Every Playwright action (`.click()`, `.fill()`, `.type()`, `.press()`, `.check()`, `.selectOption()`, `.setInputFiles()`, `.hover()`, `.focus()`, `.blur()`) must be `await`ed. Flag P0.
+
+**False-positive exclusions (Phase 2):**
+- **`Promise.all` / `Promise.race` arrays:** SKIP a hit when the line sits inside a `Promise.all([` / `Promise.race([` array — array elements don't need an explicit `await`; the `Promise.all` awaits them.
+- **Retry-wrapper callbacks:** SKIP a hit whose enclosing function is the callback of `await expect(async () => { … }).toPass({…})` or `await expect.poll(…)` — the harness awaits and re-runs the callback until it passes or times out.
 
 ---
 

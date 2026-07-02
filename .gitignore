@@ -22,3 +22,6 @@ results/
 
 # test-parity.sh transient backups (stray after an interrupted run)
 *.parity-backup
+
+# Marketing collateral (local-only, not part of the public repo)
+marketing/

@@ -291,6 +291,103 @@
         "Does NOT flag the 'should delete a profile' test — the post-delete success toast getByText(/profile deleted/i) counts as verifying the deletion happened",
         "Does NOT flag the 'should remove selected text from the editor' test — editor text removal is not an entity deletion (judged by the noun), and it asserts toBeEmpty() anyway"
       ]
+    },
+    {
+      "id": 15,
+      "prompt": "Review the Playwright E2E tests in evals/files/soft-and-zero-timeout.spec.ts. Identify retry-disabling timeout options and expect.soft overuse, respecting JUSTIFIED suppression and without flagging nonzero timeout bounds.",
+      "expected_output": "Should detect: { timeout: 0 } on an assertion (#4g P0) and a test where all assertions are expect.soft (#18 P1). Should NOT flag: the JUSTIFIED { timeout: 0 } snapshot-of-absence, nonzero timeout bounds in waitFor()/toBeVisible(), or a test with a minority of soft assertions.",
+      "files": [
+        "evals/files/soft-and-zero-timeout.spec.ts"
+      ],
+      "assertions": [
+        "Detects toHaveCount(0, { timeout: 0 }) on line 7 as #4g (P0) — { timeout: 0 } disables auto-retry, turning the assertion into a one-shot snapshot of absence",
+        "Does NOT flag the { timeout: 0 } on line 19 as #4g — the // JUSTIFIED: snapshot-of-absence comment on line 18 (position-1 suppression) documents the intentional must-never-exist semantic",
+        "Does NOT flag waitFor({ state: 'hidden', timeout: 5000 }) on line 12 or toBeVisible({ timeout: 5000 }) on line 13 as #4g or #9 — nonzero timeout options are bounds, not sleeps and not retry-disables",
+        "Flags the 'shows all profile fields' test as #18 (P1) — all 3 of its assertions (lines 26-28) are expect.soft (100% > 50% threshold); no hard assertion gates the test, so cascading failures are masked",
+        "Does NOT flag the 'shows plan details' test as #18 — only 1 of its 3 assertions (line 35) is soft (33%, below the >50% threshold); the hard assertions on lines 33-34 gate the test",
+        "Structured output with P0/P1/P2",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Review the Playwright E2E tests in evals/files/unmocked-writes.spec.ts. Check whether write/credential paths are stubbed (#20) without flagging stubbed writes or client-side-only validation tests.",
+      "expected_output": "Should detect one unmocked real-backend write (#20 P1): the signup submit with no route stub. Should NOT flag: the test whose write endpoint is covered by page.route, or the client-side validation test that fires no request.",
+      "files": [
+        "evals/files/unmocked-writes.spec.ts"
+      ],
+      "assertions": [
+        "Flags the 'registers a new account' test as #20 (P1) — the submit on line 8 fires a real signup mutation and no page.route/cy.intercept stub in the spec or its fixtures covers the endpoint, so every CI run registers a real account on a shared backend",
+        "Does NOT flag the 'shows an error when the backend rejects the email' test as #20 — the page.route('**/api/auth/join**') stub on lines 13-15 covers the write endpoint before the submit on line 19; the test asserts the app's handling of the stubbed 409 response",
+        "Does NOT flag the 'rejects a malformed email client-side' test as #20 — client-side validation blocks submission (comment on line 27) so no network request is fired; there is nothing to stub",
+        "Structured output with P0/P1/P2",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Review the Playwright E2E tests in evals/files/session-state.spec.ts together with evals/files/auth.setup.ts. Check every storageState dependency for reproducibility (#21) and do not flag session files a setup project regenerates.",
+      "expected_output": "Should detect one manually-captured session-file dependency (#21 P2): the member storageState that only a manual DevTools capture produces. Should NOT flag the admin storageState, which auth.setup.ts regenerates programmatically on every run.",
+      "files": [
+        "evals/files/session-state.spec.ts",
+        "evals/files/auth.setup.ts"
+      ],
+      "assertions": [
+        "Flags the storageState '.auth/member.json' on session-state.spec.ts line 6 as #21 (P2) — per the comment on lines 3-4 only a manual DevTools capture produces the file; nothing in the automated setup regenerates it, so it is absent on fresh clones/CI and silently expires",
+        "Does NOT flag the storageState '.auth/admin.json' on session-state.spec.ts line 17 as #21 — auth.setup.ts line 9 writes that exact path programmatically on every run (a `setup` project), so the dependency is reproducible from code",
+        "Structured output with P0/P1/P2",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Review the Playwright E2E tests in evals/files/optimistic-ui.spec.ts. Check write-interaction tests for request proof (#22) without flagging tests that await request evidence or exercise pure client-side state.",
+      "expected_output": "Should detect one optimistic-UI-only assertion (#22 P1): the like test that asserts only the optimistically-flipped aria-pressed attribute. Should NOT flag: the variant that awaits page.waitForRequest, or the collapse test whose handler issues no request.",
+      "files": [
+        "evals/files/optimistic-ui.spec.ts"
+      ],
+      "assertions": [
+        "Flags the 'likes a sentence' test as #22 (P1) — the click on line 9 is verified only by the aria-pressed assertion on line 10, and the comment on lines 3-4 documents that the handler flips aria-pressed optimistically before the POST; the test passes even if the API wiring is deleted",
+        "Does NOT flag the 'likes a sentence and proves the write fired' test as #22 — page.waitForRequest is set up on line 16 BEFORE the click on line 19 and awaited on line 20, proving the POST /api/sentence/like fired alongside the UI assertion",
+        "Does NOT flag the 'collapses the translation panel' test as #22 — the collapse handler is pure client-side state (comment on line 26, no request in the handler), so no call proof is required",
+        "Structured output with P0/P1/P2",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "Review the Playwright E2E tests in evals/files/liked-fixture.spec.ts together with the display component evals/files/components/liked-list.tsx. Cross-check seeded fixture data against the component's render guards (#23) and do not flag guard-passing fixtures.",
+      "expected_output": "Should detect two fixture/render-guard mismatches (#23 P2): a liked-tab fixture seeding liked: false that the component guard suppresses (element-not-found flake), and a negative toHaveCount(0) assertion that passes for the wrong reason. Should NOT flag the fixture seeding liked: true.",
+      "files": [
+        "evals/files/liked-fixture.spec.ts",
+        "evals/files/components/liked-list.tsx"
+      ],
+      "assertions": [
+        "Flags the 'shows the liked sentence' test as #23 (P2) — the fixture seeds liked: false (line 10) for the Liked tab, but LikedListItem's render guard (components/liked-list.tsx line 10: if (tabIsLiked && !item.liked) return null) suppresses the item, so the toHaveText assertion on line 14 fails as 'element not found' that looks like infra flake",
+        "Flags the 'shows the empty state when nothing is liked' test as #23 (P2) — the negative assertion toHaveCount(0) on line 26 passes for the wrong reason: the seeded item (liked: false, line 22) is guard-suppressed rather than genuinely absent, so the test would keep passing even if real liked items leaked into the empty state",
+        "Does NOT flag the 'renders a guard-passing liked item' test as #23 — the fixture seeds liked: true (line 34), which passes every render guard for the Liked view, making the assertion on line 38 meaningful",
+        "Structured output with P0/P1/P2",
+        "Summary table included"
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "Review the Playwright E2E tests in evals/files/documented-exclusions.spec.ts. Triage the Phase 1 hits against the documented false-positive exclusions (#5a if-without-expect, #4c-4e custom-service subject, #16 Promise.all element, #4b dynamically-injected element, #4h bare url read, #9 waitFor timeout bound) and only report the real finding.",
+      "expected_output": "Exactly one P0 should survive Phase 2: the spinner test whose expect() is gated inside an if with no unconditional assertion (#5a). All other Phase 1 hits match documented exclusions and must be skipped; the bare page.url() read and the waitFor timeout bound must not be flagged at all.",
+      "files": [
+        "evals/files/documented-exclusions.spec.ts"
+      ],
+      "assertions": [
+        "Does NOT report the #5a Phase 1 hit on line 15 as P0 — the if-body (line 16) contains no expect(); it gates a setup action (dismissing an optional cookie banner) and the test still asserts unconditionally on line 18",
+        "Still flags the #5a hit on lines 64-65 as P0 — the expect on line 65 is gated inside the if with no unconditional assertion after it, so the test passes silently whenever the spinner never appears",
+        "Does NOT report the #4c-4e Phase 1 hit on line 24 as P0 — the subject flags.isEnabled('labs-mode') is a custom FeatureFlagService method returning Promise<boolean> (defined on lines 4-10), not a Playwright Locator/Page",
+        "Does NOT report the #16 Phase 1 hit on line 33 as P0 — page.locator('#send').click() is an element of the Promise.all array opened on line 31; Promise.all awaits it, so no explicit await is needed",
+        "Does NOT report the #4b Phase 1 hit on line 44 as P0 — the .expired-license-banner is dynamically injected only when the mocked license API reports expiry (route on lines 40-42), so toBeAttached() can genuinely fail and is meaningful",
+        "Does NOT flag const originalUrl = page.url() on line 49 as #4h — a bare page.url() read captured for the later toHaveURL assertion on line 52 is the canonical baseline-then-assert pattern; only expect(page.url()) is the anti-pattern",
+        "Does NOT flag waitFor({ state: 'visible', timeout: 5000 }) on line 58 as #9 — a timeout option inside waitFor() is a bound on a condition-based wait, not a hard-coded sleep",
+        "Structured output with P0/P1/P2",
+        "Summary table included"
+      ]
     }
   ]
 }

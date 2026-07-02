@@ -34,6 +34,7 @@ cleanup() {
       mv "$b" "$f" || true
     fi
   done
+  [ -n "${SCAN_FIXDIR:-}" ] && rm -rf "$SCAN_FIXDIR" || true
 }
 trap cleanup EXIT INT TERM
 
@@ -209,6 +210,130 @@ PY_LONG_DESC
 assert_fails "SKILL.md description length guard" "frontmatter description exceeds 1024 characters"
 assert_security_fails "Pre-push SKILL.md description length guard" "frontmatter description exceeds 1024 characters"
 restore "$file"
+
+# Case 14: Language guard — Hangul on a non-switcher README.md line must still fail.
+# The switcher exemption only covers lines linking to README.<lang>.md translations.
+file="README.md"
+backup "$file"
+mutate "$file" "Find Playwright/Cypress E2E tests that pass CI" "Find Playwright/Cypress E2E tests 한국어 that pass CI"
+assert_fails "Language guard — Hangul outside switcher line in README.md" "Korean text found in public docs: README.md"
+restore "$file"
+
+# Case 15: README i18n structural parity — a translation losing a section must fail.
+file="README.ko.md"
+backup "$file"
+mutate "$file" "## 설치" "###설치-변조"
+assert_fails "README i18n parity — section drift in README.ko.md" "README i18n parity: README.ko.md has"
+restore "$file"
+
+# ---------------------------------------------------------------------------
+# Scanner detection smoke — fixture-based and offline: eslint auto-download is
+# disabled via E2E_SMELL_NO_ESLINT_DOWNLOAD=1 (so counts come from the Tier-3
+# regex path) and ast-grep download via E2E_SMELL_NO_AST_GREP_DOWNLOAD=1. A
+# locally installed ast-grep may still run Tier 2 offline, so assertions only
+# key on Tier-3 output shapes ('[P0] #id' headers and the Summary line).
+# ---------------------------------------------------------------------------
+echo ""
+echo "-- Scanner detection smoke --"
+
+SCAN_SH="skills/e2e-reviewer/scripts/scan.sh"
+SCAN_FIXDIR=$(mktemp -d /tmp/e2e-scan-smoke.XXXXXX)
+
+run_scan() { # $1 = fixture subdir, $2 = FAIL_ON mode; sets SCAN_OUT and SCAN_RC
+  SCAN_RC=0
+  SCAN_OUT=$(E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_NO_AST_GREP_DOWNLOAD=1 \
+    E2E_SMELL_FAIL_ON="$2" bash "$SCAN_SH" "$SCAN_FIXDIR/$1" 2>&1) || SCAN_RC=$?
+}
+
+assert_scan_contains() {
+  local name="$1"
+  local expected="$2"
+  if printf '%s\n' "$SCAN_OUT" | grep -qF "$expected"; then
+    echo "  [PASS] $name"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] $name — expected substring not found: '$expected'" >&2
+    printf '%s\n' "$SCAN_OUT" | sed 's/^/         /' >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+assert_scan_absent() {
+  local name="$1"
+  local unexpected="$2"
+  if printf '%s\n' "$SCAN_OUT" | grep -qF "$unexpected"; then
+    echo "  [FAIL] $name — unexpected substring found: '$unexpected'" >&2
+    printf '%s\n' "$SCAN_OUT" | sed 's/^/         /' >&2
+    FAIL=$((FAIL + 1))
+  else
+    echo "  [PASS] $name"
+    PASS=$((PASS + 1))
+  fi
+}
+
+assert_scan_rc() {
+  local name="$1"
+  local expected_rc="$2"
+  if [ "$SCAN_RC" -eq "$expected_rc" ]; then
+    echo "  [PASS] $name"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] $name — expected exit $expected_rc, got $SCAN_RC" >&2
+    printf '%s\n' "$SCAN_OUT" | sed 's/^/         /' >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# Case S1: JUSTIFIED above test.only must NOT suppress #7 (no-exemption contract)
+mkdir -p "$SCAN_FIXDIR/s1"
+cat > "$SCAN_FIXDIR/s1/focused.spec.ts" <<'EOF'
+import { test, expect } from '@playwright/test';
+
+// JUSTIFIED: debugging leftover — the no-exemption contract must still flag this
+test.only('focused test', async ({ page }) => {
+  await page.goto('/');
+});
+EOF
+run_scan s1 none
+assert_scan_contains "Scanner S1 — JUSTIFIED does not silence #7" "[P0] #7"
+assert_scan_contains "Scanner S1 — #7 hit names the fixture line" "focused.spec.ts:4"
+
+# Case S2: fixture whose only P0 is test.only must exit 1 under FAIL_ON=p0 (Tier-3 path)
+run_scan s1 p0
+assert_scan_rc "Scanner S2 — test.only fixture exits 1 under FAIL_ON=p0" 1
+
+# Case S3: sync-matcher one-shot read is #4c-4e (one-shot read, P0), never #15
+mkdir -p "$SCAN_FIXDIR/s3"
+cat > "$SCAN_FIXDIR/s3/oneshot.spec.ts" <<'EOF'
+import { test, expect } from '@playwright/test';
+
+test('one-shot read with sync matcher', async ({ page }) => {
+  expect(await page.locator('.cell').textContent()).toBe('Name');
+});
+EOF
+run_scan s3 none
+assert_scan_contains "Scanner S3 — sync-matcher read reported as #4c-4e" "#4c-4e"
+assert_scan_absent "Scanner S3 — sync-matcher read not reported as #15" "#15"
+
+# Case S4: Knex-style .first() in a non-E2E (backend Vitest) file produces no hit
+mkdir -p "$SCAN_FIXDIR/s4"
+cat > "$SCAN_FIXDIR/s4/user-dal.test.ts" <<'EOF'
+import { describe, it, expect } from 'vitest';
+import { db } from './db';
+
+describe('user dal', () => {
+  it('returns the first user', async () => {
+    const user = await db('users').where({ id: 1 }).first();
+    expect(user).toBeDefined();
+  });
+});
+EOF
+run_scan s4 none
+assert_scan_absent "Scanner S4 — backend Knex .first() not flagged as #10a" "#10a"
+assert_scan_contains "Scanner S4 — out-of-scope file skip is reported" "1 out-of-scope file(s) skipped"
+assert_scan_contains "Scanner S4 — zero total hits" "Summary: 0 total hit(s)"
+
+rm -rf "$SCAN_FIXDIR"
 
 echo ""
 echo "========================================"

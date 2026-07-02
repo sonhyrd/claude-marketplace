@@ -591,6 +591,25 @@ else
   warn "python3 not available; skipped docs orphan check"
 fi
 
+section "README i18n parity"
+i18n_ok=1
+en_sec=$(grep -c '^## ' README.md || true)
+en_fence=$(grep -c '^```' README.md || true)
+for f in README.ko.md README.ja.md README.zh-cn.md; do
+  if [ ! -f "$f" ]; then
+    err "README i18n parity: translation missing: $f"
+    i18n_ok=0
+    continue
+  fi
+  s=$(grep -c '^## ' "$f" || true)
+  c=$(grep -c '^```' "$f" || true)
+  [ "$s" = "$en_sec" ] || { err "README i18n parity: $f has $s '## ' sections, README.md has $en_sec"; i18n_ok=0; }
+  [ "$c" = "$en_fence" ] || { err "README i18n parity: $f has $c code fences, README.md has $en_fence"; i18n_ok=0; }
+  grep -q 'docs/assets/hero.png' "$f" || { err "README i18n parity: $f missing hero image"; i18n_ok=0; }
+  grep -q 'README.md">🇺🇸 English' "$f" || { err "README i18n parity: $f missing language switcher"; i18n_ok=0; }
+done
+[ "$i18n_ok" = "1" ] && ok "README.md / ko / ja / zh-cn structural parity (sections, fences, hero, switcher)"
+
 section "Language"
 if command -v python3 >/dev/null 2>&1; then
   hangul_hits=$(python3 - <<'PY' 2>/dev/null || true
@@ -609,14 +628,23 @@ def repo_files():
         return [p for p in pathlib.Path('.').rglob('*') if p.is_file()]
 
 hangul = re.compile(r'[\uAC00-\uD7AF]')
+# Sanctioned exception: language-switcher lines that link to README.<lang>.md
+# translation files may carry Hangul. Matches both markdown links
+# ([\uD55C\uAD6D\uC5B4](README.ko.md)) and centered HTML links
+# (<a href="README.ko.md">\uD55C\uAD6D\uC5B4</a>).
+switcher = re.compile(r'(?:\(|href=["\x27])README\.[a-z]{2}(?:-[a-z]{2,4})?\.md')
 hits = []
 for path in sorted(p for p in repo_files() if p.suffix == '.md'):
     if not (path.as_posix() == 'README.md' or path.parts[:1] in [('docs',), ('skills',)]):
         continue
     if '/evals/' in str(path):
         continue
-    if path.exists() and hangul.search(path.read_text(encoding='utf-8', errors='ignore')):
-        hits.append(str(path))
+    if not path.exists():
+        continue
+    for line in path.read_text(encoding='utf-8', errors='ignore').splitlines():
+        if hangul.search(line) and not switcher.search(line):
+            hits.append(str(path))
+            break
 print('\n'.join(hits))
 PY
 )
