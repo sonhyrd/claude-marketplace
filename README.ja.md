@@ -260,6 +260,8 @@ Add playwright coverage for checkout flow
 
 CI は通るのに実際のリグレッションを捕まえられない E2E テストの問題を検出します。
 
+すべての finding は報告前に refute-first で adversarial に検証されます — Claude Code のプラグインインストールでは read-only のサブエージェントで、それ以外のホストでは inline で。この独立した検証パスが、ベンチマークで false positive をゼロに保った仕組みです。
+
 ### 使いどころ
 
 - テストは常に通るのに、バグは本番まですり抜けている

@@ -260,6 +260,8 @@ Add playwright coverage for checkout flow
 
 捕捉那些能通过 CI、却抓不到真实回归的端到端测试问题。
 
+每条 finding 在报告前都会经过 refute-first 的 adversarial 验证 —— 在 Claude Code 插件安装中由 read-only 子代理执行，在其他宿主中则 inline 执行。正是这道独立的验证环节，让审查器在基准测试中把 false positive 保持为零。
+
 ### 何时使用
 
 - 你的测试总是通过，但缺陷仍会溜到生产环境

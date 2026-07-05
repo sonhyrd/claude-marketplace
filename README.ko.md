@@ -260,6 +260,8 @@ Add playwright coverage for checkout flow
 
 CI는 통과하지만 실제 회귀를 잡아내지 못하는 E2E 테스트의 문제를 찾아냅니다.
 
+모든 finding은 보고 전에 refute-first로 adversarial 검증을 거칩니다 — Claude Code 플러그인 설치에서는 read-only 서브에이전트로, 그 외 호스트에서는 inline으로. 이 별도 검증 패스가 벤치마크에서 false positive를 0으로 유지한 방식입니다.
+
 ### 사용 시점
 
 - 테스트는 항상 통과하는데 버그가 계속 프로덕션으로 새어 나갈 때

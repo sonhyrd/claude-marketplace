@@ -260,6 +260,8 @@ Add playwright coverage for checkout flow
 
 Catches issues in E2E tests that pass CI but fail to catch real regressions.
 
+Every finding is adversarially verified — refute-first — before it's reported: a read-only subagent on Claude Code plugin installs, inline on other hosts. That separate verification pass is how the reviewer kept false positives at zero in the benchmark.
+
 ### When to Use
 
 - Your tests always pass but bugs still slip through to production

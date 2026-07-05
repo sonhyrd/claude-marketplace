@@ -150,6 +150,8 @@ failures.forEach(([,name,msg], i) => console.log('FAIL', suiteFile, '/', classna
 
 Use Phase 1 output (error message + duration) to classify. **Most failures are identifiable here — only go to Phase 3 if still unclear.**
 
+**Classifier delegation (delegation-aware):** if the `e2e-failure-classifier` subagent is available (Claude Code plugin install), delegate one failure per call, in parallel — pass the failing test name and report excerpt (error, stack, attempt/screenshot signal); it loads this F1–F15 table, reads the spec and config, and returns the F-code with confidence, evidence, and a fix. If the subagent is not available (Codex, `skills` CLI install, or any host without subagents), classify inline with the same table and steps below. The F-code must be identical either way.
+
 | # | Category | Signals | Review Pattern |
 |---|----------|---------|----------------|
 | F1 | **Flaky / Timing** | `Timed out retrying`, duration near defaultCommandTimeout, passes on retry | #9 |

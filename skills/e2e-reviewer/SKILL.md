@@ -148,6 +148,10 @@ Glob: "*.{spec.*,test.*,cy.*}"
 ```
 This is much faster than grepping each member individually. Classify results: USED / INTERNAL-ONLY (make `private`) / UNUSED (delete).
 
+### Verifying findings (delegation-aware)
+
+Before a Phase 2 finding is reported, verify it survives its real context — refute first. If the `e2e-finding-verifier` subagent is available (Claude Code plugin install), delegate one finding per call, in parallel: pass the pattern ID, `file:line`, and flagged snippet; it reads the surrounding spec, project config, and the pattern's contract in `references/pattern-reference.md`, then returns CONFIRMED / FALSE-POSITIVE / NEEDS-CONTEXT. Drop every finding it refutes. If the subagent is not available (Codex, `skills` CLI install, or any host without subagents), run the same refute-first procedure inline against the same `references/pattern-reference.md` contract. The verdict must be identical either way — never report a finding a refutation attempt would eliminate.
+
 ---
 
 ## Phase 2.5: Systemic Issues
