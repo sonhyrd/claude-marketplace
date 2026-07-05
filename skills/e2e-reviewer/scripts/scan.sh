@@ -19,6 +19,31 @@ case "$(cd "$ROOT" 2>/dev/null && pwd || true)" in
   *"/evals/files"*) EVAL_FIXTURE_EXCLUDES=() ;;
 esac
 
+# Shared `// JUSTIFIED:` suppression check, honored by ALL THREE tiers so the documented
+# convention is consistent (previously only the Tier-3 regex net applied it; Tier-1 eslint
+# and Tier-2 ast-grep flagged JUSTIFIED lines regardless). Returns 0 when the hit at
+# <file>:<line> is covered by a JUSTIFIED marker on the line itself or the contiguous
+# //-comment block immediately above it (max 5 lines). The #7 no-exemption contract is the
+# caller's responsibility — callers must NOT consult this for focused-test rules.
+_line_is_justified() {
+  local _hf="$1" _hl="$2" _linetext _just
+  [[ -f "$_hf" && "$_hl" =~ ^[0-9]+$ ]] || return 1
+  _linetext=$(sed -n "${_hl}p" "$_hf" 2>/dev/null)
+  case "$_linetext" in (*"JUSTIFIED:"*) return 0 ;; esac
+  if [[ "$_hl" -gt 1 ]]; then
+    _just=$(sed -n "$((_hl > 5 ? _hl - 5 : 1)),$((_hl - 1))p" "$_hf" 2>/dev/null | awk '
+      { lines[NR] = $0 }
+      END {
+        for (i = NR; i >= 1; i--) {
+          t = lines[i]; sub(/^[[:space:]]+/, "", t)
+          if (t ~ /^\/\//) { if (t ~ /JUSTIFIED:/) { print "Y"; exit } } else exit
+        }
+      }')
+    [[ "$_just" == "Y" ]] && return 0
+  fi
+  return 1
+}
+
 if [[ ! -e "$ROOT" ]]; then
   echo "error: path does not exist: $ROOT" >&2
   exit 2
@@ -241,10 +266,38 @@ EOFCFG
   #   P0: no-focused-test (#7), missing-playwright-await (#15/#16),
   #       mocha no-exclusive-tests (#7 Cypress), no-silent-pass (#4f companion plugin)
   #   P1: no-wait-for-timeout (#9), no-unnecessary-waiting (#9b)
-  local _t1_p0 _t1_p1
-  _t1_p0=$(printf '%s\n' "$out" | grep -cE '/(no-focused-test|missing-playwright-await|no-exclusive-tests|no-silent-pass)[[:space:]]*$' || true)
-  _t1_p1=$(printf '%s\n' "$out" | grep -cE '/(no-wait-for-timeout|no-unnecessary-waiting)[[:space:]]*$' || true)
-  _t1_p0=${_t1_p0:-0}; _t1_p1=${_t1_p1:-0}
+  # Count Tier-1 P0/P1 hits, honoring `// JUSTIFIED:` (parity with Tier 2/3). Walk the eslint
+  # stylish output tracking the current file header; #7 rules (no-focused-test / mocha
+  # no-exclusive-tests) are NEVER exempt, per the no-JUSTIFIED-for-#7 contract.
+  local _t1_p0=0 _t1_p1=0 _curf="" _eln _elno _efp _etrim
+  while IFS= read -r _eln; do
+    # File header line: a path on its own (absolute, or relative with a dot), not a hit/summary.
+    if [[ "$_eln" == /* || ( -n "$_eln" && "$_eln" != " "* && "$_eln" == *.* && "$_eln" != *"problem"* && "$_eln" != *"✖"* && "$_eln" != *"potentially fixable"* ) ]]; then
+      _curf="$_eln"; continue
+    fi
+    # Hit line: "  <line>:<col>  <severity> ... <rule>". Extract the line number with parameter
+    # expansion — bash 3.2 (macOS default) does NOT populate BASH_REMATCH capture groups, so a
+    # `=~ (…)` capture silently yields an empty line number and suppression never fires.
+    _body="${_eln#"${_eln%%[![:space:]]*}"}"        # strip leading whitespace
+    case "$_body" in
+      *:*)
+        _elno="${_body%%:*}"                        # field before the first ':' — the line number
+        case "$_elno" in
+          ''|*[!0-9]*) ;;                           # not a pure number -> not an eslint hit line
+          *)
+            _etrim="${_eln%"${_eln##*[![:space:]]}"}"   # strip trailing whitespace; rule is the suffix
+            _efp="$_curf"; [[ -f "$_efp" ]] || _efp="$ROOT/$_curf"
+            case "$_etrim" in
+              */no-focused-test|*/no-exclusive-tests)
+                _t1_p0=$((_t1_p0 + 1)) ;;                            # #7 — never JUSTIFIED-exempt
+              */no-silent-pass|*/missing-playwright-await)
+                _line_is_justified "$_efp" "$_elno" || _t1_p0=$((_t1_p0 + 1)) ;;
+              */no-wait-for-timeout|*/no-unnecessary-waiting)
+                _line_is_justified "$_efp" "$_elno" || _t1_p1=$((_t1_p1 + 1)) ;;
+            esac ;;
+        esac ;;
+    esac
+  done <<< "$out"
   if [[ "$_t1_p0" -gt 0 ]]; then p0_hits=$((p0_hits + _t1_p0)); total_hits=$((total_hits + _t1_p0)); fi
   if [[ "$_t1_p1" -gt 0 ]]; then p1_hits=$((p1_hits + _t1_p1)); total_hits=$((total_hits + _t1_p1)); fi
   eslint_ran=1
@@ -310,8 +363,16 @@ if [[ -n "$AST_GREP" && -d "$ASTGREP_RULES_DIR" ]]; then
       continue
     fi
     ast_out=$($AST_GREP scan --rule "$rule" "$ROOT" 2>&1 || true)
-    ast_count=$(printf '%s\n' "$ast_out" | grep -cE '^(error|warning|info)\[' || true)
-    ast_count=${ast_count:-0}
+    # Honor `// JUSTIFIED:` — count only hits whose source line is NOT suppressed (parity with
+    # Tier 1/3). ast-grep prints each hit's location as "  ┌─ <file>:<line>:<col>".
+    ast_count=0
+    while IFS= read -r _aloc; do
+      [[ -z "$_aloc" ]] && continue
+      _acol=${_aloc##*:}; _arest=${_aloc%:*}; _aln=${_arest##*:}; _afile=${_arest%:*}
+      _line_is_justified "$_afile" "$_aln" && continue
+      [[ ! -f "$_afile" ]] && _line_is_justified "$ROOT/$_afile" "$_aln" && continue
+      ast_count=$((ast_count + 1))
+    done < <(printf '%s\n' "$ast_out" | grep -oE '[^[:space:]]+:[0-9]+:[0-9]+')
     if [[ "$ast_count" -gt 0 ]]; then
       printf '\n[AST] %s (%s hit%s)\n' "$rule_name" "$ast_count" "$([[ "$ast_count" == "1" ]] && printf '' || printf 's')"
       printf '%s\n' "$ast_out" | head -30 | sed 's/^/  /'
