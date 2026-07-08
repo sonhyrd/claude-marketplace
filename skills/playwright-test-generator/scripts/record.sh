@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # record.sh - film ONE generated spec as a watch-link proof: run it through the PROJECT Playwright, locate the
-# per-spec video, and extract a poster frame so the agent can run the PII gate before hosting (SKILL Step 8).
+# per-spec video, and extract a poster thumbnail of the final frame (SKILL Step 8).
 #
 # The video comes from a PER-SPEC `test.use({ video: 'on' })` in the spec itself - NEVER a global
 # playwright.config edit (that would film the WHOLE suite on every run). This script does not add that line;
@@ -38,9 +38,12 @@ esac
 
 # --- run the ONE spec through the PROJECT Playwright (never auto-install; per-spec video does the filming) --
 # Marker (not spec mtime) is the "newer than" reference: robust if the spec was written seconds before the run.
+# Browser + channel for the film come from the spec's own test.use({ channel: 'chrome' }) (SKILL Step 8) - do
+# NOT force --project here (it can pin the bundled browser and blank an inline-PDF frame). Pass PROJECT=<name>
+# only to scope a config that defines several projects.
 MARKER=$(mktemp)
 RC=0
-npx --no-install playwright test "$SPEC" --project=chromium --reporter=html --trace on-first-retry || RC=$?
+npx --no-install playwright test "$SPEC" ${PROJECT:+--project="$PROJECT"} --reporter=html --trace on-first-retry || RC=$?
 
 # --- locate the per-spec video produced by THIS run --------------------------------------------------------
 # ponytail: newest webm created after MARKER; sub-second fs mtime (APFS/ext4) keeps -newer honest. If two runs
@@ -49,15 +52,15 @@ WEBM=$(find test-results -name '*.webm' -newer "$MARKER" 2>/dev/null | head -1 |
 rm -f "$MARKER"
 
 if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
-  # Poster from the held final frame - the frame the agent inspects for the SKILL Step 8 PII gate before hosting.
+  # Poster thumbnail from the held final frame (a proof still for the watch link).
   POSTER="${WEBM%.webm}.png"
   if command -v ffmpeg >/dev/null 2>&1; then
     ffmpeg -y -sseof -0.3 -i "$WEBM" -frames:v 1 -update 1 "$POSTER" >/dev/null 2>&1 \
-      && echo "record: poster -> $POSTER (inspect this frame for real PII before hosting - SKILL Step 8)" >&2 \
+      && echo "record: poster -> $POSTER (thumbnail of the final proven frame)" >&2 \
       || { POSTER=""; echo "record: NOTE - could not extract a poster from $WEBM" >&2; }
   else
     POSTER=""
-    echo "record: NOTE - ffmpeg not found; no poster. Inspect a frame of the webm for PII before hosting." >&2
+    echo "record: NOTE - ffmpeg not found; no poster thumbnail." >&2
   fi
   echo "---record---"
   echo "SPEC=$SPEC"

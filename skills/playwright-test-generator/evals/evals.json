@@ -59,18 +59,20 @@
     },
     {
       "id": 3,
-      "title": "No POM dir — POM-always scaffolds a Page Object for new specs",
-      "prompt": "Analyze the project in evals/files/project-flat/ for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Tests are in tests/login.spec.ts using direct page interactions without POM. Identify the project pattern, coverage gaps, and how new tests should be structured.",
-      "expected_output": "Should detect that the project has no POM directory (no pages/, models/, or page-objects/). Under POM-always (the default), it should still recommend a Page Object for NEW specs — scaffold pages/<Feature>Page.ts and put locators there — rather than matching the existing flat style. It must NOT rewrite or retro-refactor the existing flat tests/login.spec.ts; POM-always applies to newly generated code only. Should identify login as covered. Should identify home page, signup, dashboard, profile, notifications as potential coverage gaps based on page.tsx links and feature list. (Flat is available only as an explicit opt-out, e.g. structure: flat, which this prompt does not request.)",
+      "title": "Established flat convention — match flat, do not force a POM",
+      "prompt": "Analyze the project in evals/files/project-flat/ for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Its existing E2E tests are flat (direct page interactions, no Page Object Model) and there is no POM directory anywhere — flat is the house convention. Identify the project pattern, coverage gaps, and how new tests should be structured.",
+      "expected_output": "Should detect no POM directory (no pages/, models/, or page-objects/ used as Page Objects) and that the repo's E2E convention is flat. Under 'POM by default, yield to a clear flat convention', it should MATCH the flat convention — recommend new tests in the existing flat style (direct page.goto + page.getByX), and NOT introduce or force a POM. It must not rewrite the existing tests/login.spec.ts. Should identify login as covered. Should identify home page, signup, dashboard, profile, notifications as coverage gaps from page.tsx links. Note: a Next.js app/ or pages/ ROUTE folder is not a Playwright POM directory and must not be mistaken for one.",
       "files": [
         "evals/files/project-flat/playwright.config.ts",
         "evals/files/project-flat/tests/login.spec.ts",
         "evals/files/project-flat/src/app/page.tsx"
       ],
       "assertions": [
-        "Detects that no POM directory exists in the project",
-        "Recommends a Page Object for new specs (POM-always default), scaffolding a pages/ directory",
-        "Does NOT retro-refactor or rewrite the existing flat tests/login.spec.ts",
+        "Detects no POM directory (the repo's E2E convention is flat)",
+        "Matches the established flat convention — recommends new tests stay flat",
+        "Does NOT introduce or force a POM pattern",
+        "Does NOT rewrite the existing tests/login.spec.ts",
+        "Does not mistake a Next.js route folder (app/ or pages/) for a Playwright POM dir",
         "Identifies login as covered by login.spec.ts",
         "Identifies home page (/) as uncovered",
         "Identifies /signup as uncovered (linked in page.tsx)",

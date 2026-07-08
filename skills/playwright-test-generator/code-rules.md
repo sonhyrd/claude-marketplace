@@ -12,18 +12,21 @@ Non-negotiable for every generated spec, regardless of project shape:
 
 ## Structure Detection
 
-**Default: always Page Object Model (POM).** Every generated spec gets a Page Object — even in a repo that has none. A POM keeps selectors in one place, survives DOM churn, and is the team standard. Opt out only when explicitly asked (`structure: flat` in `$ARGUMENT`) or when the project has a stated convention forbidding POM.
+**Default: Page Object Model (POM) — but yield to a clear flat convention.** POM is the default for greenfield or ambiguous repos: it keeps selectors in one place and survives DOM churn. But when the repo shows an **established flat convention** — several flat specs and/or a shared spec helper the specs import, with no POM directory — match it. A lone POM spec beside a suite of flat siblings splits the house style; internal consistency wins.
 
 | What you find | What to generate |
 |---------------|-----------------|
 | POM directory exists, no POM for this page | New POM class (extends `BasePage` if present) + spec file |
 | POM directory exists, POM for this page already exists | Extend existing POM — add new locators only + new spec file |
-| No POM directory anywhere | **Scaffold one** — create `pages/<Feature>Page.ts` + spec file. Do **not** rewrite existing flat sibling specs; the new POM covers the new spec only. |
+| **Established flat convention** (several flat specs / a shared helper, no POM dir) | **Flat spec** — match the house style; do **not** introduce a POM |
+| No POM dir and no clear convention (greenfield, 0–1 specs) | **Scaffold a POM** — `pages/<Feature>Page.ts` + spec; don't rewrite any existing flat sibling |
 | `structure: flat` requested (or a project convention forbids POM) | Flat spec file only |
+
+**Reading the convention:** look at the existing specs and how they're built. Multiple flat specs, or a shared auth/helper module the specs import, is an established flat convention → match it. One stray spec, or none, is not a convention → default to POM. When in doubt, match what the majority of existing E2E specs do — a Nuxt/Next `pages/` route folder is **not** a Playwright POM dir, so it never counts as "POM exists."
 
 **Extending an existing POM:** Read the file first. Match its existing naming and structural patterns — even if they differ from the rules below. Apply rules below only to newly added code.
 
-**Scaffolding a new POM dir:** put it at the test root — `<testDir>/pages/<Feature>Page.ts` — unless the project already uses `models/` or `page-objects/`, in which case match that name. One class per feature/page, following the POM Rules below. Leave existing flat specs untouched: POM-always applies to newly generated code, not a retro-refactor of the suite.
+**Scaffolding a new POM dir (greenfield case only):** put it at the test root — `<testDir>/pages/<Feature>Page.ts` — unless the project already uses `models/` or `page-objects/`, in which case match that name. One class per feature/page, following the POM Rules below. Never retro-refactor existing flat specs.
 
 ---
 
@@ -153,7 +156,7 @@ Decide per endpoint, not per suite:
 
 | Traffic | Strategy |
 |---------|----------|
-| **Writes / credential paths** (signup, login, payment, any mutation) | **Always stub** with `page.route()`. A generated test must never create real accounts, hit real payment providers, or mutate shared backend data — data pollution, rate-limit flakiness, and PII exposure in third-party logs are all silent until they aren't. |
+| **Writes / credential paths** (signup, login, payment, any mutation) | **Always stub** with `page.route()`. A generated test must never create real accounts, hit real payment providers, or mutate shared backend data — data pollution, rate-limit flakiness, and leaking real records to third-party logs are all silent until they aren't. |
 | Stable first-party reads | Real backend acceptable when responses are deterministic enough to assert on |
 | Third-party services | Always stub (also covered by Spec Rules above) |
 | Real-backend smoke | At most one small, clearly named smoke spec may exercise the real backend end-to-end (e.g. a throwaway guest session) — keep it isolated |
