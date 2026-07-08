@@ -12,13 +12,18 @@ Non-negotiable for every generated spec, regardless of project shape:
 
 ## Structure Detection
 
+**Default: always Page Object Model (POM).** Every generated spec gets a Page Object — even in a repo that has none. A POM keeps selectors in one place, survives DOM churn, and is the team standard. Opt out only when explicitly asked (`structure: flat` in `$ARGUMENT`) or when the project has a stated convention forbidding POM.
+
 | What you find | What to generate |
 |---------------|-----------------|
 | POM directory exists, no POM for this page | New POM class (extends `BasePage` if present) + spec file |
 | POM directory exists, POM for this page already exists | Extend existing POM — add new locators only + new spec file |
-| No POM directory anywhere | Flat spec file only |
+| No POM directory anywhere | **Scaffold one** — create `pages/<Feature>Page.ts` + spec file. Do **not** rewrite existing flat sibling specs; the new POM covers the new spec only. |
+| `structure: flat` requested (or a project convention forbids POM) | Flat spec file only |
 
 **Extending an existing POM:** Read the file first. Match its existing naming and structural patterns — even if they differ from the rules below. Apply rules below only to newly added code.
+
+**Scaffolding a new POM dir:** put it at the test root — `<testDir>/pages/<Feature>Page.ts` — unless the project already uses `models/` or `page-objects/`, in which case match that name. One class per feature/page, following the POM Rules below. Leave existing flat specs untouched: POM-always applies to newly generated code, not a retro-refactor of the suite.
 
 ---
 

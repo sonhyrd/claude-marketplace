@@ -152,14 +152,12 @@ for skill_dir in skill_dirs:
                 "wrap the description in single quotes; YAML parsers (gray-matter / js-yaml) reject this and the "
                 "skills CLI will silently skip the skill (regression of bug fixed in v0.7.3)"
             )
-    # SKILL.md metadata.version must match the plugin manifest version. The
-    # manifest-vs-manifest version parity check above guards Claude/Codex/
-    # marketplace drift; this guard catches the case where a SKILL.md file
-    # gets left behind during a lock-step bump (see v1.3.1 changelog).
+    # SKILL.md metadata.version is OPTIONAL (a skill may opt out of frontmatter
+    # metadata entirely — private-fork policy). When present it must match the
+    # plugin manifest version, so a SKILL.md left behind during a lock-step bump
+    # is still caught (see v1.3.1 changelog); when absent, the file is opted out.
     version_match = re.search(r"^  version:\s*['\"]?([^'\"\n]+)['\"]?\s*$", match.group(1), re.M)
-    if not version_match:
-        errors.append(f"{skill_file}: missing metadata.version in frontmatter")
-    elif plugin_version and version_match.group(1).strip() != plugin_version:
+    if version_match and plugin_version and version_match.group(1).strip() != plugin_version:
         errors.append(
             f"{skill_file}: metadata.version {version_match.group(1).strip()!r} "
             f"does not match plugin version {plugin_version!r}"

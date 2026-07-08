@@ -181,8 +181,10 @@ assert_fails "Frontmatter YAML guard — unquoted description with ': '" "colon-
 restore "$file"
 
 # Case 12: SKILL.md metadata.version drift vs plugin manifest version — guards against
-# the v1.3.1 hole where one of four SKILL.md files got left behind during a lock-step bump
-file="skills/playwright-test-generator/SKILL.md"
+# the v1.3.1 hole where one of four SKILL.md files got left behind during a lock-step bump.
+# (Uses e2e-reviewer: playwright-test-generator opted out of frontmatter metadata, so it
+# carries no version line to mutate — absence is a sanctioned opt-out, presence must match.)
+file="skills/e2e-reviewer/SKILL.md"
 backup "$file"
 mutate "$file" "version: \"$PLUGIN_VERSION\"" "version: \"9.9.9\""
 assert_fails "SKILL.md version drift vs manifest" "does not match plugin version"
