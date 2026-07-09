@@ -138,6 +138,8 @@ When no argument is given:
 
 The old default was "stop and ask for a URL / credentials." Instead the agent brings the environment up itself:
 
+**PR-mode first — serve the code under proof.** If Step 0 selected PR-mode and `HEAD` is not the PR head, the dev server proves the *wrong* branch. Check out the PR branch **in place** before bringing anything up: if the worktree is clean (or has only stashable local changes), `git stash` those changes, remember the current ref, `git checkout <pr-branch>`, and restore afterward — `git checkout <original-ref>` then `git stash pop` — once the proof (and any Step-8 film) is done. If the tree is dirty in a way that blocks checkout, **STOP and ask** — never graft the diff in and revert it in a loop. After checkout, `HEAD` *is* the PR head, so `record.sh`'s `PROOF_SHA` guard passes on the same commit you filmed.
+
 1. **Resolve the port — prefer the worktree's configured one.** Use `baseURL` / `webServer.url` in `playwright.config.*`, or `.env PORT`. Only when nothing is configured, pick a free one:
    ```bash
    PORT=$(node -e 'const s=require("net").createServer();s.listen(0,()=>{const p=s.address().port;s.close(()=>console.log(p))})')
@@ -149,8 +151,9 @@ The old default was "stop and ask for a URL / credentials." Instead the agent br
    BASE_URL="http://localhost:$PORT" bash <skill-base>/scripts/preflight.sh
    ```
    If it STOPs: read the dev server's background log and check `playwright.config.*` for a `webServer` block whose command differs from what you started; fix and re-run. Report to the user only if the app genuinely cannot start from this worktree.
+4. **Probe hosting early (PR-mode) — warn, never block.** A PR proof defaults to a watch link (Step 8), which needs `wrangler` authed **and** Chrome installed — both slow to discover *after* filming. Probe now: `npx wrangler whoami` (no `--no-install`) and check for Chrome on `PATH` / the `chrome` channel. If either fails, WARN immediately — "watch link will be skipped unless you `wrangler login` now" / "no Chrome → inline-PDF/media films blank in bundled Chromium" — and continue. Never STOP for this; a missing link never fails generation.
 
-**Autonomy line (what the agent may do without asking):** start/stop the dev server · mint a token via the project's own login · **read-only** data discovery (query list/read endpoints to find a valid entity). **Never** seed or create backend data on a shared/staging tenant, register real accounts, or invent credentials — if the target state needs data you cannot reach read-only, **mock the data endpoint** (`page.route`) or, only if a real record is unavoidable, stop and ask. This keeps generated tests CI-safe and the shared tenant litter-free.
+**Autonomy line (what the agent may do without asking):** start/stop the dev server · mint a token via the project's own login · **read-only** data discovery (query list/read endpoints to find a valid entity — **sample a handful, don't enumerate the whole tenant**). **Never** seed or create backend data on a shared/staging tenant, register real accounts, or invent credentials — if the required sub-resource is absent in your sample (e.g. every sampled person has zero documents), go straight to a **`page.route` mock** rather than scanning hundreds of records; only if a real record is truly unavoidable, stop and ask. This keeps generated tests CI-safe and the shared tenant litter-free.
 
 ### Auth — drive the app's OWN entry (never a blind localStorage seed)
 
@@ -175,6 +178,8 @@ Don't build a separate recon ceremony. Selectors are validated by the Step-7 tes
 1. **Draft selectors from source + the readiness-confirmed app.** Read the changed component(s) for roles/labels/testids. For a big or gated page where blind-drafting would thrash the heal loop, *optionally* snapshot the live DOM once — authenticate via the discovered path above, `goto` the target, read `page.locator('body').ariaSnapshot()` from a throwaway `_recon.spec.ts` (delete it after). This is an **accelerator, not a required step**.
 2. **Capture the network log on the first run to drive mocks.** Run the draft spec once; from Playwright's request log (or `page.on('request')`), list the endpoints the surface actually calls — including proxy (`/api/request?cmd=`) and SSR calls that source-reading misses — and write the `page.route` mocks against them (per `code-rules.md` › Network Determinism).
 3. **Let the test run heal the rest.** A wrong selector fails the run; Step 7 re-snapshots and fixes it by intent. Never auto-install Playwright — rely on the project's pinned version.
+
+**Source recon uses the Grep tool (ripgrep), not bash `grep --include=*.vue`.** Unquoted globs and bracket paths — a Nuxt dynamic route `pages/person/[id].vue` — trip zsh `nomatch` and abort the whole `&&`-chain. The Grep tool sidesteps the shell entirely; quote any glob you must hand to bash.
 
 **Accessible-name reality check:** confirm from the live DOM (or the heal-loop failure) whether inputs actually carry labels/aria. Label-less inputs (placeholder/title only) are common — `getByLabel` matches nothing; use `getByPlaceholder()` / `getByRole('textbox')` and record the reason in the Locator Mapping Table.
 
@@ -213,7 +218,7 @@ Cover at minimum: one happy path + one error/edge case per feature. **In PR-mode
 - Do not create any locator not listed in this table
 - No getter methods — locators are exposed directly as `readonly` properties
 - `.nth()`, `.first()`, `.last()` require `// JUSTIFIED: <reason>` on the line immediately above
-- **POM or flat, per the repo's convention:** in POM mode the "File" column is the Page Object file (`pages/<Feature>Page.ts`) with `readonly` locators; in flat mode (an established flat convention, or `structure: flat`) it is the spec file itself with inline `const` locators. Step 5 decides via `code-rules.md` › Structure Detection.
+- **POM always:** the "File" column is the Page Object file (`<testDir>/pages/<Feature>Page.ts`) with `readonly` locators, per `code-rules.md` › Structure Detection — even when the repo's existing specs are flat.
 
 **Approval gate:** Do not proceed to Step 5 until the user explicitly approves the plan. In hosts with a dedicated planning mode, exit that mode only after approval.
 
@@ -222,12 +227,12 @@ Cover at minimum: one happy path + one error/edge case per feature. **In PR-mode
 ## Step 5: Code Generation
 
 Follow `code-rules.md` in this directory for:
-- Structure detection (POM by default — see below)
+- Structure detection (always POM — see below)
 - Selector priority
 - POM rules and composition pattern
 - Spec rules and forbidden patterns
 
-**POM by default, yield to a clear flat convention:** scaffold a Page Object for greenfield/ambiguous repos; when the repo has an **established flat convention** (several flat specs / a shared helper, no POM dir), match it and write flat (`code-rules.md` › Structure Detection). `structure: flat` forces flat. A Nuxt/Next `pages/` route folder is not a POM dir. Never rewrite existing sibling specs.
+**Always POM — no exceptions:** every generated spec uses a Page Object. Scaffold one even when the repo's existing specs are all flat — do **not** match the flat siblings, and never rewrite them; add the POM for the new coverage only (`code-rules.md` › Structure Detection). There is no `structure: flat` opt-out. A Nuxt/Next `pages/` route folder is not a POM dir.
 
 ---
 
@@ -320,7 +325,7 @@ Tests: N passed
 **Prerequisites — if any is unmet, skip gracefully: print why, finish the run normally. Never fail generation over a missing watch link.**
 
 - **Per-spec video, filmed in real Chrome.** Add `test.use({ video: 'on', channel: 'chrome' })` at the top of the spec being filmed — **per-spec only**; never touch the global `playwright.config` `use` (that films the whole suite on every run). `channel: 'chrome'` renders exactly what a human sees — Playwright's bundled Chromium ships **no PDF viewer** and some media codecs, so an inline-PDF or media feature films **blank** in it. If Chrome isn't installed, drop the `channel` and film in the default browser, and NOTE the fidelity caveat. The **durable committed test keeps the project's default browser** — only the throwaway film spec gets `channel: 'chrome'`.
-- **`wrangler` authenticated** (`npx wrangler whoami` succeeds). `host-on-r2.sh` has the R2 bucket + public domain hard-coded near the top (`BUCKET`, `PUB`). `<skill-base>` is the directory shown in the Skill tool's "Base directory" output.
+- **`wrangler` authenticated** (`npx wrangler whoami` succeeds — **don't** add `--no-install`; unlike the pinned playwright/tsc, wrangler may need provisioning and `--no-install` false-negatives). `host-on-r2.sh` has the R2 bucket + public domain hard-coded near the top (`BUCKET`, `PUB`). `<skill-base>` is the directory shown in the Skill tool's "Base directory" output. A `5xx` from `wrangler whoami` or the upload is transient (Cloudflare-side) — retry once before reporting a hosting blocker; never bake a transient 500 into the completion report.
 
 ### 1. Film + poster
 

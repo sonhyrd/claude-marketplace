@@ -12,21 +12,19 @@ Non-negotiable for every generated spec, regardless of project shape:
 
 ## Structure Detection
 
-**Default: Page Object Model (POM) — but yield to a clear flat convention.** POM is the default for greenfield or ambiguous repos: it keeps selectors in one place and survives DOM churn. But when the repo shows an **established flat convention** — several flat specs and/or a shared spec helper the specs import, with no POM directory — match it. A lone POM spec beside a suite of flat siblings splits the house style; internal consistency wins.
+**Always Page Object Model (POM) — no exceptions.** Every generated spec uses a Page Object. POM keeps selectors in one place and survives DOM churn. Flat sibling specs do **not** change this: even in a repo where every existing E2E spec is flat, scaffold a POM for the new coverage — do not match the flat house style, and do not offer a `structure: flat` opt-out. "Internal consistency with flat siblings" is not a reason to write flat; POM is the style the skill enforces.
 
 | What you find | What to generate |
 |---------------|-----------------|
 | POM directory exists, no POM for this page | New POM class (extends `BasePage` if present) + spec file |
 | POM directory exists, POM for this page already exists | Extend existing POM — add new locators only + new spec file |
-| **Established flat convention** (several flat specs / a shared helper, no POM dir) | **Flat spec** — match the house style; do **not** introduce a POM |
-| No POM dir and no clear convention (greenfield, 0–1 specs) | **Scaffold a POM** — `pages/<Feature>Page.ts` + spec; don't rewrite any existing flat sibling |
-| `structure: flat` requested (or a project convention forbids POM) | Flat spec file only |
+| No POM directory (greenfield, **or** a repo whose existing specs are all flat) | **Scaffold a POM** — `<testDir>/pages/<Feature>Page.ts` + spec. Do **not** match the flat siblings, and never rewrite them. |
 
-**Reading the convention:** look at the existing specs and how they're built. Multiple flat specs, or a shared auth/helper module the specs import, is an established flat convention → match it. One stray spec, or none, is not a convention → default to POM. When in doubt, match what the majority of existing E2E specs do — a Nuxt/Next `pages/` route folder is **not** a Playwright POM dir, so it never counts as "POM exists."
+**Do not mistake a route folder for a POM directory.** A Nuxt/Next `pages/` (or `app/`) folder holds route components, not Page Objects — it never counts as "POM directory exists." Look for Page Object *classes* the specs import, not any directory named `pages/`.
 
 **Extending an existing POM:** Read the file first. Match its existing naming and structural patterns — even if they differ from the rules below. Apply rules below only to newly added code.
 
-**Scaffolding a new POM dir (greenfield case only):** put it at the test root — `<testDir>/pages/<Feature>Page.ts` — unless the project already uses `models/` or `page-objects/`, in which case match that name. One class per feature/page, following the POM Rules below. Never retro-refactor existing flat specs.
+**Scaffolding a new POM dir:** put it at the test root — `<testDir>/pages/<Feature>Page.ts` — unless the project already uses `models/` or `page-objects/`, in which case match that name. One class per feature/page, following the POM Rules below. Never retro-refactor existing flat specs — add the POM for the *new* coverage and leave the siblings untouched.
 
 ---
 
@@ -145,6 +143,7 @@ test.describe('Login', () => {
 | `expect(page.url()).toContain(x)` | `await expect(page).toHaveURL(x)` — one-shot, no retry |
 | Framework component selectors in spec (`app-button`, `my-component`) | POM only |
 | XPath selectors | `getByRole` / `getByLabel` / `getByTestId` |
+| `import { URL } from '@playwright/test'` | Use the global `URL` (or the `(route, request)` route-callback signature) — Playwright doesn't export `URL`; the param is the DOM global, and importing it fails typecheck |
 
 **Await rule:** Every `expect()` on a Locator and every Playwright action (`.click()`, `.fill()`, `.type()`, `.press()`, `.check()`, `.selectOption()`, `.hover()`) **must** be `await`ed. Missing `await` silently skips the assertion or action.
 
@@ -160,6 +159,8 @@ Decide per endpoint, not per suite:
 | Stable first-party reads | Real backend acceptable when responses are deterministic enough to assert on |
 | Third-party services | Always stub (also covered by Spec Rules above) |
 | Real-backend smoke | At most one small, clearly named smoke spec may exercise the real backend end-to-end (e.g. a throwaway guest session) — keep it isolated |
+
+**Match the URL path, query-tolerant — and derive the pattern from an OBSERVED request, not source intent.** A mock that end-anchors the full href (`/\/documents$/`, or `url === '…/documents'`) silently misses a query suffix the app appends (`?lang=en`, `?v=2`): the route never intercepts, the real (often empty) response renders, and the spec fails at the ready selector instead of on the mock. Match on the path with a trailing-query-tolerant glob (`page.route('**/documents*', …)`) or test `new URL(route.request().url()).pathname` — never the whole href with a `$` anchor. Get the real URL by watching one run's request log (a throwaway `_recon.spec.ts` that logs `page.on('request', r => console.log(r.method(), r.url()))`, deleted after), not by guessing from source.
 
 When the app funnels API calls through a proxy endpoint (e.g. `/api/request?cmd=<path>`), write ONE shared route-mock helper that matches on the decoded routing parameter and exposes response builders — not per-test `page.route()` calls with duplicated URL parsing:
 
