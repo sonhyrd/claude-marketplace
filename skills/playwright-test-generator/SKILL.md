@@ -308,6 +308,8 @@ After 3 failed attempts: **invoke `playwright-debugger` skill** using the `Skill
 
 **PR-mode gate — do not emit this report until Step 8 has run.** The `Watch link` line is **mandatory in PR-mode** and is exactly one of: the hosted R2 URL, or `skipped — <specific unmet prerequisite>` (e.g. `skipped — wrangler not authenticated: run \`wrangler login\``). A PR-mode run is **not "Complete"** with the watch link unaccounted for — never close green having silently dropped it. If you're about to write "Complete" in PR-mode and haven't run Step 8, that's the bug this gate exists to catch: go run Step 8 first.
 
+**A `skipped` line must show the corpse.** A skip is legal *only* when you paste the actual failing probe output right under it — the `npx wrangler whoami` stderr, or the "Chrome not on PATH / no `chrome` channel" check. `skipped — wrangler not authenticated` with **no command output shown** is the silent drop this gate forbids, not a real skip: go run the probe and paste what it printed, or produce the link. This is the difference between "I checked and here's why there's no link" and "I decided there's no link" — only the first is allowed to close a PR-mode run.
+
 ```
 ## playwright-test-generator — Complete
 
@@ -328,48 +330,87 @@ Watch link: <public R2 URL>          # PR-mode: REQUIRED — the hosted URL, or 
 
 **When it runs:** **PR-mode → not optional.** A PR proof owes a shareable watch link, so Step 8 is a required deliverable — run it **before** you emit the Step-7 completion report, and account for it there (the hosted URL, or `skipped — <unmet prerequisite>`). "Complete" without a resolved watch link is a bug, not a finished run (the Step-7 gate exists to catch exactly this). **On request** in any mode ("host a watch link", "give me a video proof"). In coverage/target mode it stays opt-in; skip unless asked.
 
-**Required does not mean it must succeed** — it means you must *account* for it. If a prerequisite below is genuinely unmet, that's a legitimate `skipped — <reason>` in the completion report, not a silent omission. The rule is: never finish a PR-mode run without either a link or a stated reason there's none.
+**Required does not mean it must succeed** — it means you must *account* for it. If a prerequisite below is genuinely unmet, that's a legitimate `skipped — <reason>` in the completion report, not a silent omission. The rule is: never finish a PR-mode run without either a link or a stated reason there's none — **and the reason must show its evidence.** Paste the failing probe's output next to the `skipped` line (see the Step-7 gate: a skip with no shown command output is not a legal skip). Run the probe *before* you write "skipped", not from memory.
 
 **Prerequisites — if any is unmet, skip gracefully: print why, finish the run normally. Never fail generation over a missing watch link.**
 
 - **Per-spec video, filmed in real Chrome.** Add `test.use({ video: 'on', channel: 'chrome' })` at the top of the spec being filmed — **per-spec only**; never touch the global `playwright.config` `use` (that films the whole suite on every run). `channel: 'chrome'` renders exactly what a human sees — Playwright's bundled Chromium ships **no PDF viewer** and some media codecs, so an inline-PDF or media feature films **blank** in it. If Chrome isn't installed, drop the `channel` and film in the default browser, and NOTE the fidelity caveat. The **durable committed test keeps the project's default browser** — only the throwaway film spec gets `channel: 'chrome'`.
 - **`wrangler` authenticated** (`npx wrangler whoami` succeeds — **don't** add `--no-install`; unlike the pinned playwright/tsc, wrangler may need provisioning and `--no-install` false-negatives). `host-on-r2.sh` has the R2 bucket + public domain hard-coded near the top (`BUCKET`, `PUB`). `<skill-base>` is the directory shown in the Skill tool's "Base directory" output. A `5xx` from `wrangler whoami` or the upload is transient (Cloudflare-side) — retry once before reporting a hosting blocker; never bake a transient 500 into the completion report.
 
-### 1. Film + poster
+### Film-spec shape — film the payoff, mark the chapters
+
+The film is a **second run** of the spec (`record.sh` re-executes it to capture the video), and Playwright ends the recording at context close. Two consequences drive how the film spec is authored:
+
+- **The terminal assertion must be the success signal itself** — the toast / `alert` / redirect / empty-state the app shows on success, *not* an earlier DOM change (a row disappearing) that resolves before the payoff paints. That frame **is** the proof. Asserting on it also makes Playwright wait until it's on screen, so the video captures it.
+- **Hold the payoff on screen** so both the video *and* the poster (grabbed from the final 0.3s) end on the success, not after a toast auto-dismisses. A fixed `waitForTimeout` is legitimate **in the throwaway film spec only** — never in the committed test.
+
+Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sidecar of `{name, t}` offsets; `record.sh` turns it into the watch page's clickable chapter list. Absent sidecar → the page just omits the list.
+
+```typescript
+// THROWAWAY film spec (not committed): video + chapters + payoff hold. The committed test asserts the same
+// success signal but keeps the default browser, no video, no waitForTimeout (see code-rules.md).
+import fs from 'node:fs';
+test.use({ video: 'on', channel: 'chrome' });
+
+test('delete removes the legal notice', async ({ page }) => {
+  const t0 = Date.now();
+  const chapters: { name: string; t: number }[] = [];
+  const chapter = (name: string, fn: () => Promise<void>) => {
+    chapters.push({ name, t: (Date.now() - t0) / 1000 });   // offset ≈ video timestamp (recording starts at test start)
+    return test.step(name, fn);
+  };
+
+  await chapter('item present', async () => { await expect(row).toBeVisible(); });
+  await chapter('click delete',  async () => { await row.getByRole('button', { name: 'Delete' }).click(); });
+  await chapter('confirm',       async () => { await page.getByRole('button', { name: 'Confirm' }).click(); });
+  await chapter('deleted ✓',     async () => {
+    await expect(page.getByRole('alert')).toContainText('deleted');  // ← the payoff: terminal assertion = success signal
+    await page.waitForTimeout(800);                                   // ← film-only hold so video + poster end ON the toast
+  });
+
+  fs.mkdirSync('test-results', { recursive: true });
+  fs.writeFileSync('test-results/chapters.json', JSON.stringify(chapters));
+});
+```
+
+### 1. Film + poster + watch page
 
 ```bash
-# record.sh runs the ONE spec through the project Playwright, finds the per-spec webm, and extracts a poster
-# frame. PROOF_SHA (the commit under proof — in PR-mode, the PR head SHA) STOPs the film if this worktree is
-# not actually serving that code. BASE_URL is the server the agent started in Step 3.
-BASE_URL="http://localhost:$PORT" PROOF_SHA="$(git rev-parse HEAD)" \
+# record.sh runs the ONE spec through the project Playwright, finds the per-spec webm, extracts a poster frame,
+# and assembles a self-contained watch.html (title + poster + video + clickable chapters, all inline). PROOF_SHA
+# (the commit under proof — in PR-mode, the PR head SHA) STOPs the film if this worktree is not serving that
+# code. BASE_URL is the server the agent started in Step 3. TITLE (optional) names the watch page.
+BASE_URL="http://localhost:$PORT" PROOF_SHA="$(git rev-parse HEAD)" TITLE="PR #<N> — <scenario>" \
   sh <skill-base>/scripts/record.sh "<generated-spec-file>"
-# Prints WEBM=<path> and POSTER=<path> on success. exit 3 = spec failed / no video; exit 4 = provenance STOP.
+# Prints WEBM=, POSTER=, and WATCH=<watch.html> on success. exit 3 = spec failed / no video; exit 4 = provenance STOP.
 ```
 
 ### 2. Publish
 
 ```bash
-# Use the WEBM path record.sh printed. SHA-keyed object name: a healed spec re-hosts under a new key, so old
-# links stay faithful to the SHA they filmed.
+# Publish the WATCH page record.sh printed (NOT the bare webm) — it is one self-contained HTML file with the
+# video inlined, so a reviewer opens a titled page with chapters, not a raw video. SHA-keyed: a healed spec
+# re-hosts under a new key, so old links stay faithful to the SHA they filmed.
 PROJECT=$(basename "$(git rev-parse --show-toplevel)")
 SHA=$(git rev-parse --short HEAD)
-KEY="proof/<scenario>-$SHA.webm"
+KEY="proof/<scenario>-$SHA.html"
 
 # host-on-r2.sh <file> <project> [keyname] — prints the public URL on stdout. Set BEARER (auth token in use) +
-# SCAN (the committed spec) so the token gate protects the PUBLIC upload — a no-op when BEARER is unset. STOPs:
-#   token gate (exit 6): BEARER in webm/SCAN · empty-file (exit 3): webm <1KB · degenerate-key (exit 2): bad key
-URL=$(BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file>" \
-  bash <skill-base>/scripts/host-on-r2.sh "$WEBM" "$PROJECT" "$KEY")
+# SCAN so the token gate protects the PUBLIC upload — a no-op when BEARER is unset. Pass the raw $WEBM in SCAN
+# so the gate still greps the video bytes even though the uploaded file is now the html (which base64-wraps them).
+#   token gate (exit 6): BEARER in file/SCAN · empty-file (exit 3): <1KB · degenerate-key (exit 2): bad key
+URL=$(BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file> $WEBM" \
+  bash <skill-base>/scripts/host-on-r2.sh "$WATCH" "$PROJECT" "$KEY")
 ```
 
-If `host-on-r2.sh` STOPs on a gate, report **which** gate fired (its exit code) and print **no** link — a leaked-token or broken webm must never ship as the watch link.
+If `host-on-r2.sh` STOPs on a gate, report **which** gate fired (its exit code) and print **no** link — a leaked-token or broken webm must never ship as the watch link. (The broken/empty-webm case is caught earlier: `record.sh` only emits a `WATCH` page around a passing, non-empty video.)
 
-**Auth alignment (why the token gate stays quiet):** the token gate greps the webm for the bearer token, so a filmed **UI** login would trip it. Prefer programmatic auth (Step 3 dev-login / `storageState`) — credentials never enter the frame, so the gate passes. If a login must be filmed, expect the gate to STOP.
+**Auth alignment (why the token gate stays quiet):** the token gate greps the video (via `$WEBM` in `SCAN`) for the bearer token, so a filmed **UI** login would trip it. Prefer programmatic auth (Step 3 dev-login / `storageState`) — credentials never enter the frame, so the gate passes. If a login must be filmed, expect the gate to STOP.
 
 **Output:** append to the Step-7 completion report:
 
 ```
-Watch link: <public R2 URL>
+Watch link: <public R2 URL>          # the watch.html page — titled, with poster + chapters
 Local webm: <WEBM path>
 ```
 

@@ -64,6 +64,8 @@ case "$FILE" in
   *.png)  CT=image/png ;;
   *.gif)  CT=image/gif ;;
   *.jpg|*.jpeg) CT=image/jpeg ;;
+  *.html) CT="text/html;charset=utf-8" ;;   # D2: without this a watch page uploads as octet-stream and DOWNLOADS instead of rendering
+  *.vtt)  CT=text/vtt ;;
   *)      CT=application/octet-stream ;;
 esac
 
