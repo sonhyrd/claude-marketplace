@@ -30,7 +30,10 @@ Step 5: Code Generation        (see code-rules.md)
 Step 5b: Conventions & Seed    (first run on a project — see conventions-template.md)
 Step 6: YAGNI Audit + e2e-reviewer
 Step 7: TS Compile + Test Run  (playwright-debugger on failure)
+Step 8: Publish Watch Link     (REQUIRED in PR-mode — hosted video proof; opt-in in other modes)
 ```
+
+**In PR-mode the pipeline is not done at Step 7 — Step 8 is a required deliverable.** A PR proof owes a shareable watch link, so the run only closes after Step 8 has run (or been consciously skipped with a stated unmet prerequisite). Emitting the Step-7 "Complete" report without accounting for the watch link is a bug.
 
 ---
 
@@ -303,6 +306,8 @@ After 3 failed attempts: **invoke `playwright-debugger` skill** using the `Skill
 
 ### Completion report (on full pass)
 
+**PR-mode gate — do not emit this report until Step 8 has run.** The `Watch link` line is **mandatory in PR-mode** and is exactly one of: the hosted R2 URL, or `skipped — <specific unmet prerequisite>` (e.g. `skipped — wrangler not authenticated: run \`wrangler login\``). A PR-mode run is **not "Complete"** with the watch link unaccounted for — never close green having silently dropped it. If you're about to write "Complete" in PR-mode and haven't run Step 8, that's the bug this gate exists to catch: go run Step 8 first.
+
 ```
 ## playwright-test-generator — Complete
 
@@ -314,13 +319,16 @@ Coverage added: <route path>
 
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed
+Watch link: <public R2 URL>          # PR-mode: REQUIRED — the hosted URL, or `skipped — <unmet prerequisite>`
 ```
 
 ---
 
-## Step 8: Publish Watch Link (default in PR-mode)
+## Step 8: Publish Watch Link (REQUIRED in PR-mode)
 
-**When it runs:** by default in **PR-mode** — a PR proof wants a shareable watch link — and **on request** in any mode ("host a watch link", "give me a video proof"). In coverage/target mode it stays opt-in; skip unless asked.
+**When it runs:** **PR-mode → not optional.** A PR proof owes a shareable watch link, so Step 8 is a required deliverable — run it **before** you emit the Step-7 completion report, and account for it there (the hosted URL, or `skipped — <unmet prerequisite>`). "Complete" without a resolved watch link is a bug, not a finished run (the Step-7 gate exists to catch exactly this). **On request** in any mode ("host a watch link", "give me a video proof"). In coverage/target mode it stays opt-in; skip unless asked.
+
+**Required does not mean it must succeed** — it means you must *account* for it. If a prerequisite below is genuinely unmet, that's a legitimate `skipped — <reason>` in the completion report, not a silent omission. The rule is: never finish a PR-mode run without either a link or a stated reason there's none.
 
 **Prerequisites — if any is unmet, skip gracefully: print why, finish the run normally. Never fail generation over a missing watch link.**
 
