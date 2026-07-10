@@ -122,12 +122,12 @@
       "id": 6,
       "title": "Film spec ends on the success signal (film the payoff); committed test has no film-only hold",
       "prompt": "In Step 8 of playwright-test-generator you are authoring the THROWAWAY film spec for a delete flow: the user clicks Delete, confirms a dialog, the row disappears, and the app shows a success toast reading 'Notice deleted'. Show the film spec you would write, and state how the durable committed test differs.",
-      "expected_output": "The film spec's terminal assertion is the success toast/alert ('Notice deleted'), not merely the row's disappearance -- that success frame is the proof the film must end on. It adds a film-only hold (e.g. waitForTimeout(~800ms)) after the success assertion so the video and poster end on the toast before it auto-dismisses. It wraps each phase in test.step(...) and writes a test-results/chapters.json sidecar of {name,t} offsets for the watch-page chapter list. It uses a per-spec test.use block with channel: 'chrome' and an explicit video size (1280x720 — not Playwright's 800x450 default, which renders chapter titles illegible). The durable committed test asserts the SAME success signal but keeps the project default browser, no video, and NO waitForTimeout hold.",
+      "expected_output": "The film spec's terminal assertion is the success toast/alert ('Notice deleted'), not merely the row's disappearance -- that success frame is the proof the film must end on. It adds a film-only hold (e.g. waitForTimeout(~800ms)) after the success assertion so the video and poster end on the toast before it auto-dismisses. It wraps each phase in test.step(...) and writes a test-results/chapters.json sidecar of {name,t} offsets for the watch-page chapter list. It uses a per-spec test.use block with channel: 'chrome' and an explicit video size (1920x1080 — not Playwright's 800x450 default, which renders chapter titles illegible). The durable committed test asserts the SAME success signal but keeps the project default browser, no video, and NO waitForTimeout hold.",
       "assertions": [
         "True positive: the film spec's terminal assertion targets the success signal (the 'Notice deleted' toast/alert), not only the row removal",
         "Film spec holds the payoff on screen (a film-only waitForTimeout after the success assertion) so video + poster end on the toast",
         "Film spec wraps phases in test.step and writes test-results/chapters.json for the chapter list",
-        "Film spec sets an explicit video size (1280x720) rather than inheriting the 800x450 default",
+        "Film spec sets an explicit video size (1920x1080) rather than inheriting the 800x450 default",
         "False-positive guard: the committed durable test does NOT include the waitForTimeout hold and does NOT set video:'on' -- those belong only to the throwaway film spec",
         "Committed test still asserts the user-visible success signal, not just the DOM side effect"
       ]
