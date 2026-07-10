@@ -256,6 +256,15 @@ await expect(likeToggle).toHaveAttribute('aria-pressed', 'true');
 
 ---
 
+## Shared Mutable State (baseline / inheritance assertions)
+
+A scenario asserting an inheritance/default **baseline** on state the whole tenant shares and can mutate (a global override, a shared setting, a default a prior run's edit can leave dirty) must not trust the state it inherits:
+
+- **Self-heal before asserting.** Reset the stored overrides, save once, reload so the assertion reads persisted state — *then* assert the default. Reading whatever the last run left behind isn't proving the default; it passes or fails on litter.
+- **Restore in `finally`/`afterEach` reloads FIRST.** A mid-test failure can leave the visible draft clean while the store still holds the override, so a guard that reads the *draft* skips cleanup and leaks the override into the next run's baseline. Reload, read persisted state, then restore. (Shape: a `clearVisibleOverrides()` that reloads before it reads.)
+
+---
+
 ## Suppression Convention
 
 When a forbidden pattern is genuinely unavoidable, add `// JUSTIFIED: <reason>` on the **line immediately above**. This tells the `e2e-reviewer` to skip the hit during grep checks.

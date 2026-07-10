@@ -221,6 +221,8 @@ Don't build a separate recon ceremony. Selectors are validated by the Step-7 tes
 
 **Interaction-dependent state** a first render can't reach (modals, post-submit views, dropdown contents): drive it with the host's `browser_*` automation tools (Playwright MCP / `webapp-testing` skill) when exposed; otherwise reach it inside the spec itself. Do **not** paste raw snapshot/DOM content into responses — summarize.
 
+**Binding smoke check.** When the diff changes a control's *binding* (v-model, slot-injected props, controlled-component wiring) rather than its computed output, look at that one control live before the Step-7 loop — the binding layer is invisible to unit tests and to source-reading, which gets prop-merge ORDER right but misses key normalization: a slot camelCase `modelValue` silently beats a child's kebab-case `:model-value`. Cheaper than the heal cycle it prevents.
+
 ---
 
 ## Step 4: Scenario Design — notify-and-continue (PR-mode) / approval gate (coverage-gap)
@@ -365,6 +367,10 @@ Per attempt, diagnose the actual failure and apply the matching fix below (the o
 | Assertion failures | Fix expected values, add `{ timeout }` for slow elements |
 | Structural issues | Fix missing `await`, wrong test setup, incorrect `beforeEach` |
 
+**Rerun only what failed.** During the ≤3 fix attempts, run just the failing test(s) — `-g "<title>"` (`-g "a|b"` for several) — not the whole spec, which re-pays every green scenario to reach the one red one. The full spec runs **once** after the last fix, as the gate. Isolating one test is safe only because tests are independent (`code-rules.md`); a shared-mutable baseline earns that independence only via its self-heal (`code-rules.md` › Shared Mutable State).
+
+**A type-only fix doesn't warrant its own e2e run.** A change touching only types is gated by `tsc --noEmit` — batch it into the next behavioral rerun. The final full-spec gate above still runs on the committed SHA.
+
 After 3 failed attempts: **invoke `playwright-debugger` skill** using the `Skill` tool, pointing it at the `playwright-report/` produced by the run above (HTML report + `--trace on-first-retry` traces). Do not attempt a 4th fix.
 
 A **flaky verdict** (passed only on retry) is not clean — diagnose it once like a failure. If the nondeterminism is app-inherent (the app races its own state — e.g. boot code that rewrites locale/session after mount), the scenario cannot be reliably proven: remove it on this committed-run evidence and report its AC as `unproven — gated: nondeterministic (<cause>)`. A flaky scenario that stays in the spec is barred from the film by Step 8's flake screen.
@@ -396,6 +402,7 @@ Proving the spec *guards* the change (not merely that it passes) is sanctioned v
 
 **Prerequisites — if one is genuinely unmet, skip gracefully: capture the failing probe's output (Step 3's `PROBE_HOSTING=1` run already printed it), finish the run, and let Step 9's `Watch link: skipped — <gate>` line carry that output. Never fail generation over a missing watch link.**
 
+- **Gate the film-server through `preflight.sh`** (Step 3) — it treats any HTTP answer as "up", clearing a legitimate `307`/`401` that a `grep '200\|302'` poll would miss while burning its whole loop.
 - **Per-spec video, filmed in real Chrome at an explicit size.** Add to the top of the film spec — **per-spec only**; never touch the global `playwright.config` `use` (that films the whole suite on every run):
   ```typescript
   test.use({ video: { mode: 'on', size: { width: 1600, height: 900 } }, viewport: { width: 1600, height: 900 }, channel: 'chrome' });
@@ -412,6 +419,7 @@ The film is a **second run** (`record.sh` re-executes the film spec to capture t
 - **Open on the feature, not on boot — kill the blank lead.** Recording starts the moment the filmed page exists, and 14/14 previously published films wasted 50–88% of their runtime on a blank/loading lead. So: warm the route before filming (the Step 7 run usually has; otherwise one `page.request.get(target)` compiles it server-side), authenticate **before** the filmed `goto` (token/`storageState` — never film a login dance unless login IS the AC), and make the first chapter's first line an assertion on a **feature-anchored element** so the film's first frames already show the surface under proof.
 - **The terminal assertion must be the success signal itself** — the toast / `alert` / redirect / empty-state the app shows on success, *not* an earlier DOM change (a row disappearing) that resolves before the payoff paints. That frame **is** the proof. Asserting on it also makes Playwright wait until it's on screen, so the video captures it.
 - **Hold the payoff on screen ≥3s** so the video — and the contact sheet's final tile (sampled every duration/30 s; hold ≥ duration/30 on films past 90s) — ends on the success, not after a toast auto-dismisses. A fixed `waitForTimeout` is legitimate **in the throwaway film spec only** — never in the committed test.
+- **Persistence-proof films reload, and each reload films white on a dev server** — an SSR repaint, up to ~40% white tiles that still pass every QA check. Anchor each chapter timestamp on the **post-reload painted assertion**, not the reload, so the seekable frame shows the surface; and note in the PR comment that the white flashes are the persistence proof, not a broken film.
 
 ### Film admission — flake screen + refilm budget (hard bounds)
 
@@ -459,7 +467,9 @@ test('delete removes the legal notice', async ({ page }) => {
 # inline). PROOF_SHA (the commit under proof — in
 # PR-mode, the PR head SHA) STOPs the film if this worktree is not serving that code. BASE_URL is the server
 # the agent started in Step 3 (exported as PLAYWRIGHT_BASE_URL and SPEC_BASE_URL). TITLE names the watch page.
-# CONFIG=<path> / PROJECT=<name> / FILM_TIMEOUT=<ms, default 60000> pass through when the repo needs them.
+# CONFIG=<path> / PROJECT=<name> pass through when the repo needs them. FILM_TIMEOUT floors at
+# max(FILM_TIMEOUT, 60000 + 60000*SCENARIOS) — a 5-scenario film gets >=360s automatically; pass an
+# explicit FILM_TIMEOUT only to raise it further (a live-backend film with heavy per-scenario latency).
 BASE_URL="http://localhost:$PORT" PROOF_SHA="$(git rev-parse HEAD)" TITLE="PR #<N> — <scenario>" \
   SCENARIOS=<approved scenario count> sh <skill-base>/scripts/record.sh "<film-spec-file>"
 # Prints WEBM= CONTACT= DURATION= CHAPTERS= WATCH= on success.

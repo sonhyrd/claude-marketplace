@@ -22,8 +22,10 @@
 #   CONFIG        optional - passed to playwright as --config=<path> (multi-worktree repos whose default config
 #                 hard-codes a sibling port/webServer).
 #   PROJECT       optional - passed as --project=<name> to scope a config that defines several projects.
-#   FILM_TIMEOUT  optional - per-test timeout ms for the film run (default 60000; film specs hold the payoff
-#                 and walk every scenario, so the project default is often too tight).
+#   FILM_TIMEOUT  optional - per-test timeout ms for the film run. Floored at max(FILM_TIMEOUT, 60000 +
+#                 60000*SCENARIOS): a film walks every scenario and holds each payoff, so a flat 60000 is far
+#                 too tight for a multi-scenario live-backend film (a 5-chapter film needs ~300s; the floor
+#                 gives 360s). Pass an explicit FILM_TIMEOUT only to raise it ABOVE the floor.
 #   TITLE         optional - names the watch page.
 #   <spec>        the ONE spec to film (it must carry the per-spec video use()).
 #   [out-name]    label only - echoed in the summary so a caller can tell runs apart (default: spec basename).
@@ -71,10 +73,17 @@ rm -rf test-results 2>/dev/null || true
 # is a re-shoot, not a proof. Retries only multiply a failing film's cost by the retry count, and multiple
 # attempts each leave a video, making the webm pick below ambiguous (a real run nearly published the FAILED
 # attempt's video under RESULT=passed). One attempt = one video = no ambiguity.
+# Timeout floor: a multi-scenario live-backend film outlasts the flat 60000 default (the SCENARIOS the caller
+# already passes for the chapter floor sizes it). FLOOR = 60000 + 60000*SCENARIOS; an explicit FILM_TIMEOUT
+# still wins if it asks for MORE. SCENARIOS defaults to 0, so a no-SCENARIOS run keeps the 60000 floor.
+FLOOR=$((60000 + 60000 * ${SCENARIOS:-0}))
+TIMEOUT=${FILM_TIMEOUT:-60000}
+[ "$FLOOR" -gt "$TIMEOUT" ] && TIMEOUT=$FLOOR
+
 MARKER=$(mktemp)
 RC=0
 npx --no-install playwright test "$SPEC" ${PROJECT:+--project="$PROJECT"} ${CONFIG:+--config="$CONFIG"} \
-  --timeout="${FILM_TIMEOUT:-60000}" --retries=0 --reporter=html --trace retain-on-failure || RC=$?
+  --timeout="$TIMEOUT" --retries=0 --reporter=html --trace retain-on-failure || RC=$?
 
 # --- locate the per-spec video (+ optional chapters sidecar) produced by THIS run --------------------------
 # newest webm created after MARKER; sub-second fs mtime (APFS/ext4) keeps -newer honest. chapters.json is the
