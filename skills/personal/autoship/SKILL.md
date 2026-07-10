@@ -35,7 +35,9 @@ Report the source brief to the user, then proceed.
 
 ### 2. Run worktree
 
-Every run gets one fresh Orca worktree, created top-level and branched from the **repo default base** — never from the invoking branch; anything the run needs to know about the invoking branch goes into the source brief instead. The worktree name is derived from the brief (a short slug of the problem). The invoking worktree stays untouched for the whole run: every worker is a terminal in the run worktree, and every artifact the run produces lives there. Creation commands and base-branch rules are in [reference.md](./reference.md).
+Every run gets one dedicated Orca worktree, created top-level and branched from the **repo default base** — never from the invoking branch; anything the run needs to know about the invoking branch goes into the source brief instead. The worktree name is derived from the brief (a short slug of the problem). Every worker is a terminal in the run worktree, and every artifact the run produces lives there. Creation commands and base-branch rules are in [reference.md](./reference.md).
+
+The coordinator itself lives **in the target repo**, not somewhere else steering it remotely: in real use you start a fresh worktree on the target repo and the agent session in it runs this skill. When the invoking session already sits in a fresh top-level worktree created for this run — clean, branched from the default base — that worktree IS the run worktree; do not create a second one. The rule is one dedicated worktree per run, and the coordinator's terminal sits inside it with its workers.
 
 ### 3. Align
 
