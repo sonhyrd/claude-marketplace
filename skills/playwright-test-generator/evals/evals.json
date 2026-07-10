@@ -197,6 +197,22 @@
         "False-positive guard: does NOT npx-float or reinstall a different Playwright version; after the pinned install, later steps still use --no-install",
         "Sequences the bootstrap before Step 6 (e2e-reviewer) and Step 7 (test run), which cannot run without a runner"
       ]
+    },
+    {
+      "id": 12,
+      "title": "Legible stop report: bring-up failure names verbatim evidence and produces nothing",
+      "prompt": "You are running in target mode to cover the home page (/) of a Nuxt app. You start the dev server, but the readiness gate (preflight.sh) STOPs (exit 3): the server never binds because nuxt.config.ts imports a file that does not exist ('Cannot find module ./runtime-flags.generated') and the process exits code 1. A spec from an earlier run already exists at e2e/onboarding.spec.ts. What do you do, and what does your report contain?",
+      "expected_output": "Should STOP at Step 3 and report the app cannot start — not generate a spec, not fabricate a pass, not edit the app's own source (nuxt.config) to force a boot, and NOT run the pre-existing e2e/onboarding.spec.ts against the dead server and report it green. The stop report should contain: a one-line verdict naming the Step, the target, the bring-up steps attempted, the VERBATIM dev-server error and preflight STOP, an explicit statement that no spec/POM was produced (and that the pre-existing spec was not run or reported green), and how to unblock (restore the missing file or remove the import, then re-run). Should NOT emit the Step 9 completion tail (Watch link / Committed / Pushed).",
+      "assertions": [
+        "STOPs at Step 3 (bring-up) rather than generating a spec",
+        "Attributes the failure to the app not booting, tracing it to the nuxt.config import of a missing module",
+        "Quotes the blocker VERBATIM (the 'Cannot find module' error and the preflight STOP), not a paraphrase",
+        "States explicitly that nothing was produced — no spec, no POM",
+        "False-positive guard: does NOT run the pre-existing e2e/onboarding.spec.ts against the dead server and does NOT report it as green",
+        "Does NOT edit the app's own source/config to force a boot (application-source change is out of test-authoring scope)",
+        "Does NOT emit the Step 9 completion tail (Watch link / Committed / Pushed) for a stop",
+        "Gives a concrete unblock action and offers to re-run"
+      ]
     }
   ]
 }

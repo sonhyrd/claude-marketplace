@@ -36,6 +36,17 @@ Step 9: Land the Proof         (PR-mode tail: commit → push → PR comment →
 
 **A PR-mode run ends at Step 9's completion report and nowhere else.** The report format (Step 9) is the exit gate: in PR-mode it is structurally invalid without its `Watch link`, `Film QA`, `Committed`, `Pushed`, and `PR comment` lines, so a run cannot close green with the tail undone. The only sanctioned PR-mode stop is a base-merge conflict (Step 3); everything else resolves from this contract with a stated assumption.
 
+**Stop reports (target & coverage-gap modes).** A run that cannot legitimately produce coverage — target flow absent, dev server won't boot, auth wall with no discoverable credential — must STOP with a report, never a fabricated pass. This is a distinct shape from the Step 9 completion tail; a legible stop report contains, in order:
+
+1. **Verdict + where** — one line: what stopped it and the Step (e.g. "STOPPED at Step 3 — dev server won't boot").
+2. **Target** — the flow / route / change requested.
+3. **What was attempted** — the concrete bring-up / recon steps actually taken.
+4. **Blocker evidence, verbatim** — the real error, HTTP status, or recon counts (`0 forms`, `HTTP 404`), never paraphrased. This is what separates a real stop from a guess.
+5. **What was NOT produced** — state plainly that no spec / POM was written. If a prior spec already exists, say it was *not* run against the unavailable app and *not* reported green — a spec that "passes" against an absent or dead surface is the silent-always-pass anti-pattern this pipeline exists to avoid.
+6. **How to unblock** — the one action that would let a re-run succeed, plus an offer to re-run.
+
+A stop never emits the Step 9 tail (`Watch link` / `Committed` / `Pushed`) — nothing shipped.
+
 ---
 
 ## Step 0: Entry Dispatch
