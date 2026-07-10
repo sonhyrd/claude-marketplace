@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # record.sh - film ONE generated spec as a watch-link proof: run it through the PROJECT Playwright, locate the
-# per-spec video, and enforce the film-QA gate (poster + contact sheet + duration/chapter floors) before any
+# per-spec video, and enforce the film-QA gate (contact sheet + duration/chapter floors) before any
 # watch page exists to publish (SKILL Step 8).
 #
 # The video comes from a PER-SPEC `test.use({ video: ... })` in the spec itself - NEVER a global
@@ -30,7 +30,7 @@
 #
 # Exit 0 ONLY when the spec PASSED, a video exists, and the film-QA gate held. Run from the app repo root.
 #   exit 3 = spec failed / no video      exit 4 = provenance STOP
-#   exit 5 = film-QA gate (poster / contact sheet / duration floor / chapter floor) - fix the film, re-run;
+#   exit 5 = film-QA gate (contact sheet / duration floor / chapter floor) - fix the film, re-run;
 #            NEVER publish past a 5.
 set -eu
 
@@ -41,10 +41,10 @@ OUT="${2:-$(basename "${SPEC%.*}")}"
 export PLAYWRIGHT_BASE_URL="$BASE_URL"
 export SPEC_BASE_URL="$BASE_URL"
 
-# ffmpeg is NOT optional: the poster and the contact sheet ARE the film-QA evidence (SKILL Step 8 screens the
-# film from them). Fail fast BEFORE the slow test run; preflight.sh PROBE_HOSTING=1 warns about this at Step 3.
+# ffmpeg is NOT optional: the contact sheet IS the film-QA evidence (SKILL Step 8 screens the film from it).
+# Fail fast BEFORE the slow test run; preflight.sh PROBE_HOSTING=1 warns about this at Step 3.
 if ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "record: STOP - ffmpeg not found. The poster + contact sheet are the film-QA evidence; install ffmpeg and re-run." >&2
+  echo "record: STOP - ffmpeg not found. The contact sheet is the film-QA evidence; install ffmpeg and re-run." >&2
   exit 5
 fi
 
@@ -64,15 +64,17 @@ esac
 # NOT force --project here (it can pin the bundled browser and blank an inline-PDF frame). Pass PROJECT=<name>
 # only to scope a config that defines several projects; CONFIG=<path> when the default config is wrong for
 # this worktree. --timeout raises the per-test ceiling for the film run only (payoff holds + all-scenario walk).
-# D4: clear a stale test-results/ so the webm THIS run produces is the only candidate. Without it a retry
-# (`--trace on-first-retry` leaves the failed attempt's video too) makes the "newest webm" pick below ambiguous
-# and it could grab the wrong attempt - the fix the old "delete stale test-results/" comment only advised.
+# D4: clear a stale test-results/ so the webm THIS run produces is the only candidate.
 rm -rf test-results 2>/dev/null || true
 
+# --retries=0 overrides any project-config retries: a proof film must pass CLEAN on attempt 1 - a flaky film
+# is a re-shoot, not a proof. Retries only multiply a failing film's cost by the retry count, and multiple
+# attempts each leave a video, making the webm pick below ambiguous (a real run nearly published the FAILED
+# attempt's video under RESULT=passed). One attempt = one video = no ambiguity.
 MARKER=$(mktemp)
 RC=0
 npx --no-install playwright test "$SPEC" ${PROJECT:+--project="$PROJECT"} ${CONFIG:+--config="$CONFIG"} \
-  --timeout="${FILM_TIMEOUT:-60000}" --reporter=html --trace on-first-retry || RC=$?
+  --timeout="${FILM_TIMEOUT:-60000}" --retries=0 --reporter=html --trace retain-on-failure || RC=$?
 
 # --- locate the per-spec video (+ optional chapters sidecar) produced by THIS run --------------------------
 # newest webm created after MARKER; sub-second fs mtime (APFS/ext4) keeps -newer honest. chapters.json is the
@@ -84,26 +86,8 @@ rm -f "$MARKER"
 if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
   # --- film-QA gate (all non-skippable; every failure is exit 5 and names its gate) ------------------------
 
-  # Poster thumbnail from the held final frame (a proof still for the watch link). NON-SKIPPABLE: a watch page
-  # without the payoff still is a defective proof - there is no code path that continues without a poster.
-  POSTER="${WEBM%.webm}.png"
-  if ! ffmpeg -y -sseof -0.3 -i "$WEBM" -frames:v 1 -update 1 "$POSTER" >/dev/null 2>&1 || [ ! -s "$POSTER" ]; then
-    echo "record: STOP - film-QA gate (poster): could not extract the final proven frame from $WEBM. Re-film, then retry." >&2
-    exit 5
-  fi
-  echo "record: poster -> $POSTER (thumbnail of the final proven frame)" >&2
-
-  # Contact sheet: first frame + one every ~3s, tiled on a single image. This is what SKILL Step 8 tells the
-  # agent to LOOK at before publishing (blank lead? chapters seekable? payoff on final frame? feature shown?).
-  # ponytail: 5x6 tile covers the first ~90s; longer films keep the first sheet + the poster covers the tail.
-  CONTACT="${WEBM%.webm}.contact.png"
-  if ! ffmpeg -y -i "$WEBM" -vf "fps=1/3,scale=480:-2,tile=5x6" -frames:v 1 "$CONTACT" >/dev/null 2>&1 || [ ! -s "$CONTACT" ]; then
-    echo "record: STOP - film-QA gate (contact sheet): could not extract the contact sheet from $WEBM. Re-film, then retry." >&2
-    exit 5
-  fi
-
-  # Duration: ffprobe first; live-recorded webms sometimes carry no duration metadata, so fall back to a null
-  # decode and parse the last time= stamp (HH:MM:SS.xx).
+  # Duration first (the contact sheet's sampling rate derives from it): ffprobe, falling back to a null decode
+  # for live-recorded webms that carry no duration metadata (parse the last time= stamp, HH:MM:SS.xx).
   DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$WEBM" 2>/dev/null || true)
   case "$DUR" in
     ''|N/A*)
@@ -111,6 +95,18 @@ if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
         awk -F: '{ if (NF==3) print $1*3600+$2*60+$3; else if (NF==2) print $1*60+$2; else print $1 }') ;;
   esac
   DUR_INT=$(awk -v d="${DUR:-0}" 'BEGIN{printf "%d", d+0.5}')
+
+  # Contact sheet: 30 frames spanning the WHOLE film, tiled on one image - the film-QA evidence SKILL Step 8
+  # LOOKs at before publishing (blank lead? chapters seekable? payoff on the final tile? feature shown?).
+  # Sampling every duration/30s puts the last tile within ~d/30s of the end, so the >=3s payoff hold (SKILL
+  # Step 8) guarantees the success frame survives into it. There is no separate poster: the final tile IS the
+  # final-frame evidence, and the watch page opens on the video itself.
+  CONTACT="${WEBM%.webm}.contact.png"
+  SHEET_FPS=$(awk -v d="$DUR_INT" 'BEGIN{ if (d < 1) d = 1; printf "%.6f", 30 / d }')
+  if ! ffmpeg -y -i "$WEBM" -vf "fps=${SHEET_FPS},scale=480:-2,tile=5x6" -frames:v 1 "$CONTACT" >/dev/null 2>&1 || [ ! -s "$CONTACT" ]; then
+    echo "record: STOP - film-QA gate (contact sheet): could not extract the contact sheet from $WEBM. Re-film, then retry." >&2
+    exit 5
+  fi
 
   # Chapters: count + strictly non-decreasing timestamps (a bunched or out-of-order chapter list is unseekable).
   CH_COUNT=0
@@ -140,8 +136,8 @@ if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
     exit 5
   fi
 
-  # D2: assemble ONE self-contained watch page - webm + poster inline as data URIs, so the watch link is a
-  # single HTML object (title + poster + clickable chapters), not a bare .webm a reviewer opens with no context.
+  # D2: assemble ONE self-contained watch page - webm inlined as a data URI, so the watch link is a
+  # single HTML object (title + clickable chapters), not a bare .webm a reviewer opens with no context.
   # ponytail: base64-inlining is fine for a seconds-long proof clip; if clips ever run to many MB, switch to
   # sibling files + a directory upload. The empty/broken-webm guard lives above ([ -s "$WEBM" ] && RC=0), so a
   # page is only ever built around a real, passing video.
@@ -161,13 +157,7 @@ if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
     if [ -n "$SHA" ]; then
       printf 'SHA %s &middot; ' "$SHA"
     fi
-    printf '%s' '<span class="ok">passed &check;</span></p><video id="v" controls playsinline'
-    if [ -n "$POSTER" ] && [ -s "$POSTER" ]; then
-      printf '%s' ' poster="data:image/png;base64,'
-      base64 < "$POSTER" | tr -d '\n'
-      printf '%s' '"'
-    fi
-    printf '%s' ' src="data:video/webm;base64,'
+    printf '%s' '<span class="ok">passed &check;</span></p><video id="v" controls playsinline preload="metadata" src="data:video/webm;base64,'
     base64 < "$WEBM" | tr -d '\n'
     printf '%s' '"></video><ol id="ch"></ol><script>const C='
     printf '%s' "$CHAPTERS_JSON"
@@ -175,14 +165,13 @@ if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
   } > "$WATCH"
   if [ "$CHAPTERS_JSON" = '[]' ]; then CHNOTE='no chapters'; else CHNOTE='with chapters'; fi
   echo "record: watch page -> $WATCH ($CHNOTE)" >&2
-  echo "record: LOOK at the contact sheet before publishing (SKILL Step 8): no blank lead, chapters seekable, payoff on the final frame, feature actually shown." >&2
+  echo "record: LOOK at the contact sheet before publishing (SKILL Step 8): no blank lead, chapters seekable, payoff on the final tile, feature actually shown." >&2
 
   echo "---record---"
   echo "SPEC=$SPEC"
   echo "OUT=$OUT"
   echo "RESULT=passed"
   echo "WEBM=$WEBM"
-  echo "POSTER=$POSTER"
   echo "CONTACT=$CONTACT"
   echo "DURATION=${DUR_INT}s"
   echo "CHAPTERS=$CH_COUNT"

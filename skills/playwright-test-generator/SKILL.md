@@ -346,6 +346,8 @@ Per attempt, diagnose the actual failure and apply the matching fix below (the o
 
 After 3 failed attempts: **invoke `playwright-debugger` skill** using the `Skill` tool, pointing it at the `playwright-report/` produced by the run above (HTML report + `--trace on-first-retry` traces). Do not attempt a 4th fix.
 
+A **flaky verdict** (passed only on retry) is not clean — diagnose it once like a failure. If the nondeterminism is app-inherent (the app races its own state — e.g. boot code that rewrites locale/session after mount), the scenario cannot be reliably proven: remove it on this committed-run evidence and report its AC as `unproven — gated: nondeterministic (<cause>)`. A flaky scenario that stays in the spec is barred from the film by Step 8's flake screen.
+
 ### Hermetic audit (after the passing run)
 
 The spec is hermetic by default (`code-rules.md` › Network Determinism). From the passing run's request log, list every XHR/fetch the mock map did **not** answer (document/asset loads from the dev server don't count). The verdict is binary:
@@ -384,10 +386,17 @@ Proving the spec *guards* the change (not merely that it passes) is sanctioned v
 
 The film is a **second run** (`record.sh` re-executes the film spec to capture the video), and Playwright ends the recording at context close. Author it as:
 
-- **One film test that walks EVERY approved scenario in order** — one `chapter()` per scenario (that is the proof-film contract; `record.sh`'s chapter floor enforces the count when you pass `SCENARIOS=<n>`). A film that covers fewer scenarios than the spec is a defective proof.
+- **One film test that walks EVERY approved scenario in order** — one `chapter()` per scenario (that is the proof-film contract; `record.sh`'s chapter floor enforces the count when you pass `SCENARIOS=<n>`). A film that covers fewer scenarios than the spec is a defective proof — unless a scenario was demoted under the flake screen or refilm budget below, in which case the demotion is named in the report, never silently absorbed.
+- **Chapters share ONE browser context** — committed tests each get a fresh one; the film does not. Any scenario whose committed test depends on fresh-context state (cookies, localStorage, locale, auth) must either open its chapter with an explicit state reset (clear cookies + storage, re-auth) or be excluded from the film and demoted. State leaked from earlier chapters (an i18n cookie, a persisted user profile) has produced film-only failures the committed spec never had.
 - **Open on the feature, not on boot — kill the blank lead.** Recording starts the moment the filmed page exists, and 14/14 previously published films wasted 50–88% of their runtime on a blank/loading lead. So: warm the route before filming (the Step 7 run usually has; otherwise one `page.request.get(target)` compiles it server-side), authenticate **before** the filmed `goto` (token/`storageState` — never film a login dance unless login IS the AC), and make the first chapter's first line an assertion on a **feature-anchored element** so the film's first frames already show the surface under proof.
 - **The terminal assertion must be the success signal itself** — the toast / `alert` / redirect / empty-state the app shows on success, *not* an earlier DOM change (a row disappearing) that resolves before the payoff paints. That frame **is** the proof. Asserting on it also makes Playwright wait until it's on screen, so the video captures it.
-- **Hold the payoff on screen** so both the video *and* the poster (grabbed from the final 0.3s) end on the success, not after a toast auto-dismisses. A fixed `waitForTimeout` is legitimate **in the throwaway film spec only** — never in the committed test.
+- **Hold the payoff on screen ≥3s** so the video — and the contact sheet's final tile (sampled every duration/30 s; hold ≥ duration/30 on films past 90s) — ends on the success, not after a toast auto-dismisses. A fixed `waitForTimeout` is legitimate **in the throwaway film spec only** — never in the committed test.
+
+### Film admission — flake screen + refilm budget (hard bounds)
+
+- **Flake screen:** a scenario Playwright marked `flaky` in the Step 7 run does not get a film chapter until it passes clean. App-inherent nondeterminism → demote it: no chapter, and the AC reports as `unproven — gated: nondeterministic (<cause>)`.
+- **Refilm budget = 1 per failing chapter:** first film failure → ONE diagnose+fix+refilm. The same chapter failing again → stop paying: drop the chapter, demote its AC as above, film the rest (pass the reduced `SCENARIOS` count to `record.sh`). Never a third cycle.
+- **Committed coverage never shrinks to make a film green.** Deleting a scenario from the committed spec is justified only by committed-run evidence (Step 7 flake handling above) — never by film-run behavior.
 
 Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sidecar of `{name, t}` offsets; `record.sh` turns it into the watch page's clickable chapter list and enforces the chapter floor from it.
 
@@ -410,7 +419,7 @@ test('delete removes the legal notice', async ({ page }) => {
   await chapter('confirm',       async () => { await page.getByRole('button', { name: 'Confirm' }).click(); });
   await chapter('deleted ✓',     async () => {
     await expect(page.getByRole('alert')).toContainText('deleted');  // ← the payoff: terminal assertion = success signal
-    await page.waitForTimeout(800);                                   // ← film-only hold so video + poster end ON the toast
+    await page.waitForTimeout(3000);                                  // ← film-only hold (≥3s) so the video and the sheet's final tile end ON the toast
   });
 
   fs.mkdirSync('test-results', { recursive: true });
@@ -418,33 +427,35 @@ test('delete removes the legal notice', async ({ page }) => {
 });
 ```
 
-### 1. Film + poster + contact sheet + watch page
+### 1. Film + contact sheet + watch page
 
 ```bash
-# record.sh runs the ONE film spec through the project Playwright, finds the per-spec webm, and enforces the
-# film-QA gate: poster (final proven frame), contact sheet (first/last + every ~3s, one image), duration floor
-# (4s + 3s x SCENARIOS) and chapter floor (>= SCENARIOS titled chapters) — then assembles a self-contained
-# watch.html (title + poster + video + clickable chapters, all inline). PROOF_SHA (the commit under proof — in
+# record.sh runs the ONE film spec through the project Playwright (--retries=0 forced: a proof film passes
+# clean on attempt 1 or it is a re-shoot — retries only multiply a failing film's cost and leave ambiguous
+# per-attempt videos), finds the per-spec webm, and enforces the film-QA gate: contact sheet (30 frames
+# spanning the whole film, one image), duration floor (4s + 3s x SCENARIOS) and chapter floor (>= SCENARIOS
+# titled chapters) — then assembles a self-contained watch.html (title + video + clickable chapters, all
+# inline). PROOF_SHA (the commit under proof — in
 # PR-mode, the PR head SHA) STOPs the film if this worktree is not serving that code. BASE_URL is the server
 # the agent started in Step 3 (exported as PLAYWRIGHT_BASE_URL and SPEC_BASE_URL). TITLE names the watch page.
 # CONFIG=<path> / PROJECT=<name> / FILM_TIMEOUT=<ms, default 60000> pass through when the repo needs them.
 BASE_URL="http://localhost:$PORT" PROOF_SHA="$(git rev-parse HEAD)" TITLE="PR #<N> — <scenario>" \
   SCENARIOS=<approved scenario count> sh <skill-base>/scripts/record.sh "<film-spec-file>"
-# Prints WEBM= POSTER= CONTACT= DURATION= CHAPTERS= WATCH= on success.
+# Prints WEBM= CONTACT= DURATION= CHAPTERS= WATCH= on success.
 # exit 3 = spec failed / no video · exit 4 = provenance STOP · exit 5 = film-QA gate — fix the film and
 # re-run; NEVER publish past a 5.
 ```
 
-### 2. Screen the film — LOOK at the contact sheet
+### 2. Screen the film — LOOK at the contact sheet, ONCE
 
-Before publishing, **Read the `CONTACT=` image** (first/last frame + one every ~3s) and answer four checks with your own eyes:
+Before publishing, **Read the `CONTACT=` image** (30 frames spanning the whole film) and answer four checks with your own eyes:
 
 1. **No blank lead** — the feature is visible in the first strip of frames, not a spinner/blank shell.
 2. **Chapters seekable** — the sheet shows distinct scenario phases where the chapter timestamps claim them.
-3. **Payoff on the final frame** — the last frame (= the poster) shows the success signal.
+3. **Payoff on the final tile** — the last tile shows the success signal (the ≥3s payoff hold puts it there).
 4. **Feature actually shown** — the surface under proof is on screen, not just app chrome.
 
-The answers become the Step 9 report's `Film QA:` line — a `Film QA` line not backed by the sheet is fabrication. Any check failing → fix the film spec, re-run `record.sh`, re-screen. Publish only the `watch.html` (never a bare `.webm`).
+**Screen once per film:** one contact-sheet Read per `record.sh` run — megapixel re-reads inflate every later turn for no new evidence; re-screen only after a re-film. The answers become the Step 9 report's `Film QA:` line — a `Film QA` line not backed by the sheet is fabrication. A check failing → ONE fix+re-film (the refilm budget above), re-screen; the same chapter failing again → drop + demote. Publish only the `watch.html` (never a bare `.webm`).
 
 ### 3. Publish
 
@@ -497,7 +508,7 @@ Generated:
 ACs: <N proven> / <M total>          # list each `unproven — gated: <what>` explicitly
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed · hermetic (carve-outs: none | <declared list>)
-Film QA: lead OK · chapters <N>/<scenarios> · payoff on final frame · feature shown   # from the contact sheet
+Film QA: lead OK · chapters <N>/<scenarios> · payoff on final tile · feature shown   # from the contact sheet
 Watch link: <public R2 URL>
 Committed: <short-sha> on <branch>
 Pushed: <remote>/<branch>
@@ -519,7 +530,7 @@ In coverage/target mode the report is the first four lines (`Generated` through 
 - Playwright best practices: see `best-practices.md` in this directory
 - Code generation rules: see `code-rules.md` in this directory
 - Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` probes wrangler/Chrome/ffmpeg): see `scripts/preflight.sh` in this directory
-- Step-8 watch-link film (per-spec video + PROOF_SHA provenance guard + film-QA gate: poster, contact sheet, duration/chapter floors): see `scripts/record.sh` in this directory
+- Step-8 watch-link film (per-spec video + PROOF_SHA provenance guard + film-QA gate: contact sheet, duration/chapter floors, `--retries=0` forced): see `scripts/record.sh` in this directory
 - Recommended lint hardening (propose by default): see `recommended-lint.md` in this directory
 - Contributing a generated or fixed spec to a third-party repo? Re-read that repo's `CONTRIBUTING.md` and PR/issue templates IN FULL first, and honor each gate before opening a PR: issue-first policy and any required PR-issue link, CLA/DCO, commit-message style and signing, target branch, and any AI-disclosure or AI-PR policy. A finding from a scanner is a candidate, not a verdict — verify it is a real silent-pass before submitting.
 - Conventions & seed template (Step 5b): see `conventions-template.md` in this directory

@@ -122,10 +122,10 @@
       "id": 6,
       "title": "Film spec ends on the success signal (film the payoff); committed test has no film-only hold",
       "prompt": "In Step 8 of playwright-test-generator you are authoring the THROWAWAY film spec for a delete flow: the user clicks Delete, confirms a dialog, the row disappears, and the app shows a success toast reading 'Notice deleted'. Show the film spec you would write, and state how the durable committed test differs.",
-      "expected_output": "The film spec's terminal assertion is the success toast/alert ('Notice deleted'), not merely the row's disappearance -- that success frame is the proof the film must end on. It adds a film-only hold (e.g. waitForTimeout(~800ms)) after the success assertion so the video and poster end on the toast before it auto-dismisses. It wraps each phase in test.step(...) and writes a test-results/chapters.json sidecar of {name,t} offsets for the watch-page chapter list. It uses a per-spec test.use block with channel: 'chrome' and an explicit video size (1600x900 — not Playwright's 800x450 default, which renders chapter titles illegible). The durable committed test asserts the SAME success signal but keeps the project default browser, no video, and NO waitForTimeout hold.",
+      "expected_output": "The film spec's terminal assertion is the success toast/alert ('Notice deleted'), not merely the row's disappearance -- that success frame is the proof the film must end on. It adds a film-only hold (waitForTimeout(3000), ≥3s) after the success assertion so the video and the contact sheet's final tile end on the toast before it auto-dismisses. It wraps each phase in test.step(...) and writes a test-results/chapters.json sidecar of {name,t} offsets for the watch-page chapter list. It uses a per-spec test.use block with channel: 'chrome' and an explicit video size (1600x900 — not Playwright's 800x450 default, which renders chapter titles illegible). The durable committed test asserts the SAME success signal but keeps the project default browser, no video, and NO waitForTimeout hold.",
       "assertions": [
         "True positive: the film spec's terminal assertion targets the success signal (the 'Notice deleted' toast/alert), not only the row removal",
-        "Film spec holds the payoff on screen (a film-only waitForTimeout after the success assertion) so video + poster end on the toast",
+        "Film spec holds the payoff on screen ≥3s (a film-only waitForTimeout after the success assertion) so the video and the contact sheet's final tile end on the toast",
         "Film spec wraps phases in test.step and writes test-results/chapters.json for the chapter list",
         "Film spec sets an explicit video size (1600x900) rather than inheriting the 800x450 default",
         "False-positive guard: the committed durable test does NOT include the waitForTimeout hold and does NOT set video:'on' -- those belong only to the throwaway film spec",
@@ -166,6 +166,20 @@
         "Flags Run A's staging POST as a write to a shared tenant (data pollution), not merely a determinism concern",
         "False-positive guard: does NOT fail Run B — a declared, read-only carve-out is sanctioned and the run proceeds",
         "Carries the verdict into the report's Tests line as hermetic (carve-outs: none | <list>)"
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Refilm budget: a twice-failing chapter is dropped and demoted; committed coverage never shrinks for the film",
+      "prompt": "Step 8 of a PR-mode run. The film spec walks 5 approved scenarios in one browser context. Chapter 4 asserts a German (de) label; the committed test for that scenario passed, but Playwright marked it flaky in the Step 7 run. The first film run fails on chapter 4 (the de label never appears — earlier /en chapters persisted an en locale cookie and user profile into the shared context). You clear cookies and re-film; chapter 4 fails again. State exactly what you do next, what happens to the committed spec, and what the Step 9 report says.",
+      "expected_output": "Chapter 4 was flaky in Step 7, so under the flake screen it should not have been filmed unmodified at all. After the second film failure the refilm budget (1 per failing chapter) is exhausted: drop chapter 4 from the film, re-film the remaining 4 scenarios (passing the reduced SCENARIOS=4 to record.sh), and demote the scenario's AC to 'unproven — gated: nondeterministic (<cause>)' on the Step 9 ACs line. The committed spec KEEPS the scenario while it passes its own fresh-context test — committed coverage never shrinks to make a film green; deleting it is justified only by committed-run evidence (Step 7 flake handling), never by film-run behavior. The shared-context state leak (locale cookie + persisted profile) is a film-setup failure mode the committed fresh-context tests never had; the sanctioned fix is an explicit chapter-opening state reset (clear cookies + storage, re-auth), which counts as the one budgeted refilm attempt. No third diagnose+refilm cycle.",
+      "assertions": [
+        "True positive: after the second failure of the same chapter, drops the chapter and demotes the AC to 'unproven — gated' instead of attempting a third fix+refilm cycle",
+        "Names the flake screen: a scenario Playwright marked flaky in Step 7 does not get a film chapter until it passes clean",
+        "Recognizes the shared-context state leak (locale cookie / persisted user profile from earlier chapters) as a film-only failure mode and names the explicit chapter-opening state reset as the fix",
+        "Passes the reduced SCENARIOS count to record.sh so the chapter floor matches the demoted film — the demotion is named in the report, not silently absorbed",
+        "False-positive guard: does NOT delete the still-passing scenario from the committed spec because of film behavior — committed coverage shrinks only on committed-run evidence",
+        "Step 9 report lists the demoted scenario on the ACs line as unproven — gated with the cause"
       ]
     }
   ]

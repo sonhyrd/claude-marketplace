@@ -13,7 +13,7 @@ A hard stop where the pipeline waits for an explicit user go-ahead before procee
 Posting the scenario plan to the conversation as an audit trail and proceeding immediately without waiting for a reply. The user interrupts to redirect; silence is consent. The PR-mode replacement for the approval gate.
 
 ## Watch link
-The hosted, shareable proof of a PR-mode run: a watch.html page (poster + chapters + video), not a bare .webm. Required deliverable in PR-mode.
+The hosted, shareable proof of a PR-mode run: a watch.html page (title + chapters + video), not a bare .webm. Required deliverable in PR-mode.
 
 ## Proof film
 The video behind the watch link. Covers every approved scenario, one titled chapter per scenario, ending with the final scenario's payoff held on screen. A film that covers fewer scenarios than the spec, or ends before the success state is visible, is a defective proof.
@@ -31,10 +31,22 @@ The sanctioned exception to hermetic specs: a real-backend interaction that is i
 The complete PR-mode deliverable: green spec + POM committed to the PR branch, plus the watch link. A run that ends with uncommitted tests or no watch link has not delivered a proof.
 
 ## Contact sheet
-The film-QA evidence record.sh extracts: the film's first frames plus one every ~3 seconds, tiled on a single image (`CONTACT=`). Step 8 requires reading it before publishing; the report's `Film QA:` line is filled from it.
+The single film-QA evidence artifact record.sh extracts: 30 frames spanning the whole film, tiled on one image (`CONTACT=`). Its final tile is the film's final-frame evidence (there is no separate poster). Step 8 reads it once per film before publishing; the report's `Film QA:` line is filled from it.
 
 ## Film QA gate
-The Step 8 structural gate on the proof film: record.sh's scripted floors (duration ≥ 4s + ~3s per scenario, chapter count ≥ scenario count, ordered timestamps, poster + contact sheet extraction — any failure is exit 5) plus the agent's contact-sheet screening. Publishing past a failed gate is forbidden.
+The Step 8 structural gate on the proof film: record.sh's scripted floors (duration ≥ 4s + ~3s per scenario, chapter count ≥ scenario count, ordered timestamps, contact-sheet extraction — any failure is exit 5) plus the agent's one contact-sheet screening. Film runs are single-attempt (`--retries=0`): a flaky film is a re-shoot, not a proof. Publishing past a failed gate is forbidden.
+
+## Refilm budget
+The bound on Step 8's fix-and-refilm loop: one diagnose+fix+refilm attempt per failing chapter. A chapter that fails its second film is dropped from the film and its scenario demoted — never a third cycle. Decided 2026-07-10 after a run spent three full-price refilm cycles on a chapter that was deleted anyway.
+
+## Flake screen
+Using Step 7's own run verdicts as the admission test for film chapters: a scenario Playwright marked flaky does not get a chapter until it has passed clean. Failing the screen leads to demotion, not to filming-and-hoping.
+
+## Demotion
+Recording a scenario as `unproven — gated: <reason>` on the report's ACs line instead of proving it. Demotion affects the film and the report only — the committed spec never loses a passing scenario to make a film green.
+
+## State-isolation rule
+The film-spec authoring constraint that follows from chapters sharing one browser context (unlike committed tests, which each get a fresh one): any scenario whose committed test depends on fresh-context state (cookies, storage, locale, auth) must open with an explicit state reset or be excluded from the film via demotion.
 
 ## Land the proof
 Step 9, the deterministic PR-mode tail: hygiene sweep → commit spec+POM to the PR branch → push → watch-link PR comment (creating a PR when none exists) → completion report. The report format is the run's exit gate: structurally invalid in PR-mode without its Watch link, Film QA, Committed, Pushed, and PR comment lines.
