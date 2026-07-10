@@ -86,12 +86,18 @@ fi
 
 section "Manifest validity"
 if command -v python3 >/dev/null 2>&1; then
-  python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))" 2>/dev/null && \
-    ok ".claude-plugin/plugin.json valid JSON" || err ".claude-plugin/plugin.json invalid JSON"
-  python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))" 2>/dev/null && \
-    ok ".claude-plugin/marketplace.json valid JSON" || err ".claude-plugin/marketplace.json invalid JSON"
-  python3 -c "import json; json.load(open('.codex-plugin/plugin.json'))" 2>/dev/null && \
-    ok ".codex-plugin/plugin.json valid JSON" || err ".codex-plugin/plugin.json invalid JSON"
+  # Private-fork policy: manifests removed (commit 6c9d4ac). Manifest JSON/parity checks
+  # skip when absent; the SKILL.md/openai.yaml convention checks below still run.
+  if [ -f .claude-plugin/plugin.json ]; then
+    python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))" 2>/dev/null && \
+      ok ".claude-plugin/plugin.json valid JSON" || err ".claude-plugin/plugin.json invalid JSON"
+    python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))" 2>/dev/null && \
+      ok ".claude-plugin/marketplace.json valid JSON" || err ".claude-plugin/marketplace.json invalid JSON"
+    python3 -c "import json; json.load(open('.codex-plugin/plugin.json'))" 2>/dev/null && \
+      ok ".codex-plugin/plugin.json valid JSON" || err ".codex-plugin/plugin.json invalid JSON"
+  else
+    ok "plugin manifests absent (private fork) - manifest JSON validity skipped"
+  fi
 
   if python3 - <<'PY'
 import json
@@ -103,31 +109,35 @@ sys.path.insert(0, 'scripts/ci/lib')
 from validate_codex import collect_codex_errors
 
 errors = []
-plugin = json.loads(pathlib.Path('.claude-plugin/plugin.json').read_text())
-marketplace = json.loads(pathlib.Path('.claude-plugin/marketplace.json').read_text())
-codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text())
-
-plugin_version = plugin.get('version')
-market_versions = [entry.get('version') for entry in marketplace.get('plugins', [])]
-codex_version = codex_plugin.get('version')
-if not plugin_version or market_versions != [plugin_version] or codex_version != plugin_version:
-    errors.append(
-        f"version mismatch: plugin={plugin_version!r}, marketplace={market_versions!r}, codex={codex_version!r}"
-    )
-
 skill_dirs = sorted(path for path in pathlib.Path('skills').iterdir() if path.is_dir())
 expected = {path.name for path in skill_dirs}
-expected_paths = {f'./skills/{skill}' for skill in expected}
-plugin_paths = plugin.get('skills')
-if (
-    not isinstance(plugin_paths, list)
-    or not all(isinstance(path, str) for path in plugin_paths)
-    or set(plugin_paths) != expected_paths
-    or len(plugin_paths) != len(expected_paths)
-):
-    errors.append(f"plugin skills must be exactly these paths: {sorted(expected_paths)!r}")
 
-errors.extend(collect_codex_errors(codex_plugin, expected, pathlib.Path('.')))
+# Private-fork policy: manifest parity checks skip when the manifests are absent.
+manifest_path = pathlib.Path('.claude-plugin/plugin.json')
+if manifest_path.exists():
+    plugin = json.loads(manifest_path.read_text())
+    marketplace = json.loads(pathlib.Path('.claude-plugin/marketplace.json').read_text())
+    codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text())
+
+    plugin_version = plugin.get('version')
+    market_versions = [entry.get('version') for entry in marketplace.get('plugins', [])]
+    codex_version = codex_plugin.get('version')
+    if not plugin_version or market_versions != [plugin_version] or codex_version != plugin_version:
+        errors.append(
+            f"version mismatch: plugin={plugin_version!r}, marketplace={market_versions!r}, codex={codex_version!r}"
+        )
+
+    expected_paths = {f'./skills/{skill}' for skill in expected}
+    plugin_paths = plugin.get('skills')
+    if (
+        not isinstance(plugin_paths, list)
+        or not all(isinstance(path, str) for path in plugin_paths)
+        or set(plugin_paths) != expected_paths
+        or len(plugin_paths) != len(expected_paths)
+    ):
+        errors.append(f"plugin skills must be exactly these paths: {sorted(expected_paths)!r}")
+
+    errors.extend(collect_codex_errors(codex_plugin, expected, pathlib.Path('.')))
 
 for skill_dir in skill_dirs:
     skill_file = skill_dir / 'SKILL.md'
@@ -153,7 +163,7 @@ for skill_dir in skill_dirs:
 
     manifest = skill_dir / 'agents' / 'openai.yaml'
     if not manifest.exists():
-        errors.append(f"{manifest}: missing OpenAI agent manifest")
+        # Private-fork policy: openai.yaml is opt-out (PTG's removed in e45e68a).
         continue
     text = manifest.read_text(encoding='utf-8')
     if '\t' in text:

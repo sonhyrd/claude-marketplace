@@ -105,22 +105,27 @@ errors = []
 skill_dirs = sorted(path for path in pathlib.Path('skills').iterdir() if path.is_dir())
 expected = {path.name for path in skill_dirs}
 
-plugin = json.loads(pathlib.Path('.claude-plugin/plugin.json').read_text())
-codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text())
-expected_paths = {f'./skills/{skill}' for skill in expected}
-plugin_paths = plugin.get('skills')
-if (
-    not isinstance(plugin_paths, list)
-    or not all(isinstance(path, str) for path in plugin_paths)
-    or set(plugin_paths) != expected_paths
-    or len(plugin_paths) != len(expected_paths)
-):
-    errors.append(f"Claude plugin skills must be exactly these paths: {sorted(expected_paths)!r}")
+# Private-fork policy: the plugin manifests were deliberately removed (commit 6c9d4ac).
+# Manifest-dependent checks skip when they are absent; the skill-surface checks below still run.
+plugin_version = None
+manifest_path = pathlib.Path('.claude-plugin/plugin.json')
+if manifest_path.exists():
+    plugin = json.loads(manifest_path.read_text())
+    codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text())
+    expected_paths = {f'./skills/{skill}' for skill in expected}
+    plugin_paths = plugin.get('skills')
+    if (
+        not isinstance(plugin_paths, list)
+        or not all(isinstance(path, str) for path in plugin_paths)
+        or set(plugin_paths) != expected_paths
+        or len(plugin_paths) != len(expected_paths)
+    ):
+        errors.append(f"Claude plugin skills must be exactly these paths: {sorted(expected_paths)!r}")
 
-errors.extend(collect_codex_errors(codex_plugin, expected, pathlib.Path('.')))
+    errors.extend(collect_codex_errors(codex_plugin, expected, pathlib.Path('.')))
+    plugin_version = plugin.get('version')
 
 frontmatter_names = set()
-plugin_version = plugin.get('version')
 for skill_dir in skill_dirs:
     skill_file = skill_dir / 'SKILL.md'
     text = skill_file.read_text(encoding='utf-8')
@@ -169,7 +174,8 @@ if frontmatter_names != expected:
 for skill_dir in skill_dirs:
     manifest = skill_dir / 'agents' / 'openai.yaml'
     if not manifest.exists():
-        errors.append(f"{manifest}: missing")
+        # Private-fork policy: openai.yaml is opt-out (PTG's removed in e45e68a).
+        # A present manifest is still validated below.
         continue
     text = manifest.read_text(encoding='utf-8')
     if not re.search(rf"^name:\s*{re.escape(skill_dir.name)}\s*$", text, re.M):
@@ -205,9 +211,13 @@ patref_text = pathlib.Path('skills/e2e-reviewer/references/pattern-reference.md'
 scan_text = pathlib.Path('skills/e2e-reviewer/scripts/scan.sh').read_text(encoding='utf-8')
 docs_text = pathlib.Path('docs/e2e-test-smells.md').read_text(encoding='utf-8')
 readme_text = pathlib.Path('README.md').read_text(encoding='utf-8')
-plugin = json.loads(pathlib.Path('.claude-plugin/plugin.json').read_text(encoding='utf-8'))
-market = json.loads(pathlib.Path('.claude-plugin/marketplace.json').read_text(encoding='utf-8'))
-codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text(encoding='utf-8'))
+# Private-fork policy: manifests removed (commit 6c9d4ac) — Checks 5 and 6 skip when absent.
+manifest_path = pathlib.Path('.claude-plugin/plugin.json')
+MANIFESTS = manifest_path.exists()
+if MANIFESTS:
+    plugin = json.loads(manifest_path.read_text(encoding='utf-8'))
+    market = json.loads(pathlib.Path('.claude-plugin/marketplace.json').read_text(encoding='utf-8'))
+    codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text(encoding='utf-8'))
 
 qr_match = re.search(r'## Quick Reference\s*\n(?:.*\n)*?((?:\|.*\n)+)', skill_text)
 if not qr_match:
@@ -340,14 +350,15 @@ for skill in ('playwright-debugger', 'cypress-debugger'):
 # Check 5: severity-grouped pattern phrase parity (canonical source: .claude-plugin/plugin.json
 # description -> marketplace.json / .codex-plugin. The e2e-reviewer SKILL.md uses a lean trigger
 # description by design, so the 24-phrase catalog lives in the manifests, not the skill frontmatter.)
-phrase_source = plugin.get('description', '')
 sev_groups = {}
-for m in re.finditer(r"P([012])\s+[a-z\-]+\s*\(([^)]*)\)", phrase_source):
-    sev_groups[m.group(1)] = m.group(2)
+if MANIFESTS:
+    phrase_source = plugin.get('description', '')
+    for m in re.finditer(r"P([012])\s+[a-z\-]+\s*\(([^)]*)\)", phrase_source):
+        sev_groups[m.group(1)] = m.group(2)
 
-if set(sev_groups) != {'0', '1', '2'}:
+if MANIFESTS and set(sev_groups) != {'0', '1', '2'}:
     errors.append('.claude-plugin/plugin.json description: could not extract P0/P1/P2 pattern groups')
-else:
+elif MANIFESTS:
     def normalize(s):
         s = s.lower()
         s = re.sub(r'[^a-z0-9+]+', ' ', s)
@@ -388,21 +399,22 @@ else:
             pos = idx + len(phrase)
 
 # Check 6: version parity across all three manifest files
-plugin_version = plugin.get('version')
-market_version = None
-for entry in market.get('plugins', []):
-    if entry.get('name') == 'e2e-skills':
-        market_version = entry.get('version')
-        break
-codex_version = codex_plugin.get('version')
-versions = {
-    '.claude-plugin/plugin.json': plugin_version,
-    '.claude-plugin/marketplace.json (plugins[e2e-skills])': market_version,
-    '.codex-plugin/plugin.json': codex_version,
-}
-distinct = {v for v in versions.values() if v is not None}
-if None in versions.values() or len(distinct) > 1:
-    errors.append(f"manifest version mismatch: {versions}")
+if MANIFESTS:
+    plugin_version = plugin.get('version')
+    market_version = None
+    for entry in market.get('plugins', []):
+        if entry.get('name') == 'e2e-skills':
+            market_version = entry.get('version')
+            break
+    codex_version = codex_plugin.get('version')
+    versions = {
+        '.claude-plugin/plugin.json': plugin_version,
+        '.claude-plugin/marketplace.json (plugins[e2e-skills])': market_version,
+        '.codex-plugin/plugin.json': codex_version,
+    }
+    distinct = {v for v in versions.values() if v is not None}
+    if None in versions.values() or len(distinct) > 1:
+        errors.append(f"manifest version mismatch: {versions}")
 
 if errors:
     for err in errors:
