@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Autoship
 
-Autoship takes one argument — an idea or an existing Issue — and drives it through the full quality pipeline autonomously: align it into a spec, slice it into Issues, drain the Frontier one Issue at a time, and end in **one pull request** whose description carries everything a reviewer needs. The invoking session is the coordinator; it replaces the human at every gate. Later phases (Frontier drain, failure handling) are specified in later sections as they land; today the pipeline runs through Align — spec and Issues published — and stops.
+Autoship takes one argument — an idea or an existing Issue — and drives it through the full quality pipeline autonomously: align it into a spec, slice it into Issues, drain the Frontier one Issue at a time, and end in **one pull request** whose description carries everything a reviewer needs. The invoking session is the coordinator; it replaces the human at every gate. The user fires one command and reviews one PR.
 
 This file states what each phase must achieve. The concrete commands behind the checks and lookups live in [reference.md](./reference.md).
 
@@ -19,7 +19,7 @@ Verify both before doing anything else (check commands in [reference.md](./refer
 
 ## Phases
 
-Intake through Align exist so far; later phases append below them as they are built.
+One continuous run: Intake → Run worktree → Align → Publish → Drain → Ship.
 
 ### 1. Intake
 
@@ -43,14 +43,28 @@ One **align worker** — a fresh agent terminal in the run worktree — turns th
 
 Wherever those skills address "the user", the user is the coordinator. The worker routes every question over orchestration ask/reply, and the coordinator answers as the **product-owner proxy**, grounded in exactly three sources: the source brief, the target repo's `CONTEXT.md`, and its ADRs. An answer that none of those supports is **ungrounded**.
 
-**Never block.** The run never waits for a human. An ungrounded question gets the most reversible answer — the one cheapest to undo when PR review proves it wrong — and an entry in the **assumptions log**: `.scratch/autoship/assumptions.md` in the run worktree, one entry per decision recording the question, the answer given, and why it was the most reversible option. The log travels into the PR description in a later phase; it is what makes reviewing the PR a sufficient audit of the whole run.
+**Never block.** The run never waits for a human. An ungrounded question gets the most reversible answer — the one cheapest to undo when PR review proves it wrong — and an entry in the **assumptions log**: `.scratch/autoship/assumptions.md` in the run worktree, one entry per decision recording the question, the answer given, and why it was the most reversible option. The log travels into the PR description at Ship; it is what makes reviewing the PR a sufficient audit of the whole run.
 
-### 4. Publish and report
+### 4. Publish
 
-The align phase ends when the worker has published the spec and the Issues — each Issue carrying its blocking edges — to the target repo's configured tracker, following its `docs/agents/issue-tracker.md`, and sent `worker_done`. The coordinator verifies the published artifacts, then reports to the user: where the spec lives, the published Issues with their edges, and the assumptions log (even if empty). **In this version, the run ends here** — the Frontier drain continues the run in later sections.
+The align phase ends when the worker has published the spec and the Issues — each Issue carrying its blocking edges — to the target repo's configured tracker, following its `docs/agents/issue-tracker.md`, and sent `worker_done`. The coordinator verifies the published artifacts, then reports progress to the user: where the spec lives, the published Issues with their edges, and the assumptions log so far. Nothing here waits for approval — the run continues straight into the drain; the PR is the gate.
+
+### 5. Drain the Frontier
+
+First, mirror the DAG: one orchestration task per published Issue, with dependency edges matching the published blocking edges exactly. From here the task list is the coordinator's **external memory of the Frontier** — which Issue can start next is always recomputed from the task DAG, never recalled from the context window; a long run must survive the coordinator remembering nothing but this list.
+
+The drain is strictly sequential: exactly one Issue worker at a time, in dependency order, each dispatched into a **fresh terminal in the run worktree**. A worker's context is deliberately small: its single Issue, the spec, and the conventions agreed during align — nothing from earlier Issues. The worker reads and follows the implement skill (user-only — read, never Skill-invoke), which ends in code-review and a commit.
+
+The review loop is bounded: fix every must-fix finding, re-review once, then stop — whatever remains rides along as **residual findings** in the `worker_done` payload. Two review cycles per Issue, hard cap; a subjective reviewer must never trap a worker. Each Issue lands as **exactly one commit** on the run branch. On a successful `worker_done`, the coordinator records the Issue's status and residual findings (they travel to the PR description), marks the task completed, and dispatches the next ready Issue.
+
+### 6. Ship
+
+When the last Issue completes, the coordinator pushes the run branch and opens **one pull request** against the repo default base. The PR description is the run's entire report: the spec summary, the assumptions log (even if empty), and per-Issue status with residual findings. Issues are closed or linked per the target repo's tracker configuration. The PR is where the human judges the run, so the description must be sufficient on its own — whatever it omits, the reviewer will never see. Report the PR URL to the user; the run ends.
 
 ## Gotchas
 
-- **Read, never invoke.** to-spec and to-tickets are user-only (`disable-model-invocation: true`) — a worker cannot Skill-invoke them. The align worker reads all four SKILL.md files and follows them in its own context, which is also what keeps the grill → spec → slice sequence in the single window to-spec requires.
+- **Read, never invoke — code-review is the one exception.** to-spec, to-tickets, and implement are user-only (`disable-model-invocation: true`) — no worker can Skill-invoke them. Workers read those SKILL.md files and follow them in their own context, which is also what keeps the align worker's grill → spec → slice sequence in the single window to-spec requires. code-review is model-invocable, so an Issue worker may Skill-invoke it where implement calls for it.
+- **A fresh terminal per Issue is non-negotiable.** A reused terminal drags the previous Issue's assumptions, half-read files, and debugging state into work that must stand alone. New terminal per Issue — even when an idle one is sitting right there.
+- **Sequential on purpose.** The Issues are vertical slices of one feature, sharing one worktree and one branch; two workers at once collide in the same files. One at a time, in dependency order — parallel drain is out of scope.
 - **Wait for tui-idle before dispatching.** Dispatching into a worker terminal that is still starting up races the agent's TUI and loses the task.
-- **A silent wait window is a checkpoint, not a failure.** Align interviews run long. When a wait returns nothing, check that the worker terminal is alive and keep waiting — never restart or kill a worker just because it is slow.
+- **A silent wait window is a checkpoint, not a failure.** Align interviews and Issue implementations run long. When a wait returns nothing, check that the worker terminal is alive and keep waiting — never restart or kill a worker just because it is slow.

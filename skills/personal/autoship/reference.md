@@ -87,7 +87,7 @@ location and the published Issue identifiers (with their blocking edges)
 in the body.
 ```
 
-## Coordinator wait loop
+## Coordinator wait loop — align
 
 The coordinator is the product-owner proxy. Wait in rolling windows — never sleep/poll:
 
@@ -111,8 +111,119 @@ Handle each outcome, then loop:
 
 - **`escalation`**: treat like a `decision_gate` — answer it with `reply` under the same grounding and never-block rules; do not wait for a human.
 
-- **`worker_done`**: mark the task completed, verify the spec and Issues exist in the tracker per `docs/agents/issue-tracker.md`, then report spec + Issues + assumptions log and stop (this version ends here):
+- **`worker_done`**: mark the align task completed, verify the spec and Issues exist in the tracker per `docs/agents/issue-tracker.md`, report spec + Issues + assumptions log to the user, then continue into the Frontier drain (below):
 
   ```bash
   orca orchestration task-update --id <task_id> --status completed --json
   ```
+
+## Frontier drain
+
+### Mirror the DAG
+
+One orchestration task per published Issue. Create blockers before dependents so `--deps` can name their task ids; read each Issue's blocking edges from the tracker per `docs/agents/issue-tracker.md` and mirror them exactly — no edge added, none dropped:
+
+```bash
+orca orchestration task-create --spec "<Issue worker spec — template below>" --json
+orca orchestration task-create --spec "<...>" --deps '["<blocker_task_id>","<blocker_task_id>"]' --json
+```
+
+Put the Issue identifier on the first line of each task spec so task output maps back to the tracker. The Frontier is then a query, never a recollection:
+
+```bash
+orca orchestration task-list --ready --json   # Issues whose blockers are all completed
+```
+
+### Issue worker dispatch
+
+One Issue at a time, in dependency order. Every dispatch gets a fresh terminal in the run worktree — never the align worker's terminal, never a previous Issue's:
+
+```bash
+orca terminal create --worktree id:<worktreeId> --title issue-<id> --command "claude" --json
+orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
+orca orchestration dispatch --task <task_id> --to <handle> --inject --json
+```
+
+Issue worker spec template (fill per Issue):
+
+```text
+Implement exactly one Issue in this worktree, on the current branch.
+
+Issue <tracker id>: <title>
+<full Issue body, verbatim, including acceptance criteria>
+
+Spec, for context — the Issue above bounds your scope: <spec location>
+Conventions agreed during align: the spec's implementation decisions, plus
+.scratch/autoship/assumptions.md in this worktree.
+
+Read and follow ~/.claude/skills/implement/SKILL.md as instructions — it is
+user-only, do NOT Skill-invoke it. Where it says to use code-review, Skill-invoke
+code-review (it is model-invocable), reviewing against the commit that was HEAD
+when you started.
+
+Review loop, hard cap two cycles: fix every must-fix finding from the first
+review, re-review once, then stop — findings still open after the second review
+are residual findings to report, not fix.
+
+End with exactly ONE commit on this branch containing all work for this Issue
+(amend if fixes land after the first commit — never a second commit). Then send
+worker_done exactly once, even on failure, to the coordinator handle in your
+dispatch preamble, with payload:
+{"taskId":"<task_id>","dispatchId":"<dispatch_id>","issue":"<tracker id>",
+ "commit":"<sha>","reviewCycles":<1 or 2>,"residualFindings":["<finding>", ...]}
+```
+
+### Drain loop
+
+The same rolling wait as align, after every dispatch:
+
+```bash
+orca orchestration check --wait --types worker_done,escalation,decision_gate --timeout-ms 900000 --json
+```
+
+- **`decision_gate` / `escalation`**: answer as the product-owner proxy under the align rules — grounded in the source brief, `CONTEXT.md`, and ADRs; ungrounded → most reversible answer plus an assumptions-log entry; `reply`, then keep waiting.
+- **Timeout / `{count:0}`**: liveness checkpoint — `orca terminal read --terminal <handle> --json`, then wait again.
+- **`worker_done`**: record the Issue's status, commit, and residual findings for the PR description; on success:
+
+  ```bash
+  orca orchestration task-update --id <task_id> --status completed --result '<payload>' --json
+  orca orchestration task-list --ready --json
+  ```
+
+  A ready task → dispatch it (fresh terminal, sequence above). Nothing ready and nothing pending → Ship.
+
+## Ship
+
+Push the run branch from the run worktree (path from the `worktree create` output):
+
+```bash
+git -C <run-worktree-path> push -u origin <run-branch>
+```
+
+Open one PR against the repo default base (from `orca repo show --repo <selector> --json`), e.g. on GitHub:
+
+```bash
+gh pr create --base <default-base> --title "<one-line feature summary>" --body-file <pr-body.md>
+```
+
+PR body — all three sections, always; the reviewer sees nothing the description omits:
+
+```markdown
+## Spec
+<3–5 sentence summary of the spec, plus where the full spec lives>
+
+## Assumptions log
+<verbatim contents of .scratch/autoship/assumptions.md, or "No ungrounded decisions.">
+
+## Issues
+| Issue | Status | Commit | Residual findings |
+| ----- | ------ | ------ | ----------------- |
+| <id> <title> | completed | <sha> | <list, or none> |
+```
+
+Close or link the Issues per the target repo's `docs/agents/issue-tracker.md`:
+
+- GitHub: append `Closes #<n>` lines to the PR body so the merge closes them.
+- Trackers without PR linking (e.g. local markdown): mark each Issue closed per the tracker doc's Close convention, referencing the PR.
+
+Report the PR URL to the user; the run ends.
