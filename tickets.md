@@ -2,7 +2,7 @@
 
 Build the `autoship` skill — idea-or-issue → autonomous grill/spec/slice → drain the Frontier → one PR. Source spec: `.scratch/autoship-spec.md`.
 
-Work the **frontier**: any ticket whose blockers are all done. This chain is purely linear — top to bottom.
+Work the **frontier**: any Issue whose blockers are all done. This chain is purely linear — top to bottom.
 
 ## Installable skeleton with hard preconditions
 

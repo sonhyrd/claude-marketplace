@@ -170,7 +170,8 @@ End with exactly ONE commit on this branch containing all work for this Issue
 worker_done exactly once, even on failure, to the coordinator handle in your
 dispatch preamble, with payload:
 {"taskId":"<task_id>","dispatchId":"<dispatch_id>","issue":"<tracker id>",
- "commit":"<sha>","reviewCycles":<1 or 2>,"residualFindings":["<finding>", ...]}
+ "commit":"<sha>","reviewCycles":<1 or 2>,"filesModified":["path/a", ...],
+ "residualFindings":["<finding>", ...]}
 ```
 
 ### Drain loop
@@ -196,7 +197,13 @@ orca orchestration check --wait --types worker_done,escalation,decision_gate --t
 
 ### Failure — detect the circuit-break and halt
 
-A worker can also die without any `worker_done` — a liveness checkpoint that finds the terminal gone or exited counts as a failed attempt too. Either way, confirm what the runtime recorded:
+A worker can also die without any `worker_done` — a liveness checkpoint finds the terminal gone or exited. The runtime saw no failure to count, so the coordinator tracks these itself: one failed attempt per dead worker, and on the third, mark the task failed directly:
+
+```bash
+orca orchestration task-update --id <task_id> --status failed --json
+```
+
+Either way, confirm what is recorded:
 
 ```bash
 orca orchestration task-list --status failed --json       # the Issue's task shows failed → circuit-broken
