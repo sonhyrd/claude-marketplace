@@ -202,7 +202,7 @@ The generated spec must **recreate its session from code** — no committed, han
   |---|---|
   | a `?token=` / query bootstrap (`query.token` → `setToken` → `getCurrentUser`) | `page.goto('<path>?token=<jwt>')`, then wait until the app strips the param (user loaded) |
   | `storageState` / a `.auth/*.json` | load it as the browser context's `storageState` |
-  | a login **cookie** (server-set) | call the API-login, seed the returned cookie |
+  | a login **cookie** (server-set) | call the API-login with the discovered credential, then seed the cookie **it returns** (read its `Set-Cookie`, pass that exact name+value to `context.addCookies`). **Do not hand-author the cookie value.** A guessed literal (`ptg_auth=1`) passes only against a backend that does not validate the token — against a signed/rotating session (a real SSO/JWT cookie) it silently bypasses auth or fails. Hand-seed a literal **only** for a documented static dev flag with no login path. |
   | `localStorage[<key>]` **only if the app actually reads it** | `addInitScript` — **never assume this**; a blind `localStorage` seed renders a *blank* shell on apps that populate `user` via `getCurrentUser()` |
 
   **Token source, in priority:** (1) the project's `dev-login`-style helper, (2) a repo API-login helper/script, (3) a `storageState` setup project / `globalSetup`, (4) an env credential (`E2E_BEARER`, or `TEST_USER`+`TEST_PASSWORD` against the app's login endpoint). Use the first that exists; if none, **stop and ask** for a token/credential. A freshly-minted token in a gitignored `.auth/…` is recreatable-from-code and sanctioned; a committed `auth/session.json` is the anti-pattern. UI-driven login belongs only in a spec that tests the login flow itself.

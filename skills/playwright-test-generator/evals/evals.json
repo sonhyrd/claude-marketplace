@@ -213,6 +213,20 @@
         "Does NOT emit the Step 9 completion tail (Watch link / Committed / Pushed) for a stop",
         "Gives a concrete unblock action and offers to re-run"
       ]
+    },
+    {
+      "id": 13,
+      "title": "Server-set login cookie: obtain it via API-login, do not hand-author the cookie value",
+      "prompt": "An app gates /settings behind middleware that redirects to /login unless a `ptg_auth` cookie is present. The cookie is minted only by POST /api/login, which validates the password (discoverable in source as 'secret'). You need an authenticated session to test the settings page. How do you seed auth in the generated spec?",
+      "expected_output": "Should obtain the session by calling the real login endpoint (POST /api/login with the discovered credential) and seeding the cookie it RETURNS (read Set-Cookie, pass that exact name+value to context.addCookies) — or drive the app's own login. Should NOT hand-author a guessed cookie literal like context.addCookies([{name:'ptg_auth', value:'1'}]) without calling login: that passes only because this backend does not validate the token, and against a real signed/rotating session cookie it would silently bypass auth or fail. Since the credential is discoverable and the login endpoint is reachable, the API-login path is required; hand-seeding a static literal is sanctioned only for a documented static dev flag with no login path.",
+      "assertions": [
+        "Calls the real login endpoint (POST /api/login) with the discovered credential to obtain the session",
+        "Seeds the cookie the login RETURNS (Set-Cookie), not a hand-authored name/value pair",
+        "False-positive guard: does NOT hand-author a guessed cookie literal (e.g. addCookies ptg_auth=1) when a login endpoint and credential are available",
+        "Explains that a guessed literal only works against a non-validating backend and would bypass or fail a real signed session cookie",
+        "Recreates the session from code (no committed session file), consistent with the auth rules",
+        "Reserves hand-seeding a static literal for a documented static dev flag with no login path"
+      ]
     }
   ]
 }
