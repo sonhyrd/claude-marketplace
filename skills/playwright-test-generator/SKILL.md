@@ -69,6 +69,7 @@ Read project files to build a project profile before doing anything else.
 | POM pattern | Check for `models/`, `pages/`, `page-objects/` directories |
 | Existing specs | All `*.spec.ts` / `*.test.ts` files in test dir |
 | Conventions doc | E2E/testing section in `AGENTS.md`, `CLAUDE.md`, or `CONTRIBUTING.md`; a designated seed spec (`seed.spec.ts` or a spec referenced as the example to copy) |
+| Test runner | `@playwright/test` in `package.json` deps, or `node -e "require.resolve('@playwright/test')"` resolves. If neither, the project is **greenfield** — Step 5b bootstraps the runner. |
 
 **Output (project profile):**
 ```
@@ -77,6 +78,7 @@ testDir: <detected path>
 hasPOM: true | false
 existingSpecs: [list of file paths]
 hasConventionsDoc: true | false
+hasTestRunner: true | false   # false → greenfield; Step 5b installs Playwright before Step 7
 ```
 
 **If `baseURL` cannot be determined:** stop and ask the user to provide the target URL before proceeding.
@@ -200,7 +202,7 @@ Don't build a separate recon ceremony. Selectors are validated by the Step-7 tes
 
 1. **Draft selectors from source + the readiness-confirmed app.** Read the changed component(s) for roles/labels/testids. For a big or gated page where blind-drafting would thrash the heal loop, *optionally* snapshot the live DOM once — authenticate via the discovered path above, `goto` the target, read `page.locator('body').ariaSnapshot()` from a throwaway `_recon.spec.ts` (delete it after). This is an **accelerator, not a required step**.
 2. **Capture the network log on the first run to drive mocks.** Run the draft spec once; from Playwright's request log (or `page.on('request')`), list the endpoints the surface actually calls — including proxy (`/api/request?cmd=`) and SSR calls that source-reading misses — and write the `page.route` mocks against them (per `code-rules.md` › Network Determinism).
-3. **Let the test run heal the rest.** A wrong selector fails the run; Step 7 re-snapshots and fixes it by intent. Never auto-install Playwright — rely on the project's pinned version.
+3. **Let the test run heal the rest.** A wrong selector fails the run; Step 7 re-snapshots and fixes it by intent. Never *npx-float* Playwright when the project already pins it — rely on the project's pinned version (a floated runner breaks the heal loop). **The one exception is a greenfield project with no runner at all (`hasTestRunner: false`): there, scaffolding Playwright as a *pinned dev-dep* is Step 5b's bootstrap — see it — not a floated install.**
 
 **Source recon uses the Grep tool (ripgrep), not bash `grep --include=*.vue`.** Unquoted globs and bracket paths — a Nuxt dynamic route `pages/person/[id].vue` — trip zsh `nomatch` and abort the whole `&&`-chain. The Grep tool sidesteps the shell entirely; quote any glob you must hand to bash. Ad-hoc shell during a run must be portable: the interactive shell may be zsh and grep may be BSD — no `${!var}` indirection, quote every expansion, no GNU-only grep flags. A sweep that can silently no-op is a bug: end it with an explicit non-empty check on its output or exit code, so "found nothing" is distinguishable from "never actually ran".
 
@@ -286,6 +288,14 @@ Follow `code-rules.md` in this directory for:
 Runs only when Step 1 found no testing-conventions doc (`hasConventionsDoc: false`). When conventions already exist, skip — never overwrite or duplicate them.
 
 The highest-leverage artifact for consistent AI-generated tests is not any single test — it is a conventions doc plus a designated seed spec that future generation runs (Claude Code, Codex, Playwright Agents) read before writing code. Without one, every later session re-derives locator strategy, auth, and mocking decisions from scratch — and drifts.
+
+0. **Bootstrap the test runner if the project is greenfield (`hasTestRunner: false`).** This sub-step runs whenever no runner resolves — **independent of the conventions gate above** — because Step 6 (`e2e-reviewer`) and Step 7 (test run) cannot run without one. Scaffold it once, as **pinned project deps**:
+   - Add the runner with the project's package manager so it lands pinned in `package.json` (`pnpm add -D @playwright/test` · `npm i -D @playwright/test` · `yarn add -D @playwright/test`). A pinned dependency is **not** the npx-floated install the "never auto-install" rule forbids — that rule guards against version skew from a *different* runner, which a pinned dev-dep does not cause.
+   - Install the browser once: `npx playwright install chromium`.
+   - Author a minimal `playwright.config.*`: `testDir`, `use.baseURL` (the Step 1/3 resolved URL), a `webServer` block that runs the project's own `dev` command on that port with `reuseExistingServer: !process.env.CI`, plus `forbidOnly: !!process.env.CI` and `retries: process.env.CI ? 2 : 0`.
+   - TypeScript project → add `<testDir>/tsconfig.json` extending the project's config, so Step 7's `tsc --noEmit` has a target.
+
+   Idempotent: skip any artifact that already exists, never overwrite. After this, treat Playwright as project-pinned — `--no-install` everywhere else still holds.
 
 1. Generate a project-adapted E2E conventions section from `conventions-template.md` in this directory. Target: the project's root `AGENTS.md` (read by Codex and most agent CLIs), plus a one-line `CLAUDE.md` pointer if the project uses Claude Code. Append to existing files; create only when absent.
 2. Designate the best generated spec as the seed: reference it by path in the conventions doc ("copy the shape of `<path>`"). A seed spec demonstrating the project's real auth, locator, and mocking patterns teaches future agents more than any prose.

@@ -181,6 +181,22 @@
         "False-positive guard: does NOT delete the still-passing scenario from the committed spec because of film behavior — committed coverage shrinks only on committed-run evidence",
         "Step 9 report lists the demoted scenario on the ACs line as unproven — gated with the cause"
       ]
+    },
+    {
+      "id": 11,
+      "title": "Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep",
+      "prompt": "A project has a package.json with a `dev` script (Nuxt on port 3100) but NO `@playwright/test` in its dependencies and NO playwright.config file — Step 1 detected `hasTestRunner: false`. The user asks: 'Add a Playwright E2E test for the onboarding form on the home page (/).' Describe your Step 5b setup plan and how you will reach a green Step 7 run. Do not write the spec yet.",
+      "expected_output": "Should recognize the project as greenfield (hasTestRunner: false) and bootstrap the runner in Step 5b before Step 6/7: add `@playwright/test` as a PINNED dev dependency via the project's package manager (pnpm add -D / npm i -D / yarn add -D), run `npx playwright install chromium` once, and author a minimal playwright.config with testDir, baseURL from the resolved dev URL, and a webServer block running the project's own `dev` command. Should add an e2e tsconfig for the TypeScript typecheck. Should NOT interpret the 'never auto-install Playwright' rule as a reason to stop or to skip installing — that rule scopes to projects that already pin a runner (guarding version skew), not to greenfield. Should NOT npx-float a runner version; the install is a pinned dev-dep, and every later step still uses `--no-install`.",
+      "assertions": [
+        "Detects the project as greenfield via hasTestRunner: false",
+        "True positive: Step 5b installs @playwright/test as a pinned dev dependency (pnpm/npm/yarn add -D), not via an npx-floated runner",
+        "Installs the browser binary once (npx playwright install chromium)",
+        "Authors a minimal playwright.config with testDir, baseURL, and a webServer block running the project's dev command",
+        "Adds an e2e tsconfig so Step 7 tsc --noEmit has a target",
+        "Does NOT treat 'never auto-install Playwright' as a blocker or stop-and-ask on a greenfield project",
+        "False-positive guard: does NOT npx-float or reinstall a different Playwright version; after the pinned install, later steps still use --no-install",
+        "Sequences the bootstrap before Step 6 (e2e-reviewer) and Step 7 (test run), which cannot run without a runner"
+      ]
     }
   ]
 }
