@@ -6,6 +6,7 @@ Non-negotiable for every generated spec, regardless of project shape:
 
 - **`await` everything** — every `expect()` on a Locator and every Playwright action (`.click()`, `.fill()`, `.press()`, `.check()`, `.selectOption()`, `.hover()`). A missing `await` silently skips the assertion or action.
 - **Web-first assertions only** — `toBeVisible()`, `toHaveText()`, `toHaveURL()`, etc. Never `expect(await el.isVisible()).toBe(true)` (resolves once, no retry).
+- **Hermetic by default** — every network call the spec triggers is answered by a mock; a live round-trip exists only as a declared carve-out (see Network Determinism). Step 7's hermetic audit fails the run on any undeclared live call.
 - **Stub all writes** — signup, login, payment, any mutation goes through `page.route()`. A generated test never mutates real shared backend data.
 - **Gate hydration** — on SSR/SSG apps, gate the first interaction on a hydration signal, never `waitForTimeout()` after `goto`.
 - **One hard `expect()` per test** — a test built only from `expect.soft()` never fails early.
@@ -151,14 +152,26 @@ test.describe('Login', () => {
 
 ## Network Determinism
 
-Decide per endpoint, not per suite:
+**Hermetic by default.** Every call the spec triggers is answered by a mock built from one observed run's request log; the only live traffic a spec may carry is a **declared carve-out**:
 
 | Traffic | Strategy |
 |---------|----------|
 | **Writes / credential paths** (signup, login, payment, any mutation) | **Always stub** with `page.route()`. A generated test must never create real accounts, hit real payment providers, or mutate shared backend data — data pollution, rate-limit flakiness, and leaking real records to third-party logs are all silent until they aren't. |
-| Stable first-party reads | Real backend acceptable when responses are deterministic enough to assert on |
+| First-party reads | **Mock by default** — derive the response fixtures from one observed run's real payloads (deterministic, CI-safe) |
 | Third-party services | Always stub (also covered by Spec Rules above) |
-| Real-backend smoke | At most one small, clearly named smoke spec may exercise the real backend end-to-end (e.g. a throwaway guest session) — keep it isolated |
+| A real round-trip that **IS the acceptance criterion** | **Declared carve-out only** — see below |
+
+**Declared carve-out** — the one sanctioned exception, used only when the real round-trip is itself the behavior under proof (e.g. "the live rate endpoint answers"). It must be:
+
+1. **Named in the Step 4 scenario plan**, and
+2. **Declared in the spec header**, one line per live endpoint:
+   ```typescript
+   // CARVE-OUT: GET /api/v2/exchange-rates — live round-trip IS the AC — restore: read-only
+   // CARVE-OUT: POST /api/v2/drafts — draft lifecycle IS the AC — restore: DELETE /api/v2/drafts/:id in afterEach (proven below)
+   ```
+3. **Reads may run freely; writes need a proven restore** (the restore call must itself be exercised in the spec), and a carve-out **never creates data on a shared tenant**.
+
+Step 7's hermetic audit compares the run's live calls against these headers: any live call with no matching `CARVE-OUT:` line **fails the run**, green or not.
 
 **Match the URL path, query-tolerant — and derive the pattern from an OBSERVED request, not source intent.** A mock that end-anchors the full href (`/\/documents$/`, or `url === '…/documents'`) silently misses a query suffix the app appends (`?lang=en`, `?v=2`): the route never intercepts, the real (often empty) response renders, and the spec fails at the ready selector instead of on the mock. Match on the path with a trailing-query-tolerant glob (`page.route('**/documents*', …)`) or test `new URL(route.request().url()).pathname` — never the whole href with a `$` anchor. Get the real URL by watching one run's request log (a throwaway `_recon.spec.ts` that logs `page.on('request', r => console.log(r.method(), r.url()))`, deleted after), not by guessing from source.
 
@@ -175,7 +188,7 @@ await page.route('**/api/request?**', route => {
 });
 ```
 
-Fall-through (`route.continue()`) keeps reads real, but it means **a misspelled key silently leaks a write to the real backend** — list every write endpoint explicitly, and record that requirement in the project's conventions doc (Step 5b).
+Fall-through (`route.continue()`) is how live traffic escapes a hermetic spec: **a misspelled key silently leaks a call — possibly a write — to the real backend.** Default the helper to answering every API call it sees (empty success + loud warning for unlisted cmds); reserve `route.continue()` for endpoints a declared carve-out names. Record that requirement in the project's conventions doc (Step 5b).
 
 **The mock layer is decided by where the call originates, not just the URL.** `page.route()` only intercepts requests the *browser* makes. Calls issued server-side — Next.js SSR/RSC, route handlers, a BFF, `getServerSideProps` — never pass through the browser, so a `page.route()` mock silently misses them and the test hits the real backend (the same root cause as the cookie note under Auth & Session). For server-originated traffic, mock at a server-side seam instead: an E2E-only env var that flips the server's fetch boundary to fixed responses (`process.env.E2E_MOCK` → return canned payloads), or the project's existing test double. Detect the origin before choosing: if the data appears in the initial SSR HTML (view-source), it's a server call and `page.route()` won't help.
 

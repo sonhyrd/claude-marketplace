@@ -108,7 +108,7 @@
     {
       "id": 5,
       "title": "PR-mode watch link: a skip must show the failing probe (no silent drop)",
-      "prompt": "You are finishing a PR-mode run of playwright-test-generator (invoked with PR #2872). The generated spec passes. You run `npx wrangler whoami` and it prints `Not authenticated. Please run `wrangler login`.`; Chrome IS installed. Produce the Step-7 completion report and account for the Step-8 watch link.",
+      "prompt": "You are finishing a PR-mode run of playwright-test-generator (invoked with PR #2872). The generated spec passes. You run `npx wrangler whoami` and it prints `Not authenticated. Please run `wrangler login`.`; Chrome IS installed. The spec + POM are already committed and pushed to the PR branch and the PR comment is posted. Produce the Step-9 completion report and account for the Step-8 watch link.",
       "expected_output": "Emits the completion report and accounts for the watch link as `Watch link: skipped -- wrangler not authenticated`, with the actual `wrangler whoami` output pasted next to it as evidence. Does NOT write 'Complete' while silently omitting the Watch link line. Does NOT fabricate an R2 URL it never produced. Does NOT fail or abort generation over the missing link -- the run finishes normally with the passing tests reported. Because Chrome is installed, the skip reason is specifically the wrangler auth failure, not a Chrome/media caveat.",
       "assertions": [
         "True positive: the `skipped` line pastes the actual `wrangler whoami` failure output as evidence, not a bare `skipped -- wrangler not authenticated` written from memory",
@@ -122,13 +122,50 @@
       "id": 6,
       "title": "Film spec ends on the success signal (film the payoff); committed test has no film-only hold",
       "prompt": "In Step 8 of playwright-test-generator you are authoring the THROWAWAY film spec for a delete flow: the user clicks Delete, confirms a dialog, the row disappears, and the app shows a success toast reading 'Notice deleted'. Show the film spec you would write, and state how the durable committed test differs.",
-      "expected_output": "The film spec's terminal assertion is the success toast/alert ('Notice deleted'), not merely the row's disappearance -- that success frame is the proof the film must end on. It adds a film-only hold (e.g. waitForTimeout(~800ms)) after the success assertion so the video and poster end on the toast before it auto-dismisses. It wraps each phase in test.step(...) and writes a test-results/chapters.json sidecar of {name,t} offsets for the watch-page chapter list. It uses test.use({ video: 'on', channel: 'chrome' }). The durable committed test asserts the SAME success signal but keeps the project default browser, no video, and NO waitForTimeout hold.",
+      "expected_output": "The film spec's terminal assertion is the success toast/alert ('Notice deleted'), not merely the row's disappearance -- that success frame is the proof the film must end on. It adds a film-only hold (e.g. waitForTimeout(~800ms)) after the success assertion so the video and poster end on the toast before it auto-dismisses. It wraps each phase in test.step(...) and writes a test-results/chapters.json sidecar of {name,t} offsets for the watch-page chapter list. It uses a per-spec test.use block with channel: 'chrome' and an explicit video size (1280x720 — not Playwright's 800x450 default, which renders chapter titles illegible). The durable committed test asserts the SAME success signal but keeps the project default browser, no video, and NO waitForTimeout hold.",
       "assertions": [
         "True positive: the film spec's terminal assertion targets the success signal (the 'Notice deleted' toast/alert), not only the row removal",
         "Film spec holds the payoff on screen (a film-only waitForTimeout after the success assertion) so video + poster end on the toast",
         "Film spec wraps phases in test.step and writes test-results/chapters.json for the chapter list",
+        "Film spec sets an explicit video size (1280x720) rather than inheriting the 800x450 default",
         "False-positive guard: the committed durable test does NOT include the waitForTimeout hold and does NOT set video:'on' -- those belong only to the throwaway film spec",
         "Committed test still asserts the user-visible success signal, not just the DOM side effect"
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate",
+      "prompt": "You are at Step 4 of playwright-test-generator in PR-mode (invoked with PR #412). The scenario plan is written: two scenarios plus a locator mapping table. Context: the repo's existing specs are all flat (no POM anywhere), the worktree had uncommitted changes that Step 3 stashed, and one input on the form is label-less (placeholder only). Describe exactly what you do next, including anything you would ask the user. Then answer the same question for a coverage-gap run (no argument).",
+      "expected_output": "PR-mode: posts the plan to the conversation as the audit trail — including an Assumptions block that states POM-always (despite flat siblings), the stash-and-restore of the dirty tree, and getByPlaceholder for the label-less input — and continues immediately to Step 5. Silence is consent; it does not wait for a reply, does not enter plan mode, and asks zero questions. Coverage-gap: presents the plan and stops for explicit user approval before writing any code.",
+      "assertions": [
+        "True positive: in PR-mode, posts the plan and proceeds immediately to Step 5 without waiting for a reply (notify-and-continue; silence is consent)",
+        "Resolves POM-vs-flat, dirty-tree, and selector-strategy side-questions from the contract as stated Assumptions in the plan — asks the user none of them",
+        "The plan includes an Assumptions block naming the contract-resolved decisions",
+        "False-positive guard: in coverage-gap mode it still STOPS at the approval gate and writes no code until explicit approval — notify-and-continue does not leak into coverage-gap mode"
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Step 9 lands the proof: the report is structurally invalid without the tail lines",
+      "prompt": "A PR-mode run (PR #88, branch feat/consent-banner) has finished Step 8: tests pass hermetically, the film passed its QA gate, and watch.html is published to R2. State exactly what remains before you may emit the Complete report, then produce the report skeleton. Separately: same question for a run whose argument was the prose 'prove this change' on a branch that has no PR.",
+      "expected_output": "Step 9 remains: hygiene sweep (revert auto-imports.d.ts-style codegen churn, delete the throwaway film spec and _recon.spec.ts, no specs/*.plan.md litter), commit the spec + POM to the PR branch, push, and post the watch link as a PR comment via gh pr comment — all without asking. The report skeleton includes ACs, Tests (hermetic + carve-outs), Film QA, Watch link, Committed, Pushed, and PR comment lines; a report missing any of them is structurally invalid in PR-mode. For the prose-arg run with no PR: create one (push the branch, gh pr create with the AC table as body) and post the comment there.",
+      "assertions": [
+        "True positive: commits the spec + POM to the PR branch, pushes, and posts the watch link as a PR comment BEFORE emitting the Complete report — without asking 'want me to commit?'",
+        "The report skeleton contains the Committed, Pushed, and PR comment lines (plus Film QA and Watch link) and treats a report missing any of them as structurally invalid",
+        "True positive: with a prose argument and no existing PR, creates one (fresh branch push + gh pr create) and posts the watch-link comment there",
+        "False-positive guard: the hygiene sweep excludes throwaway artifacts from the commit — the film spec and _recon.spec.ts are deleted, not committed"
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Hermetic audit: undeclared live call fails the run; a declared carve-out passes",
+      "prompt": "Step 7 hermetic audit of two PR-mode runs. Run A: the spec passes, but the request log shows a POST to https://staging.example.com/api/v2/documents that no page.route answered, and the spec header declares no carve-outs. Run B: a different spec's header carries '// CARVE-OUT: GET /api/v2/exchange-rates — live round-trip IS the AC — restore: read-only' and its log shows exactly that GET (and nothing else) going live. State the verdict for each run and what happens next.",
+      "expected_output": "Run A FAILS despite the green spec: an undeclared live call is a run failure — mock the endpoint (or declare a carve-out only if the real round-trip is genuinely the AC) and re-run; additionally the live POST is a WRITE to a shared staging tenant, which must be called out as data pollution. Run B passes: the declared read-only carve-out is sanctioned, and the report's Tests line carries 'hermetic (carve-outs: GET /api/v2/exchange-rates)'.",
+      "assertions": [
+        "True positive: fails Run A on the undeclared live call even though the spec itself passed — undeclared live traffic is a run-failure, not a footnote",
+        "Flags Run A's staging POST as a write to a shared tenant (data pollution), not merely a determinism concern",
+        "False-positive guard: does NOT fail Run B — a declared, read-only carve-out is sanctioned and the run proceeds",
+        "Carries the verdict into the report's Tests line as hermetic (carve-outs: none | <list>)"
       ]
     }
   ]

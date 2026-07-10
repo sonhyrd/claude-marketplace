@@ -388,10 +388,15 @@ printf '\n--- Tier 3: Bundled regex checks (universal fallback for grep-detectab
 
 # Phase-0 file scope filter (Tier 3): pattern checks only apply to files that are actually
 # E2E surface — basename contains `.cy.`, path has a `cypress/` component, the file imports
-# @playwright/test, or it references cypress (import/require or `cy.<cmd>(` usage). Kills
-# backend/unit-suite FPs that share the *.test.* suffix (observed in the field: Knex
-# `.first()` flagged as #10a and an `import type ... secret` line flagged as #14 in backend
-# Vitest files). Skipped files are counted and reported before the Summary — never silently.
+# @playwright/test, references cypress (import/require or `cy.<cmd>(` usage), OR carries a
+# Playwright runtime marker (`page.goto/route/locator/getBy*(`, `test.use(`, `expect(page`).
+# The runtime markers matter: specs that import test/expect from a project FIXTURES WRAPPER
+# (`import { test } from '../fixtures'`) have no literal @playwright/test line, and the
+# import-only filter silently scoped them OUT — a staging-writing spec once sailed through
+# with a false "0 P0". Kills backend/unit-suite FPs that share the *.test.* suffix (observed
+# in the field: Knex `.first()` flagged as #10a and an `import type ... secret` line flagged
+# as #14 in backend Vitest files — none of those carry a page-API marker). Skipped files are
+# counted and reported before the Summary — never silently.
 SCOPE_STATE_DIR=$(mktemp -d)
 : > "$SCOPE_STATE_DIR/in"
 : > "$SCOPE_STATE_DIR/out"
@@ -404,7 +409,7 @@ file_in_e2e_scope() {
   case "/$f/" in
     */cypress/*) return 0 ;;
   esac
-  rg -q "@playwright/test|from\s+['\"]cypress['\"]|require\(\s*['\"]cypress['\"]|(^|[^A-Za-z0-9_])cy\.[a-z]+\(" "$f" 2>/dev/null
+  rg -q "@playwright/test|from\s+['\"]cypress['\"]|require\(\s*['\"]cypress['\"]|(^|[^A-Za-z0-9_])cy\.[a-z]+\(|page\.(goto|route|locator|getBy[A-Z][A-Za-z]*)\s*\(|test\.use\s*\(|expect\(\s*page\b" "$f" 2>/dev/null
 }
 
 # Cached IN/OUT lookup (exact-line grep — space-safe filenames; file appends survive the

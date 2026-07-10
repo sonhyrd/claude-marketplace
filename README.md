@@ -84,7 +84,7 @@ Summary: 2 total hit(s), 2 P0
 | Debug failed Cypress reports | [`cypress-debugger`](#skill-4-cypress-debugger--cypress-failure-debugger) |
 | Run a deterministic local scan | [`skills/e2e-reviewer/scripts/scan.sh`](#standalone-scanner) |
 
-Useful docs: [case studies](docs/case-studies.md), [roadmap](docs/roadmap.md), [24-smell taxonomy](docs/e2e-test-smells.md), [framework scope](docs/framework-scope.md), [AI reviewer benchmark](docs/ai-reviewer-benchmark.md).
+Useful docs: [case studies](docs/case-studies.md), [roadmap](docs/roadmap.md), [24-smell taxonomy](docs/e2e-test-smells.md), [framework scope](docs/framework-scope.md), [AI reviewer benchmark](docs/ai-reviewer-benchmark.md). Architecture decisions: [PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) · [merge main before proof](docs/adr/0002-merge-main-before-proof.md) · [mock-first with declared carve-out](docs/adr/0003-mock-first-declared-carve-out.md).
 
 ## Install
 
