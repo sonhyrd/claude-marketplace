@@ -375,7 +375,7 @@ Proving the spec *guards* the change (not merely that it passes) is sanctioned v
 
 - **Per-spec video, filmed in real Chrome at an explicit size.** Add to the top of the film spec — **per-spec only**; never touch the global `playwright.config` `use` (that films the whole suite on every run):
   ```typescript
-  test.use({ video: { mode: 'on', size: { width: 1920, height: 1080 } }, viewport: { width: 1920, height: 1080 }, channel: 'chrome' });
+  test.use({ video: { mode: 'on', size: { width: 1600, height: 900 } }, viewport: { width: 1600, height: 900 }, channel: 'chrome' });
   ```
   The explicit `size` stops Playwright shrinking the film to its 800×450 default, which renders chapter titles and UI text illegible. `channel: 'chrome'` renders exactly what a human sees — Playwright's bundled Chromium ships **no PDF viewer** and some media codecs, so an inline-PDF or media feature films **blank** in it. If Chrome isn't installed, drop the `channel` and film in the default browser, and NOTE the fidelity caveat. The **durable committed test keeps the project's default browser** — only the throwaway film spec gets the block above.
 - **`wrangler` authenticated** (`npx wrangler whoami` succeeds — **don't** add `--no-install`; unlike the pinned playwright/tsc, wrangler may need provisioning and `--no-install` false-negatives). `host-on-r2.sh` has the R2 bucket + public domain hard-coded near the top (`BUCKET`, `PUB`). `<skill-base>` is the directory shown in the Skill tool's "Base directory" output. A `5xx` from `wrangler whoami` or the upload is transient (Cloudflare-side) — retry once before reporting a hosting blocker; never bake a transient 500 into the completion report.
@@ -395,7 +395,7 @@ Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sid
 // THROWAWAY film spec (not committed): video + chapters + payoff hold. The committed test asserts the same
 // success signal but keeps the default browser, no video, no waitForTimeout (see code-rules.md).
 import fs from 'node:fs';
-test.use({ video: { mode: 'on', size: { width: 1920, height: 1080 } }, viewport: { width: 1920, height: 1080 }, channel: 'chrome' });
+test.use({ video: { mode: 'on', size: { width: 1600, height: 900 } }, viewport: { width: 1600, height: 900 }, channel: 'chrome' });
 
 test('delete removes the legal notice', async ({ page }) => {
   const t0 = Date.now();
