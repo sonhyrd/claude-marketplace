@@ -43,7 +43,7 @@ orca worktree create --name <run-name> --no-parent --agent claude --json
 
 - `--no-parent` sets Orca lineage only (top-level worktree); the Git base comes from **omitting `--base-branch`**, which uses the repo default base. Never pass the invoking branch. To be explicit, pass the default base from `orca repo show --repo <selector> --json`.
 - Omit `--repo` only when running inside an Orca-managed worktree; otherwise pass `--repo <selector>`.
-- `--agent claude` launches the align worker's agent in the worktree's first terminal — do not create a separate startup terminal. If an older CLI rejects `--agent`, create the worktree plain, then `orca terminal create --worktree id:<worktreeId> --title align --command "claude" --json`.
+- `--agent claude` launches the spec worker's agent in the worktree's first terminal — do not create a separate startup terminal. If an older CLI rejects `--agent`, create the worktree plain, then `orca terminal create --worktree id:<worktreeId> --title align --command "claude" --json`.
 
 Read `worktreeId` from the output, then find the worker's terminal handle and wait for it to be ready:
 
@@ -137,7 +137,7 @@ orca orchestration task-list --ready --json   # Issues whose blockers are all co
 
 ### Issue worker dispatch
 
-One Issue at a time, in dependency order. Every dispatch gets a fresh terminal in the run worktree — never the align worker's terminal, never a previous Issue's:
+One Issue at a time, in dependency order. Every dispatch gets a fresh terminal in the run worktree — never the spec worker's terminal, never a previous Issue's:
 
 ```bash
 orca terminal create --worktree id:<worktreeId> --title issue-<id> --command "claude" --json

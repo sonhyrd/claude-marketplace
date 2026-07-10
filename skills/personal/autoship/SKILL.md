@@ -41,7 +41,7 @@ The coordinator itself lives **in the target repo**, not somewhere else steering
 
 ### 3. Align
 
-One **align worker** — a fresh agent terminal in the run worktree — turns the source brief into a spec and published Issues. It reads and follows four skills as instructions (paths in [reference.md](./reference.md)): grilling plus domain-modeling to stress-test the brief, to-spec to synthesize the spec, to-tickets to slice it into Issues with blocking edges. All four run **in one continuous context**: to-spec synthesizes the current conversation, so the grilling interview must still be in the window when the spec is written. The worker never Skill-invokes any of them — it reads the files and follows them (see Gotchas).
+One **spec worker** — a fresh agent terminal in the run worktree — turns the source brief into a spec and published Issues. It reads and follows four skills as instructions (paths in [reference.md](./reference.md)): grilling plus domain-modeling to stress-test the brief, to-spec to synthesize the spec, to-tickets to slice it into Issues with blocking edges. All four run **in one continuous context**: to-spec synthesizes the current conversation, so the grilling interview must still be in the window when the spec is written. The worker never Skill-invokes any of them — it reads the files and follows them (see Gotchas).
 
 Wherever those skills address "the user", the user is the coordinator. The worker routes every question over orchestration ask/reply, and the coordinator answers as the **product-owner proxy**, grounded in exactly three sources: the source brief, the target repo's `CONTEXT.md`, and its ADRs. An answer that none of those supports is **ungrounded**.
 
@@ -73,7 +73,7 @@ Either way the PR is where the human judges the run, so the description must be 
 
 ## Gotchas
 
-- **Read, never invoke — code-review is the one exception.** to-spec, to-tickets, and implement are user-only (`disable-model-invocation: true`) — no worker can Skill-invoke them. Workers read those SKILL.md files and follow them in their own context, which is also what keeps the align worker's grill → spec → slice sequence in the single window to-spec requires. code-review is model-invocable, so an Issue worker may Skill-invoke it where implement calls for it.
+- **Read, never invoke — code-review is the one exception.** to-spec, to-tickets, and implement are user-only (`disable-model-invocation: true`) — no worker can Skill-invoke them. Workers read those SKILL.md files and follow them in their own context, which is also what keeps the spec worker's grill → spec → slice sequence in the single window to-spec requires. code-review is model-invocable, so an Issue worker may Skill-invoke it where implement calls for it.
 - **A fresh terminal per Issue is non-negotiable.** A reused terminal drags the previous Issue's assumptions, half-read files, and debugging state into work that must stand alone. New terminal per Issue — even when an idle one is sitting right there.
 - **Sequential on purpose.** The Issues are vertical slices of one feature, sharing one worktree and one branch; two workers at once collide in the same files. One at a time, in dependency order — parallel drain is out of scope.
 - **Wait for tui-idle before dispatching.** Dispatching into a worker terminal that is still starting up races the agent's TUI and loses the task.
