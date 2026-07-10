@@ -89,10 +89,10 @@ in the body.
 
 ## Coordinator wait loop — align
 
-The coordinator is the product-owner proxy. Wait in rolling windows — never sleep/poll:
+The coordinator is the product-owner proxy. Wait in rolling windows — never sleep/poll. **Always pass `--terminal` explicitly**: subshells can resolve to a different identity than the handle the workers address, leaving the coordinator silently deaf while messages queue. The coordinator handle is `created_by_terminal_handle` in the `task-create` output:
 
 ```bash
-orca orchestration check --wait --types worker_done,escalation,decision_gate --timeout-ms 900000 --json
+orca orchestration check --wait --terminal <coordinator_handle> --types worker_done,escalation,decision_gate --timeout-ms 900000 --json
 ```
 
 Handle each outcome, then loop:
@@ -103,10 +103,11 @@ Handle each outcome, then loop:
   orca orchestration reply --id <msg_id> --body "<answer>" --json
   ```
 
-- **Timeout / `{count:0}`**: a checkpoint, not a failure — align runs can take 15–60+ minutes. Check liveness, then wait again:
+- **Timeout / `{count:0}`**: a checkpoint, not a failure — align runs can take 15–60+ minutes. Check liveness, and also poll for pending gates: a worker whose blocking `ask` dies client-side falls back to `gate-create` + `escalation`, and gates never arrive as messages. Then wait again:
 
   ```bash
   orca terminal read --terminal <handle> --json
+  orca orchestration gate-list --status pending --json   # resolve any pending gate like a decision_gate
   ```
 
 - **`escalation`**: treat like a `decision_gate` — answer it with `reply` under the same grounding and never-block rules; do not wait for a human.
@@ -141,8 +142,11 @@ One Issue at a time, in dependency order. Every dispatch gets a fresh terminal i
 ```bash
 orca terminal create --worktree id:<worktreeId> --title issue-<id> --command "claude" --json
 orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
+orca terminal read --terminal <handle> --json    # verify the agent TUI actually rendered
 orca orchestration dispatch --task <task_id> --to <handle> --inject --json
 ```
+
+`tui-idle` is trivially satisfied by a bare shell, so it alone does not prove the agent launched — if `terminal read` shows only a shell prompt (no agent statusline), the agent exited or never started: treat it as a dead worker and retry in a fresh terminal, never dispatch into it.
 
 Issue worker spec template (fill per Issue):
 
@@ -179,7 +183,7 @@ dispatch preamble, with payload:
 The same rolling wait as align, after every dispatch:
 
 ```bash
-orca orchestration check --wait --types worker_done,escalation,decision_gate --timeout-ms 900000 --json
+orca orchestration check --wait --terminal <coordinator_handle> --types worker_done,escalation,decision_gate --timeout-ms 900000 --json
 ```
 
 - **`decision_gate` / `escalation`**: answer as the product-owner proxy under the align rules — grounded in the source brief, `CONTEXT.md`, and ADRs; ungrounded → most reversible answer plus an assumptions-log entry; `reply`, then keep waiting.
@@ -193,7 +197,7 @@ orca orchestration check --wait --types worker_done,escalation,decision_gate --t
 
   A ready task → dispatch it (fresh terminal, sequence above). Nothing ready and nothing pending → Ship, success variant.
 
-- **`worker_done` reporting failure**: record the reason from its body and payload verbatim, then re-dispatch the same task into a fresh terminal (the fresh-terminal rule covers retries). The runtime counts consecutive failures per task; the third circuit-breaks the dispatch context and marks the task `failed`.
+- **`worker_done` reporting failure**: record the reason from its body and payload verbatim, then re-dispatch the same task into a fresh terminal (the fresh-terminal rule covers retries). Two runtime quirks the coordinator must absorb: a task still `dispatched` refuses re-dispatch — reset it first (`task-update --id <task_id> --status ready`); and a failure-reporting `worker_done` can auto-complete the task — verify its status afterwards and correct it. The coordinator counts the consecutive failures; after the third, mark the task `failed` (`task-update --id <task_id> --status failed`).
 
 ### Failure — detect the circuit-break and halt
 

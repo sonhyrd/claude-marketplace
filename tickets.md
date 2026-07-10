@@ -12,8 +12,8 @@ Work the **frontier**: any Issue whose blockers are all done. This chain is pure
 
 - [x] `skills/personal/autoship/SKILL.md` exists, user-invoked (`disable-model-invocation: true`), prose uses **Issue** and **Frontier** (never "ticket"/"queue")
 - [x] Concrete orca CLI invocations live in `skills/personal/autoship/reference.md`, not SKILL.md (progressive disclosure)
-- [ ] Invoked in a repo without tracker setup or without a running Orca orchestration runtime → stops with a precise report of the missing precondition
-- [ ] Invoked with free text → reports a source brief synthesized from the text; invoked with an Issue reference → reports a source brief fetched from the configured tracker
+- [x] Invoked in a repo without tracker setup or without a running Orca orchestration runtime → stops with a precise report of the missing precondition
+- [x] Invoked with free text → reports a source brief synthesized from the text; invoked with an Issue reference → reports a source brief fetched from the configured tracker
 - [x] `skills/personal/README.md` lists autoship with a one-line description linked to its SKILL.md
 - [x] `scripts/link-skills.sh` re-run; `/autoship` resolves from the harness skill directories
 
@@ -23,11 +23,11 @@ Work the **frontier**: any Issue whose blockers are all done. This chain is pure
 
 **Blocked by:** Installable skeleton with hard preconditions.
 
-- [ ] Run creates a dedicated Orca worktree branched from the repo default base; the invoking worktree is untouched
-- [ ] Align worker reads the user-only SKILL.mds (never Skill-invokes them) and runs grill → spec → slice in one context
-- [ ] Align worker questions reach the coordinator via orchestration ask/reply; the coordinator answers from the source brief + repo domain docs
-- [ ] An ungrounded question gets the most reversible answer and an entry in the assumptions log; the run never stalls waiting for a human
-- [ ] Issues with blocking edges exist in the target repo's configured tracker when the run ends; the coordinator's final report includes spec, Issues, and assumptions log
+- [x] Run creates a dedicated Orca worktree branched from the repo default base; the invoking worktree is untouched
+- [x] Align worker reads the user-only SKILL.mds (never Skill-invokes them) and runs grill → spec → slice in one context
+- [x] Align worker questions reach the coordinator via orchestration ask/reply; the coordinator answers from the source brief + repo domain docs
+- [x] An ungrounded question gets the most reversible answer and an entry in the assumptions log; the run never stalls waiting for a human
+- [x] Issues with blocking edges exist in the target repo's configured tracker when the run ends; the coordinator's final report includes spec, Issues, and assumptions log
 
 ## Back half — Frontier drain to one PR
 
@@ -35,12 +35,12 @@ Work the **frontier**: any Issue whose blockers are all done. This chain is pure
 
 **Blocked by:** Front half — autonomous align to published Issues.
 
-- [ ] Issues are mirrored into orchestration tasks whose dependency edges match the published blocking edges
-- [ ] Exactly one Issue worker runs at a time, in dependency order, each in a fresh terminal in the run worktree
-- [ ] Each Issue worker follows the implement skill, runs at most two review cycles, and reports done exactly once with residual findings in its payload
-- [ ] One commit per Issue lands on the run branch
-- [ ] One PR opens against the repo default base; its description contains the spec summary, the assumptions log, and per-Issue status; Issues are closed/linked per tracker config
-- [ ] Happy-path smoke run on a sandbox repo produces all of the above artifacts
+- [x] Issues are mirrored into orchestration tasks whose dependency edges match the published blocking edges
+- [x] Exactly one Issue worker runs at a time, in dependency order, each in a fresh terminal in the run worktree
+- [x] Each Issue worker follows the implement skill, runs at most two review cycles, and reports done exactly once with residual findings in its payload
+- [x] One commit per Issue lands on the run branch
+- [x] One PR opens against the repo default base; its description contains the spec summary, the assumptions log, and per-Issue status; Issues are closed/linked per tracker config
+- [x] Happy-path smoke run on a sandbox repo produces all of the above artifacts
 
 ## Failure path — halt and draft-PR report
 
@@ -48,8 +48,8 @@ Work the **frontier**: any Issue whose blockers are all done. This chain is pure
 
 **Blocked by:** Back half — Frontier drain to one PR.
 
-- [ ] A circuit-broken Issue stops all further dispatching
-- [ ] Completed commits are pushed; the PR is opened as a draft, never ready-for-review
-- [ ] The draft PR description reports completed Issues, the failed Issue with its failure reason, and the assumptions log
-- [ ] No Issue is closed in the tracker on a failed run
-- [ ] Verified on the sandbox repo with a deliberately impossible Issue in the chain
+- [x] A circuit-broken Issue stops all further dispatching
+- [x] Completed commits are pushed; the PR is opened as a draft, never ready-for-review
+- [x] The draft PR description reports completed Issues, the failed Issue with its failure reason, and the assumptions log
+- [x] No Issue is closed in the tracker on a failed run
+- [x] Verified on the sandbox repo with a deliberately impossible Issue in the chain
