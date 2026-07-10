@@ -221,13 +221,6 @@ mutate "$file" "Find Playwright/Cypress E2E tests that pass CI" "Find Playwright
 assert_fails "Language guard — Hangul outside switcher line in README.md" "Korean text found in public docs: README.md"
 restore "$file"
 
-# Case 15: README i18n structural parity — a translation losing a section must fail.
-file="README.ko.md"
-backup "$file"
-mutate "$file" "## 설치" "###설치-변조"
-assert_fails "README i18n parity — section drift in README.ko.md" "README i18n parity: README.ko.md has"
-restore "$file"
-
 # ---------------------------------------------------------------------------
 # Scanner detection smoke — fixture-based and offline: eslint auto-download is
 # disabled via E2E_SMELL_NO_ESLINT_DOWNLOAD=1 (so counts come from the Tier-3

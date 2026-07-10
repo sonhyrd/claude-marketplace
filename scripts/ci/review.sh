@@ -589,25 +589,6 @@ else
   warn "python3 not available; skipped docs orphan check"
 fi
 
-section "README i18n parity"
-i18n_ok=1
-en_sec=$(grep -c '^## ' README.md || true)
-en_fence=$(grep -c '^```' README.md || true)
-for f in README.ko.md README.ja.md README.zh-cn.md; do
-  if [ ! -f "$f" ]; then
-    err "README i18n parity: translation missing: $f"
-    i18n_ok=0
-    continue
-  fi
-  s=$(grep -c '^## ' "$f" || true)
-  c=$(grep -c '^```' "$f" || true)
-  [ "$s" = "$en_sec" ] || { err "README i18n parity: $f has $s '## ' sections, README.md has $en_sec"; i18n_ok=0; }
-  [ "$c" = "$en_fence" ] || { err "README i18n parity: $f has $c code fences, README.md has $en_fence"; i18n_ok=0; }
-  grep -q 'docs/assets/hero.png' "$f" || { err "README i18n parity: $f missing hero image"; i18n_ok=0; }
-  grep -q 'README.md">🇺🇸 English' "$f" || { err "README i18n parity: $f missing language switcher"; i18n_ok=0; }
-done
-[ "$i18n_ok" = "1" ] && ok "README.md / ko / ja / zh-cn structural parity (sections, fences, hero, switcher)"
-
 section "Language"
 if command -v python3 >/dev/null 2>&1; then
   hangul_hits=$(python3 - <<'PY' 2>/dev/null || true

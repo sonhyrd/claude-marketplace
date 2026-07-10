@@ -11,11 +11,6 @@
   <a href="https://agents.md"><img alt="Runs in 55+ agents" src="https://img.shields.io/badge/runs_in-55%2B_agents-37B0E6?style=flat-square&labelColor=black"></a>
   <a href="https://www.npmjs.com/package/eslint-plugin-playwright-silent-pass"><img alt="playwright silent-pass npm" src="https://img.shields.io/npm/v/eslint-plugin-playwright-silent-pass?style=flat-square&label=playwright%20lint&labelColor=black&color=1FC07C"></a>
   <a href="https://www.npmjs.com/package/eslint-plugin-cypress-silent-pass"><img alt="cypress silent-pass npm" src="https://img.shields.io/npm/v/eslint-plugin-cypress-silent-pass?style=flat-square&label=cypress%20lint&labelColor=black&color=37B0E6"></a>
-  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/voidmatcha/e2e-skills?style=flat-square&labelColor=black&color=37B0E6"></a>
-</p>
-
-<p align="center">
-<strong>🇺🇸 English</strong> | <a href="README.ko.md">🇰🇷 한국어</a> | <a href="README.ja.md">🇯🇵 日本語</a> | <a href="README.zh-cn.md">🇨🇳 简体中文</a>
 </p>
 
 Find Playwright/Cypress E2E tests that pass CI while proving little or nothing.
@@ -222,7 +217,7 @@ Total: 3 P0, 0 P1, 0 P2 in 24 spec files.
 
 The scanner is intentionally deterministic. It catches the high-confidence subset first; the Agent Skill handles intent-aware review around the scanner findings.
 
-> **Network behavior.** The scanner reads only the files you point it at and uploads nothing. For its precision tier it prefers project-local lint tools and, when absent, auto-downloads pinned public packages (`eslint`, `eslint-plugin-playwright`/`-cypress`, `ast-grep`) via `npx`. Set `E2E_SMELL_NO_ESLINT_DOWNLOAD=1` and `E2E_SMELL_NO_AST_GREP_DOWNLOAD=1` to run fully offline. Full disclosure: [SECURITY.md](./SECURITY.md).
+> **Network behavior.** The scanner reads only the files you point it at and uploads nothing. For its precision tier it prefers project-local lint tools and, when absent, auto-downloads pinned public packages (`eslint`, `eslint-plugin-playwright`/`-cypress`, `ast-grep`) via `npx`. Set `E2E_SMELL_NO_ESLINT_DOWNLOAD=1` and `E2E_SMELL_NO_AST_GREP_DOWNLOAD=1` to run fully offline.
 
 ## Skill 1: `playwright-test-generator` — Test Generation
 
@@ -502,11 +497,10 @@ Separately, the upstream contribution roadmap tracks the broader pipeline: **12 
 
 ## Contributing
 
-Bug reports, false-positive guards, new anti-patterns, and translations are all
-welcome. Start with [CONTRIBUTING.md](./CONTRIBUTING.md) for the setup, the
-verification gate (`bash scripts/ci/ci-local.sh`), and the frozen-ID / parity
-conventions. Deeper cross-agent detail lives in [AGENTS.md](./AGENTS.md).
+Bug reports, false-positive guards, and new anti-patterns are all welcome.
+The verification gate is `bash scripts/ci/ci-local.sh`; the frozen-ID / parity
+conventions and deeper cross-agent detail live in [AGENTS.md](./AGENTS.md).
 
 ## License
 
-Apache-2.0 &copy; [voidmatcha](https://github.com/voidmatcha). See [LICENSE](./LICENSE).
+Apache-2.0 &copy; [voidmatcha](https://github.com/voidmatcha).

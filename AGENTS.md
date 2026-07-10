@@ -55,8 +55,7 @@ The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.
 │   ├── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
 │   └── validate-evals.sh
 ├── docs/                   # Open-source assets (taxonomy, case studies, scope)
-├── README.md
-└── CHANGELOG.md
+└── README.md
 ```
 
 Each `skills/<name>/SKILL.md` is the contract. Everything in the skill body should be **task-actionable instructions for the agent**, not narrative documentation; supporting reference material (long tables, framework references) goes in sibling `.md` files and is read on demand.
@@ -69,7 +68,7 @@ Each `skills/<name>/SKILL.md` is the contract. Everything in the skill body shou
 - **Failure category IDs**: 15 codes (`F1`–`F15`) used by both debuggers. Codes are stable.
 - **JUSTIFIED comments**: `// JUSTIFIED: <reason>` on the line above (or above the enclosing block / multi-line chain) suppresses scanner findings. Suppress for documented intent, never to hide a real finding.
 - **Severity-first organization**: tables in SKILL.md, README, and `docs/e2e-test-smells.md` group by P0/P1/P2 in the same order.
-- **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check). Sanctioned exception: root-level `README.<lang>.md` translations (`README.ko.md`, `README.ja.md`, `README.zh-cn.md`) and the language-switcher line in `README.md` that links to them. `README.md` (English) is canonical; translations follow it.
+- **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check).
 
 ## Frameworks in Scope
 
