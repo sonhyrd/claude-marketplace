@@ -10,12 +10,12 @@ Work the **frontier**: any ticket whose blockers are all done. This chain is pur
 
 **Blocked by:** None — can start immediately.
 
-- [ ] `skills/personal/autoship/SKILL.md` exists, user-invoked (`disable-model-invocation: true`), prose uses **Issue** and **Frontier** (never "ticket"/"queue")
-- [ ] Concrete orca CLI invocations live in `skills/personal/autoship/reference.md`, not SKILL.md (progressive disclosure)
+- [x] `skills/personal/autoship/SKILL.md` exists, user-invoked (`disable-model-invocation: true`), prose uses **Issue** and **Frontier** (never "ticket"/"queue")
+- [x] Concrete orca CLI invocations live in `skills/personal/autoship/reference.md`, not SKILL.md (progressive disclosure)
 - [ ] Invoked in a repo without tracker setup or without a running Orca orchestration runtime → stops with a precise report of the missing precondition
 - [ ] Invoked with free text → reports a source brief synthesized from the text; invoked with an Issue reference → reports a source brief fetched from the configured tracker
-- [ ] `skills/personal/README.md` lists autoship with a one-line description linked to its SKILL.md
-- [ ] `scripts/link-skills.sh` re-run; `/autoship` resolves from the harness skill directories
+- [x] `skills/personal/README.md` lists autoship with a one-line description linked to its SKILL.md
+- [x] `scripts/link-skills.sh` re-run; `/autoship` resolves from the harness skill directories
 
 ## Front half — autonomous align to published Issues
 
