@@ -57,9 +57,17 @@ The drain is strictly sequential: exactly one Issue worker at a time, in depende
 
 The review loop is bounded: fix every must-fix finding, re-review once, then stop — whatever remains rides along as **residual findings** in the `worker_done` payload. Two review cycles per Issue, hard cap; a subjective reviewer must never trap a worker. Each Issue lands as **exactly one commit** on the run branch. On a successful `worker_done`, the coordinator records the Issue's status and residual findings (they travel to the PR description), marks the task completed, and dispatches the next ready Issue.
 
+**When an Issue fails.** A failed `worker_done` is not yet the end: the coordinator re-dispatches the Issue into a fresh terminal, and the orchestration runtime counts — three consecutive failures circuit-break the dispatch context and mark the task **failed**. That is the halt signal. The coordinator stops dispatching entirely: the failed Issue's dependents are blocked anyway, and independent Issues are deliberately not attempted either. The halt is total by design — a run that cannot finish ends in one accurate report, not a best-effort salvage that muddies what worked. Capture why the Issue failed — its last `worker_done`, or its terminal output when it died without one — then go straight to Ship.
+
 ### 6. Ship
 
-When the last Issue completes, the coordinator pushes the run branch and opens **one pull request** against the repo default base. The PR description is the run's entire report: the spec summary, the assumptions log (even if empty), and per-Issue status with residual findings. Issues are closed or linked per the target repo's tracker configuration. The PR is where the human judges the run, so the description must be sufficient on its own — whatever it omits, the reviewer will never see. Report the PR URL to the user; the run ends.
+Ship runs on both outcomes — the same push, a different PR. The coordinator pushes the run branch and opens **one pull request** against the repo default base.
+
+**Success** — every Issue completed: the PR opens ready for review. Its description is the run's entire report: the spec summary, the assumptions log (even if empty), and per-Issue status with residual findings. Issues are closed or linked per the target repo's tracker configuration.
+
+**Failure** — the drain halted: the commits that already landed are pushed, and the PR opens as a **draft**, never ready-for-review — draft is what marks partial work as not shipped. Its description reports which Issues completed, which Issue failed and why (from the failure evidence captured at the halt), and the assumptions log. **No Issue is closed** in the tracker on a failed run; everything stays open, and the user resumes by hand.
+
+Either way the PR is where the human judges the run, so the description must be sufficient on its own — whatever it omits, the reviewer will never see. Report the PR URL to the user; the run ends.
 
 ## Gotchas
 

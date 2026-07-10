@@ -183,22 +183,45 @@ orca orchestration check --wait --types worker_done,escalation,decision_gate --t
 
 - **`decision_gate` / `escalation`**: answer as the product-owner proxy under the align rules — grounded in the source brief, `CONTEXT.md`, and ADRs; ungrounded → most reversible answer plus an assumptions-log entry; `reply`, then keep waiting.
 - **Timeout / `{count:0}`**: liveness checkpoint — `orca terminal read --terminal <handle> --json`, then wait again.
-- **`worker_done`**: record the Issue's status, commit, and residual findings for the PR description; on success:
+- **`worker_done` reporting success**: record the Issue's status, commit, and residual findings for the PR description, then:
 
   ```bash
   orca orchestration task-update --id <task_id> --status completed --result '<payload>' --json
   orca orchestration task-list --ready --json
   ```
 
-  A ready task → dispatch it (fresh terminal, sequence above). Nothing ready and nothing pending → Ship.
+  A ready task → dispatch it (fresh terminal, sequence above). Nothing ready and nothing pending → Ship, success variant.
+
+- **`worker_done` reporting failure**: record the reason from its body and payload verbatim, then re-dispatch the same task into a fresh terminal (the fresh-terminal rule covers retries). The runtime counts consecutive failures per task; the third circuit-breaks the dispatch context and marks the task `failed`.
+
+### Failure — detect the circuit-break and halt
+
+A worker can also die without any `worker_done` — a liveness checkpoint that finds the terminal gone or exited counts as a failed attempt too. Either way, confirm what the runtime recorded:
+
+```bash
+orca orchestration task-list --status failed --json       # the Issue's task shows failed → circuit-broken
+orca orchestration dispatch-show --task <task_id> --json  # per-dispatch detail if the picture is unclear
+```
+
+A `failed` task ends the drain. Dispatch nothing further — independent Issues included — and leave every remaining task exactly as it is (`pending`/`ready`); do not mark, complete, or cancel them.
+
+Capture the failure reason for the ship report: the last failed `worker_done`'s body and payload, or — when the worker died without one — the tail of its terminal:
+
+```bash
+orca terminal read --terminal <handle> --json
+```
+
+Then go to Ship, failure variant.
 
 ## Ship
 
-Push the run branch from the run worktree (path from the `worktree create` output):
+Both variants push the run branch from the run worktree (path from the `worktree create` output) — on failure the branch simply carries only the commits that landed:
 
 ```bash
 git -C <run-worktree-path> push -u origin <run-branch>
 ```
+
+### Success — ready PR
 
 Open one PR against the repo default base (from `orca repo show --repo <selector> --json`), e.g. on GitHub:
 
@@ -225,5 +248,36 @@ Close or link the Issues per the target repo's `docs/agents/issue-tracker.md`:
 
 - GitHub: append `Closes #<n>` lines to the PR body so the merge closes them.
 - Trackers without PR linking (e.g. local markdown): mark each Issue closed per the tracker doc's Close convention, referencing the PR.
+
+### Failure — draft PR
+
+Open the same PR as a **draft** — the flag is what marks the run incomplete:
+
+```bash
+gh pr create --draft --base <default-base> --title "<one-line feature summary> [autoship: halted]" --body-file <pr-body.md>
+```
+
+PR body — the success sections plus a halt report on top:
+
+```markdown
+## Run halted
+Issue <id> <title> failed: <failure reason, from its last worker_done or terminal evidence>.
+Not attempted: <every remaining Issue, by id and title>.
+
+## Spec
+<3–5 sentence summary of the spec, plus where the full spec lives>
+
+## Assumptions log
+<verbatim contents of .scratch/autoship/assumptions.md, or "No ungrounded decisions.">
+
+## Issues
+| Issue | Status | Commit | Residual findings |
+| ----- | ------ | ------ | ----------------- |
+| <id> <title> | completed | <sha> | <list, or none> |
+| <id> <title> | failed | — | <failure reason, one line> |
+| <id> <title> | not attempted | — | — |
+```
+
+**Skip the close/link step entirely**: no `Closes #<n>` lines, no tracker Close — every Issue stays open for the user to resume by hand.
 
 Report the PR URL to the user; the run ends.
