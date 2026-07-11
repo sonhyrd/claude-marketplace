@@ -4,7 +4,7 @@
 
 Non-negotiable for every generated spec, regardless of project shape:
 
-- **`await` everything** — every `expect()` on a Locator and every Playwright action (`.click()`, `.fill()`, `.press()`, `.check()`, `.selectOption()`, `.hover()`). A missing `await` silently skips the assertion or action.
+- **`await` everything** — every `expect()` on a Locator and every Playwright action (`.click()`, `.fill()`, `.type()`, `.press()`, `.check()`, `.selectOption()`, `.hover()`). A missing `await` silently skips the assertion or action.
 - **Web-first assertions only** — `toBeVisible()`, `toHaveText()`, `toHaveURL()`, etc. Never `expect(await el.isVisible()).toBe(true)` (resolves once, no retry).
 - **Hermetic by default** — every network call the spec triggers is answered by a mock; a live round-trip exists only as a declared carve-out (see Network Determinism). Step 7's hermetic audit fails the run on any undeclared live call.
 - **Stub all writes** — signup, login, payment, any mutation goes through `page.route()`. A generated test never mutates real shared backend data.
@@ -13,7 +13,7 @@ Non-negotiable for every generated spec, regardless of project shape:
 
 ## Structure Detection
 
-**Always Page Object Model (POM) — no exceptions.** Every generated spec uses a Page Object. POM keeps selectors in one place and survives DOM churn. Flat sibling specs do **not** change this: even in a repo where every existing E2E spec is flat, scaffold a POM for the new coverage — do not match the flat house style, and do not offer a `structure: flat` opt-out. "Internal consistency with flat siblings" is not a reason to write flat; POM is the style the skill enforces.
+**Always Page Object Model (POM) — no exceptions.** Every generated spec uses a Page Object; POM keeps selectors in one place and survives DOM churn. Flat sibling specs change nothing: even in a repo where every existing E2E spec is flat, scaffold a POM for the new coverage — do not match the flat house style, and do not offer a `structure: flat` opt-out. "Internal consistency with flat siblings" is not a reason to write flat.
 
 | What you find | What to generate |
 |---------------|-----------------|
@@ -23,7 +23,7 @@ Non-negotiable for every generated spec, regardless of project shape:
 
 **Do not mistake a route folder for a POM directory.** A Nuxt/Next `pages/` (or `app/`) folder holds route components, not Page Objects — it never counts as "POM directory exists." Look for Page Object *classes* the specs import, not any directory named `pages/`.
 
-**Extending an existing POM:** Read the file first. Match its existing naming and structural patterns — even if they differ from the rules below. Apply rules below only to newly added code.
+**Extending an existing POM:** read the file first; match its existing naming and structural patterns — even if they differ from the rules below. Apply the rules below only to newly added code.
 
 **Scaffolding a new POM dir:** put it at the test root — `<testDir>/pages/<Feature>Page.ts` — unless the project already uses `models/` or `page-objects/`, in which case match that name. One class per feature/page, following the POM Rules below. Never retro-refactor existing flat specs — add the POM for the *new* coverage and leave the siblings untouched.
 
@@ -40,7 +40,7 @@ Non-negotiable for every generated spec, regardless of project shape:
 7. CSS class — **POM files only**, stable structural classes only (not styling classes)
 8. `.nth()` / `.first()` / `.last()` — **forbidden** without `// JUSTIFIED:` on the line above
 
-**Project-configured test ids rank with role+name.** When `playwright.config.*` sets `use: { testIdAttribute: '...' }`, or `data-testid` (or the project's equivalent) is pervasive in the components under test, treat `getByTestId` as a **tier-1 locator alongside role+name** — not #4. A deliberate, stable test hook beats reaching past it for brittle text/placeholder locators. Keep `getByText`/`getByPlaceholder` as the fallback when no role or test id fits.
+**Project-configured test ids rank with role+name.** When `playwright.config.*` sets `use: { testIdAttribute: '...' }`, or `data-testid` (or the project's equivalent) is pervasive in the components under test, treat `getByTestId` as a **tier-1 locator alongside role+name** — not #4. A deliberate, stable test hook beats brittle text/placeholder locators; keep `getByText`/`getByPlaceholder` as the fallback when no role or test id fits.
 
 Never use XPath. Never use CSS class chains that couple to styling.
 
@@ -125,7 +125,7 @@ test.describe('Login', () => {
 - `beforeEach` for shared navigation setup only — never for shared state
 - Mock external APIs with Playwright Network API; do not call real third-party services
 - **Auto-waiting assertions only:** `toBeVisible()`, `toBeHidden()`, `toHaveText()`, `toContainText()`, `toHaveCount()`, `toHaveURL()`
-- Use `expect.soft()` for independent, non-critical checks — but ensure at least one hard `expect()` gates on the primary condition per test. A test with only `expect.soft()` assertions never fails early.
+- Use `expect.soft()` for independent, non-critical checks — but at least one hard `expect()` must gate the primary condition per test (a soft-only test never fails early)
 
 **Forbidden:**
 
@@ -146,8 +146,6 @@ test.describe('Login', () => {
 | XPath selectors | `getByRole` / `getByLabel` / `getByTestId` |
 | `import { URL } from '@playwright/test'` | Use the global `URL` (or the `(route, request)` route-callback signature) — Playwright doesn't export `URL`; the param is the DOM global, and importing it fails typecheck |
 
-**Await rule:** Every `expect()` on a Locator and every Playwright action (`.click()`, `.fill()`, `.type()`, `.press()`, `.check()`, `.selectOption()`, `.hover()`) **must** be `await`ed. Missing `await` silently skips the assertion or action.
-
 ---
 
 ## Network Determinism
@@ -156,7 +154,7 @@ test.describe('Login', () => {
 
 | Traffic | Strategy |
 |---------|----------|
-| **Writes / credential paths** (signup, login, payment, any mutation) | **Always stub** with `page.route()`. A generated test must never create real accounts, hit real payment providers, or mutate shared backend data — data pollution, rate-limit flakiness, and leaking real records to third-party logs are all silent until they aren't. |
+| **Writes / credential paths** (signup, login, payment, any mutation) | **Always stub** with `page.route()`. A generated test must never create real accounts, hit real payment providers, or mutate shared backend data. |
 | First-party reads | **Mock by default** — derive the response fixtures from one observed run's real payloads (deterministic, CI-safe) |
 | Third-party services | Always stub (also covered by Spec Rules above) |
 | A real round-trip that **IS the acceptance criterion** | **Declared carve-out only** — see below |
@@ -173,7 +171,7 @@ test.describe('Login', () => {
 
 Step 7's hermetic audit compares the run's live calls against these headers: any live call with no matching `CARVE-OUT:` line **fails the run**, green or not.
 
-**Match the URL path, query-tolerant — and derive the pattern from an OBSERVED request, not source intent.** A mock that end-anchors the full href (`/\/documents$/`, or `url === '…/documents'`) silently misses a query suffix the app appends (`?lang=en`, `?v=2`): the route never intercepts, the real (often empty) response renders, and the spec fails at the ready selector instead of on the mock. Match on the path with a trailing-query-tolerant glob (`page.route('**/documents*', …)`) or test `new URL(route.request().url()).pathname` — never the whole href with a `$` anchor. Get the real URL by watching one run's request log (a throwaway `_recon.spec.ts` that logs `page.on('request', r => console.log(r.method(), r.url()))`, deleted after), not by guessing from source.
+**Match the URL path, query-tolerant — derive the pattern from an OBSERVED request, not source intent.** A mock end-anchoring the full href (`/\/documents$/`, or `url === '…/documents'`) silently misses a query suffix the app appends (`?lang=en`, `?v=2`): the route never intercepts, the real (often empty) response renders, and the spec fails at the ready selector instead of on the mock. Match the path with a trailing-query-tolerant glob (`page.route('**/documents*', …)`) or test `new URL(route.request().url()).pathname` — never the whole href with a `$` anchor. Get the real URL from one run's request log (a throwaway `_recon.spec.ts` logging `page.on('request', r => console.log(r.method(), r.url()))`, deleted after), never by guessing from source.
 
 When the app funnels API calls through a proxy endpoint (e.g. `/api/request?cmd=<path>`), write ONE shared route-mock helper that matches on the decoded routing parameter and exposes response builders — not per-test `page.route()` calls with duplicated URL parsing:
 
@@ -190,7 +188,7 @@ await page.route('**/api/request?**', route => {
 
 Fall-through (`route.continue()`) is how live traffic escapes a hermetic spec: **a misspelled key silently leaks a call — possibly a write — to the real backend.** Default the helper to answering every API call it sees (empty success + loud warning for unlisted cmds); reserve `route.continue()` for endpoints a declared carve-out names. Record that requirement in the project's conventions doc (Step 5b).
 
-**The mock layer is decided by where the call originates, not just the URL.** `page.route()` only intercepts requests the *browser* makes. Calls issued server-side — Next.js SSR/RSC, route handlers, a BFF, `getServerSideProps` — never pass through the browser, so a `page.route()` mock silently misses them and the test hits the real backend (the same root cause as the cookie note under Auth & Session). For server-originated traffic, mock at a server-side seam instead: an E2E-only env var that flips the server's fetch boundary to fixed responses (`process.env.E2E_MOCK` → return canned payloads), or the project's existing test double. Detect the origin before choosing: if the data appears in the initial SSR HTML (view-source), it's a server call and `page.route()` won't help.
+**The mock layer is decided by where the call originates, not just the URL.** `page.route()` intercepts only requests the *browser* makes. Server-side calls — Next.js SSR/RSC, route handlers, a BFF, `getServerSideProps` — never pass through it, so a `page.route()` mock silently misses them and the test hits the real backend. Mock those at a server-side seam: an E2E-only env var flipping the server's fetch boundary to fixed responses (`process.env.E2E_MOCK` → canned payloads), or the project's existing test double. Detect the origin first: data present in the initial SSR HTML (view-source) = a server call; `page.route()` won't help.
 
 **Request-aware rules.** When the same endpoint must answer differently by method or parameters (tab filters, pagination pages, POST toggles), extend the helper with an ordered rule list instead of sprinkling conditional logic in specs:
 
@@ -208,7 +206,7 @@ Two hard rules learned from production use:
 
 - **A registered-but-unmatched rule array must NOT fall through to the network.** If the cmd is in the map but no rule matches, answer with an empty success + a loud warning that includes the method and params — a param typo (`liked: 'True'`) must surface as a warning, never as a real-backend write.
 - Pagination contracts become testable with a `start`/`offset` param rule per page: seed page 1 at exactly the page size (a short page often sets an internal "loaded end" flag that suppresses the next request), then assert the page-2 item appears after scroll *and* a page-1 item is still attached (append, not replace).
-- **Before narrowing a rule with `when.params`, prove the app actually sends that param at that point in time — wire evidence, not source intent.** A component that reads `router.query` in a first-render `useRef`/initializer fires its initial fetch during hydration, before `router.isReady`, so the query param is silently dropped from the wire even though the source clearly "passes" it. A param-narrowed rule then never matches, the strict fallback answers empty, and a previously-green render test fails for a contract the app never honors. If the param is best-effort in practice, keep the broad rule and record the WHY as a comment citing the file:line of the early read.
+- **Before narrowing a rule with `when.params`, prove the app actually sends that param at that point in time — wire evidence, not source intent.** A component reading `router.query` in a first-render `useRef`/initializer fires its initial fetch during hydration, before `router.isReady` — the param is silently dropped from the wire even though the source "passes" it, so the narrowed rule never matches, the strict fallback answers empty, and a previously-green render test fails for a contract the app never honors. If the param is best-effort in practice, keep the broad rule and comment the WHY, citing the file:line of the early read.
 
 **Prove the call, not just the pixels.** For write interactions with optimistic UI (like toggles, deletes), the UI updates before — and regardless of — the request. Pair every such assertion with request proof:
 
@@ -219,22 +217,22 @@ await call; // without this line the test passes even if the wiring to the API i
 await expect(likeToggle).toHaveAttribute('aria-pressed', 'true');
 ```
 
-**…but prove the call HAPPENS before asserting it (the inverse trap).** "Prove the call" only applies to calls the app actually makes at runtime. Unmount-cleanup API calls are the canonical counterexample: an empty-deps effect's cleanup captures its guard variables as a stale closure from mount time — if the guard (e.g. a `quizSetId` that arrives with the fetch response) was empty at mount, the cleanup's `if (id) api.cancel(id)` is a dead path forever, even though the source reads as an obvious contract. A `waitForRequest` assertion on such a call times out against correct test code. Before shipping a call-proof assertion on exit/unmount/cleanup paths, verify the request fires at least once (solo run, network log); if it never does, assert the user-visible outcome instead, file the stale closure as an app defect, and leave a comment with the file:line so the proof can be added when the defect is fixed.
+**…but prove the call HAPPENS before asserting it (the inverse trap).** "Prove the call" applies only to calls the app actually makes at runtime. Canonical counterexample: unmount-cleanup API calls — an empty-deps effect's cleanup captures its guard as a stale closure from mount time, so if the guard (e.g. a `quizSetId` arriving with the fetch response) was empty at mount, `if (id) api.cancel(id)` is a dead path forever, and a `waitForRequest` on it times out against correct test code. Before shipping a call-proof assertion on exit/unmount/cleanup paths, verify the request fires at least once (solo run, network log); if it never does, assert the user-visible outcome instead, file the stale closure as an app defect, and leave a comment with the file:line so the proof can be added when the defect is fixed.
 
-**Assert the success *signal*, not just the side effect.** The terminal assertion of a write/delete flow should be the thing the app shows the user on success — the toast / `alert` / redirect / empty-state — not only the earlier DOM change (a row vanishing). The success signal is what a human reads as "it worked," it's what a watch-link film must end on (SKILL Step 8: film the payoff), and asserting a row's *absence* alone passes even when the app silently failed and never confirmed. Assert the visible confirmation; assert the row gone as a *second* check if you like, not the only one.
+**Assert the success *signal*, not just the side effect.** The terminal assertion of a write/delete flow is what the app shows the user on success — the toast / `alert` / redirect / empty-state — not only the earlier DOM change (a row vanishing). It's what a human reads as "it worked," what a watch-link film must end on (SKILL Step 8), and asserting a row's *absence* alone passes even when the app silently failed and never confirmed. Assert the visible confirmation; the row-gone check may be a *second* assertion, never the only one.
 
-**Destructive/mutating specs must be re-runnable — WARN if they aren't.** A delete/create spec that acts on a pre-existing record passes once, then fails on every re-run (the row is gone, or a unique key now collides) — and *filming re-runs the spec*, so a one-shot destructive spec that went green in Step 6/7 fails at Step 8 and in CI. The durable pattern is self-seeding: arrange the target inside the test (API or UI create in the test / `beforeEach`), act on it, so verification + film + CI all pass. When you generate a spec that mutates data it did not itself create, **WARN the user** ("this deletes a real record — it won't survive a re-run or CI without seeding its own fixture") rather than silently shipping a spec that only passes once. Do not auto-invent the seed path unless the create route is obvious from Step 3–5 recon.
+**Destructive/mutating specs must be re-runnable — WARN if they aren't.** A delete/create spec acting on a pre-existing record passes once, then fails every re-run (row gone, or a unique key collides) — and *filming re-runs the spec*, so a one-shot destructive spec green in Step 6/7 fails at Step 8 and in CI. Durable pattern: self-seeding — arrange the target inside the test (API or UI create in the test / `beforeEach`), then act on it, so verification + film + CI all pass. When a generated spec mutates data it did not itself create, **WARN the user** ("this deletes a real record — it won't survive a re-run or CI without seeding its own fixture") rather than silently shipping a spec that only passes once. Do not auto-invent the seed path unless the create route is obvious from Step 3–5 recon.
 
 ---
 
 ## SSR & Hydration
 
-- **Gate the first interaction on hydration for server-rendered apps** (Next.js, Nuxt, SvelteKit, Astro, Remix). SSR paints interactive-looking elements before the framework attaches event listeners; Playwright's actionability checks pass against that inert DOM, so the first click is reported successful but does nothing and the spec fails at the *next* assertion — intermittently, because hydration sometimes wins the race. Detect SSR from the framework config/`package.json` before generating.
+- **Gate the first interaction on hydration for server-rendered apps** (Next.js, Nuxt, SvelteKit, Astro, Remix). SSR paints interactive-looking elements before listeners attach; Playwright's actionability checks pass against that inert DOM, so the first click "succeeds", does nothing, and the spec fails at the *next* assertion — intermittently, because hydration sometimes wins the race. Detect SSR from the framework config/`package.json` before generating.
 - Preferred gate, in order:
   1. An app-provided hydration marker: `await expect(page.locator('html[data-hydrated]')).toBeAttached();` — if the app exposes none, propose the one-line marker upstream (set an attribute in a root `useEffect`/`onMounted`); it fixes every spec at once.
   2. A self-verifying first action: `await expect(async () => { await button.click(); await expect(dialog).toBeVisible({ timeout: 1000 }); }).toPass();` — retries the click until it lands.
-- Never `page.waitForTimeout()` after `goto` as a hydration guard — it's the #9 band-aid the reviewer flags, and it still races on slow CI.
-- Nuance: Qwik apps are resumable, not hydrated — no page-global gate needed. Island frameworks (Astro) hydrate per-island according to their `client:*` directive — gate on the specific island's readiness (its own marker or a self-verifying action on that island), not a page-global signal.
+- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI.
+- Nuance: Qwik apps are resumable, not hydrated — no page-global gate needed. Island frameworks (Astro) hydrate per-island per their `client:*` directive — gate on the specific island's readiness (its own marker or a self-verifying action on that island), not a page-global signal.
 
 ---
 
@@ -243,15 +241,15 @@ await expect(likeToggle).toHaveAttribute('aria-pressed', 'true');
 - Authenticate **once**, programmatically (API-login helper or a `setup` project), persist with `storageState`, reuse it in specs that need a session. UI-driven login belongs only in specs that test the login flow itself.
 - Never hard-depend on a **manually captured** session file — a locally generated `auth/*.json` that a fresh clone or CI won't have, and that silently expires. Generated tests must be able to recreate their session from code.
 - Logged-out scenarios use a fresh context (no `storageState`) — don't "log out first" inside a test.
-- **Login-success flows: route mocks can't mint cookies.** Session cookies are usually issued server-side (the app server proxies the login call and sets cookies from the backend response); a browser-layer route mock returns the success body but no `Set-Cookie`, so the post-login SSR still sees an anonymous user. Hybrid pattern: mock the login POST for the form/UX behavior, seed the session cookies through the project's sanctioned test seam (test-auth endpoint, API login helper) right before submit, then assert the full redirect chain. Comment WHY in the spec — it reads like cheating until you know cookie issuance is server-side.
+- **Login-success flows: route mocks can't mint cookies.** Session cookies are usually issued server-side (the app server proxies the login call and sets cookies from the backend response); a browser-layer route mock returns the success body but no `Set-Cookie`, so post-login SSR still sees an anonymous user. Hybrid pattern: mock the login POST for the form/UX behavior, seed the session cookies through the project's sanctioned test seam (test-auth endpoint, API login helper) right before submit, then assert the full redirect chain. Comment WHY in the spec — it reads like cheating until you know cookie issuance is server-side.
 
 ---
 
 ## Branch State Seeding
 
-- For multi-step funnels (onboarding, checkout, multi-page applications), do **not** drive the shared prefix (consent → phone-auth → …) through the UI in every spec. Each test re-running the common steps is slow, and one change to the prefix breaks every downstream test at once — the opposite of the independence Playwright recommends.
-- Instead, seed the user to the **branch's starting state** through a test-only API/endpoint, then exercise only the branch under test. This mirrors the `storageState` approach for auth, extended to application state.
-- Use real UI steps for the prefix **only** in the one spec that specifically verifies that prefix. Everywhere else, seed and skip ahead.
+- Multi-step funnels (onboarding, checkout, multi-page applications): do **not** drive the shared prefix (consent → phone-auth → …) through the UI in every spec — re-running the common steps is slow, and one prefix change breaks every downstream test at once.
+- Seed the user to the **branch's starting state** through a test-only API/endpoint, then exercise only the branch under test — the `storageState` approach for auth, extended to application state.
+- Real UI steps for the prefix belong **only** in the one spec that specifically verifies that prefix. Everywhere else, seed and skip ahead.
 - Record which seeding endpoints/fixtures exist in the project's conventions doc (Step 5b) so later runs reuse them instead of re-driving the funnel.
 
 ---
