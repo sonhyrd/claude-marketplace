@@ -37,7 +37,7 @@ When `.spec.ts` files exist without `@playwright/test` or `cy.` imports, inspect
 Run the bundled scanner against the test directory:
 
 ```bash
-bash <skill-base>/scripts/scan.sh <test-dir>
+node <skill-base>/scripts/scan.mjs <test-dir>
 ```
 
 `<skill-base>` is the directory shown in the Skill tool's "Base directory" output (e.g., `~/.claude/skills/e2e-reviewer/`). Auto-detect `<test-dir>` from project structure (common: `e2e/`, `tests/`, `__tests__/`, `spec/`, `cypress/e2e/`).
@@ -56,7 +56,7 @@ Output is grouped per pattern ID (`#3`, `#4a`, `#15`, etc.) with `file:line:matc
 **Deterministic mode (cross-host convergence contract):** different hosts (Claude Code, Codex, etc.) must produce comparable findings on the same repo. Tier 1/2 availability varies with the environment (local plugin installs, npx download policy, watchdog), which changes the raw hit set. For a comparable review, invoke the scanner in the canonical form and SAY SO in the report:
 
 ```bash
-E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_NO_AST_GREP_DOWNLOAD=1 bash <skill-base>/scripts/scan.sh <test-dir>
+E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_NO_AST_GREP_DOWNLOAD=1 node <skill-base>/scripts/scan.mjs <test-dir>
 ```
 
 (Tier 3 regex always runs and is the deterministic baseline; Tier 1/2 add precision when locally installed but never subtract findings — the exit-code gate guarantees a crashed tier cannot suppress Tier 3.) The report MUST state which tiers actually ran ("Tier coverage: 3 only" / "1+2+3").
@@ -301,6 +301,6 @@ When a grep-detected pattern is intentional, add `// JUSTIFIED: [reason]`. The f
 2. The line immediately preceding the **enclosing call/block** when the hit sits inside a body (e.g., `// JUSTIFIED:` above `page.evaluate(() => { … document.querySelector(…) … })` covers every qualifying pattern inside that callback)
 3. For chained calls split across lines, the line immediately preceding the chain's **starting expression** covers `.nth()` / `.first()` / `.last()` further down the chain
 
-**Phase 1 vs Phase 2 suppression.** The mechanical scan (`scripts/scan.sh`) only pre-suppresses **position 1** — a contiguous `//`-comment block directly above the hit *line* (it walks up to 5 comment lines for wrapped rationales). Positions **2 and 3** (enclosing block / multi-line-chain start) require knowing the surrounding structure and are applied in **Phase 2 (LLM review)** only. So a hit JUSTIFIED via position 2 or 3 — e.g. `// JUSTIFIED:` above `await expect(` with `.first()` two lines down — **still appears in the Phase 1 mechanical output** and must be skipped during Phase 2, not counted in the final report. This is by design (Phase 1 over-flags; Phase 2 triages with full context), not a missed suppression.
+**Phase 1 vs Phase 2 suppression.** The mechanical scan (`scripts/scan.mjs`) only pre-suppresses **position 1** — a contiguous `//`-comment block directly above the hit *line* (it walks up to 5 comment lines for wrapped rationales). Positions **2 and 3** (enclosing block / multi-line-chain start) require knowing the surrounding structure and are applied in **Phase 2 (LLM review)** only. So a hit JUSTIFIED via position 2 or 3 — e.g. `// JUSTIFIED:` above `await expect(` with `.first()` two lines down — **still appears in the Phase 1 mechanical output** and must be skipped during Phase 2, not counted in the final report. This is by design (Phase 1 over-flags; Phase 2 triages with full context), not a missed suppression.
 
 **Exception — #7 Focused Test Leak:** `// JUSTIFIED:` does not suppress `.only` hits. There are no legitimate committed uses of `test.only` / `it.only` / `describe.only` — every hit is P0.

@@ -208,7 +208,7 @@ errors = []
 skill_text = pathlib.Path('skills/e2e-reviewer/SKILL.md').read_text(encoding='utf-8')
 grep_text = pathlib.Path('skills/e2e-reviewer/references/grep-patterns.md').read_text(encoding='utf-8')
 patref_text = pathlib.Path('skills/e2e-reviewer/references/pattern-reference.md').read_text(encoding='utf-8')
-scan_text = pathlib.Path('skills/e2e-reviewer/scripts/scan.sh').read_text(encoding='utf-8')
+scan_text = pathlib.Path('skills/e2e-reviewer/scripts/scan.mjs').read_text(encoding='utf-8')
 docs_text = pathlib.Path('docs/e2e-test-smells.md').read_text(encoding='utf-8')
 readme_text = pathlib.Path('README.md').read_text(encoding='utf-8')
 # Private-fork policy: manifests removed (commit 6c9d4ac) — Checks 5 and 6 skip when absent.
@@ -241,11 +241,18 @@ def matches_qr(s):
 
 # Check 1: every pattern id in subordinate sources must map back to a QR base id
 grep_ids = sorted(set(re.findall(r'\|\s*#(\d+[a-z]?(?:-\d+[a-z]?)?)', grep_text)))
-scan_ids = sorted(set(re.findall(r"run_check\s+P[012]\s+'#(\d+[a-z]?(?:-\d+[a-z]?)?)", scan_text)))
+# Reads the CHECKS table in scan.mjs: `{ severity: 'P0', id: '#4c-4e', title: … }`.
+scan_ids = sorted(set(re.findall(r"id:\s*'#(\d+[a-z]?(?:-\d+[a-z]?)?)'", scan_text)))
+if not scan_ids:
+    # Without this guard, a regex that stops matching makes every downstream parity check silently
+    # pass on an EMPTY id set — the exact silent-always-pass class this repo exists to catch.
+    print('scripts/ci/review.sh: extracted ZERO pattern ids from the CHECKS table in scan.mjs — its '
+          'shape changed and this regex did not follow it', file=sys.stderr)
+    sys.exit(1)
 docs_ids = sorted(set(re.findall(r'\|\s*#(\d+[a-z]?)\s*\|', docs_text)))
 for label, ids in (
     ('skills/e2e-reviewer/references/grep-patterns.md', grep_ids),
-    ('skills/e2e-reviewer/scripts/scan.sh', scan_ids),
+    ('skills/e2e-reviewer/scripts/scan.mjs', scan_ids),
     ('docs/e2e-test-smells.md', docs_ids),
 ):
     for pid in ids:

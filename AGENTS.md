@@ -13,16 +13,16 @@ Guidance for AI coding agents (Claude Code, Codex, and other AGENTS.md-compatibl
 - `playwright-debugger` — root-cause diagnosis from `playwright-report/`.
 - `cypress-debugger` — root-cause diagnosis from `cypress/reports/` (mochawesome / JUnit).
 
-The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.codex-plugin/`), a cross-agent skill source via the `skills` CLI, and a standalone scanner (`skills/e2e-reviewer/scripts/scan.sh`).
+The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.codex-plugin/`), a cross-agent skill source via the `skills` CLI, and a standalone scanner (`skills/e2e-reviewer/scripts/scan.mjs`).
 
 ## Verification gate (must pass before commit)
 
 ```
-[ ] bash scripts/ci/ci-local.sh          # 11 review checks + 24 drift smoke checks + 0 P0 smell hits
+[ ] bash scripts/ci/ci-local.sh          # review checks + drift smoke + corpus golden + 0 P0 smell hits
 [ ] bash scripts/ci/pre-push-security.sh # secrets and credential leak guard
 ```
 
-`ci-local.sh` is the single source of truth for what CI runs (shell syntax, parity, security, evals, public skill surface, framework scope, link integrity, docs orphan check, language, e2e smell scan). If you change any check, update this script first.
+`ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity, security, evals, public skill surface, framework scope, link integrity, docs orphan check, language, **scanner pattern corpus**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
 
@@ -43,22 +43,33 @@ The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
 │   │   ├── evals/evals.json
-│   │   └── agents/openai.yaml
+│   │   ├── agents/openai.yaml
+│   │   └── scripts/        # SHIPPED — Node, zero deps: record/preflight/host-on-r2 .mjs
 │   ├── e2e-reviewer/
+│   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   ├── playwright-debugger/
 │   └── cypress-debugger/
-├── scripts/
-│   ├── ci/                 # CI parity, security, eval-metadata checks
+├── scripts/                # NOT shipped — repo CI and dev tooling, stays shell
+│   ├── ci/                 # CI parity, security, eval-metadata, corpus golden
 │   ├── dev/                # contributor reinstall + git hook setup
 │   ├── hooks/              # local git hooks
 │   ├── pr-preflight.sh     # six-stage preflight for upstream E2E-fix PRs
 │   ├── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
 │   └── validate-evals.sh
+├── tests/pattern-corpus/   # one hit + one JUSTIFIED twin per check, and the golden
 ├── docs/                   # Open-source assets (taxonomy, case studies, scope)
 └── README.md
 ```
 
 Each `skills/<name>/SKILL.md` is the contract. Everything in the skill body should be **task-actionable instructions for the agent**, not narrative documentation; supporting reference material (long tables, framework references) goes in sibling `.md` files and is read on demand.
+
+### Shipped scripts are Node; repo scripts are shell
+
+The four scripts under `skills/*/scripts/` run inside a **user's** repository, so they are plain ESM `.mjs` on the Node standard library — **no npm dependency, no build step, nothing installed into someone else's project**. Node is already a hard dependency there (they all invoke `npx playwright`). Invoke them with `node <path>.mjs`, never `bash`.
+
+They orchestrate; they do not match. `rg` (PCRE2), `eslint`, `ast-grep`, `ffmpeg`, `ffprobe`, `git`, `gh`, `curl`, `npx playwright` and `wrangler` stay subprocesses. **Do not rewrite the Tier-3 PCRE2 patterns as JS RegExp** — at least one is load-bearing on a possessive quantifier JS cannot express, and rewriting it silently inverts the check (see `tests/pattern-corpus/README.md`). Dropping the ripgrep dependency is a separate change with its own fixtures.
+
+Everything under `scripts/` is repo-only tooling and stays shell.
 
 ## Conventions
 
@@ -83,10 +94,11 @@ bash scripts/ci/ci-local.sh
 # Individual stages
 bash scripts/ci/review.sh           # parity, language, links, framework scope, orphans
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
+bash scripts/ci/test-corpus.sh      # scanner golden: 25/25 checks fire, suppression holds
 bash scripts/validate-evals.sh      # eval JSON schema
 bash scripts/ci/pre-push-security.sh
 bash scripts/ci/codex-smoke.sh      # manual Codex cross-host smoke (skips if codex absent)
-bash skills/e2e-reviewer/scripts/scan.sh path/to/tests   # standalone scanner
+node skills/e2e-reviewer/scripts/scan.mjs path/to/tests   # standalone scanner
 
 # Plugin manifest sanity
 python3 -m json.tool .claude-plugin/plugin.json
@@ -100,7 +112,7 @@ python3 -m json.tool .claude-plugin/marketplace.json
 ```bash
 # Clone any real Playwright/Cypress repo into testbed/ (gitignored) to exercise the skills
 git clone --depth 1 https://github.com/calcom/cal.diy testbed/cal.diy
-bash skills/e2e-reviewer/scripts/scan.sh testbed/cal.diy
+node skills/e2e-reviewer/scripts/scan.mjs testbed/cal.diy
 # Invoke e2e-reviewer / playwright-debugger via the agent runtime as usual.
 
 # Install the four skills from this repo as real copies (one-time setup; also cleans up any prior symlink install)
@@ -114,8 +126,9 @@ The reinstall script runs `npx skills remove` then `npx skills add <repo-root> -
 
 ## When You Edit Skills
 
-1. **Update parity surfaces in lock-step.** Adding or renaming a pattern means touching: the relevant `SKILL.md` (Quick Reference), `skills/e2e-reviewer/references/pattern-reference.md` (per-pattern contract — CI Checks 3b/3c validate this file), `docs/e2e-test-smells.md`, `README.md` 24 Patterns table, `skills/e2e-reviewer/references/grep-patterns.md`, `skills/e2e-reviewer/scripts/scan.sh`, `.claude-plugin/plugin.json` description, `.claude-plugin/marketplace.json` description, and `.codex-plugin/plugin.json` description. CI fails fast if any one is out of step.
+1. **Update parity surfaces in lock-step.** Adding or renaming a pattern means touching: the relevant `SKILL.md` (Quick Reference), `skills/e2e-reviewer/references/pattern-reference.md` (per-pattern contract — CI Checks 3b/3c validate this file), `docs/e2e-test-smells.md`, `README.md` 24 Patterns table, `skills/e2e-reviewer/references/grep-patterns.md`, `skills/e2e-reviewer/scripts/scan.mjs`, `.claude-plugin/plugin.json` description, `.claude-plugin/marketplace.json` description, and `.codex-plugin/plugin.json` description. CI fails fast if any one is out of step.
 2. **Re-run the drift smoke test.** `scripts/ci/test-parity.sh` mutates known-bad versions of the files and asserts the parity check catches each one — keep it green when you add new parity rules.
+2b. **Give the new pattern a corpus fixture and refresh the golden.** `tests/pattern-corpus/` holds one deliberate hit and one `// JUSTIFIED:` twin per check; `scripts/ci/test-corpus.sh` freezes the scanner's output over it. Add both fixtures, run `bash scripts/ci/test-corpus.sh --update`, and **read the diff before committing it** — the golden only protects you if a moved line makes you stop and look. A pattern with no fixture is a pattern nothing is testing.
 3. **Add or update evals when behavior changes.** Each skill has an `evals/evals.json`. Eval IDs must follow the skill's naming convention (CI validates). Each new smell or behavior change should add at least two assertions: one true positive that must be flagged, and one false-positive guard that names the exact line and why it must not be flagged.
 4. **Respect severity contracts.** P0 entries should be silent-always-pass smells; don't downgrade. P1/P2 should not creep into P0 just because they're easier to grep.
 5. **Keep subagent wiring delegation-aware.** The `agents/` subagents (`e2e-finding-verifier`, `e2e-failure-classifier`) are discovered only on a Claude Code plugin install — the `skills` CLI copy and Codex never see them. So any skill that delegates to a subagent MUST also carry an inline fallback that reaches an **identical** verdict from the same source of truth (`skills/e2e-reviewer/references/pattern-reference.md` for reviewer findings; the debugger `SKILL.md` F1–F15 tables for failures). Never make a subagent the only path to a verdict.
@@ -137,8 +150,8 @@ When you bump the bundle version, touch all three manifests in one commit. The d
 - Do **not** silently change a pattern ID, severity, or failure category code. Downstream evals and OSS adopters depend on them.
 - Do **not** introduce out-of-scope framework code paths. Skills must say "out of scope" rather than emit half-working examples for Selenium/WebdriverIO/etc.
 - Do **not** push commits without running `bash scripts/ci/ci-local.sh`.
-- Do **not** edit `skills/e2e-reviewer/references/grep-patterns.md` without checking that the matching pattern IDs in `skills/e2e-reviewer/scripts/scan.sh` still line up — `scan.sh` is now the runtime source of truth, `grep-patterns.md` is an ID-meaning reference for Phase 2 / debugger lookup.
-- Do **not** create side effects on third-party repos when validating the skill. Cloning into `testbed/` and running `scan.sh` locally is allowed; pushing to forks, opening PRs/issues, posting comments, or any state-changing `gh` command is not.
+- Do **not** edit `skills/e2e-reviewer/references/grep-patterns.md` without checking that the matching pattern IDs in `skills/e2e-reviewer/scripts/scan.mjs` still line up — `scan.mjs` is now the runtime source of truth, `grep-patterns.md` is an ID-meaning reference for Phase 2 / debugger lookup.
+- Do **not** create side effects on third-party repos when validating the skill. Cloning into `testbed/` and running `scan.mjs` locally is allowed; pushing to forks, opening PRs/issues, posting comments, or any state-changing `gh` command is not.
 
 ## Installation Paths Documented for Users
 

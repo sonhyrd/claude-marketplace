@@ -39,7 +39,7 @@ Before the LLM layer, the purely mechanical detectors over the same 100 PRs:
 | Detector | PRs with >=1 finding |
 |----------|----------------------|
 | lint (eslint-plugin-playwright / -cypress) | 75 |
-| our scanner (`scan.sh`, regex + ast-grep tiers) | 55 |
+| our scanner (`scan.mjs`, regex + ast-grep tiers) | 55 |
 | AI reviewer inline spec comments | 39 |
 
 Our **scanner adds net-new mechanical coverage over lint in only 8 of 100 PRs** — and the
@@ -112,7 +112,7 @@ numbers above can be independently re-derived. The method, reproducible end to e
 1. Find PRs an AI reviewer commented on that touch Playwright/Cypress specs
    (GitHub search: `is:pr commenter:<bot> playwright`).
 2. Download the changed spec files at the PR head SHA (no full clone).
-3. Run, per PR: `eslint` with `eslint-plugin-playwright`/`-cypress`; `scan.sh`; and collect
+3. Run, per PR: `eslint` with `eslint-plugin-playwright`/`-cypress`; `scan.mjs`; and collect
    the bot's inline spec comments.
 4. For each material PR, run the `e2e-reviewer` Phase-2 review and a neutral judge that
    establishes ground truth and scores all three tools.

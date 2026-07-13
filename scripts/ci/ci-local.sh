@@ -24,11 +24,21 @@ step() { [ "$QUIET" = "1" ] || echo "-- $* --"; }
 fail() { echo "ci-local: $1 failed" >&2; exit 1; }
 
 step "Shell syntax"
+# The repo's own CI/dev scripts stay shell — they never ship to a user and cause no pain.
 while IFS= read -r file; do
   [ -z "$file" ] && continue
   bash -n "$file" || fail "shell syntax: $file"
 done < <(find scripts -name '*.sh' -type f 2>/dev/null)
 [ "$QUIET" = "1" ] || echo "  all shell scripts parse"
+
+step "Node syntax"
+# The four SHIPPED scripts are Node. `node --check` is the safety net the shell versions never had:
+# under `set -eu` a typo'd variable name exits 0 having done nothing, where this fails at parse time.
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  node --check "$file" || fail "node syntax: $file"
+done < <(find skills -name '*.mjs' -type f 2>/dev/null)
+[ "$QUIET" = "1" ] || echo "  all shipped .mjs scripts parse"
 
 step "Review checks"
 if [ "$QUIET" = "1" ]; then
@@ -46,16 +56,39 @@ if [ "${E2E_SKILLS_SKIP_PARITY_SMOKE:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_CORPUS:-}" != "1" ]; then
+  step "Scanner pattern corpus (golden)"
+  # One deliberate instance of every Tier-3 check, plus a JUSTIFIED twin for each, plus the
+  # possessive-quantifier backtracking trap. Proves all 25 checks still fire and that suppression
+  # still suppresses — against a frozen golden, so a changed pattern names itself.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-corpus.sh >/dev/null 2>&1 || fail "test-corpus.sh"
+  else
+    bash scripts/ci/test-corpus.sh || fail "test-corpus.sh"
+  fi
+fi
+
+if [ "${E2E_SKILLS_SKIP_GENERATOR_TESTS:-}" != "1" ]; then
+  step "Generator scripts (process boundary)"
+  # preflight / host-on-r2 / record: exit codes and emitted bytes. Skips the record cases if ffmpeg
+  # is absent; never touches the network.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-generator-scripts.sh >/dev/null 2>&1 || fail "test-generator-scripts.sh"
+  else
+    bash scripts/ci/test-generator-scripts.sh || fail "test-generator-scripts.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_SMELL_SCAN:-}" != "1" ]; then
   step "E2E smell scan"
   # Self-scan checks OUR files' Tier-3 cleanliness. Skip the eslint download tier here:
   # local clones carry gitignored testbed/ trees that Tier 1 would otherwise lint for
   # minutes (watchdog-bounded but slow). The GitHub workflow (no testbed) still runs
-  # scan.sh with Tier 1 enabled, so the eslint path stays CI-exercised.
+  # scan.mjs with Tier 1 enabled, so the eslint path stays CI-exercised.
   if [ "$QUIET" = "1" ]; then
-    E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_FAIL_ON=p0 ./skills/e2e-reviewer/scripts/scan.sh . >/dev/null 2>&1 || fail "skills/e2e-reviewer/scripts/scan.sh"
+    E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_FAIL_ON=p0 node skills/e2e-reviewer/scripts/scan.mjs . >/dev/null 2>&1 || fail "skills/e2e-reviewer/scripts/scan.mjs"
   else
-    E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_FAIL_ON=p0 ./skills/e2e-reviewer/scripts/scan.sh . || fail "skills/e2e-reviewer/scripts/scan.sh"
+    E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_FAIL_ON=p0 node skills/e2e-reviewer/scripts/scan.mjs . || fail "skills/e2e-reviewer/scripts/scan.mjs"
   fi
 fi
 

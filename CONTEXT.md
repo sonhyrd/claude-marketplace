@@ -31,10 +31,10 @@ The sanctioned exception to hermetic specs: a real-backend interaction that is i
 The complete PR-mode deliverable: green spec + POM committed to the PR branch, plus the watch link. A run that ends with uncommitted tests or no watch link has not delivered a proof.
 
 ## Contact sheet
-The single film-QA evidence artifact record.sh extracts: 30 frames spanning the whole film, tiled on one image (`CONTACT=`). Its final tile is the film's final-frame evidence (there is no separate poster). Step 8 reads it once per film before publishing; the report's `Film QA:` line is filled from it.
+The single film-QA evidence artifact record.mjs extracts: 30 frames spanning the whole film, tiled on one image (`CONTACT=`). Its final tile is the film's final-frame evidence (there is no separate poster). Step 8 reads it once per film before publishing; the report's `Film QA:` line is filled from it.
 
 ## Film QA gate
-The Step 8 structural gate on the proof film: record.sh's scripted floors (duration ≥ 4s + ~3s per scenario, chapter count ≥ scenario count, ordered timestamps, contact-sheet extraction — any failure is exit 5) plus the agent's one contact-sheet screening. Film runs are single-attempt (`--retries=0`): a flaky film is a re-shoot, not a proof. Publishing past a failed gate is forbidden.
+The Step 8 structural gate on the proof film: record.mjs's scripted floors (duration ≥ 4s + ~3s per scenario, chapter count ≥ scenario count, ordered timestamps, contact-sheet extraction — any failure is exit 5) plus the agent's one contact-sheet screening. Film runs are single-attempt (`--retries=0`): a flaky film is a re-shoot, not a proof. Publishing past a failed gate is forbidden.
 
 ## Refilm budget
 The bound on Step 8's fix-and-refilm loop: one diagnose+fix+refilm attempt per failing chapter. A chapter that fails its second film is dropped from the film and its scenario demoted — never a third cycle. Decided 2026-07-10 after a run spent three full-price refilm cycles on a chapter that was deleted anyway.

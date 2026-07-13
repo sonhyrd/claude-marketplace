@@ -60,7 +60,7 @@ test('shows the welcome message', async ({ page }) => {
 The scanner catches both deterministically, no config:
 
 ```console
-$ bash skills/e2e-reviewer/scripts/scan.sh tests/
+$ node skills/e2e-reviewer/scripts/scan.mjs tests/
 
 [P0] #4f Locator always-true assertion (truthy/defined/not-null) (2 hits)
   tests/login.spec.ts:6:  expect(page.getByText('Welcome back')).toBeDefined();
@@ -77,7 +77,7 @@ Summary: 2 total hit(s), 2 P0
 | Review existing Playwright/Cypress tests for silent-pass smells | [`e2e-reviewer`](#skill-2-e2e-reviewer--quality-review) |
 | Debug failed Playwright reports | [`playwright-debugger`](#skill-3-playwright-debugger--playwright-failure-debugger) |
 | Debug failed Cypress reports | [`cypress-debugger`](#skill-4-cypress-debugger--cypress-failure-debugger) |
-| Run a deterministic local scan | [`skills/e2e-reviewer/scripts/scan.sh`](#standalone-scanner) |
+| Run a deterministic local scan | [`skills/e2e-reviewer/scripts/scan.mjs`](#standalone-scanner) |
 
 Useful docs: [case studies](docs/case-studies.md), [roadmap](docs/roadmap.md), [24-smell taxonomy](docs/e2e-test-smells.md), [framework scope](docs/framework-scope.md), [AI reviewer benchmark](docs/ai-reviewer-benchmark.md). Architecture decisions: [PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) · [merge main before proof](docs/adr/0002-merge-main-before-proof.md) · [mock-first with declared carve-out](docs/adr/0003-mock-first-declared-carve-out.md).
 
@@ -212,8 +212,10 @@ Total: 3 P0, 0 P1, 0 P2 in 24 spec files.
 ## Standalone scanner
 
 ```bash
-./skills/e2e-reviewer/scripts/scan.sh path/to/tests
+node skills/e2e-reviewer/scripts/scan.mjs path/to/tests
 ```
+
+Needs Node 18+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on `PATH`. It installs nothing into your project: the scanner is plain ESM on the Node standard library, with zero npm dependencies and no build step.
 
 The scanner is intentionally deterministic. It catches the high-confidence subset first; the Agent Skill handles intent-aware review around the scanner findings.
 
@@ -456,7 +458,7 @@ e2e-skills is an open-source AI agent testing toolkit for Playwright and Cypress
 
 ### How do I find Playwright or Cypress tests that pass but don't actually test anything?
 
-Run the `e2e-reviewer` skill (or its standalone scanner, `scan.sh`) against your spec directory. It flags 24 anti-patterns grouped by severity (P0/P1/P2) — including missing `await` on assertions, one-shot `isVisible()` reads, matcher-less `expect()`, and committed `.only` leaks — that let a test stay green while the feature it covers is broken.
+Run the `e2e-reviewer` skill (or its standalone scanner, `scan.mjs`) against your spec directory. It flags 24 anti-patterns grouped by severity (P0/P1/P2) — including missing `await` on assertions, one-shot `isVisible()` reads, matcher-less `expect()`, and committed `.only` leaks — that let a test stay green while the feature it covers is broken.
 
 ### How is this different from eslint-plugin-playwright or eslint-plugin-cypress?
 

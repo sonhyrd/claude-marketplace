@@ -259,13 +259,13 @@ restore "$file"
 echo ""
 echo "-- Scanner detection smoke --"
 
-SCAN_SH="skills/e2e-reviewer/scripts/scan.sh"
+SCAN_MJS="skills/e2e-reviewer/scripts/scan.mjs"
 SCAN_FIXDIR=$(mktemp -d /tmp/e2e-scan-smoke.XXXXXX)
 
 run_scan() { # $1 = fixture subdir, $2 = FAIL_ON mode; sets SCAN_OUT and SCAN_RC
   SCAN_RC=0
   SCAN_OUT=$(E2E_SMELL_NO_ESLINT_DOWNLOAD=1 E2E_SMELL_NO_AST_GREP_DOWNLOAD=1 \
-    E2E_SMELL_FAIL_ON="$2" bash "$SCAN_SH" "$SCAN_FIXDIR/$1" 2>&1) || SCAN_RC=$?
+    E2E_SMELL_FAIL_ON="$2" node "$SCAN_MJS" "$SCAN_FIXDIR/$1" 2>&1) || SCAN_RC=$?
 }
 
 assert_scan_contains() {

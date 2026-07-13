@@ -29,7 +29,7 @@ if [[ ! -d "$REPO" ]]; then
   exit 2
 fi
 
-# Resolve ast-grep (same fallback chain as scan.sh's Tier 2 block).
+# Resolve ast-grep (same fallback chain as scan.mjs's Tier 2 block).
 if command -v ast-grep >/dev/null 2>&1; then
   AST_GREP="ast-grep"
 elif command -v sg >/dev/null 2>&1; then

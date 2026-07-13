@@ -2,7 +2,7 @@
 # PR preflight for upstream E2E-fix PRs prepared in testbed/ clones.
 #
 # Runs six stages against the uncommitted working-tree edits of a testbed repo:
-#   1. smell delta    — scan.sh baseline (HEAD) vs working tree; counts must drop
+#   1. smell delta    — scan.mjs baseline (HEAD) vs working tree; counts must drop
 #   2. ast-artifacts  — verify-fixes.sh postfix rules on changed files only
 #   3. tsc            — nearest-tsconfig targeted typecheck (errors in changed files only)
 #   4. lint           — the repo's OWN eslint/biome config on changed files
@@ -48,7 +48,7 @@ for f in "${FILES[@]}"; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCAN="$SCRIPT_DIR/../skills/e2e-reviewer/scripts/scan.sh"
+SCAN="$SCRIPT_DIR/../skills/e2e-reviewer/scripts/scan.mjs"
 VERIFY="$SCRIPT_DIR/verify-fixes.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -83,10 +83,10 @@ run_with_timeout() { # $1=seconds, rest=cmd...; stdout+stderr -> $TMP/run.out; 1
   wait "$pid"
 }
 
-# parse scan.sh output: "Summary: N total hit(s), N P0," (Tier 3) + "ast-grep total: N hit(s)" (Tier 2)
-scan_counts() { # $1 = path (file ok — scan.sh accepts non-dirs); echoes "total p0 ast"
+# parse scan.mjs output: "Summary: N total hit(s), N P0," (Tier 3) + "ast-grep total: N hit(s)" (Tier 2)
+scan_counts() { # $1 = path (file ok — scan.mjs accepts non-dirs); echoes "total p0 ast"
   local out t p a
-  out=$(E2E_SMELL_FAIL_ON=none E2E_SMELL_NO_ESLINT_DOWNLOAD=1 bash "$SCAN" "$1" 2>/dev/null)
+  out=$(E2E_SMELL_FAIL_ON=none E2E_SMELL_NO_ESLINT_DOWNLOAD=1 node "$SCAN" "$1" 2>/dev/null)
   t=$(printf '%s\n' "$out" | sed -n 's/^Summary: \([0-9]*\) total.*/\1/p' | head -1); t=${t:-0}
   p=$(printf '%s\n' "$out" | sed -n 's/^Summary: [0-9]* total hit(s), \([0-9]*\) P0.*/\1/p' | head -1); p=${p:-0}
   a=$(printf '%s\n' "$out" | sed -n 's/^[[:space:]]*ast-grep total: \([0-9]*\) hit.*/\1/p' | head -1); a=${a:-0}
@@ -94,7 +94,7 @@ scan_counts() { # $1 = path (file ok — scan.sh accepts non-dirs); echoes "tota
 }
 
 # ---- Stage 1: smell delta ---------------------------------------------------
-# scan.sh's Tier-3 globs only match in directory mode, so both sides are staged
+# scan.mjs's Tier-3 globs only match in directory mode, so both sides are staged
 # as temp TREES with relative paths preserved (basenames like *.spec.ts must
 # survive for the globs; the dir layout also keeps e2e content scoping intact).
 for f in "${FILES[@]}"; do

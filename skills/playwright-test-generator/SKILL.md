@@ -30,7 +30,7 @@ Step 5: Code Generation        (see code-rules.md — hermetic by default)
 Step 5b: Conventions & Seed    (first run on a project — see conventions-template.md)
 Step 6: YAGNI Audit + e2e-reviewer
 Step 7: TS Compile + Test Run + Hermetic Audit (playwright-debugger on failure)
-Step 8: Film + QA + Publish    (PR-mode; opt-in elsewhere — record.sh floors, contact-sheet check, watch.html)
+Step 8: Film + QA + Publish    (PR-mode; opt-in elsewhere — record.mjs floors, contact-sheet check, watch.html)
 Step 9: Land the Proof         (PR-mode tail: commit → push → PR comment → completion report)
 ```
 
@@ -152,7 +152,7 @@ Prove the change, not the whole app: derive the ACs the PR must satisfy; Step 4 
 
 ### Bring the environment up (autonomous — don't stop to ask)
 
-**PR-mode first — serve the code under proof.** `HEAD` ≠ PR head → the dev server proves the wrong branch. Check out the PR branch **in place** (`git stash -u` local changes → note the current ref → `git checkout <pr-branch>`); restore after the proof and any Step-8 film (`git checkout <original-ref>`, `git stash pop`). A dirty tree is a stated Step 4 Assumptions line, never a question. Never graft the diff in and revert it in a loop. Post-checkout `HEAD` *is* the PR head, so `record.sh`'s `PROOF_SHA` guard passes on the commit you filmed.
+**PR-mode first — serve the code under proof.** `HEAD` ≠ PR head → the dev server proves the wrong branch. Check out the PR branch **in place** (`git stash -u` local changes → note the current ref → `git checkout <pr-branch>`); restore after the proof and any Step-8 film (`git checkout <original-ref>`, `git stash pop`). A dirty tree is a stated Step 4 Assumptions line, never a question. Never graft the diff in and revert it in a loop. Post-checkout `HEAD` *is* the PR head, so `record.mjs`'s `PROOF_SHA` guard passes on the commit you filmed.
 
 **Then sync the base — merge `origin/<default>` before bring-up** (`git fetch origin <default>`, `git merge origin/<default>`); a PR proven against a stale base can go green on code that will never ship that way.
 
@@ -165,16 +165,16 @@ Prove the change, not the whole app: derive the ACs the PR must satisfy; Step 4 
    ```
    Configured port already **bound** → confirm it is *this* worktree's server on the right branch (readiness check + a `git` branch/commit check) before reusing. A sibling worktree's wrong-branch server → start on a free port and set `PLAYWRIGHT_BASE_URL` so the run targets your port.
 2. **Start this worktree's dev server** in a background shell (harness-tracked; survives the turn, log readable) — the configured `dev` command on the resolved port. Never start it from inside a script (a script-started `dev` can bind a sibling's wrong branch). Reuse an already-up server only after the branch check above.
-3. **Confirm readiness** — `preflight.sh` is a warmup-aware poll that STOPs (exit 3) if the origin never answers, so a dead server fails fast. `<skill-base>` is the directory in the Skill tool's "Base directory" output:
+3. **Confirm readiness** — `preflight.mjs` is a warmup-aware poll that STOPs (exit 3) if the origin never answers, so a dead server fails fast. `<skill-base>` is the directory in the Skill tool's "Base directory" output:
    ```bash
-   BASE_URL="http://localhost:$PORT" bash <skill-base>/scripts/preflight.sh
+   BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
    ```
    On STOP: read the dev-server log and check `playwright.config.*` for a `webServer` block whose command differs from what you started; fix and re-run. Report to the user only if the app genuinely cannot start from this worktree.
 4. **Probe hosting prerequisites now (PR-mode) — with the readiness poll, not after filming:**
    ```bash
-   PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" bash <skill-base>/scripts/preflight.sh
+   PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
    ```
-   Probes `wrangler` auth by **running** `npx wrangler whoami` (never conclude "missing" from `command -v` in a non-interactive shell — npx-provisioned tools are invisible to `PATH`), plus Chrome and `ffmpeg` (`record.sh` hard-stops without ffmpeg). WARN-only: `HOSTING_READY=no` never stops generation — but its printed output is the evidence a later `Watch link: skipped — <gate>` line must paste (Step 9).
+   Probes `wrangler` auth by **running** `npx wrangler whoami` (never conclude "missing" from `command -v` in a non-interactive shell — npx-provisioned tools are invisible to `PATH`), plus Chrome and `ffmpeg` (`record.mjs` hard-stops without ffmpeg). WARN-only: `HOSTING_READY=no` never stops generation — but its printed output is the evidence a later `Watch link: skipped — <gate>` line must paste (Step 9).
 
 **Autonomy line (what the agent may do without asking):** start/stop the dev server · mint a token via the project's own login · **read-only** data discovery (query list/read endpoints to find a valid entity — **sample a handful, never enumerate the whole tenant**). **Never** seed or create backend data on a shared/staging tenant, register real accounts, or invent credentials. Required sub-resource absent in the sample (e.g. every sampled person has zero documents) → go straight to a **`page.route` mock** rather than scanning hundreds of records; only if a real record is truly unavoidable, stop and ask.
 
@@ -382,19 +382,19 @@ Proving the spec *guards* the change (not merely that it passes) is sanctioned v
 
 **Prerequisites — if one is genuinely unmet, skip gracefully:** capture the failing probe's output (Step 3's `PROBE_HOSTING=1` run already printed it), finish the run, and let Step 9's `Watch link: skipped — <gate>` line carry that output. Never fail generation over a missing watch link.
 
-- **Gate the film-server through `preflight.sh`** (Step 3) — it treats any HTTP answer as "up", clearing a legitimate `307`/`401` that a `grep '200\|302'` poll would miss while burning its whole loop.
+- **Gate the film-server through `preflight.mjs`** (Step 3) — it treats any HTTP answer as "up", clearing a legitimate `307`/`401` that a `grep '200\|302'` poll would miss while burning its whole loop.
 - **Per-spec video, filmed in real Chrome at an explicit size** — add to the top of the film spec, **per-spec only**; never touch the global `playwright.config` `use` (that films the whole suite on every run):
   ```typescript
   test.use({ video: { mode: 'on', size: { width: 1600, height: 900 } }, viewport: { width: 1600, height: 900 }, channel: 'chrome' });
   ```
   The explicit `size` stops Playwright shrinking the film to its 800×450 default (chapter titles and UI text become illegible). `channel: 'chrome'` renders what a human sees — bundled Chromium ships **no PDF viewer** and some media codecs, so an inline-PDF or media feature films **blank** in it. No Chrome installed → drop the `channel`, film in the default browser, NOTE the fidelity caveat. The **durable committed test keeps the project's default browser** — only the throwaway film spec gets this block.
-- **`wrangler` authenticated** (`npx wrangler whoami` succeeds — **don't** add `--no-install`; unlike the pinned playwright/tsc, wrangler may need provisioning and `--no-install` false-negatives). `host-on-r2.sh` has the R2 bucket + public domain hard-coded near the top (`BUCKET`, `PUB`). `<skill-base>` is the Skill tool's "Base directory" output. A `5xx` from `wrangler whoami` or the upload is transient (Cloudflare-side) — retry once before reporting a hosting blocker; never bake a transient 500 into the completion report.
+- **`wrangler` authenticated** (`npx wrangler whoami` succeeds — **don't** add `--no-install`; unlike the pinned playwright/tsc, wrangler may need provisioning and `--no-install` false-negatives). `host-on-r2.mjs` has the R2 bucket + public domain hard-coded near the top (`BUCKET`, `PUB`). `<skill-base>` is the Skill tool's "Base directory" output. A `5xx` from `wrangler whoami` or the upload is transient (Cloudflare-side) — retry once before reporting a hosting blocker; never bake a transient 500 into the completion report.
 
 ### Film-spec shape — every scenario, no blank lead, film the payoff
 
-The film is a **second run** (`record.sh` re-executes the film spec to capture the video), and Playwright ends the recording at context close. Author it as:
+The film is a **second run** (`record.mjs` re-executes the film spec to capture the video), and Playwright ends the recording at context close. Author it as:
 
-- **One film test that walks EVERY approved scenario in order** — one `chapter()` per scenario (the proof-film contract; `record.sh`'s chapter floor enforces the count via `SCENARIOS=<n>`). Fewer scenarios than the spec = a defective proof — unless demoted under the flake screen or refilm budget below, and a demotion is named in the report, never silently absorbed.
+- **One film test that walks EVERY approved scenario in order** — one `chapter()` per scenario (the proof-film contract; `record.mjs`'s chapter floor enforces the count via `SCENARIOS=<n>`). Fewer scenarios than the spec = a defective proof — unless demoted under the flake screen or refilm budget below, and a demotion is named in the report, never silently absorbed.
 - **Chapters share ONE browser context** — committed tests each get a fresh one; the film does not. A scenario whose committed test depends on fresh-context state (cookies, localStorage, locale, auth) must open its chapter with an explicit state reset (clear cookies + storage, re-auth) or be excluded from the film and demoted — leaked chapter state (an i18n cookie, a persisted user profile) causes film-only failures the committed spec never had.
 - **Open on the feature, not on boot — kill the blank lead.** Recording starts the moment the filmed page exists: warm the route first (the Step 7 run usually has; else one `page.request.get(target)` compiles it server-side), authenticate **before** the filmed `goto` (token/`storageState` — never film a login dance unless login IS the AC), and make the first chapter's first line an assertion on a **feature-anchored element** so the first frames show the surface under proof.
 - **The terminal assertion must be the success signal itself** — the toast / `alert` / redirect / empty-state the app shows on success, *not* an earlier DOM change (a row disappearing) that resolves before the payoff paints. That frame **is** the proof, and asserting on it makes Playwright wait until it's on screen, so the video captures it.
@@ -404,10 +404,10 @@ The film is a **second run** (`record.sh` re-executes the film spec to capture t
 ### Film admission — flake screen + refilm budget (hard bounds)
 
 - **Flake screen:** a scenario Playwright marked `flaky` in the Step 7 run gets no film chapter until it passes clean. App-inherent nondeterminism → demote it: no chapter, and the AC reports as `unproven — gated: nondeterministic (<cause>)`.
-- **Refilm budget = 1 per failing chapter:** first film failure → ONE diagnose+fix+refilm. The same chapter failing again → drop the chapter, demote its AC as above, film the rest (pass the reduced `SCENARIOS` count to `record.sh`). Never a third cycle.
+- **Refilm budget = 1 per failing chapter:** first film failure → ONE diagnose+fix+refilm. The same chapter failing again → drop the chapter, demote its AC as above, film the rest (pass the reduced `SCENARIOS` count to `record.mjs`). Never a third cycle.
 - **Committed coverage never shrinks to make a film green.** Deleting a scenario from the committed spec is justified only by committed-run evidence (Step 7 flake handling) — never by film-run behavior.
 
-Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sidecar of `{name, t}` offsets; `record.sh` turns it into the watch page's clickable chapter list and enforces the chapter floor from it.
+Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sidecar of `{name, t}` offsets; `record.mjs` turns it into the watch page's clickable chapter list and enforces the chapter floor from it.
 
 ```typescript
 // THROWAWAY film spec (not committed): video + chapters + payoff hold. The committed test asserts the same
@@ -439,7 +439,7 @@ test('delete removes the legal notice', async ({ page }) => {
 ### 1. Film + contact sheet + watch page
 
 ```bash
-# record.sh: runs the ONE film spec through the project Playwright with --retries=0 forced (a proof film
+# record.mjs: runs the ONE film spec through the project Playwright with --retries=0 forced (a proof film
 # passes clean on attempt 1 or it is a re-shoot; retries multiply a failing film's cost and leave
 # ambiguous per-attempt videos), finds the per-spec webm, enforces the film-QA gate — contact sheet
 # (30 frames spanning the whole film, one image), duration floor (4s + 3s x SCENARIOS), chapter floor
@@ -454,7 +454,7 @@ test('delete removes the legal notice', async ({ page }) => {
 # gets >=360s automatically; pass an explicit FILM_TIMEOUT only to raise it further (heavy live-backend
 # per-scenario latency).
 BASE_URL="http://localhost:$PORT" PROOF_SHA="$(git rev-parse HEAD)" TITLE="PR #<N> — <scenario>" \
-  SCENARIOS=<approved scenario count> sh <skill-base>/scripts/record.sh "<film-spec-file>"
+  SCENARIOS=<approved scenario count> node <skill-base>/scripts/record.mjs "<film-spec-file>"
 # Prints WEBM= CONTACT= DURATION= CHAPTERS= WATCH= on success.
 # exit 3 = spec failed / no video · exit 4 = provenance STOP · exit 5 = film-QA gate — fix the film and
 # re-run; NEVER publish past a 5.
@@ -469,28 +469,28 @@ Before publishing, **Read the `CONTACT=` image** (30 frames spanning the whole f
 3. **Payoff on the final tile** — the last tile shows the success signal (the ≥3s payoff hold puts it there).
 4. **Feature actually shown** — the surface under proof is on screen, not just app chrome.
 
-**Screen once per film:** one contact-sheet Read per `record.sh` run; re-screen only after a re-film. The answers become the Step 9 report's `Film QA:` line — a `Film QA` line not backed by the sheet is fabrication. A failing check → ONE fix+re-film (the refilm budget above), re-screen; the same chapter failing again → drop + demote. Publish only the `watch.html` (never a bare `.webm`).
+**Screen once per film:** one contact-sheet Read per `record.mjs` run; re-screen only after a re-film. The answers become the Step 9 report's `Film QA:` line — a `Film QA` line not backed by the sheet is fabrication. A failing check → ONE fix+re-film (the refilm budget above), re-screen; the same chapter failing again → drop + demote. Publish only the `watch.html` (never a bare `.webm`).
 
 ### 3. Publish
 
 ```bash
-# Publish the WATCH page record.sh printed (NOT the bare webm) — one self-contained HTML file with the
+# Publish the WATCH page record.mjs printed (NOT the bare webm) — one self-contained HTML file with the
 # video inlined, so a reviewer opens a titled page with chapters. SHA-keyed: a healed spec re-hosts under
 # a new key, so old links stay faithful to the SHA they filmed.
 PROJECT=$(basename "$(git rev-parse --show-toplevel)")
 SHA=$(git rev-parse --short HEAD)
 KEY="proof/<scenario>-$SHA.html"
 
-# host-on-r2.sh <file> <project> [keyname] — prints the public URL on stdout. Set BEARER (auth token in
+# host-on-r2.mjs <file> <project> [keyname] — prints the public URL on stdout. Set BEARER (auth token in
 # use) + SCAN so the token gate protects the PUBLIC upload — a no-op when BEARER is unset. Pass the raw
 # $WEBM in SCAN so the gate still greps the video bytes even though the uploaded file is the html (which
 # base64-wraps them).
 #   token gate (exit 6): BEARER in file/SCAN · empty-file (exit 3): <1KB · degenerate-key (exit 2): bad key
 URL=$(BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file> $WEBM" \
-  bash <skill-base>/scripts/host-on-r2.sh "$WATCH" "$PROJECT" "$KEY")
+  node <skill-base>/scripts/host-on-r2.mjs "$WATCH" "$PROJECT" "$KEY")
 ```
 
-If `host-on-r2.sh` STOPs on a gate, report **which** gate fired (its exit code) and print **no** link — a leaked-token or broken webm must never ship as the watch link. (The broken/empty-webm case is caught earlier: `record.sh` only emits a `WATCH` page around a passing, non-empty video.)
+If `host-on-r2.mjs` STOPs on a gate, report **which** gate fired (its exit code) and print **no** link — a leaked-token or broken webm must never ship as the watch link. (The broken/empty-webm case is caught earlier: `record.mjs` only emits a `WATCH` page around a passing, non-empty video.)
 
 **Auth alignment (why the token gate stays quiet):** the gate greps the video (via `$WEBM` in `SCAN`) for the bearer token, so a filmed **UI** login would trip it. Prefer programmatic auth (Step 3 dev-login / `storageState`) — credentials never enter the frame. If a login must be filmed, expect the gate to STOP.
 
@@ -546,8 +546,8 @@ All paths are in this directory.
 
 - Playwright best practices: `best-practices.md`
 - Code generation rules: `code-rules.md`
-- Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` probes wrangler/Chrome/ffmpeg): `scripts/preflight.sh`
-- Step-8 watch-link film (per-spec video + PROOF_SHA provenance guard + film-QA gate: contact sheet, duration/chapter floors, `--retries=0` forced): `scripts/record.sh`
+- Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` probes wrangler/Chrome/ffmpeg): `scripts/preflight.mjs`
+- Step-8 watch-link film (per-spec video + PROOF_SHA provenance guard + film-QA gate: contact sheet, duration/chapter floors, `--retries=0` forced): `scripts/record.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`
 - Contributing a generated or fixed spec to a third-party repo: re-read that repo's `CONTRIBUTING.md` and PR/issue templates IN FULL first, and honor each gate before opening a PR — issue-first policy and any required PR-issue link, CLA/DCO, commit-message style and signing, target branch, any AI-disclosure or AI-PR policy. A scanner finding is a candidate, not a verdict — verify it is a real silent-pass before submitting.
 - Conventions & seed template (Step 5b): `conventions-template.md`

@@ -391,7 +391,7 @@
     },
     {
       "id": 21,
-      "prompt": "Run the e2e-reviewer scan (scripts/scan.sh, or the Phase 1 grep pass) over evals/files/scope-fixture-wrapper/. The Playwright specs in tests/ import test/expect from a local fixtures wrapper (tests/fixtures.ts), not from '@playwright/test' directly; server/report.test.ts is a backend Vitest suite using the Knex query builder. Report which files are in E2E scan scope and every P0 finding.",
+      "prompt": "Run the e2e-reviewer scan (scripts/scan.mjs, or the Phase 1 grep pass) over evals/files/scope-fixture-wrapper/. The Playwright specs in tests/ import test/expect from a local fixtures wrapper (tests/fixtures.ts), not from '@playwright/test' directly; server/report.test.ts is a backend Vitest suite using the Knex query builder. Report which files are in E2E scan scope and every P0 finding.",
       "expected_output": "tests/billing.spec.ts IS in scan scope even though it never imports '@playwright/test' — its page-API markers (page.goto/page.locator/getByRole) make it E2E surface — and its one-shot visibility assertion `expect(await page.locator('.invoice-status').isVisible()).toBe(true)` on line 9 is flagged P0 (#4c-4e one-shot state read). server/report.test.ts stays OUT of scope (no Playwright/Cypress marker): its Knex `.first()` on line 10 is NOT flagged #10a, and the skip is reported in the scope-filter count, not silent.",
       "files": [
         "evals/files/scope-fixture-wrapper/tests/fixtures.ts",

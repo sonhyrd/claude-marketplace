@@ -1,6 +1,6 @@
 # Pattern ID Reference
 
-**This file is a lookup table, not a dispatch procedure.** Phase 1 runs `bash <skill-base>/scripts/scan.sh` (the runtime source of truth); use this file to interpret what each pattern ID means when reading scanner output, doing Phase 2 review, or mapping debugger failure categories back to review patterns. Do NOT hand-dispatch these greps.
+**This file is a lookup table, not a dispatch procedure.** Phase 1 runs `node <skill-base>/scripts/scan.mjs` (the runtime source of truth); use this file to interpret what each pattern ID means when reading scanner output, doing Phase 2 review, or mapping debugger failure categories back to review patterns. Do NOT hand-dispatch these greps.
 
 A hit is intentional and must be **skipped** when `// JUSTIFIED:` appears in any of these positions (exception: #7 Focused Test Leak has no `// JUSTIFIED:` exemption):
 1. The line **immediately preceding** the hit.
