@@ -443,8 +443,11 @@ test('delete removes the legal notice', async ({ page }) => {
 # passes clean on attempt 1 or it is a re-shoot; retries multiply a failing film's cost and leave
 # ambiguous per-attempt videos), finds the per-spec webm, enforces the film-QA gate — contact sheet
 # (30 frames spanning the whole film, one image), duration floor (4s + 3s x SCENARIOS), chapter floor
-# (>= SCENARIOS titled chapters) — and assembles a self-contained watch.html (title + video + clickable
-# chapters, all inline). PROOF_SHA (the commit under proof; PR-mode: the PR head SHA) STOPs the film if
+# (>= SCENARIOS titled chapters) — and assembles a self-contained watch.html: the film painted at its full
+# 1600x900 (a text-column-width page downscales it ~2x and the app's own UI text goes unreadable), a meta
+# line (PR link + runtime + chapter count + spec), and a clickable chapter rail, all inline. PR_URL fills
+# that link (default: the branch's PR via `gh pr view`). PROOF_SHA (the commit under proof; PR-mode: the
+# PR head SHA) STOPs the film if
 # this worktree is not serving that code. BASE_URL = the Step 3 server (exported as PLAYWRIGHT_BASE_URL
 # and SPEC_BASE_URL). TITLE names the watch page. CONFIG=<path> / PROJECT=<name> pass through when the
 # repo needs them. FILM_TIMEOUT floors at max(FILM_TIMEOUT, 60000 + 60000*SCENARIOS) — a 5-scenario film

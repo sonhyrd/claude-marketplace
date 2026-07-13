@@ -27,6 +27,8 @@
 #                 too tight for a multi-scenario live-backend film (a 5-chapter film needs ~300s; the floor
 #                 gives 360s). Pass an explicit FILM_TIMEOUT only to raise it ABOVE the floor.
 #   TITLE         optional - names the watch page.
+#   PR_URL        optional - linked from the watch page's meta line. Defaults to the current branch's PR via
+#                 `gh pr view`; set it explicitly on a detached HEAD or where gh is not authed.
 #   <spec>        the ONE spec to film (it must carry the per-spec video use()).
 #   [out-name]    label only - echoed in the summary so a caller can tell runs apart (default: spec basename).
 #
@@ -150,9 +152,16 @@ if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
   # ponytail: base64-inlining is fine for a seconds-long proof clip; if clips ever run to many MB, switch to
   # sibling files + a directory upload. The empty/broken-webm guard lives above ([ -s "$WEBM" ] && RC=0), so a
   # page is only ever built around a real, passing video.
+  # The film is shot at 1600x900 (SKILL Step 8), so the page must let it PAINT at that size: a column capped
+  # at a text-column width downscales the film ~2x and the app's own UI text goes unreadable - the proof stops
+  # proving. Layout: 100svh flex column, header + chapter rail fixed, the video takes every remaining pixel
+  # (height:100%, width:auto - the intrinsic 16:9 keeps it letterbox-free and scrolls nothing off-screen).
   WATCH="${WEBM%.webm}.watch.html"
   TITLE="${TITLE:-$OUT}"
-  SHA="$(git rev-parse --short HEAD 2>/dev/null || echo '')"
+  # Meta line = what a reviewer needs before hitting play: the PR, the runtime, the scenario count, the spec
+  # that produced it. `gh pr view` resolves the current branch's PR; PR_URL overrides (detached HEAD / no gh).
+  PR_URL="${PR_URL:-$(gh pr view --json url -q .url 2>/dev/null || true)}"
+  DUR_MMSS=$(awk -v d="$DUR_INT" 'BEGIN{printf "%d:%02d", d/60, d%60}')
   CHAPTERS_JSON='[]'
   if [ -n "$CH" ] && [ -s "$CH" ]; then
     CHAPTERS_JSON="$(cat "$CH")"
@@ -160,17 +169,18 @@ if [ "$RC" -eq 0 ] && [ -n "$WEBM" ] && [ -s "$WEBM" ]; then
   {
     printf '%s' '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'
     printf '%s' "$TITLE"
-    printf '%s' '</title><style>:root{color-scheme:dark light}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:#0b0d10;color:#e6e8eb;display:flex;justify-content:center}main{width:100%;max-width:920px;padding:24px}h1{font-size:20px;margin:0 0 4px}.meta{color:#9aa4af;margin:0 0 16px;font-size:13px}.ok{color:#2ec26b;font-weight:600}video{width:100%;border-radius:10px;background:#000}ol{list-style:none;padding:0;margin:16px 0 0}li{padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;gap:12px}li:hover{background:#151a1f}li .t{color:#7d8894;font-variant-numeric:tabular-nums;min-width:44px}</style></head><body><main><h1>'
+    printf '%s' '</title><style>:root{color-scheme:dark light}*{box-sizing:border-box}body{margin:0;height:100svh;display:flex;flex-direction:column;gap:14px;padding:18px 24px 20px;font:15px/1.5 system-ui,sans-serif;background:#0b0d10;color:#e6e8eb}header{flex:0 0 auto}h1{font-size:19px;font-weight:600;margin:0 0 2px}.meta{margin:0;font-size:13px;color:#9aa4af;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.meta a{color:#7cc4ff;text-decoration:none}.meta a:hover{text-decoration:underline}.meta code{font:12px/1.5 ui-monospace,monospace;color:#7d8894}.sep{color:#39414a}.stage{flex:1 1 auto;min-height:0;display:flex;justify-content:center}video{height:100%;width:auto;max-width:100%;border-radius:12px;background:#000;box-shadow:0 12px 40px rgba(0,0,0,.5)}ol{flex:0 0 auto;list-style:none;display:flex;gap:8px;overflow-x:auto;margin:0;padding:2px 0}li{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:13px;white-space:nowrap;border:1px solid #232a31;border-radius:999px;background:#151a1f;cursor:pointer}li:hover{background:#1c232a;border-color:#33404b}li.on{background:#16281d;border-color:#2ec26b;color:#eafff2}li .t{color:#7d8894;font-variant-numeric:tabular-nums}li.on .t{color:#2ec26b}</style></head><body><header><h1>'
     printf '%s' "$TITLE"
     printf '%s' '</h1><p class="meta">'
-    if [ -n "$SHA" ]; then
-      printf 'SHA %s &middot; ' "$SHA"
+    if [ -n "$PR_URL" ]; then
+      printf '<a href="%s" target="_blank" rel="noopener">View the PR &#8599;</a><span class="sep">&middot;</span>' "$PR_URL"
     fi
-    printf '%s' '<span class="ok">passed &check;</span></p><video id="v" controls playsinline preload="metadata" src="data:video/webm;base64,'
+    printf '%s<span class="sep">&middot;</span>%s chapters<span class="sep">&middot;</span><code>%s</code>' "$DUR_MMSS" "$CH_COUNT" "$SPEC"
+    printf '%s' '</p></header><div class="stage"><video id="v" controls playsinline preload="metadata" src="data:video/webm;base64,'
     base64 < "$WEBM" | tr -d '\n'
-    printf '%s' '"></video><ol id="ch"></ol><script>const C='
+    printf '%s' '"></video></div><ol id="ch"></ol><script>const C='
     printf '%s' "$CHAPTERS_JSON"
-    printf '%s' ';const v=document.getElementById("v"),ol=document.getElementById("ch");const mmss=s=>Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0");C.forEach(c=>{const li=document.createElement("li");li.innerHTML=`<span class="t">${mmss(c.t)}</span><span>${c.name}</span>`;li.onclick=()=>{v.currentTime=c.t;v.play()};ol.appendChild(li)});</script></main></body></html>'
+    printf '%s' ';const v=document.getElementById("v"),ol=document.getElementById("ch");const mmss=s=>Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0");const items=C.map(c=>{const li=document.createElement("li");li.innerHTML=`<span class="t">${mmss(c.t)}</span><span>${c.name}</span>`;li.onclick=()=>{v.currentTime=c.t;v.play()};ol.appendChild(li);return li});v.ontimeupdate=()=>{let i=-1;C.forEach((c,n)=>{if(v.currentTime>=c.t-0.15)i=n});items.forEach((li,n)=>li.classList.toggle("on",n===i))};</script></body></html>'
   } > "$WATCH"
   if [ "$CHAPTERS_JSON" = '[]' ]; then CHNOTE='no chapters'; else CHNOTE='with chapters'; fi
   echo "record: watch page -> $WATCH ($CHNOTE)" >&2
