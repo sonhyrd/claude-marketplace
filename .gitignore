@@ -25,3 +25,4 @@ results/
 
 # Marketing collateral (local-only, not part of the public repo)
 marketing/
+.playwright-mcp/
