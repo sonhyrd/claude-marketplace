@@ -1,6 +1,10 @@
 ---
 name: playwright-test-generator
 description: "Generate Playwright E2E tests, or prove a PR/branch/ticket/diff with one — for pages, flows, components. Use to add/write/create test coverage, or to E2E-verify a change end to end (owns server bring-up, auth, live-DOM recon)."
+license: Apache-2.0
+metadata:
+  author: voidmatcha
+  version: "1.9.0"
 ---
 
 # playwright-test-generator

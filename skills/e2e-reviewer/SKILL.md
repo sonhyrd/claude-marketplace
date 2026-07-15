@@ -4,7 +4,7 @@ description: 'Static review of Playwright/Cypress E2E specs and Page Objects (PO
 license: Apache-2.0
 metadata:
   author: voidmatcha
-  version: "1.8.0"
+  version: "1.9.0"
 ---
 
 # E2E Test Scenario Quality Review

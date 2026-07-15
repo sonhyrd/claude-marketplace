@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
-# Reinstall the 4 e2e-skills from this repo via the official `skills` CLI.
-# Removes any prior install (including older symlink installs) of these
-# specific skills, then re-adds them as real copies (--copy). Copy mode
-# means uncommitted local edits do NOT leak into the agent runtime — only
-# committed/pushed state does. The pre-push hook calls this script to
-# refresh installs on every push, so first push acts as initial install.
+# Symlink the 4 e2e-skills from this repo straight into the agent skill dirs,
+# so the runtime ALWAYS reflects the repo working tree — zero staleness, no
+# reinstall on every edit. Direct filesystem symlinks, NOT the `skills` CLI:
+# the CLI copies files into its own store (~/.agents/skills as a real dir) and
+# only symlinks per-agent dirs to that copy, so it still drifts — a --copy
+# install once shipped the old shell record.sh long after HEAD ported it to
+# record.mjs, and a live session kept emitting the old watch.html format.
 #
 # Overrides:
-#   E2E_SKILLS_AGENTS  default: "-a claude-code -a codex"
-#                      (set to "-a claude-code -a codex -a opencode" or other -a flags to install elsewhere)
+#   E2E_SKILLS_DIRS  space-separated target skill dirs
+#                    (default: "$HOME/.claude/skills $HOME/.agents/skills")
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SKILLS=(cypress-debugger e2e-reviewer playwright-debugger playwright-test-generator)
 
-if [ -n "${E2E_SKILLS_AGENTS:-}" ]; then
+if [ -n "${E2E_SKILLS_DIRS:-}" ]; then
   # shellcheck disable=SC2206
-  AGENTS_FLAGS=($E2E_SKILLS_AGENTS)
+  TARGET_DIRS=($E2E_SKILLS_DIRS)
 else
-  AGENTS_FLAGS=(-a claude-code -a codex)
+  TARGET_DIRS=("$HOME/.claude/skills" "$HOME/.agents/skills")
 fi
 
-echo "reinstall-skills: removing prior install (${SKILLS[*]})"
-npx -y skills remove "${SKILLS[@]}" -g "${AGENTS_FLAGS[@]}" -y || true
-
-echo "reinstall-skills: adding from $REPO_ROOT as real copies (--copy)"
-npx -y skills add "$REPO_ROOT" "${SKILLS[@]}" -g "${AGENTS_FLAGS[@]}" --copy -y
+for dir in "${TARGET_DIRS[@]}"; do
+  mkdir -p "$dir"
+  for s in "${SKILLS[@]}"; do
+    rm -rf "$dir/$s"                          # drop any prior copy or symlink
+    ln -sfn "$REPO_ROOT/skills/$s" "$dir/$s"
+    echo "symlinked $dir/$s -> $REPO_ROOT/skills/$s"
+  done
+done
