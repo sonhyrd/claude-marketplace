@@ -59,7 +59,7 @@ assert_line() {
   fi
 }
 
-echo "-- all four shipped scripts emit PTG_RUN (usage-error fixtures, ledger overridden) --"
+echo "-- all five shipped scripts emit PTG_RUN (usage-error fixtures, ledger overridden) --"
 # usage: run_case <name> <want-rc> <script-basename> <version> -- <cmd...>
 run_case() {
   local name="$1" want="$2" script="$3" version="$4"; shift 5
@@ -77,15 +77,17 @@ run_case "host-on-r2.mjs (no args)" 1 host-on-r2.mjs "$PTG_VERSION" -- \
   env PTG_LEDGER="$L" node "$REPO_ROOT/$PTG/host-on-r2.mjs"
 run_case "record.mjs (no args)" 1 record.mjs "$PTG_VERSION" -- \
   env PTG_LEDGER="$L" node "$REPO_ROOT/$PTG/record.mjs"
+run_case "probe.mjs (no subcommand)" 1 probe.mjs "$PTG_VERSION" -- \
+  env PTG_LEDGER="$L" node "$REPO_ROOT/$PTG/probe.mjs"
 run_case "scan.mjs (nonexistent path)" 2 scan.mjs "$REV_VERSION" -- \
   env PTG_LEDGER="$L" node "$REPO_ROOT/$SCAN" "$W/does-not-exist"
 
 echo ""
 echo "-- ledger file: override honored, appends accumulate, line matches stdout --"
-if [ "$(wc -l < "$L" | tr -d ' ')" = "4" ]; then
-  ok "\$PTG_LEDGER honored — 4 invocations appended 4 lines"
+if [ "$(wc -l < "$L" | tr -d ' ')" = "5" ]; then
+  ok "\$PTG_LEDGER honored — 5 invocations appended 5 lines"
 else
-  bad "\$PTG_LEDGER — expected 4 accumulated lines, got: $(wc -l < "$L" | tr -d ' ')"
+  bad "\$PTG_LEDGER — expected 5 accumulated lines, got: $(wc -l < "$L" | tr -d ' ')"
 fi
 # The last case's stdout line and the last ledger line must be the SAME record.
 if [ "$(grep '^PTG_RUN ' "$W/out")" = "$(tail -1 "$L")" ]; then

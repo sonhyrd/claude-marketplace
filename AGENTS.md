@@ -44,7 +44,7 @@ The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.
 │   │   ├── code-rules.md
 │   │   ├── evals/evals.json
 │   │   ├── agents/openai.yaml
-│   │   └── scripts/        # SHIPPED — Node, zero deps: record/preflight/host-on-r2 .mjs
+│   │   └── scripts/        # SHIPPED — Node, zero deps: record/preflight/probe/host-on-r2 .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   ├── playwright-debugger/
@@ -65,9 +65,9 @@ Each `skills/<name>/SKILL.md` is the contract. Everything in the skill body shou
 
 ### Shipped scripts are Node; repo scripts are shell
 
-The four scripts under `skills/*/scripts/` run inside a **user's** repository, so they are plain ESM `.mjs` on the Node standard library — **no npm dependency, no build step, nothing installed into someone else's project**. Node is already a hard dependency there (they all invoke `npx playwright`). Invoke them with `node <path>.mjs`, never `bash`.
+The five scripts under `skills/*/scripts/` run inside a **user's** repository, so they are plain ESM `.mjs` on the Node standard library — **no npm dependency, no build step, nothing installed into someone else's project**. Node is already a hard dependency there (they all invoke `npx playwright`). Invoke them with `node <path>.mjs`, never `bash`.
 
-They orchestrate; they do not match. `rg` (PCRE2), `eslint`, `ast-grep`, `ffmpeg`, `ffprobe`, `git`, `gh`, `curl`, `npx playwright` and `wrangler` stay subprocesses. **Do not rewrite the Tier-3 PCRE2 patterns as JS RegExp** — at least one is load-bearing on a possessive quantifier JS cannot express, and rewriting it silently inverts the check (see `tests/pattern-corpus/README.md`). Dropping the ripgrep dependency is a separate change with its own fixtures.
+They orchestrate; they do not match. `rg` (PCRE2), `eslint`, `ast-grep`, `ffmpeg`, `ffprobe`, `git`, `gh`, `curl`, `npx playwright` and `wrangler` stay subprocesses. One deliberate exception: `probe.mjs` imports the **target project's own pinned** Playwright in-process (resolved from the app root — still nothing installed anywhere), because a persistent browser context cannot live across `npx playwright` subprocess invocations. **Do not rewrite the Tier-3 PCRE2 patterns as JS RegExp** — at least one is load-bearing on a possessive quantifier JS cannot express, and rewriting it silently inverts the check (see `tests/pattern-corpus/README.md`). Dropping the ripgrep dependency is a separate change with its own fixtures.
 
 Everything under `scripts/` is repo-only tooling and stays shell.
 
@@ -95,7 +95,7 @@ bash scripts/ci/ci-local.sh
 bash scripts/ci/review.sh           # parity, language, links, framework scope, orphans
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
 bash scripts/ci/test-corpus.sh      # scanner golden: 25/25 checks fire, suppression holds
-bash scripts/ci/test-run-ledger.sh  # PTG_RUN run-ledger contract on all four shipped scripts
+bash scripts/ci/test-run-ledger.sh  # PTG_RUN run-ledger contract on all five shipped scripts
 bash scripts/validate-evals.sh      # eval JSON schema
 bash scripts/ci/pre-push-security.sh
 bash scripts/ci/codex-smoke.sh      # manual Codex cross-host smoke (skips if codex absent)

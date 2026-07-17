@@ -2,7 +2,7 @@
 // machine-readable record, so a session transcript alone reconstructs the run and "audit the
 // skill" is reading one file instead of mining transcripts.
 //
-// All four shipped scripts emit through this ONE helper: the three sibling PTG scripts import it
+// All five shipped scripts emit through this ONE helper: the four sibling PTG scripts import it
 // directly; scan.mjs imports it best-effort across the skill boundary (a standalone scanner copy
 // without this sibling skill still scans — it just leaves no record).
 //

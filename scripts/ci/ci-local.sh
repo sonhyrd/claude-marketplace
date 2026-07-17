@@ -36,7 +36,7 @@ done < <(find scripts -name '*.sh' -type f 2>/dev/null)
 [ "$QUIET" = "1" ] || echo "  all shell scripts parse"
 
 step "Node syntax"
-# The four SHIPPED scripts are Node. `node --check` is the safety net the shell versions never had:
+# The five SHIPPED scripts are Node. `node --check` is the safety net the shell versions never had:
 # under `set -eu` a typo'd variable name exits 0 having done nothing, where this fails at parse time.
 while IFS= read -r file; do
   [ -z "$file" ] && continue

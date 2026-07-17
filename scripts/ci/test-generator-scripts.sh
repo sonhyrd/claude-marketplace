@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Process-boundary tests for the three shipped generator scripts: preflight.mjs, host-on-r2.mjs and
-# record.mjs. The seam is the highest one available — spawn the script, assert on the exit code and
-# the bytes it wrote. That is the whole of its contract, and it is the boundary the shell-to-Node
-# port promised to preserve.
+# Process-boundary tests for the four shipped generator scripts: preflight.mjs, host-on-r2.mjs,
+# record.mjs and probe.mjs. The seam is the highest one available — spawn the script, assert on the
+# exit code and the bytes it wrote. That is the whole of its contract, and it is the boundary the
+# shell-to-Node port promised to preserve.
 #
 # These deliberately do NOT reach the network. Every gate under test trips BEFORE the script would
 # call wrangler or Playwright: record.mjs shells out to `npx playwright test`, so we shim npx on PATH
@@ -187,6 +187,26 @@ SHIM
   film 4 "STOP: provenance — PROOF_SHA is not an ancestor of HEAD" \
     FAKE_WEBM="$W/fix/long.webm" PROOF_SHA=0000000000000000000000000000000000000000
 fi
+
+echo ""
+echo "-- probe: browserless refusal + client contract (issue #7 — NO browser in CI) --"
+# The refusal is the CI-provable half of the probe contract: $W has no node_modules anywhere up its
+# tree, so `start` must refuse cleanly (exit 2) BEFORE any launch attempt — never boot a browser,
+# never hang. The batched-command happy path needs a real app + browser and is verified manually in
+# testbed/ per the spec's testing decisions (issue #4).
+expect_exit 1 "no subcommand is a usage error" -- \
+  node "$REPO_ROOT/$S/probe.mjs"
+expect_exit 2 "browserless env: start refuses cleanly (no pinned Playwright from cwd)" -- \
+  node "$REPO_ROOT/$S/probe.mjs" start
+stderr_has "  refusal names the pinned-Playwright requirement" "pinned Playwright"
+expect_exit 3 "send with no daemon listening at the socket" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"snapshot"}]'
+expect_exit 3 "close with no daemon listening at the socket" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" close
+expect_exit 1 "unparsable batch is a usage error (checked before connecting)" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send 'not json'
+expect_exit 1 "batch must be a JSON ARRAY of {cmd} objects" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '{"cmd":"snapshot"}'
 
 echo ""
 echo "  generator scripts: $pass passed, $fail failed"

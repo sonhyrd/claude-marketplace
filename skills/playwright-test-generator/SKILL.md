@@ -198,17 +198,37 @@ The generated spec must **recreate its session from code** — no committed, han
 
   **Token source, in priority:** (1) the project's `dev-login`-style helper, (2) a repo API-login helper/script, (3) a `storageState` setup project / `globalSetup`, (4) an env credential (`E2E_BEARER`, or `TEST_USER`+`TEST_PASSWORD` against the app's login endpoint). Use the first that exists; if none, **stop and ask** for a token/credential. A freshly-minted token in a gitignored `.auth/…` is recreatable-from-code and sanctioned; a committed `auth/session.json` is the anti-pattern. UI-driven login belongs only in a spec that tests the login flow itself.
 
-### Recon — the running app is the source of truth, the test run is the validator
+### Recon — the probe is the question channel, the test run is the validator
 
-1. **Draft selectors from source + the readiness-confirmed app.** Read the changed component(s) for roles/labels/testids. Where blind-drafting a big or gated page would thrash the heal loop, *optionally* snapshot the live DOM once — authenticate, `goto` the target, read `page.locator('body').ariaSnapshot()` from a throwaway `_recon.spec.ts` (delete it after). An accelerator, not a required step.
-2. **Capture the network log on the first run to drive mocks.** Run the draft spec once; from Playwright's request log (or `page.on('request')`), list the endpoints the surface actually calls — including proxy (`/api/request?cmd=`) and SSR calls that source-reading misses — and write the `page.route` mocks against them (per `code-rules.md` › Network Determinism).
+**One persistent browser, batched questions — never a throwaway spec.** `probe.mjs` opens one long-lived context through the project's pinned Playwright and answers batches of recon questions in seconds instead of a full Playwright boot per question. Start it once from the app root in a background shell; it self-closes after 300s idle (`PROBE_IDLE`) so no zombie browser outlives the session:
+
+```bash
+# start once (background shell, app root; STORAGE_STATE=<path> seeds a Step-3 minted session)
+BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/probe.mjs start
+# ask in batches — one round trip; compact aria + network summaries, never raw DOM dumps
+node <skill-base>/scripts/probe.mjs send '[
+  {"cmd":"navigate","url":"/login"},
+  {"cmd":"fill","selector":"#email","value":"<test user>"},
+  {"cmd":"click","selector":"text=Sign in"},
+  {"cmd":"snapshot"},
+  {"cmd":"network-summary"}
+]'
+node <skill-base>/scripts/probe.mjs close   # when recon is done (the idle timeout is the net)
+```
+
+In a browserless environment the probe refuses cleanly (exit 2) — recon then falls back to source reading + the heal loop; never install a floated Playwright to force one open.
+
+1. **Draft selectors from source + the probed live app.** Read the changed component(s) for roles/labels/testids. Where blind-drafting a big or gated page would thrash the heal loop, `snapshot` the target once through the probe (scope with `"selector"` on big pages). An accelerator, not a required step.
+2. **Drive mocks from the probe's `network-summary`.** After navigating (and interacting) through the probe, its aggregation lists the endpoints the surface actually calls — including proxy (`/api/request?cmd=`) and SSR calls that source-reading misses, with the observed query suffixes the mock patterns must tolerate — and the `page.route` mocks are written against them (per `code-rules.md` › Network Determinism).
 3. **Let the test run heal the rest.** A wrong selector fails the run; Step 7 re-snapshots and fixes it by intent. Never npx-float Playwright when the project pins it — a floated runner breaks the heal loop. **Sole exception: greenfield with no runner at all (`hasTestRunner: false`) — Step 5b bootstraps Playwright as a *pinned dev-dep*, not a floated install.**
+
+**Non-deliverable spec probes are forbidden.** Never create a spec file that is not a deliverable to answer a recon or debug question — no `_recon.spec.ts`, no `zz-debug.spec.ts`: the test runner is not a REPL (the worst audited run wrote 8 throwaway probe specs and invoked `playwright test` 48 times). The probe is the recon channel; the only sanctioned throwaway spec in the whole pipeline is Step 8's film spec. The heal loop's existing bounds — rerun only the failing test, full suite once at the end — stay the enforcement for post-recon iteration.
 
 **Source recon uses the Grep tool (ripgrep), never bash `grep --include=*.vue`** — unquoted globs and bracket paths (a Nuxt dynamic route `pages/person/[id].vue`) trip zsh `nomatch` and abort the whole `&&`-chain. Quote any glob you must hand to bash. Ad-hoc shell must be portable (the shell may be zsh, grep may be BSD): no `${!var}` indirection, quote every expansion, no GNU-only grep flags. End any sweep that can silently no-op with an explicit non-empty check on its output or exit code — "found nothing" must be distinguishable from "never actually ran".
 
 **Accessible-name reality check:** confirm from the live DOM (or the heal-loop failure) whether inputs actually carry labels/aria. Label-less inputs (placeholder/title only) are common — `getByLabel` matches nothing; use `getByPlaceholder()` / `getByRole('textbox')` and record the reason in the Locator Mapping Table.
 
-**Interaction-dependent state** a first render can't reach (modals, post-submit views, dropdown contents): drive it with the host's `browser_*` automation tools (Playwright MCP / `webapp-testing` skill) when exposed; otherwise reach it inside the spec itself. Never paste raw snapshot/DOM content into responses — summarize.
+**Interaction-dependent state** a first render can't reach (modals, post-submit views, dropdown contents): drive it with a probe batch (`click`/`fill`, then `snapshot`); only state the probe genuinely cannot reach is reached inside the deliverable spec itself. Never paste raw snapshot/DOM content into responses — the probe's summaries are already compact; quote only the lines you need.
 
 **Binding smoke check.** When the diff changes a control's *binding* (v-model, slot-injected props, controlled-component wiring) rather than its computed output, look at that one control live before the Step-7 loop — the binding layer is invisible to unit tests and to source-reading, which gets prop-merge order right but misses key normalization (a slot camelCase `modelValue` silently beats a child's kebab-case `:model-value`). Cheaper than the heal cycle it prevents.
 
@@ -511,7 +531,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or an unposted link
 
 1. **Hygiene sweep** before staging:
    - Revert generated-file churn the run caused: `git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'` on Nuxt-style repos (and any other codegen artifact the diff shows you didn't author).
-   - Delete throwaway artifacts: the film spec, `_recon.spec.ts`, any `specs/*.plan.md` litter.
+   - Delete throwaway artifacts: the film spec, any `specs/*.plan.md` litter. (A `_recon.spec.ts` or other non-deliverable probe spec in the diff is a Step 3 violation — delete it on sight.)
    - What remains staged is exactly the spec + POM (+ shared helper if one was written), in the repo's conventional test dir — never shadowing a route dir (a Vike/Nuxt `pages/` is routes, not tests).
 2. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit (if any) rides along in the same push.
 3. **Push** to the PR's remote branch.
