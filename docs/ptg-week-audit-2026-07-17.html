@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PTG run audit — Jul 10–16, 2026</title>
+<script>
+  (() => {
+    const saved = localStorage.getItem('theme');
+    const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    if (dark) document.documentElement.classList.add('dark');
+  })();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --ivory: #FAF9F5;
+    --slate: #141413;
+    --clay: #D97757;
+    --oat: #E3DACC;
+    --olive: #788C5D;
+    --rust: #B04A3F;
+    --gray-100: #F0EEE6;
+    --gray-300: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-700: #3D3D3A;
+    --panel: #FFFFFF;
+    --ch-model: #D97757;
+    --ch-cli: #788C5D;
+    --ch-other: #E3DACC;
+    --ch-gate: #C9A83C;
+    --ch-env: #87867F;
+    --ch-grid: #F0EEE6;
+    --ch-base: #D1CFC5;
+
+    --serif: ui-serif, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --radius-panel: 12px;
+    --border: 1.5px solid var(--gray-300);
+  }
+  html.dark {
+    color-scheme: dark;
+    --ivory: #191813;
+    --slate: #ECEAE2;
+    --clay: #E08B6D;
+    --oat: #35322A;
+    --olive: #93A878;
+    --rust: #D96A5E;
+    --gray-100: #232219;
+    --gray-300: #403E36;
+    --gray-500: #9A988F;
+    --gray-700: #CBC9BF;
+    --panel: #201F1A;
+    --ch-model: #E08B6D;
+    --ch-cli: #93A878;
+    --ch-other: #4A463A;
+    --ch-gate: #C9A83C;
+    --ch-env: #9A988F;
+    --ch-grid: #2A2922;
+    --ch-base: #403E36;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 56px 24px 120px;
+    background: var(--ivory);
+    color: var(--slate);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 880px; margin: 0 auto; }
+
+  /* ---------- Header ---------- */
+  header { margin-bottom: 40px; }
+  .header-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 38px;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .head-meta { display: flex; align-items: center; gap: 10px; }
+  .auto-pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    background: var(--gray-100);
+    border: var(--border);
+    border-radius: 999px;
+    padding: 5px 11px;
+    white-space: nowrap;
+  }
+  #theme-toggle {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-700);
+    background: var(--gray-100);
+    border: var(--border);
+    border-radius: 999px;
+    padding: 5px 11px;
+    cursor: pointer;
+  }
+  #theme-toggle:hover { border-color: var(--gray-500); }
+  #theme-toggle:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+  .date-range { color: var(--gray-500); font-size: 14px; }
+  .date-range .repo { font-family: var(--mono); font-size: 13px; color: var(--gray-700); }
+  .lede { max-width: 720px; color: var(--gray-700); margin-top: 14px; }
+
+  /* ---------- Sections ---------- */
+  section { margin-bottom: 52px; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 24px;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    color: var(--slate);
+  }
+  hr.rule { border: none; border-top: 1px solid var(--gray-300); margin: 0 0 22px; }
+  .section-note { font-size: 13px; color: var(--gray-500); margin: -14px 0 20px; max-width: 720px; }
+
+  /* ---------- Summary band ---------- */
+  .summary-band { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  @media (max-width: 720px) { .summary-band { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card {
+    background: var(--panel);
+    border: var(--border);
+    border-radius: var(--radius-panel);
+    padding: 20px 22px 18px;
+  }
+  .stat-card.warn { border-left: 4px solid var(--clay); padding-left: 19px; }
+  .stat-num {
+    font-family: var(--serif);
+    font-size: 44px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--slate);
+    margin-bottom: 8px;
+  }
+  .stat-num small { font-size: 22px; color: var(--gray-500); }
+  .stat-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+  }
+  .stat-delta { font-family: var(--mono); font-size: 11px; margin-top: 6px; color: var(--gray-500); }
+  .stat-delta.bad { color: var(--rust); }
+  .stat-delta.good { color: var(--olive); }
+
+  /* ---------- Highlights ---------- */
+  .highlights { list-style: none; margin: 0; padding: 0; }
+  .highlights li { position: relative; padding: 0 0 14px 26px; color: var(--gray-700); }
+  .highlights li::before {
+    content: "";
+    position: absolute;
+    left: 6px; top: 8px;
+    width: 7px; height: 7px;
+    border-radius: 2px;
+    background: var(--clay);
+  }
+  .highlights li strong { color: var(--slate); font-weight: 600; }
+  .highlights li code, td code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--gray-100);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  /* ---------- Chart panels ---------- */
+  .chart-panel {
+    background: var(--panel);
+    border: var(--border);
+    border-radius: var(--radius-panel);
+    padding: 24px 28px 18px;
+  }
+  .chart-panel + .chart-panel { margin-top: 14px; }
+  .chart-panel svg { display: block; width: 100%; height: auto; }
+  .chart-title { font-size: 13px; font-weight: 600; color: var(--gray-700); margin: 0 0 14px; }
+  .chart-caption { font-size: 12px; color: var(--gray-500); margin-top: 12px; }
+  svg text { font-family: var(--sans); font-size: 11px; fill: var(--gray-500); }
+  svg text.strong { fill: var(--gray-700); font-weight: 600; }
+  svg text.onbar { fill: #FFFFFF; font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font-size: 12px; color: var(--gray-700); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  /* ---------- Tables ---------- */
+  .tablewrap { overflow-x: auto; }
+  table.panel {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--panel);
+    border: var(--border);
+    border-radius: var(--radius-panel);
+    overflow: hidden;
+  }
+  table.panel thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--gray-500);
+    background: var(--gray-100);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--gray-300);
+    white-space: nowrap;
+  }
+  table.panel tbody td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--gray-100);
+    font-size: 14px;
+    vertical-align: top;
+  }
+  table.panel tbody tr:last-child td { border-bottom: none; }
+  table.panel tbody tr:hover { background: var(--ivory); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.session { white-space: nowrap; }
+  td.session .name { font-weight: 600; color: var(--slate); }
+  td.session .meta { font-family: var(--mono); font-size: 11px; color: var(--gray-500); }
+  td.note { color: var(--gray-700); font-size: 13px; }
+
+  .sev {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-700);
+    white-space: nowrap;
+  }
+  .sev i { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .sev.p0 i { background: var(--rust); }
+  .sev.p1 i { background: var(--clay); }
+  .sev.p2 i { background: var(--olive); }
+  td q { font-style: italic; color: var(--gray-500); quotes: '\201C' '\201D'; }
+
+  /* ---------- Plan (milestone rows) ---------- */
+  .milestones { position: relative; }
+  .milestone { display: flex; gap: 18px; }
+  .dot-col { display: flex; flex-direction: column; align-items: center; width: 24px; flex-shrink: 0; }
+  .dot-col .dot {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--clay);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .dot-col .line { flex: 1; width: 2px; background: var(--gray-300); margin: 6px 0; }
+  .milestone:last-child .dot-col .line { display: none; }
+  .m-body { padding-bottom: 30px; min-width: 0; }
+  .m-body h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 18px;
+    margin: 1px 0 6px;
+    color: var(--slate);
+  }
+  .m-body p { margin: 0 0 8px; color: var(--gray-700); font-size: 14px; max-width: 68ch; }
+  .m-body p code { font-family: var(--mono); font-size: 0.86em; background: var(--gray-100); border-radius: 4px; padding: 1px 5px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-700);
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    border-radius: 4px;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+  .tag b { color: var(--olive); font-weight: 700; }
+
+  /* ---------- Keep panel (oat) ---------- */
+  .keep {
+    background: var(--oat);
+    border-radius: var(--radius-panel);
+    padding: 20px 22px;
+  }
+  .keep-item { display: flex; align-items: baseline; gap: 14px; padding: 8px 0; }
+  .keep-item + .keep-item { border-top: 1px solid rgba(20, 20, 19, 0.08); }
+  html.dark .keep-item + .keep-item { border-top: 1px solid rgba(236, 234, 226, 0.08); }
+  .keep-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-700);
+    background: var(--ivory);
+    border-radius: 4px;
+    padding: 3px 7px;
+    flex-shrink: 0;
+  }
+  .keep-body { font-size: 14px; color: var(--gray-700); }
+  .keep-body .ref { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+
+  /* ---------- Footer ---------- */
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-300);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gray-500);
+    line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+
+    <header>
+      <div class="header-top">
+        <h1>PTG run audit &mdash; Week 29</h1>
+        <span class="head-meta">
+          <span class="auto-pill">transcript-mined</span>
+          <button id="theme-toggle" aria-label="Toggle dark mode">◐ theme</button>
+        </span>
+      </div>
+      <div class="date-range">
+        Jul 10 &ndash; 16, 2026 &nbsp;&middot;&nbsp;
+        <span class="repo">playwright-test-generator @ e2e-skills</span>
+      </div>
+      <p class="lede">
+        Every Claude Code session that invoked the skill this week &mdash; 22 sessions across
+        hyrd-widget and nuxt-hyrd-chrysus &mdash; measured from the session transcripts:
+        time attribution, deterministic CLI vs. model intelligence, ranked findings, and the
+        improvement plan.
+      </p>
+    </header>
+
+    <!-- Summary band -->
+    <section>
+      <div class="summary-band">
+        <div class="stat-card">
+          <div class="stat-num">22</div>
+          <div class="stat-label">Sessions ran PTG</div>
+          <div class="stat-delta">21 product runs + 1 meta</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num">21.2<small>h</small></div>
+          <div class="stat-label">Active work time</div>
+          <div class="stat-delta">171.6h wall &middot; 88% idle</div>
+        </div>
+        <div class="stat-card warn">
+          <div class="stat-num">62<small>%</small></div>
+          <div class="stat-label">Active time = model</div>
+          <div class="stat-delta bad">CLI only 15% &middot; browser 0.4%</div>
+        </div>
+        <div class="stat-card warn">
+          <div class="stat-num">246</div>
+          <div class="stat-label">playwright test runs</div>
+          <div class="stat-delta bad">~11 / session &middot; worst 48</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Highlights -->
+    <section>
+      <h2>Highlights</h2>
+      <hr class="rule">
+      <ul class="highlights">
+        <li>
+          <strong>The test runner is being used as a REPL.</strong> When the model needs to learn
+          app behavior it writes a throwaway spec (<code>zz-debug.spec.ts</code>,
+          <code>_live-recon.spec.ts</code>&hellip;) and runs it &mdash; paying a full Playwright boot
+          per question. Worst run: 8 probe specs, 48 invocations, 55 min of CLI time.
+        </li>
+        <li>
+          <strong>Model output volume is confirmed as the bottleneck at fleet scale.</strong>
+          8.2M output tokens this week; a median run emits ~350k tokens to deliver 1&ndash;3 specs.
+          Browser/driver time is 0.4% of active time &mdash; optimizing it buys nothing.
+        </li>
+        <li>
+          <strong>The new script pipeline works where it was available.</strong> The four Jul 15&ndash;16
+          sessions with <code>preflight &rarr; record &rarr; host-on-r2</code> spent 3&ndash;5 min in
+          scripts, no film-loop runaways, fewest raw test runs.
+        </li>
+        <li>
+          <strong>One silent wrong-pass escaped.</strong> A generated test encoded the inverse of the
+          intended CTA behavior and passed; only the user&rsquo;s eyeball caught it (tilapia, Jul 16).
+        </li>
+      </ul>
+    </section>
+
+    <!-- Time attribution -->
+    <section>
+      <h2>Where the active time went</h2>
+      <hr class="rule">
+      <div class="chart-panel">
+        <p class="chart-title">Active time attribution &mdash; all 22 sessions, 1,272 min (idle excluded)</p>
+        <svg viewBox="0 0 640 96" role="img" aria-label="Stacked bar: model 62 percent, deterministic CLI 15 percent, other bash 11 percent, approval gate 5 percent, env and misc 6 percent">
+          <!-- segments: total width 632, x from 4; model 392, cli 95, other 69, gate 31, env 40; 2px gaps -->
+          <rect x="4"   y="8" width="390" height="44" rx="6" fill="var(--ch-model)"/>
+          <rect x="398" y="8" width="93"  height="44" rx="6" fill="var(--ch-cli)"/>
+          <rect x="495" y="8" width="67"  height="44" rx="6" fill="var(--ch-other)"/>
+          <rect x="566" y="8" width="29"  height="44" rx="6" fill="var(--ch-gate)"/>
+          <rect x="599" y="8" width="37"  height="44" rx="6" fill="var(--ch-env)"/>
+          <text x="199" y="35" text-anchor="middle" class="onbar">Model 62%</text>
+          <text x="444" y="35" text-anchor="middle" class="onbar">15%</text>
+          <!-- under-labels -->
+          <text x="199" y="76" text-anchor="middle">think + generate &middot; 794m</text>
+          <text x="444" y="76" text-anchor="middle">CLI &middot; 194m</text>
+          <text x="528" y="76" text-anchor="middle">11%</text>
+          <text x="580" y="76" text-anchor="middle">5%</text>
+          <text x="618" y="76" text-anchor="middle">6%</text>
+        </svg>
+        <div class="legend">
+          <span><i style="background:var(--ch-model)"></i>Model think + generate &middot; 794m</span>
+          <span><i style="background:var(--ch-cli)"></i>Deterministic CLI &middot; 194m</span>
+          <span><i style="background:var(--ch-other)"></i>Other bash/tools &middot; 140m</span>
+          <span><i style="background:var(--ch-gate)"></i>Approval gate &middot; 63m</span>
+          <span><i style="background:var(--ch-env)"></i>Env + agents + misc &middot; 81m</span>
+        </div>
+        <div class="chart-caption">
+          Tool time = tool_result &minus; tool_use timestamps paired by ID; model time = gap before each
+          assistant turn. Long waits capped, so the model and gate shares are floors.
+        </div>
+      </div>
+
+      <div class="tablewrap" style="margin-top:14px">
+        <table class="panel">
+          <thead>
+            <tr><th style="width:170px">Bucket</th><th>Covers</th><th class="n" style="width:110px">Time</th><th>Character</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="sev p2"><i></i>Deterministic</span></td>
+              <td><code>preflight</code> / <code>record</code> / <code>host-on-r2</code> / <code>scan</code>, <code>playwright test</code>, ffmpeg, dev servers</td>
+              <td class="n">230m &middot; 18%</td>
+              <td class="note">Repeatable and auditable. Fast when used &mdash; the pipeline sessions spent 3&ndash;5 min here total.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p0"><i></i>Model</span></td>
+              <td>live-DOM recon, scenario choice, spec writing, failure diagnosis, fix loops, narration</td>
+              <td class="n">794m &middot; 62%</td>
+              <td class="note">Non-deterministic; all run-to-run variance lives here. Output-token volume is the cost driver.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p1"><i></i>Human-in-loop</span></td>
+              <td>approval-gate waits, plus all idle</td>
+              <td class="n">63m + 150h idle</td>
+              <td class="note">The gate is small in-session; a mid-run question while the user is away converts to hours of idle.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Runs per session chart -->
+    <section>
+      <h2>The retry loop, made visible</h2>
+      <hr class="rule">
+      <div class="chart-panel">
+        <p class="chart-title">playwright test invocations per session (ordered by active time, same order as table)</p>
+        <svg viewBox="0 0 640 176" role="img" aria-label="Bar chart of playwright test invocations per session; worst session ran 48 times">
+          <line x1="48" y1="20"  x2="620" y2="20"  stroke="var(--ch-grid)" stroke-width="1"/>
+          <line x1="48" y1="60"  x2="620" y2="60"  stroke="var(--ch-grid)" stroke-width="1"/>
+          <line x1="48" y1="100" x2="620" y2="100" stroke="var(--ch-grid)" stroke-width="1"/>
+          <line x1="48" y1="140" x2="620" y2="140" stroke="var(--ch-base)" stroke-width="1.5"/>
+          <text x="40" y="144" text-anchor="end">0</text>
+          <text x="40" y="104" text-anchor="end">16</text>
+          <text x="40" y="64"  text-anchor="end">32</text>
+          <text x="40" y="24"  text-anchor="end">48</text>
+          <!-- 22 bars: values 33,48,7,5,10,7,7,16,9,4,5,2,2,11,17,19,14,16,5,4,4,1 ; scale 2.5px/run; barW 20 gap 6 start x 56 -->
+          <rect x="56"  y="57.5"  width="20" height="82.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="82"  y="20"    width="20" height="120"  rx="4" fill="var(--ch-model)"/>
+          <rect x="108" y="122.5" width="20" height="17.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="134" y="127.5" width="20" height="12.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="160" y="115"   width="20" height="25"   rx="4" fill="var(--ch-other)"/>
+          <rect x="186" y="122.5" width="20" height="17.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="212" y="122.5" width="20" height="17.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="238" y="100"   width="20" height="40"   rx="4" fill="var(--ch-other)"/>
+          <rect x="264" y="117.5" width="20" height="22.5" rx="4" fill="var(--ch-cli)"/>
+          <rect x="290" y="130"   width="20" height="10"   rx="4" fill="var(--ch-other)"/>
+          <rect x="316" y="127.5" width="20" height="12.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="342" y="135"   width="20" height="5"    rx="4" fill="var(--ch-cli)"/>
+          <rect x="368" y="135"   width="20" height="5"    rx="4" fill="var(--ch-other)"/>
+          <rect x="394" y="112.5" width="20" height="27.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="420" y="97.5"  width="20" height="42.5" rx="4" fill="var(--ch-cli)"/>
+          <rect x="446" y="92.5"  width="20" height="47.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="472" y="105"   width="20" height="35"   rx="4" fill="var(--ch-other)"/>
+          <rect x="498" y="100"   width="20" height="40"   rx="4" fill="var(--ch-other)"/>
+          <rect x="524" y="127.5" width="20" height="12.5" rx="4" fill="var(--ch-other)"/>
+          <rect x="550" y="130"   width="20" height="10"   rx="4" fill="var(--ch-cli)"/>
+          <rect x="576" y="130"   width="20" height="10"   rx="4" fill="var(--ch-other)"/>
+          <rect x="602" y="137.5" width="18" height="2.5"  rx="1" fill="var(--ch-other)"/>
+          <text x="92"  y="14" text-anchor="middle" class="strong">48 &middot; dolphin</text>
+          <text x="66"  y="51" text-anchor="middle">33</text>
+          <text x="456" y="86" text-anchor="middle">19</text>
+        </svg>
+        <div class="chart-caption">
+          Clay = the probe-REPL session (8 throwaway <span style="font-family:var(--mono)">zz-*.spec.ts</span> specs,
+          9 full-suite reruns). Olive = sessions where the shipped script pipeline was available
+          (Jul 15&ndash;16) &mdash; the film loop runs inside <span style="font-family:var(--mono)">record.mjs</span>,
+          so raw test runs stay low.
+        </div>
+      </div>
+    </section>
+
+    <!-- Sessions table -->
+    <section>
+      <h2>The 22 sessions</h2>
+      <hr class="rule">
+      <p class="section-note">
+        Nearly every run was PR-proof mode (&ldquo;prove this PR / ticket&rdquo;), and 15 of 21 product
+        runs were invoked mid-session on top of debugging or review context.
+      </p>
+      <div class="tablewrap">
+        <table class="panel">
+          <thead>
+            <tr>
+              <th>Session</th>
+              <th class="n">Active</th>
+              <th class="n">Model</th>
+              <th class="n">CLI</th>
+              <th class="n">PW runs</th>
+              <th class="n">Specs</th>
+              <th class="n">Tokens out</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="session"><span class="name">mamas-8851 reconnect</span><br><span class="meta">widget &middot; Jul 14</span></td><td class="n">153m</td><td class="n">94m</td><td class="n">35m</td><td class="n">33</td><td class="n">10</td><td class="n">855k</td><td class="note">Heaviest run; recon spec mutated via Python heredocs; BE debug marathon</td></tr>
+            <tr><td class="session"><span class="name">dolphin</span><br><span class="meta">widget &middot; Jul 14</span></td><td class="n">147m</td><td class="n">61m</td><td class="n">55m</td><td class="n">48</td><td class="n">9</td><td class="n">575k</td><td class="note">8 throwaway probe specs; 9 full-suite reruns</td></tr>
+            <tr><td class="session"><span class="name">logperch</span><br><span class="meta">chrysus &middot; Jul 10</span></td><td class="n">91m</td><td class="n">62m</td><td class="n">9m</td><td class="n">7</td><td class="n">2</td><td class="n">597k</td><td class="note"><q>why did you take so long to just write the test</q>; one spec edited 10&times;</td></tr>
+            <tr><td class="session"><span class="name">nudibranch</span><br><span class="meta">widget &middot; Jul 10</span></td><td class="n">82m</td><td class="n">71m</td><td class="n">1m</td><td class="n">5</td><td class="n">1</td><td class="n">702k</td><td class="note">PTG invoked at the tail of a long debug session (125m in)</td></tr>
+            <tr><td class="session"><span class="name">SaveChangesBar #1</span><br><span class="meta">chrysus &middot; Jul 9</span></td><td class="n">77m</td><td class="n">25m</td><td class="n">10m</td><td class="n">10</td><td class="n">3</td><td class="n">277k</td><td class="note">12m of gate waits; 4 subagents</td></tr>
+            <tr><td class="session"><span class="name">mamas-8851 reverify</span><br><span class="meta">widget &middot; Jul 14</span></td><td class="n">65m</td><td class="n">34m</td><td class="n">22m</td><td class="n">7</td><td class="n">1</td><td class="n">346k</td><td class="note">Skill re-invoked just to get the R2 upload step</td></tr>
+            <tr><td class="session"><span class="name">add-pr-254</span><br><span class="meta">widget &middot; Jul 14</span></td><td class="n">62m</td><td class="n">43m</td><td class="n">1m</td><td class="n">7</td><td class="n">2</td><td class="n">447k</td><td class="note">PR #503 proof</td></tr>
+            <tr><td class="session"><span class="name">Review-PR-312</span><br><span class="meta">widget &middot; Jul 10</span></td><td class="n">61m</td><td class="n">34m</td><td class="n">4m</td><td class="n">16</td><td class="n">4</td><td class="n">406k</td><td class="note">Before/after perf proof, single approval</td></tr>
+            <tr><td class="session"><span class="name">pr-2704-review</span><br><span class="meta">chrysus &middot; Jul 16</span></td><td class="n">54m</td><td class="n">40m</td><td class="n">9m</td><td class="n">9</td><td class="n">4</td><td class="n">463k</td><td class="note">New pipeline: preflight &rarr; record &rarr; host</td></tr>
+            <tr><td class="session"><span class="name">crayfish</span><br><span class="meta">chrysus &middot; Jul 10</span></td><td class="n">53m</td><td class="n">34m</td><td class="n">6m</td><td class="n">4</td><td class="n">2</td><td class="n">389k</td><td class="note">Fable 5 run</td></tr>
+            <tr><td class="session"><span class="name">cuskeel</span><br><span class="meta">chrysus &middot; Jul 13</span></td><td class="n">48m</td><td class="n">36m</td><td class="n">4m</td><td class="n">5</td><td class="n">2</td><td class="n">379k</td><td class="note">68 chrome-MCP calls for recon</td></tr>
+            <tr><td class="session"><span class="name">mamas-8940 consent</span><br><span class="meta">chrysus &middot; Jul 15</span></td><td class="n">45m</td><td class="n">37m</td><td class="n">3m</td><td class="n">2</td><td class="n">2</td><td class="n">359k</td><td class="note">Skill invoked 3&times; &mdash; stale installed copy forced re-records</td></tr>
+            <tr><td class="session"><span class="name">e2e-skills meta</span><br><span class="meta">Jul 11</span></td><td class="n">43m</td><td class="n">16m</td><td class="n">0m</td><td class="n">2</td><td class="n">0</td><td class="n">194k</td><td class="note">Meta-audit of 2 prior runs; 24m gate waits</td></tr>
+            <tr><td class="session"><span class="name">cowrie</span><br><span class="meta">widget &middot; Jul 10</span></td><td class="n">43m</td><td class="n">28m</td><td class="n">2m</td><td class="n">11</td><td class="n">3</td><td class="n">323k</td><td class="note">Animation test after /code-review + /simplify</td></tr>
+            <tr><td class="session"><span class="name">tilapia</span><br><span class="meta">widget &middot; Jul 16</span></td><td class="n">40m</td><td class="n">25m</td><td class="n">10m</td><td class="n">17</td><td class="n">3</td><td class="n">277k</td><td class="note">New pipeline &mdash; but encoded a wrong CTA expectation, user-caught</td></tr>
+            <tr><td class="session"><span class="name">review-pr-311</span><br><span class="meta">widget &middot; Jul 10</span></td><td class="n">39m</td><td class="n">27m</td><td class="n">5m</td><td class="n">19</td><td class="n">3</td><td class="n">285k</td><td class="note">19 runs for a before/after comparison</td></tr>
+            <tr><td class="session"><span class="name">mamas-8953 job-404</span><br><span class="meta">widget &middot; Jul 14</span></td><td class="n">38m</td><td class="n">27m</td><td class="n">5m</td><td class="n">14</td><td class="n">2</td><td class="n">269k</td><td class="note"><q>please reuse the ui dont make it too diff</q> &mdash; proof-page drift</td></tr>
+            <tr><td class="session"><span class="name">mamas-7749 guest</span><br><span class="meta">widget &middot; Jul 9</span></td><td class="n">37m</td><td class="n">27m</td><td class="n">2m</td><td class="n">16</td><td class="n">2</td><td class="n">268k</td><td class="note">Ran out of context mid-run &rarr; /compact + resume</td></tr>
+            <tr><td class="session"><span class="name">SaveChangesBar #2</span><br><span class="meta">chrysus &middot; Jul 10</span></td><td class="n">35m</td><td class="n">24m</td><td class="n">7m</td><td class="n">5</td><td class="n">3</td><td class="n">229k</td><td class="note">Fable 5 &middot; per-feature loop over PR #2828</td></tr>
+            <tr><td class="session"><span class="name">searobin</span><br><span class="meta">widget &middot; Jul 15</span></td><td class="n">34m</td><td class="n">30m</td><td class="n">3m</td><td class="n">4</td><td class="n">1</td><td class="n">360k</td><td class="note">Hit skills-symlink discovery issue mid-run</td></tr>
+            <tr><td class="session"><span class="name">beluga</span><br><span class="meta">chrysus &middot; Jul 13</span></td><td class="n">20m</td><td class="n">14m</td><td class="n">1m</td><td class="n">4</td><td class="n">2</td><td class="n">111k</td><td class="note"><q>where is firmed</q> &mdash; proof link not surfaced</td></tr>
+            <tr><td class="session"><span class="name">bream</span><br><span class="meta">widget &middot; Jul 16</span></td><td class="n">5m</td><td class="n">4m</td><td class="n">0m</td><td class="n">1</td><td class="n">0</td><td class="n">49k</td><td class="note">Invoked on #539, stopped before any spec</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Findings -->
+    <section>
+      <h2>Findings</h2>
+      <hr class="rule">
+      <p class="section-note">
+        Ranked in the skill&rsquo;s own idiom: P0 silently multiplies cost on every run,
+        P1 burns time or trust with visible symptoms, P2 is maintenance drag.
+      </p>
+      <div class="tablewrap">
+        <table class="panel">
+          <thead>
+            <tr><th style="width:70px">Sev</th><th style="width:34%">Finding</th><th>Evidence</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="sev p0"><i></i>P0</span></td>
+              <td><strong>Recon by throwaway spec</strong> &mdash; <code>playwright test</code> used as a REPL</td>
+              <td class="note">dolphin: 8 <code>zz-*</code> probe specs, 48 runs, 55m CLI; mamas-8851: recon spec mutated 33&times; via heredocs. Median 11 runs/session for 1&ndash;3 final specs.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p0"><i></i>P0</span></td>
+              <td><strong>Model output volume</strong> is the cost and latency driver</td>
+              <td class="note">8.2M output tokens; ~350k median per run; 2.7 edits/spec (max 10); re-derives selectors and auth every run.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p0"><i></i>P0</span></td>
+              <td><strong>Stale installed skill copy</strong> forced triple re-invocation</td>
+              <td class="note">mamas-8940: <q>why did you not follow [the new template]?</q> &rarr; /reload-skills &rarr; 2 re-records. Largely fixed by v1.9.0 symlink install; no run yet records which version it used.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p1"><i></i>P1</span></td>
+              <td><strong>Full-suite &amp; repeat runs</strong> instead of targeted ones</td>
+              <td class="note">dolphin 9 full-suite reruns (80&ndash;232s each); review-pr-311 hit 19 runs. The &ldquo;target the changed spec&rdquo; rule isn&rsquo;t enforced by anything.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p1"><i></i>P1</span></td>
+              <td><strong>Wrong expectation encoded</strong> into a passing test</td>
+              <td class="note">tilapia: <q>the CTA should always show when the config turn off</q>. No traceable link from assertion to the acceptance line it claims to prove.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p1"><i></i>P1</span></td>
+              <td><strong>Proof deliverable drifts</strong> from the template</td>
+              <td class="note">3 sessions corrected the proof page itself (reuse-the-ui, stale template, <code>:0:11</code> timestamps). Template is specified in prose, so each run re-imagines it.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p1"><i></i>P1</span></td>
+              <td><strong>Mid-run gates convert to idle</strong> when the user walks away</td>
+              <td class="note">63 min of in-session gate waits (floor) across 13 sessions; longer waits became &ldquo;idle&rdquo;. Zero-input PR-mode helps; several runs still asked mid-flight.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p2"><i></i>P2</span></td>
+              <td><strong>Context bloat</strong> &mdash; PTG rarely gets a fresh session</td>
+              <td class="note">15/21 runs invoked mid-session; 1.46B cache-read tokens; one /compact mid-generation; 49KB SKILL.md re-injected per invocation.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p2"><i></i>P2</span></td>
+              <td><strong>Environment redundancy</strong></td>
+              <td class="note">Up to 19 dev-server launches in one session; 36 min week-total on server starts and port polling.</td>
+            </tr>
+            <tr>
+              <td><span class="sev p2"><i></i>P2</span></td>
+              <td><strong>Deliverable discoverability</strong></td>
+              <td class="note"><q>where is firmed</q> (beluga); R2 upload skipped &rarr; second invocation just to publish (mamas-8851 #2).</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Keep -->
+    <section>
+      <h2>Already working &mdash; keep it</h2>
+      <hr class="rule">
+      <div class="keep">
+        <div class="keep-item">
+          <span class="keep-tag">Pipeline</span>
+          <div class="keep-body">Shipped preflight &rarr; record &rarr; host-on-r2 flow: 3&ndash;5 min of script time, zero film runaways in all 4 sessions that had it. <span class="ref">de6c47d</span></div>
+        </div>
+        <div class="keep-item">
+          <span class="keep-tag">Auth</span>
+          <div class="keep-body">API-login session bootstrap: no hand-authored cookies anywhere this week. <span class="ref">a0f0bcd</span></div>
+        </div>
+        <div class="keep-item">
+          <span class="keep-tag">Film loop</span>
+          <div class="keep-body">Refilm budget + flake screen: no post-Jul-15 session refilmed more than once. <span class="ref">760e626</span></div>
+        </div>
+        <div class="keep-item">
+          <span class="keep-tag">Install</span>
+          <div class="keep-body">Symlink install kills the stale-copy failure class going forward. <span class="ref">v1.9.0 &middot; 8e73add</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Plan -->
+    <section>
+      <h2>Improvement plan</h2>
+      <hr class="rule">
+      <p class="section-note">
+        Ordered by measured leverage. One theme: move work out of the 62% model bucket into the
+        15% deterministic bucket, and leave a ledger behind so next week&rsquo;s audit is a
+        one-liner instead of transcript mining.
+      </p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">1</div><div class="line"></div></div>
+          <div class="m-body">
+            <h3>Ban the probe-spec REPL &mdash; ship a persistent recon probe</h3>
+            <p>Add <code>probe.mjs</code> to the shipped scripts: one long-lived Playwright context that
+            accepts batched commands (goto / click / fill / snapshot / eval) and prints compact
+            accessibility-tree + network summaries. SKILL.md rule: recon questions go to the probe;
+            a <code>*.spec.ts</code> that isn&rsquo;t a deliverable is forbidden. One browser boot
+            amortized over the whole recon phase instead of 10&ndash;40 boots.</p>
+            <div class="tags"><span class="tag">pw runs/session 11 &rarr; <b>&le;4</b></span><span class="tag">dolphin-class CLI 55m &rarr; <b>~10m</b></span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">2</div><div class="line"></div></div>
+          <div class="m-body">
+            <h3>Recon emits a selector map the codegen must consume</h3>
+            <p>The probe&rsquo;s final output is <code>.ptg/selectors.json</code> &mdash; role/testid
+            selectors, auth state, route list &mdash; reviewed once, diffable, reusable across runs on
+            the same app. Spec generation reads it instead of re-deriving selectors from screenshots.</p>
+            <div class="tags"><span class="tag">spec churn 2.7 &rarr; <b>&le;1.5</b> edits/spec</span><span class="tag">tokens/run 350k &rarr; <b>&le;200k</b></span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">3</div><div class="line"></div></div>
+          <div class="m-body">
+            <h3>Leave a run ledger &mdash; auditable by construction</h3>
+            <p>Each shipped script appends one JSON line to <code>.ptg/ledger.jsonl</code>: phase, skill
+            version + git SHA, duration, exit, artifact paths. <code>preflight.mjs</code> echoes the
+            version banner into the transcript. &ldquo;Audit the skill&rdquo; becomes
+            <code>cat .ptg/ledger.jsonl</code>.</p>
+            <div class="tags"><span class="tag">audit cost hours &rarr; <b>minutes</b></span><span class="tag">version drift <b>detectable per run</b></span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">4</div><div class="line"></div></div>
+          <div class="m-body">
+            <h3>Trace every assertion to the acceptance line it proves</h3>
+            <p>PR-proof mode quotes the exact PR/ticket sentence in a <code>// PROVES:</code> header above
+            each test; the proof page shows it beside the clip. e2e-reviewer gains a check: a PTG spec
+            without a PROVES line is a finding. Makes inverted expectations visible at review.</p>
+            <div class="tags"><span class="tag">wrong-expectation escapes 1/wk &rarr; <b>0</b></span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">5</div><div class="line"></div></div>
+          <div class="m-body">
+            <h3>One gate, front-loaded; everything after runs unattended</h3>
+            <p>Collapse scenario approval, refilm budget, and publish destination into a single question
+            at the start (recommended option first), then run to the finished R2 link with no further
+            questions. Publishing the link is part of the run, not a follow-up.</p>
+            <div class="tags"><span class="tag">gate waits 63m &rarr; <b>&lt;20m</b>/wk</span><span class="tag">runs without a published link 2 &rarr; <b>0</b></span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">6</div><div class="line"></div></div>
+          <div class="m-body">
+            <h3>Token diet rules in SKILL.md</h3>
+            <p>Three lines with measured backing: no narration between tool calls inside the film/fix
+            loop; write the spec once from the selector map &mdash; never scaffold-then-rewrite; re-run
+            only the spec you changed, full suite at most once at the end.</p>
+            <div class="tags"><span class="tag">median tokens/run 350k &rarr; <b>&le;200k</b></span><span class="tag">full-suite runs <b>&le;1</b>/session</span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">7</div><div class="line"></div></div>
+          <div class="m-body">
+            <h3>Ship the proof page as a real template file</h3>
+            <p>Move the watch-page HTML into <code>assets/proof.html</code> with slots;
+            <code>host-on-r2.mjs</code> fills it. Runs stop re-imagining the UI, timestamps get one
+            canonical format, template changes ship by editing one file.</p>
+            <div class="tags"><span class="tag">deliverable-drift complaints 3/wk &rarr; <b>0</b></span></div>
+          </div>
+        </div>
+
+        <div class="milestone">
+          <div class="dot-col"><div class="dot">8</div></div>
+          <div class="m-body">
+            <h3>Recommend a fresh context for PR-proof mode</h3>
+            <p>PR-mode is zero-input by design: when invoked into a session already &gt;100k tokens,
+            offer to run as a background agent / fresh session instead of on top of debug context.
+            Cheaper, faster, and the run&rsquo;s transcript becomes a clean audit unit.</p>
+            <div class="tags"><span class="tag">mid-session invocations 15/21 &rarr; <b>opt-in</b></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Sources: ~/.claude/projects/**/*.jsonl (22 transcripts, Jul 10&ndash;16) &middot; tool_use&harr;tool_result
+      pairing, waits capped at 15m / model gaps at 5m &middot; sessions mix PTG with other skills, so absolute
+      totals are upper bounds for &ldquo;PTG-caused&rdquo;<br>
+      Models: Opus 4.8 &times;19 &middot; Fable 5 &times;3 &mdash; generated Jul 17, 2026 &middot; companion
+      artifact: claude.ai/code/artifact/face1a65
+    </footer>
+
+  </div>
+
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      const dark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('theme', dark ? 'dark' : 'light');
+    });
+  </script>
+</body>
+</html>
