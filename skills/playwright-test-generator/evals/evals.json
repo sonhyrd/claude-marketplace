@@ -227,6 +227,19 @@
         "Recreates the session from code (no committed session file), consistent with the auth rules",
         "Reserves hand-seeding a static literal for a documented static dev flag with no login path"
       ]
+    },
+    {
+      "id": 14,
+      "title": "Chapter offsets anchor when the chapter starts on screen; bunched offsets are a QA-gate rejection",
+      "prompt": "You are authoring the throwaway film spec for a 4-scenario proof. Where in the code does each chapters.json entry get its `t` offset, and what happens at the record.mjs gate if all four offsets end up within a second of each other?",
+      "expected_output": "Each chapter's `t` is captured the moment that chapter starts on screen — inside the chapter helper's test.step callback, before the chapter's first action/assertion, as (Date.now() - t0) / 1000 with t0 taken at test start. Offsets are NEVER collected in a loop after the run: post-hoc stamping bunches every offset at one timestamp (the :0:11 incident) and produces a chapter rail whose buttons all seek to the same frame. record.mjs rejects a chapter list of 2+ entries whose offsets all fall within 3s of each other with exit 5 naming the `bunched chapters` gate — the film must be re-shot with per-chapter anchoring; it never publishes.",
+      "assertions": [
+        "Captures each chapter's t inside the chapter (before its first action/assertion), not after the run",
+        "States record.mjs exits non-zero (exit 5, bunched-chapters gate) when all offsets collapse within the 3s window",
+        "Names the failure mode: a bunched rail seeks every button to the same frame (the :0:11 class)",
+        "False-positive guard: does NOT flag a healthy spread list (e.g. offsets 0/5/10 on a 14s film) as bunched",
+        "Does NOT publish past the gate — the fix is re-anchoring and re-filming, not editing chapters.json"
+      ]
     }
   ]
 }

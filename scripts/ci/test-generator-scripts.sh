@@ -101,6 +101,9 @@ else
   printf '[{"t":0,"name":"one"},{"t":5,"name":"two"},{"t":10,"name":"three"}]' > "$W/fix/ch3.json"
   printf '[{"t":0,"name":"only one"}]' > "$W/fix/ch1.json"
   printf '[{"t":9,"name":"late"},{"t":2,"name":"back"}]' > "$W/fix/chbad.json"
+  # The :0:11 incident class: non-decreasing, right count — but every offset within a second, so the
+  # chapter rail seeks to one frame. Must trip the bunched-chapters gate, not the floor.
+  printf '[{"t":11,"name":"one"},{"t":11,"name":"two"},{"t":11.4,"name":"three"}]' > "$W/fix/chbunched.json"
 
   cat > "$W/bin/npx" <<'SHIM'
 #!/usr/bin/env bash
@@ -173,6 +176,11 @@ SHIM
   film 5 "STOP: chapters malformed (timestamps go backwards)" \
     FAKE_WEBM="$W/fix/long.webm" FAKE_CH="$W/fix/chbad.json" SCENARIOS=1
   stderr_has "  names the chapters gate" "film-QA gate (chapters)"
+
+  # The healthy twin is the happy path above: ch3.json spans 0..10s over the same 14s film and exits 0.
+  film 5 "STOP: bunched chapters (3 offsets collapse at ~11s — the :0:11 class)" \
+    FAKE_WEBM="$W/fix/long.webm" FAKE_CH="$W/fix/chbunched.json" SCENARIOS=3
+  stderr_has "  names the bunched-chapters gate" "film-QA gate (bunched chapters)"
 
   film 3 "STOP: the spec failed — no watch link" FAKE_WEBM="$W/fix/long.webm" FAKE_RC=1
   film 3 "STOP: passed but produced no video" FAKE_RC=0

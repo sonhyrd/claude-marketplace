@@ -411,7 +411,7 @@ The film is a **second run** (`record.mjs` re-executes the film spec to capture 
 - **Refilm budget = 1 per failing chapter:** first film failure → ONE diagnose+fix+refilm. The same chapter failing again → drop the chapter, demote its AC as above, film the rest (pass the reduced `SCENARIOS` count to `record.mjs`). Never a third cycle.
 - **Committed coverage never shrinks to make a film green.** Deleting a scenario from the committed spec is justified only by committed-run evidence (Step 7 flake handling) — never by film-run behavior.
 
-Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sidecar of `{name, t}` offsets; `record.mjs` turns it into the watch page's clickable chapter list and enforces the chapter floor from it.
+Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sidecar of `{name, t}` offsets; `record.mjs` turns it into the watch page's clickable chapter list and enforces the chapter floor from it. **Anchor each chapter's `t` the moment the chapter starts on screen** — captured inside the chapter, before its first action/assertion, never collected in a loop after the run: post-hoc stamps bunch every offset at one timestamp (the `:0:11` incident — a rail of N buttons that all seek to the same frame), and `record.mjs` rejects a chapter list whose offsets all fall within 3s of each other (exit 5, `bunched chapters`).
 
 ```typescript
 // THROWAWAY film spec (not committed): video + chapters + payoff hold. The committed test asserts the same
@@ -422,10 +422,11 @@ test.use({ video: { mode: 'on', size: { width: 1600, height: 900 } }, viewport: 
 test('delete removes the legal notice', async ({ page }) => {
   const t0 = Date.now();
   const chapters: { name: string; t: number }[] = [];
-  const chapter = (name: string, fn: () => Promise<void>) => {
-    chapters.push({ name, t: (Date.now() - t0) / 1000 });   // offset ≈ video timestamp (recording starts at test start)
-    return test.step(name, fn);
-  };
+  const chapter = (name: string, fn: () => Promise<void>) =>
+    test.step(name, async () => {
+      chapters.push({ name, t: (Date.now() - t0) / 1000 }); // anchored as THIS chapter starts on screen (offset ≈ video timestamp) — never stamped after the run
+      await fn();
+    });
 
   await chapter('item present', async () => { await expect(row).toBeVisible(); });
   await chapter('click delete',  async () => { await row.getByRole('button', { name: 'Delete' }).click(); });
@@ -447,7 +448,8 @@ test('delete removes the legal notice', async ({ page }) => {
 # passes clean on attempt 1 or it is a re-shoot; retries multiply a failing film's cost and leave
 # ambiguous per-attempt videos), finds the per-spec webm, enforces the film-QA gate — contact sheet
 # (30 frames spanning the whole film, one image), duration floor (4s + 3s x SCENARIOS), chapter floor
-# (>= SCENARIOS titled chapters) — and assembles a self-contained watch.html: the film painted at its full
+# (>= SCENARIOS titled chapters), bunched-offsets rejection (a chapter list whose offsets all collapse
+# within 3s of each other is unseekable — the :0:11 class) — and assembles a self-contained watch.html: the film painted at its full
 # 1600x900 (a text-column-width page downscales it ~2x and the app's own UI text goes unreadable), a meta
 # line (PR link + runtime + chapter count + spec), and a clickable chapter rail, all inline. PR_URL fills
 # that link (default: the branch's PR via `gh pr view`). PROOF_SHA (the commit under proof; PR-mode: the
@@ -552,7 +554,7 @@ All paths are in this directory.
 - Playwright best practices: `best-practices.md`
 - Code generation rules: `code-rules.md`
 - Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` probes wrangler/Chrome/ffmpeg): `scripts/preflight.mjs`
-- Step-8 watch-link film (per-spec video + PROOF_SHA provenance guard + film-QA gate: contact sheet, duration/chapter floors, `--retries=0` forced): `scripts/record.mjs`
+- Step-8 watch-link film (per-spec video + PROOF_SHA provenance guard + film-QA gate: contact sheet, duration/chapter floors, bunched-offsets rejection, `--retries=0` forced): `scripts/record.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`
 - Contributing a generated or fixed spec to a third-party repo: re-read that repo's `CONTRIBUTING.md` and PR/issue templates IN FULL first, and honor each gate before opening a PR — issue-first policy and any required PR-issue link, CLA/DCO, commit-message style and signing, target branch, any AI-disclosure or AI-PR policy. A scanner finding is a candidate, not a verdict — verify it is a real silent-pass before submitting.
 - Conventions & seed template (Step 5b): `conventions-template.md`
