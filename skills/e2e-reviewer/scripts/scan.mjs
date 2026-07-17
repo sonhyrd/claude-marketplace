@@ -28,6 +28,18 @@ const out = (s) => process.stdout.write(s);
 const err = (s) => process.stderr.write(s);
 const plural = (n) => (String(n) === '1' ? '' : 's');
 
+// Run ledger (issue #5) — the shared helper ships with playwright-test-generator, a sibling in
+// every bundle install. Best-effort across the skill boundary: a standalone copy of this scanner
+// without that sibling still scans, it just leaves no PTG_RUN record. Telemetry never blocks a scan.
+try {
+  const { ptgRun } = await import(
+    new URL('../../playwright-test-generator/scripts/ptg-run.mjs', import.meta.url)
+  );
+  ptgRun(import.meta.url, 'scan');
+} catch {
+  /* sibling skill absent */
+}
+
 function isFile(p) {
   try {
     return fs.statSync(p).isFile();

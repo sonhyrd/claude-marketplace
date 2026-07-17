@@ -19,13 +19,17 @@
 //     listed in $SCAN (the committed spec + film script). Seed auth out-of-band so this never
 //     fires; the gate is the backstop, not the plan.
 //
-// Prints the public URL on stdout (wrangler chatter goes to stderr) so callers can do:
-//   URL=$(node host-on-r2.mjs demo.webm myproj)
+// Prints the public URL as the FIRST stdout line (wrangler chatter goes to stderr; the trailing
+// PTG_RUN ledger line follows it) so callers can do:
+//   URL=$(node host-on-r2.mjs demo.webm myproj | head -n1)
 // Needs wrangler authenticated (`npx wrangler whoami`). Exits non-zero if a gate trips or the
 // upload fails.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ptgRun } from './ptg-run.mjs';
+
+ptgRun(import.meta.url, 'publish'); // run ledger (issue #5) — registered before the gates
 
 const BUCKET = 'paul-rfp-public'; //                                  this account's public R2 bucket
 const PUB = 'https://pub-0e54d86b28da4e8f933f8eacd1a84c6c.r2.dev'; // its r2.dev public domain
@@ -104,8 +108,9 @@ const CONTENT_TYPES = {
 // through to octet-stream. Contract-frozen means keeping that, warts and all.
 const contentType = CONTENT_TYPES[path.extname(FILE)] ?? 'application/octet-stream';
 
-// stdio fd 2 for the child's STDOUT is deliberate, not a typo: callers do `URL=$(host-on-r2 …)`, so
-// the ONLY thing allowed on our stdout is the URL. Every byte wrangler prints goes to stderr.
+// stdio fd 2 for the child's STDOUT is deliberate, not a typo: callers do
+// `URL=$(host-on-r2 … | head -n1)`, so our stdout carries ONLY the URL (line 1) and the PTG_RUN
+// ledger line. Every byte wrangler prints goes to stderr.
 const r = spawnSync(
   'npx',
   ['-y', 'wrangler', 'r2', 'object', 'put', `${BUCKET}/${KEY}`,

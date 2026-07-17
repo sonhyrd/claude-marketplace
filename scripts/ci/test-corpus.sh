@@ -19,7 +19,7 @@ UPDATE=0
 
 fail() { echo "test-corpus: $1" >&2; exit 1; }
 
-# Two things are normalized away, and only two.
+# Three things are normalized away, and only three.
 #
 # 1. The Tier-1/Tier-2 PREAMBLE is dropped: everything before the Tier-3 header. Those lines report
 #    which engines the HOST has (npx present? ast-grep on PATH?), so pinning them would make this
@@ -33,9 +33,14 @@ fail() { echo "test-corpus: $1" >&2; exit 1; }
 #    inside one check's block is not stable run to run (observed: ~1 run in 45). The SET of hits is
 #    the contract, not the order rg happened to emit them in. Sort each run of indented lines.
 #
+# 3. The trailing PTG_RUN run-ledger line (issue #5) is dropped: its duration_ms varies every run,
+#    and the run-ledger smoke (test-run-ledger.sh) is where that contract is asserted — pinning it
+#    here would say nothing about the patterns.
+#
 # Everything else — block order, headers, hit counts, the Summary line — is compared verbatim.
 normalize() {
   awk '
+    /^PTG_RUN / { next }
     function flush(  i, j, t) {
       for (i = 1; i < n; i++) {
         t = buf[i]

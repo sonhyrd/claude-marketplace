@@ -22,7 +22,7 @@ The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.
 [ ] bash scripts/ci/pre-push-security.sh # secrets and credential leak guard
 ```
 
-`ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity, security, evals, public skill surface, framework scope, link integrity, docs orphan check, language, **scanner pattern corpus**, e2e smell scan). If you change any check, update this script first.
+`ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity, security, evals, public skill surface, framework scope, link integrity, docs orphan check, language, **scanner pattern corpus**, **run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
 
@@ -95,6 +95,7 @@ bash scripts/ci/ci-local.sh
 bash scripts/ci/review.sh           # parity, language, links, framework scope, orphans
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
 bash scripts/ci/test-corpus.sh      # scanner golden: 25/25 checks fire, suppression holds
+bash scripts/ci/test-run-ledger.sh  # PTG_RUN run-ledger contract on all four shipped scripts
 bash scripts/validate-evals.sh      # eval JSON schema
 bash scripts/ci/pre-push-security.sh
 bash scripts/ci/codex-smoke.sh      # manual Codex cross-host smoke (skips if codex absent)

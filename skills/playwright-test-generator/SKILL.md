@@ -485,13 +485,14 @@ PROJECT=$(basename "$(git rev-parse --show-toplevel)")
 SHA=$(git rev-parse --short HEAD)
 KEY="proof/<scenario>-$SHA.html"
 
-# host-on-r2.mjs <file> <project> [keyname] — prints the public URL on stdout. Set BEARER (auth token in
+# host-on-r2.mjs <file> <project> [keyname] — prints the public URL as stdout line 1 (the PTG_RUN
+# ledger line follows, hence the `head -n1`). Set BEARER (auth token in
 # use) + SCAN so the token gate protects the PUBLIC upload — a no-op when BEARER is unset. Pass the raw
 # $WEBM in SCAN so the gate still greps the video bytes even though the uploaded file is the html (which
 # base64-wraps them).
 #   token gate (exit 6): BEARER in file/SCAN · empty-file (exit 3): <1KB · degenerate-key (exit 2): bad key
 URL=$(BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file> $WEBM" \
-  node <skill-base>/scripts/host-on-r2.mjs "$WATCH" "$PROJECT" "$KEY")
+  node <skill-base>/scripts/host-on-r2.mjs "$WATCH" "$PROJECT" "$KEY" | head -n1)
 ```
 
 If `host-on-r2.mjs` STOPs on a gate, report **which** gate fired (its exit code) and print **no** link — a leaked-token or broken webm must never ship as the watch link. (The broken/empty-webm case is caught earlier: `record.mjs` only emits a `WATCH` page around a passing, non-empty video.)

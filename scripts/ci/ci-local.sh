@@ -20,6 +20,10 @@ if [ "${E2E_SKILLS_SKIP_CI_LOCAL:-}" = "1" ]; then
   exit 0
 fi
 
+# CI fixture invocations of the shipped scripts must not pollute the operator's real run ledger
+# (~/.ptg/ledger.jsonl). /dev/null is a silent sink; test-run-ledger.sh overrides this per case.
+export PTG_LEDGER=/dev/null
+
 step() { [ "$QUIET" = "1" ] || echo "-- $* --"; }
 fail() { echo "ci-local: $1 failed" >&2; exit 1; }
 
@@ -76,6 +80,18 @@ if [ "${E2E_SKILLS_SKIP_GENERATOR_TESTS:-}" != "1" ]; then
     bash scripts/ci/test-generator-scripts.sh >/dev/null 2>&1 || fail "test-generator-scripts.sh"
   else
     bash scripts/ci/test-generator-scripts.sh || fail "test-generator-scripts.sh"
+  fi
+fi
+
+if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
+  step "Run-ledger smoke (PTG_RUN contract)"
+  # Issue #5: every shipped-script invocation leaves one PTG_RUN {json} record — stdout line plus
+  # home-ledger append (env-overridable, write-failure tolerated) — and preflight banners its
+  # skill version first.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-run-ledger.sh >/dev/null 2>&1 || fail "test-run-ledger.sh"
+  else
+    bash scripts/ci/test-run-ledger.sh || fail "test-run-ledger.sh"
   fi
 fi
 

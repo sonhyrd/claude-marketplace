@@ -22,9 +22,16 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ptgRun } from './ptg-run.mjs';
 
 const out = (s) => process.stdout.write(s);
 const warn = (s) => process.stderr.write(s);
+
+// Run ledger + version banner (issue #5). The banner is the FIRST output line, before any
+// validation, so every run's transcript records what executed — stale-install drift is visible at
+// a glance instead of discovered mid-run.
+const SKILL = ptgRun(import.meta.url, 'readiness');
+out(`preflight: ${SKILL.skill} v${SKILL.version} (${SKILL.commit})\n`);
 
 const BASE_URL = process.env.BASE_URL;
 if (!BASE_URL) {

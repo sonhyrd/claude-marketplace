@@ -46,6 +46,9 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ptgRun } from './ptg-run.mjs';
+
+ptgRun(import.meta.url, 'film'); // run ledger (issue #5) — registered before validation
 
 const out = (s) => process.stdout.write(s);
 const err = (s) => process.stderr.write(s);
