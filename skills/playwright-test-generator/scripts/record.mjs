@@ -40,8 +40,8 @@
 //
 // Exit 0 ONLY when the spec PASSED, a video exists, and the film-QA gate held. Run from the app root.
 //   exit 3 = spec failed / no video      exit 4 = provenance STOP
-//   exit 5 = film-QA gate (contact sheet / duration floor / chapter floor) — fix the film, re-run;
-//            NEVER publish past a 5.
+//   exit 5 = film-QA gate (contact sheet / duration floor / chapter floor / bunched chapters) —
+//            fix the film, re-run; NEVER publish past a 5.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -246,8 +246,9 @@ if (sheet.status !== 0 || !nonEmpty(CONTACT)) {
 // Chapters: count + strictly non-decreasing timestamps. A bunched or out-of-order chapter list is
 // unseekable, which defeats the point of having chapters at all. Returns null for "malformed" —
 // unparseable, not an array, or timestamps that go backwards — so one gate covers all three.
+// Also reports the offset span (last - first) for the bunched-offsets gate below.
 function readChapters(file) {
-  if (!nonEmpty(file)) return { count: 0, raw: '[]' };
+  if (!nonEmpty(file)) return { count: 0, raw: '[]', span: 0 };
   const raw = fs.readFileSync(file, 'utf8').replace(/\n+$/, ''); // as `$(cat …)` would give it
   let parsed;
   try {
@@ -259,7 +260,8 @@ function readChapters(file) {
   for (let i = 1; i < parsed.length; i++) {
     if (parsed[i].t < parsed[i - 1].t) return null;
   }
-  return { count: parsed.length, raw };
+  const span = parsed.length ? parsed[parsed.length - 1].t - parsed[0].t : 0;
+  return { count: parsed.length, raw, span };
 }
 
 const chapters = readChapters(CH);
@@ -270,6 +272,19 @@ if (chapters === null) {
   );
 }
 const CH_COUNT = chapters.count;
+
+// Bunched offsets (the ":0:11" incident class): every chapter stamped at ~the same offset makes the
+// rail N buttons that all seek to one frame. Window = 3s — one payoff hold; a real multi-chapter
+// film spends >=3s in its final chapter alone, so a healthy list always spans more than one hold.
+// Offsets bunching means the spec collected timestamps after the run instead of anchoring each
+// chapter when it starts on screen (SKILL Step 8 film-spec contract).
+if (CH_COUNT >= 2 && chapters.span < 3) {
+  stop(
+    'bunched chapters',
+    `${CH_COUNT} chapters all within ${chapters.span.toFixed(1)}s of each other — unseekable. ` +
+      "Anchor each chapter's t when the chapter starts on screen (SKILL Step 8), re-film.",
+  );
+}
 
 // Floors. Absolute: a proof shorter than 4s shows nothing. With SCENARIOS: 4s + 3s per approved
 // scenario, and one titled chapter per scenario — a film that covers fewer scenarios than the spec
