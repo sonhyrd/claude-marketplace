@@ -674,6 +674,8 @@
         Ordered by measured leverage. One theme: move work out of the 62% model bucket into the
         15% deterministic bucket, and leave a ledger behind so next week&rsquo;s audit is a
         one-liner instead of transcript mining.
+        <em>Aligned Jul 17 via grill session against SKILL.md v1.9.0 &mdash; each step below reflects
+        the agreed decision, not the audit&rsquo;s first draft.</em>
       </p>
 
       <div class="milestones">
@@ -693,11 +695,13 @@
         <div class="milestone">
           <div class="dot-col"><div class="dot">2</div><div class="line"></div></div>
           <div class="m-body">
-            <h3>Recon emits a selector map the codegen must consume</h3>
-            <p>The probe&rsquo;s final output is <code>.ptg/selectors.json</code> &mdash; role/testid
-            selectors, auth state, route list &mdash; reviewed once, diffable, reusable across runs on
-            the same app. Spec generation reads it instead of re-deriving selectors from screenshots.</p>
-            <div class="tags"><span class="tag">spec churn 2.7 &rarr; <b>&le;1.5</b> edits/spec</span><span class="tag">tokens/run 350k &rarr; <b>&le;200k</b></span></div>
+            <h3>POM inventory in Step 1 &mdash; the POMs are the selector map</h3>
+            <p><em>Aligned: no new artifact.</em> Step 1&rsquo;s project profile gains a required
+            <strong>POM inventory</strong> line &mdash; existing Page Objects mapped to routes &mdash;
+            and Step 5 must extend a matching existing POM instead of writing a new one. Cross-run
+            selector memory stays where it already lives: checked-in, typed POMs plus the Step 5b
+            conventions doc + seed spec.</p>
+            <div class="tags"><span class="tag">spec churn 2.7 &rarr; <b>&le;1.5</b> edits/spec</span><span class="tag">duplicate POMs per route &rarr; <b>0</b></span></div>
           </div>
         </div>
 
@@ -705,10 +709,12 @@
           <div class="dot-col"><div class="dot">3</div><div class="line"></div></div>
           <div class="m-body">
             <h3>Leave a run ledger &mdash; auditable by construction</h3>
-            <p>Each shipped script appends one JSON line to <code>.ptg/ledger.jsonl</code>: phase, skill
-            version + git SHA, duration, exit, artifact paths. <code>preflight.mjs</code> echoes the
-            version banner into the transcript. &ldquo;Audit the skill&rdquo; becomes
-            <code>cat .ptg/ledger.jsonl</code>.</p>
+            <p><em>Aligned: no files in target repos.</em> Each shipped script prints one
+            <code>PTG_RUN {json}</code> line to stdout (phase, skill version + SHA, duration, exit) &mdash;
+            it lands in the session transcript for free &mdash; and appends the same line to
+            <code>~/.ptg/ledger.jsonl</code>. <code>preflight.mjs</code> echoes the version banner.
+            &ldquo;Audit the skill&rdquo; becomes <code>cat ~/.ptg/ledger.jsonl</code>; zero target-repo
+            pollution, no hygiene-sweep changes.</p>
             <div class="tags"><span class="tag">audit cost hours &rarr; <b>minutes</b></span><span class="tag">version drift <b>detectable per run</b></span></div>
           </div>
         </div>
@@ -717,9 +723,11 @@
           <div class="dot-col"><div class="dot">4</div><div class="line"></div></div>
           <div class="m-body">
             <h3>Trace every assertion to the acceptance line it proves</h3>
-            <p>PR-proof mode quotes the exact PR/ticket sentence in a <code>// PROVES:</code> header above
-            each test; the proof page shows it beside the clip. e2e-reviewer gains a check: a PTG spec
-            without a PROVES line is a finding. Makes inverted expectations visible at review.</p>
+            <p><em>Aligned: enforced inside PTG, not e2e-reviewer.</em> Every generated test carries a
+            <code>// PROVES: &lt;AC quoted verbatim from the Step 2 table&gt;</code> header; Step 6&rsquo;s
+            YAGNI audit gains the rule &mdash; missing or paraphrased = fix before Step 7. No new
+            reviewer pattern ID, no parity ceremony; the check scopes to exactly where the failure
+            class lives (PTG output). Promote to a reviewer pattern later only if it earns it.</p>
             <div class="tags"><span class="tag">wrong-expectation escapes 1/wk &rarr; <b>0</b></span></div>
           </div>
         </div>
@@ -727,11 +735,13 @@
         <div class="milestone">
           <div class="dot-col"><div class="dot">5</div><div class="line"></div></div>
           <div class="m-body">
-            <h3>One gate, front-loaded; everything after runs unattended</h3>
-            <p>Collapse scenario approval, refilm budget, and publish destination into a single question
-            at the start (recommended option first), then run to the finished R2 link with no further
-            questions. Publishing the link is part of the run, not a follow-up.</p>
-            <div class="tags"><span class="tag">gate waits 63m &rarr; <b>&lt;20m</b>/wk</span><span class="tag">runs without a published link 2 &rarr; <b>0</b></span></div>
+            <h3>Target mode publishes by default</h3>
+            <p><em>Aligned: PR-mode already has zero gates (81a0c7e) &mdash; the audit&rsquo;s
+            &ldquo;collapse the gates&rdquo; framing was stale.</em> The real gap: both no-link incidents
+            were target-mode runs, where Step 8 is opt-in. Fix: a target-mode run that passes Step 7
+            with <code>HOSTING_READY=yes</code> films + publishes like PR-mode, ending at a watch link.
+            Coverage-gap mode keeps its approval gate and stays film-opt-in.</p>
+            <div class="tags"><span class="tag">runs without a published link 2 &rarr; <b>0</b></span><span class="tag">re-invocations just to publish &rarr; <b>0</b></span></div>
           </div>
         </div>
 
@@ -739,9 +749,12 @@
           <div class="dot-col"><div class="dot">6</div><div class="line"></div></div>
           <div class="m-body">
             <h3>Token diet rules in SKILL.md</h3>
-            <p>Three lines with measured backing: no narration between tool calls inside the film/fix
-            loop; write the spec once from the selector map &mdash; never scaffold-then-rewrite; re-run
-            only the spec you changed, full suite at most once at the end.</p>
+            <p><em>Aligned: two of three rules already exist (b08edf3&rsquo;s rerun-only-what-failed,
+            full-suite-once) yet tilapia still ran 17&times; on the current skill &mdash; so add the
+            missing line and make the ledger the enforcement.</em> New: no narration between tool calls
+            inside the film/fix loop; write the spec once from the POM inventory &mdash; never
+            scaffold-then-rewrite. The <code>PTG_RUN</code> ledger makes runs-per-session a tracked
+            metric instead of an honor rule.</p>
             <div class="tags"><span class="tag">median tokens/run 350k &rarr; <b>&le;200k</b></span><span class="tag">full-suite runs <b>&le;1</b>/session</span></div>
           </div>
         </div>
@@ -749,22 +762,27 @@
         <div class="milestone">
           <div class="dot-col"><div class="dot">7</div><div class="line"></div></div>
           <div class="m-body">
-            <h3>Ship the proof page as a real template file</h3>
-            <p>Move the watch-page HTML into <code>assets/proof.html</code> with slots;
-            <code>host-on-r2.mjs</code> fills it. Runs stop re-imagining the UI, timestamps get one
-            canonical format, template changes ship by editing one file.</p>
-            <div class="tags"><span class="tag">deliverable-drift complaints 3/wk &rarr; <b>0</b></span></div>
+            <h3>Fix the chapter-offset bug in the film contract</h3>
+            <p><em>Aligned: shrunk from &ldquo;ship a template file&rdquo; &mdash; the watch page already
+            IS a template inside <code>record.mjs</code>, and the drift complaints trace to the stale
+            skill copy (fixed, v1.9.0) plus one real bug: the <code>:0:11</code> incident &mdash;
+            chapter timestamps bunched at the same offset.</em> Fix the chapters.json offset capture in
+            the film-spec contract (offsets must be taken when the chapter <em>starts on screen</em>),
+            and have <code>record.mjs</code> reject a chapter list whose offsets collapse within a few
+            seconds of each other.</p>
+            <div class="tags"><span class="tag">bunched-chapter films &rarr; <b>rejected at QA gate</b></span></div>
           </div>
         </div>
 
         <div class="milestone">
           <div class="dot-col"><div class="dot">8</div></div>
           <div class="m-body">
-            <h3>Recommend a fresh context for PR-proof mode</h3>
-            <p>PR-mode is zero-input by design: when invoked into a session already &gt;100k tokens,
-            offer to run as a background agent / fresh session instead of on top of debug context.
-            Cheaper, faster, and the run&rsquo;s transcript becomes a clean audit unit.</p>
-            <div class="tags"><span class="tag">mid-session invocations 15/21 &rarr; <b>opt-in</b></span></div>
+            <h3>Recommend a fresh context for PR-proof mode &mdash; never auto-background</h3>
+            <p><em>Aligned: recommend, don&rsquo;t auto.</em> Step 0 gains: when invoked into an already
+            heavy session, say so and offer a fresh session / background agent as the faster, cheaper
+            path &mdash; then continue inline if the user doesn&rsquo;t take it. Auto-backgrounding was
+            rejected: it silently kills the plan-post-interrupt contract and unsupervises film QA.</p>
+            <div class="tags"><span class="tag">mid-session invocations 15/21 &rarr; <b>user-informed opt-in</b></span></div>
           </div>
         </div>
       </div>
