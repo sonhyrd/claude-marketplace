@@ -34,7 +34,7 @@ Step 5: Code Generation        (see code-rules.md — hermetic by default)
 Step 5b: Conventions & Seed    (first run on a project — see conventions-template.md)
 Step 6: YAGNI Audit + e2e-reviewer
 Step 7: TS Compile + Test Run + Hermetic Audit (playwright-debugger on failure)
-Step 8: Film + QA + Publish    (PR-mode; opt-in elsewhere — record.mjs floors, contact-sheet check, watch.html)
+Step 8: Film + QA + Publish    (PR-mode + target/HOSTING_READY=yes by default; coverage-gap opt-in — record.mjs floors, contact-sheet check, watch.html)
 Step 9: Land the Proof         (PR-mode tail: commit → push → PR comment → completion report)
 ```
 
@@ -70,6 +70,8 @@ Pick the mode from `$ARGUMENT` before anything else. It may name a **change to p
 
 The mode steers **Step 2** (what to derive), **Step 4** (notify-and-continue vs approval gate), and the tail (**Steps 8–9** are the PR-mode deliverable); Steps 3 and 5–7 are identical in every mode. `gh` unavailable → PR-mode falls back to plain `git` for the diff and asks the user to paste the PR/ticket description; never stop the run over a missing `gh`.
 
+**Heavy session? Recommend a clean context first.** Invoked deep into an unrelated, long-running session (a large context already spent on other work), open by recommending the user start a fresh session or dispatch this run to a background agent — this pipeline is long and does better with room. Continue inline if they decline or don't answer; never self-background or spawn an agent on your own.
+
 ---
 
 ## Step 1: Environment Detection
@@ -81,7 +83,7 @@ Build a project profile before doing anything else.
 | Playwright config | `playwright.config.ts`, `playwright.config.js` |
 | Base URL | `baseURL` in playwright config → fallback: `PLAYWRIGHT_BASE_URL` env var → if neither exists, ask user |
 | Test directory | config `testDir` → fallback scan: `e2e/`, `tests/`, `playwright/` |
-| POM pattern | Check for `models/`, `pages/`, `page-objects/` directories |
+| POM pattern + inventory | Check for `models/`, `pages/`, `page-objects/` directories; for each Page Object found, record the route(s) it already covers → `pomInventory` |
 | Existing specs | All `*.spec.ts` / `*.test.ts` files in test dir |
 | Conventions doc | E2E/testing section in `AGENTS.md`, `CLAUDE.md`, or `CONTRIBUTING.md`; a designated seed spec (`seed.spec.ts` or a spec referenced as the example to copy) |
 | Test runner | `@playwright/test` in `package.json` deps, or `node -e "require.resolve('@playwright/test')"` resolves. If neither, the project is **greenfield** — Step 5b bootstraps the runner. |
@@ -91,6 +93,7 @@ Build a project profile before doing anything else.
 baseURL: <detected or user-provided>
 testDir: <detected path>
 hasPOM: true | false
+pomInventory: [<PageObjectClass → route(s) it covers>]   # existing POMs and the routes they already cover; [] when hasPOM=false
 existingSpecs: [list of file paths]
 hasConventionsDoc: true | false
 hasTestRunner: true | false   # false → greenfield; Step 5b installs Playwright before Step 7
@@ -299,6 +302,10 @@ Follow `code-rules.md` in this directory: structure detection (always POM), sele
 
 **Always POM — no exceptions:** every generated spec uses a Page Object. Scaffold one even when the repo's existing specs are all flat — do **not** match the flat siblings, and never rewrite them; add the POM for the new coverage only (`code-rules.md` › Structure Detection). There is no `structure: flat` opt-out. A Nuxt/Next `pages/` route folder is not a POM dir.
 
+**Extend, don't duplicate — match the Step 1 `pomInventory` by route.** The target route already has a Page Object in `pomInventory` → extend that class (add the new locators/methods there), never scaffold a second POM for the same route. A duplicate POM for a covered route ships only with a stated justification line in the Step 4 Assumptions block (e.g. the existing POM is a different app area that merely shares the path). An uncovered route with no POM in the inventory still gets a fresh one.
+
+**Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion it exercises word-for-word — Step 6 audits it before Step 7.
+
 ---
 
 ## Step 5b: Conventions & Seed Artifacts (first run on a project)
@@ -338,6 +345,10 @@ A conventions doc plus a designated seed spec is what future generation runs (Cl
 | unusedLocator  | login-page.ts  | (none)           | DELETED |
 ```
 
+### PROVES-header audit (before Step 7)
+
+Every generated `test(...)` block opens with a `// PROVES: <acceptance criterion, verbatim>` comment quoting the AC it exercises word-for-word — from the Step 2 AC table (PR-mode) or the approved scenario's **Then** (coverage-gap / target). A test with no header, or one that paraphrases instead of quoting, blocks Step 7: add the header, then proceed. This is the human-readable link from spec to acceptance contract. **Exempt:** POM files and the Step 8 throwaway film spec carry no ACs and need no header.
+
 ### e2e-reviewer (automatic quality gate)
 
 Invoke the `e2e-reviewer` skill using the `Skill` tool, targeting the generated spec and POM files.
@@ -375,6 +386,8 @@ Per attempt, diagnose the actual failure and apply the matching fix (the order i
 
 **A type-only fix doesn't warrant its own e2e run** — it is gated by `tsc --noEmit`; batch it into the next behavioral rerun. The final full-spec gate still runs on the committed SHA.
 
+**Token diet (the fix and film loops).** Inside the ≤3-attempt fix loop and the Step 8 film loop, run tool calls back-to-back — no prose narration between them; the diagnosis lands in the fix, not a play-by-play. And write the spec **once** from the Step 1 `pomInventory` and the plan's Locator Mapping Table — never scaffold a throwaway skeleton and rewrite it. This trims the loop, not the audit trail: the Step 4 plan post, its Assumptions block, and the Step 9 report are still written in full.
+
 After 3 failed attempts: **invoke the `playwright-debugger` skill** using the `Skill` tool, pointed at the `playwright-report/` produced above (HTML report + `--trace on-first-retry` traces). Do not attempt a 4th fix.
 
 A **flaky verdict** (passed only on retry) is not clean — diagnose it once like a failure. If the nondeterminism is app-inherent (the app races its own state — e.g. boot code that rewrites locale/session after mount), the scenario cannot be reliably proven: remove it on this committed-run evidence and report its AC as `unproven — gated: nondeterministic (<cause>)`. A flaky scenario that stays in the spec is barred from the film by Step 8's flake screen.
@@ -396,13 +409,13 @@ Proving the spec *guards* the change (not merely that it passes) is sanctioned v
 4. **Revert the mutation exactly** (`git checkout -- <file>`).
 5. **Verify the tree is byte-identical** to the recording: `git status --porcelain | diff - /tmp/pre.status && git diff | diff - /tmp/pre.patch`. Any residue = **HARD STOP**: report it immediately; never continue to Step 8/9 on a polluted tree.
 
-**On full pass:** PR-mode → Step 8, then Step 9. Other modes → Step 9's completion report directly (Step 8 only on request). The completion report and its required lines live in Step 9 — there is no "Complete" to emit here.
+**On full pass:** PR-mode → Step 8, then Step 9. Target mode with `HOSTING_READY=yes` → Step 8 (film + publish by default), then Step 9. Coverage-gap mode (and target mode with `HOSTING_READY=no`) → Step 9's completion report directly (Step 8 only on request). The completion report and its required lines live in Step 9 — there is no "Complete" to emit here.
 
 ---
 
 ## Step 8: Film + QA + Publish (PR-mode; opt-in elsewhere)
 
-**When it runs:** PR-mode, always — this step produces the required Step 9 `Watch link` line. **On request** in any mode ("host a watch link", "give me a video proof"); coverage/target mode stays opt-in — skip unless asked.
+**When it runs:** PR-mode, always — this step produces the required Step 9 `Watch link` line. **Target mode** films + publishes by default when Step 7 passed **and** the Step 3 hosting probe reported `HOSTING_READY=yes` — the run ends at a watch link like a PR-mode run; `HOSTING_READY=no` skips gracefully, carrying the probe output into the Step 9 `Watch link: skipped — <gate>` line (never fail the run over it). **Coverage-gap mode** stays opt-in — film only on request ("host a watch link", "give me a video proof").
 
 **Prerequisites — if one is genuinely unmet, skip gracefully:** capture the failing probe's output (Step 3's `PROBE_HOSTING=1` run already printed it), finish the run, and let Step 9's `Watch link: skipped — <gate>` line carry that output. Never fail generation over a missing watch link.
 
@@ -563,7 +576,7 @@ PR comment: <url>
 - `Film QA:` values come from the Step 8 contact-sheet screening — read the image, then fill the line.
 - `Committed / Pushed / PR comment` have **no skip form**: if the tail cannot complete (push rejected, `gh` unauthenticated), report the blocking error and the exact failing command output *instead of* a Complete report.
 
-In coverage/target mode the report is the first four lines (`Generated` through `Tests`), plus `Watch link` only if one was requested.
+In coverage-gap mode (and target mode with `HOSTING_READY=no`) the report is the first four lines (`Generated` through `Tests`), plus `Watch link` only if a film was requested or produced. Target mode that filmed + published under `HOSTING_READY=yes` includes the `Watch link` and `Film QA` lines like a PR-mode run.
 
 ---
 

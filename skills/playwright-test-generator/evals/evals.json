@@ -254,6 +254,62 @@
         "False-positive guard: does NOT flag Step 8's film spec as a forbidden probe — it remains the pipeline's one sanctioned throwaway spec",
         "False-positive guard: keeps the heal-loop bounds unchanged (rerun only the failing test, full suite once) — the probe replaces recon probes, not the Step 7 validator"
       ]
+    },
+    {
+      "id": 16,
+      "title": "POM inventory + extend-existing-POM on route match (duplicate needs stated justification)",
+      "prompt": "You are covering the /checkout route. Step 1's project profile recorded pomInventory: [CheckoutPage → /checkout, /checkout/confirmation] — an existing CheckoutPage in tests/pages/checkout-page.ts already covers the checkout route, but currently only its confirmation flow has a spec. You now need locators for the checkout form's coupon field and submit button. Separately, you are also asked to cover a brand-new /profile route that has no Page Object anywhere. Describe how you structure the POM work for each, per Step 1's pomInventory and Step 5.",
+      "expected_output": "For /checkout: because pomInventory already maps CheckoutPage to /checkout, EXTEND the existing CheckoutPage class (add the coupon-field and submit-button locators/methods there) — do NOT scaffold a second Page Object for the same route. A duplicate POM for a route already in the inventory is allowed only with a stated justification line in the Step 4 Assumptions block (e.g. the existing POM is a different app area sharing the path). For /profile: it has no POM in the inventory, so a fresh ProfilePage is created — extend-don't-duplicate does not mean refusing to author a POM for an uncovered route.",
+      "assertions": [
+        "True positive: extends the existing CheckoutPage (route already in pomInventory) instead of scaffolding a second POM for /checkout",
+        "Requires a stated justification line in the Step 4 Assumptions block before shipping any duplicate POM for a route already covered in pomInventory",
+        "References the Step 1 pomInventory as the route→PageObject source it matches against",
+        "False-positive guard: still creates a fresh ProfilePage for /profile — an uncovered route with no POM in the inventory is NOT forced into an existing class and is not left without a POM"
+      ]
+    },
+    {
+      "id": 17,
+      "title": "PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header",
+      "prompt": "A PR-mode run reached Step 6. The Step 2 AC table has one row: AC = 'User can filter people by status'. The generated spec has two test blocks: test('filters people by status', ...) with no leading comment, and test('shows an inline error for an invalid status', ...) headed by the comment `// PROVES: validates status input`. The generated PeopleListPage POM file and the throwaway film spec have no such comment. State the Step 6 PROVES-header verdict for each file/test and what must happen before Step 7.",
+      "expected_output": "The first test blocks Step 7: it has no `// PROVES:` header and must gain one quoting its AC verbatim (`// PROVES: User can filter people by status`). The second test also blocks Step 7: `// PROVES: validates status input` PARAPHRASES rather than quoting an AC verbatim from the Step 2 table — it must be corrected to the exact AC wording. Both are fixed, then the run proceeds to Step 7. The PeopleListPage POM file and the throwaway film spec are EXEMPT — they carry no ACs and need no PROVES header; their lack of one is not a finding.",
+      "assertions": [
+        "True positive: blocks Step 7 for the test with no // PROVES: header until a verbatim-AC header is added",
+        "True positive: rejects the paraphrased `// PROVES: validates status input` because the header must quote the acceptance criterion word-for-word from the Step 2 AC table",
+        "False-positive guard: does NOT demand a PROVES header on the POM file or on the Step 8 throwaway film spec — those are exempt and their absence is not flagged"
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Target mode films + publishes by default when HOSTING_READY=yes; coverage-gap stays opt-in",
+      "prompt": "Two runs finish a clean Step 7. Run A is target mode (invoked with the route /orders); the Step 3 hosting probe printed HOSTING_READY=yes. Run B is coverage-gap mode (invoked with no argument, user approved a plan for /orders); the same probe printed HOSTING_READY=yes. Neither user typed 'host a watch link' or 'give me a video'. State whether each run proceeds to Step 8 (film + publish) and ends at a watch link.",
+      "expected_output": "Run A (target mode, HOSTING_READY=yes) films + publishes by DEFAULT — it proceeds to Step 8, produces watch.html, and its Step 9 report carries a Watch link and Film QA line like a PR-mode run; no explicit request is needed. Run B (coverage-gap mode) stays OPT-IN — even with HOSTING_READY=yes it does NOT auto-film; Step 8 runs only if the user asked for a watch link/video, so this run ends at the Step 9 report with no Watch link. (Had the target-mode probe reported HOSTING_READY=no, Run A would skip gracefully with the probe output on the Watch link: skipped line, never failing the run.)",
+      "assertions": [
+        "True positive: Run A (target mode, HOSTING_READY=yes) proceeds to Step 8 and ends at a watch link by default without an explicit film request",
+        "False-positive guard: Run B (coverage-gap mode) does NOT auto-film despite HOSTING_READY=yes — coverage-gap stays opt-in and films only on explicit request",
+        "Does not fail or abort a target-mode run when HOSTING_READY=no — it skips gracefully with the probe output on the Watch link: skipped line"
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Token diet in the fix/film loops: no inter-tool narration, spec written once — audit trail unaffected",
+      "prompt": "You are inside Step 7's ≤3-attempt fix loop (a selector healed once, one rerun pending) and about to enter Step 8's film loop. Describe how you run the tool calls and how you produce the spec, and confirm what output you still write.",
+      "expected_output": "Inside the fix loop and the Step 8 film loop, run tool calls back-to-back with NO prose narration between them — the diagnosis lands in the fix, not a play-by-play. Write the spec ONCE from the Step 1 pomInventory and the plan's Locator Mapping Table; do not scaffold a throwaway skeleton and then rewrite it. This trims the loop only — the Step 4 plan post, its Assumptions block, and the Step 9 completion report are STILL written in full; the token diet never suppresses the audit trail.",
+      "assertions": [
+        "True positive: runs tool calls back-to-back inside the fix and film loops without narrating between them",
+        "True positive: writes the spec once from the pomInventory + Locator Mapping Table rather than scaffolding a skeleton and rewriting it",
+        "False-positive guard: still writes the Step 4 plan post, the Assumptions block, and the Step 9 report in full — the diet trims loop narration, not the required audit trail"
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Step 0 recommends a fresh session on a heavy context but never auto-backgrounds",
+      "prompt": "playwright-test-generator is invoked with 'prove PR #55' partway through a long, unrelated session that has already spent a large amount of context on other work. What do you do at Step 0, and what happens if the user declines or does not answer the recommendation?",
+      "expected_output": "At Step 0, before diving into the pipeline, recommend the user start a fresh session or dispatch this run to a background agent — the pipeline is long and does better with a clean context. If they decline or do not answer, continue the run INLINE in the current session. Never self-background the run or spawn a background agent on your own; the recommendation is offered once and the user decides.",
+      "assertions": [
+        "True positive: recommends a fresh session or a background agent when invoked into a heavy, unrelated session",
+        "Continues the run inline in the current session when the user declines or does not answer",
+        "False-positive guard: never auto-backgrounds the run or spawns a background agent on its own — the choice is the user's"
+      ]
     }
   ]
 }
