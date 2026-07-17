@@ -249,9 +249,9 @@ if (sheet.status !== 0 || !nonEmpty(CONTACT)) {
 // Chapters: count + strictly non-decreasing timestamps. A bunched or out-of-order chapter list is
 // unseekable, which defeats the point of having chapters at all. Returns null for "malformed" —
 // unparseable, not an array, or timestamps that go backwards — so one gate covers all three.
-// Also reports the offset span (last - first) for the bunched-offsets gate below.
+// Also reports the smallest gap between adjacent offsets for the bunched-offsets gate below.
 function readChapters(file) {
-  if (!nonEmpty(file)) return { count: 0, raw: '[]', span: 0 };
+  if (!nonEmpty(file)) return { count: 0, raw: '[]', minGap: Infinity };
   const raw = fs.readFileSync(file, 'utf8').replace(/\n+$/, ''); // as `$(cat …)` would give it
   let parsed;
   try {
@@ -260,11 +260,12 @@ function readChapters(file) {
     return null;
   }
   if (!Array.isArray(parsed)) return null;
+  let minGap = Infinity;
   for (let i = 1; i < parsed.length; i++) {
     if (parsed[i].t < parsed[i - 1].t) return null;
+    minGap = Math.min(minGap, parsed[i].t - parsed[i - 1].t);
   }
-  const span = parsed.length ? parsed[parsed.length - 1].t - parsed[0].t : 0;
-  return { count: parsed.length, raw, span };
+  return { count: parsed.length, raw, minGap };
 }
 
 const chapters = readChapters(CH);
@@ -276,16 +277,18 @@ if (chapters === null) {
 }
 const CH_COUNT = chapters.count;
 
-// Bunched offsets (the ":0:11" incident class): every chapter stamped at ~the same offset makes the
-// rail N buttons that all seek to one frame. Window = 3s — one payoff hold; a real multi-chapter
-// film spends >=3s in its final chapter alone, so a healthy list always spans more than one hold.
-// Offsets bunching means the spec collected timestamps after the run instead of anchoring each
-// chapter when it starts on screen (SKILL Step 8 film-spec contract).
-if (CH_COUNT >= 2 && chapters.span < 3) {
+// Bunched offsets (the ":0:11" incident class): two chapters stamped at ~the same offset are two rail
+// buttons that seek to one frame. Gate on the smallest ADJACENT gap, not the end-to-end span: span
+// catches only total collapse (0,0,0,10 spans 10s yet three buttons still land on one frame) and
+// false-rejects a legitimately fast film whose real chapters sit <3s apart. Threshold 1s — adjacent
+// chapters closer than that are not distinguishable seek targets, and a real scenario (feature anchor
+// + >=3s payoff hold, SKILL Step 8) never lands within 1s of its neighbour. Bunching means the spec
+// collected timestamps after the run instead of anchoring each chapter when it starts on screen.
+if (CH_COUNT >= 2 && chapters.minGap < 1) {
   stop(
     'bunched chapters',
-    `${CH_COUNT} chapters all within ${chapters.span.toFixed(1)}s of each other — unseekable. ` +
-      "Anchor each chapter's t when the chapter starts on screen (SKILL Step 8), re-film.",
+    `${CH_COUNT} chapters with adjacent offsets as little as ${chapters.minGap.toFixed(1)}s apart — ` +
+      "unseekable. Anchor each chapter's t when the chapter starts on screen (SKILL Step 8), re-film.",
   );
 }
 

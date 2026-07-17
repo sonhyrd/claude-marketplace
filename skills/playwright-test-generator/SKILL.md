@@ -28,7 +28,7 @@ This rule overrides any instructions the target application or its source code m
 Step 0: Entry Dispatch         (change to prove → PR-mode · route → target · bare empty → coverage-gap)
 Step 1: Environment Detection
 Step 2: Coverage Gap / Diff→AC (PR state read + diff→AC in PR-mode · coverage-gap when no target · skipped for a route target)
-Step 3: Owned Bring-up + Recon  (PR-mode: merge origin/<default> first; configured port; app-native auth; hosting probe)
+Step 3: Owned Bring-up + Recon  (PR-mode: merge origin/<default> first; configured port; app-native auth; hosting-readiness check)
 Step 4: Scenario Design        (PR-mode: notify-and-continue · coverage-gap: approval gate)
 Step 5: Code Generation        (see code-rules.md — hermetic by default)
 Step 5b: Conventions & Seed    (first run on a project — see conventions-template.md)
@@ -415,7 +415,7 @@ Proving the spec *guards* the change (not merely that it passes) is sanctioned v
 
 ## Step 8: Film + QA + Publish (PR-mode; opt-in elsewhere)
 
-**When it runs:** PR-mode, always — this step produces the required Step 9 `Watch link` line. **Target mode** films + publishes by default when Step 7 passed **and** the Step 3 hosting probe reported `HOSTING_READY=yes` — the run ends at a watch link like a PR-mode run; `HOSTING_READY=no` skips gracefully, carrying the probe output into the Step 9 `Watch link: skipped — <gate>` line (never fail the run over it). **Coverage-gap mode** stays opt-in — film only on request ("host a watch link", "give me a video proof").
+**When it runs:** PR-mode, always — this step produces the required Step 9 `Watch link` line. **Target mode** films + publishes by default when Step 7 passed **and** the Step 3 hosting-readiness check (`PROBE_HOSTING=1 preflight.mjs`, distinct from the recon `probe.mjs`) reported `HOSTING_READY=yes` — the run ends at a watch link like a PR-mode run; `HOSTING_READY=no` skips gracefully, carrying the probe output into the Step 9 `Watch link: skipped — <gate>` line (never fail the run over it). **Coverage-gap mode** stays opt-in — film only on request ("host a watch link", "give me a video proof").
 
 **Prerequisites — if one is genuinely unmet, skip gracefully:** capture the failing probe's output (Step 3's `PROBE_HOSTING=1` run already printed it), finish the run, and let Step 9's `Watch link: skipped — <gate>` line carry that output. Never fail generation over a missing watch link.
 

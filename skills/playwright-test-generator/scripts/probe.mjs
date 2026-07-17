@@ -109,7 +109,10 @@ function client(payload) {
   sock.setTimeout(120000);
   sock.on('connect', () => sock.write(payload + '\n'));
   sock.on('data', (d) => out(d.toString()));
-  sock.on('end', () => process.exit(0));
+  // Exit naturally (no process.exit): a hard exit drops async stdout writes still in flight, so a
+  // large recon response (a full snapshot, an all:true network-summary) captured through a pipe could
+  // be silently truncated. Setting exitCode and letting the socket close drains the tail first.
+  sock.on('end', () => { process.exitCode = 0; });
   sock.on('timeout', () => {
     sock.destroy();
     err('probe: the daemon did not answer within 120s — kill it and start a fresh one\n');

@@ -104,6 +104,12 @@ else
   # The :0:11 incident class: non-decreasing, right count — but every offset within a second, so the
   # chapter rail seeks to one frame. Must trip the bunched-chapters gate, not the floor.
   printf '[{"t":11,"name":"one"},{"t":11,"name":"two"},{"t":11.4,"name":"three"}]' > "$W/fix/chbunched.json"
+  # Partial bunch: two chapters collapse at t=0 but the span (0..10) is wide, so the old span<3 gate
+  # PASSED this while two rail buttons still land on one frame. The min-adjacent-gap gate must reject it.
+  printf '[{"t":0,"name":"a"},{"t":0,"name":"b"},{"t":5,"name":"c"},{"t":10,"name":"d"}]' > "$W/fix/chpartial.json"
+  # Legitimately fast 2-scenario film: chapters 2s apart (span<3) — the old span<3 gate FALSE-REJECTED
+  # this; 0:02 is a distinct seekable offset, so the min-gap gate must let it through (exit 0).
+  printf '[{"t":0,"name":"one"},{"t":2,"name":"two"}]' > "$W/fix/chfast.json"
 
   cat > "$W/bin/npx" <<'SHIM'
 #!/usr/bin/env bash
@@ -181,6 +187,15 @@ SHIM
   film 5 "STOP: bunched chapters (3 offsets collapse at ~11s — the :0:11 class)" \
     FAKE_WEBM="$W/fix/long.webm" FAKE_CH="$W/fix/chbunched.json" SCENARIOS=3
   stderr_has "  names the bunched-chapters gate" "film-QA gate (bunched chapters)"
+
+  # Partial bunch: wide span but a zero adjacent gap — old span<3 gate missed it, min-gap gate catches it.
+  film 5 "STOP: partial bunch (two offsets collapse at t=0, span still 10s)" \
+    FAKE_WEBM="$W/fix/long.webm" FAKE_CH="$W/fix/chpartial.json" SCENARIOS=3
+  stderr_has "  names the bunched-chapters gate (partial)" "film-QA gate (bunched chapters)"
+
+  # Legit fast film: chapters 2s apart pass the min-gap gate (the old span<3 gate would have rejected).
+  film 0 "PASS: legit fast film (2 chapters 2s apart, no longer false-rejected)" \
+    FAKE_WEBM="$W/fix/long.webm" FAKE_CH="$W/fix/chfast.json" SCENARIOS=2 PR_URL=https://x/pull/42
 
   film 3 "STOP: the spec failed — no watch link" FAKE_WEBM="$W/fix/long.webm" FAKE_RC=1
   film 3 "STOP: passed but produced no video" FAKE_RC=0
