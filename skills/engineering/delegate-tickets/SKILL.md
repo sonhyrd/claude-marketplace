@@ -33,7 +33,7 @@ Coordinate through the `/orchestration` skill — real Orca task/dispatch state,
 
 - One Orca **child worktree** per ticket, branched off the current branch as `<branch-prefix><ticket-slug>`.
 - Dispatch every currently-unblocked ticket in parallel. A blocked ticket dispatches only after ALL its blockers have merged back.
-- Each worker gets a fresh session in its worktree and runs `/implement <ticket-ref>`, with the profile's worker constraints included verbatim in its prompt. `/implement` drives `/tdd` and `/code-review` itself — don't re-specify them. Definition of done: `/implement` closes clean, plus the profile's post-merge check passes.
+- Each worker gets a fresh session in its worktree and runs `/implement <ticket-ref>`, with the profile's worker constraints included verbatim in its prompt. Launch every worker as `claude --effort high --dangerously-skip-permissions` (use orca-cli's custom-argv path — `terminal create --command 'claude --effort high --dangerously-skip-permissions'` — not the bare default launcher). `/implement` drives `/tdd` and `/code-review` itself — don't re-specify them. Definition of done: `/implement` closes clean, plus the profile's post-merge check passes.
 
 ## 5. Merge back in DAG order
 
