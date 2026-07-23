@@ -170,8 +170,12 @@ Prove the change, not the whole app: derive the ACs the PR must satisfy; Step 4 
    ```bash
    PORT=$(node -e 'const s=require("net").createServer();s.listen(0,()=>{const p=s.address().port;s.close(()=>console.log(p))})')
    ```
-   Configured port already **bound** → confirm it is *this* worktree's server on the right branch (readiness check + a `git` branch/commit check) before reusing. A sibling worktree's wrong-branch server → start on a free port and set `PLAYWRIGHT_BASE_URL` so the run targets your port.
-2. **Start this worktree's dev server** in a background shell (harness-tracked; survives the turn, log readable) — the configured `dev` command on the resolved port. Never start it from inside a script (a script-started `dev` can bind a sibling's wrong branch). Reuse an already-up server only after the branch check above.
+   Configured port already **bound** → confirm it is *this* worktree's server before reusing, by **fingerprinting the served asset paths**, which carry the serving worktree's absolute path:
+   ```bash
+   curl -s "http://localhost:$PORT" | grep -o '/_nuxt/[^"]*' | head -3   # or /_next/, /@fs/, /assets/
+   ```
+   A path that is not this worktree's → a sibling's server: start on a free port and set `PLAYWRIGHT_BASE_URL` so the run targets yours. `lsof -ti :$PORT` / `ps` are the **fallback only** — both are blind under sandboxing (`lsof` returned an unrelated PID and `ps` could not see sibling dev servers at all in the audited runs), so never conclude "the port is free" or "it's mine" from either alone.
+2. **Start this worktree's dev server** as a harness-tracked background task (survives the turn, log readable) — the configured `dev` command on the resolved port. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** — dev-server bring-up, the Step-8 film run, and a production build are the three that do; `exit 143 — Command timed out after 2m 0s` cost four round trips in the audited runs. Never start it from inside a script (a script-started `dev` can bind a sibling's wrong branch). Reuse an already-up server only after the branch check above.
 3. **Confirm readiness** — `preflight.mjs` is a warmup-aware poll that STOPs (exit 3) if the origin never answers, so a dead server fails fast. `<skill-base>` is the directory in the Skill tool's "Base directory" output:
    ```bash
    BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
@@ -203,31 +207,41 @@ The generated spec must **recreate its session from code** — no committed, han
 
 ### Recon — the probe is the question channel, the test run is the validator
 
-**One persistent browser, batched questions — never a throwaway spec.** `probe.mjs` opens one long-lived context through the project's pinned Playwright and answers batches of recon questions in seconds instead of a full Playwright boot per question. Start it once from the app root in a background shell; it self-closes after 300s idle (`PROBE_IDLE`) so no zombie browser outlives the session:
+**One persistent browser, batched questions — never a throwaway spec.** `probe.mjs` opens one long-lived context through the project's pinned Playwright and answers batches of recon questions in seconds instead of a full Playwright boot per question. It self-closes after 300s idle (`PROBE_IDLE`) so no zombie browser outlives the session.
+
+**Step 3 is not complete until both of these hold:**
+
+- **The readiness poll ran** — `preflight.mjs` (above) reported ready. Skipped in 5 of 15 audited runs, two of which went on to film against a server nobody had confirmed.
+- **The recon channel is one of exactly two states — there is no third:** (1) a probe session exists and has answered at least one batch, or (2) the probe refused with **exit 2** (browserless) and the source-reading fallback is named in the Step 4 Assumptions block.
+
+Reaching Step 4 in neither state is a **HARD STOP**: report it and do not continue — the same register as the polluted-tree stop in Step 7. Source reading *without* a recorded exit-2 refusal is not the fallback; it is the skip this gate exists to catch. Never install a floated Playwright to force a probe open.
+
+**Start the probe with the harness's background-task mechanism** (`run_in_background: true` on the Bash tool, or the host's equivalent) — **never a trailing `&`**. A `&`-backgrounded probe dies with the shell that launched it, and every later `send` then fails with no output and nothing to diagnose.
 
 ```bash
-# start once (background shell, app root; STORAGE_STATE=<path> seeds a Step-3 minted session)
+# start once (background task, app root; STORAGE_STATE=<path> seeds a Step-3 minted session)
 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/probe.mjs start
 # ask in batches — one round trip; compact aria + network summaries, never raw DOM dumps
 node <skill-base>/scripts/probe.mjs send '[
   {"cmd":"navigate","url":"/login"},
   {"cmd":"fill","selector":"#email","value":"<test user>"},
   {"cmd":"click","selector":"text=Sign in"},
+  {"cmd":"wait","selector":"[data-testid=dashboard]"},
   {"cmd":"snapshot"},
   {"cmd":"network-summary"}
 ]'
 node <skill-base>/scripts/probe.mjs close   # when recon is done (the idle timeout is the net)
 ```
 
-In a browserless environment the probe refuses cleanly (exit 2) — recon then falls back to source reading + the heal loop; never install a floated Playwright to force one open.
+Four commands exist for the cases a batch runs into: `{"cmd":"wait","ms":6000}` (or `"selector"`) for a settle; `"max"` on `eval` to raise the 2000-char cap; `"out":"<path>"` on `eval` to write the **full** result to a file (truncated JSON is unparsable — never reconstruct it by hand); `{"cmd":"storage-state","path":".auth/<slug>.auth.json"}` to save the live session for the deliverable spec or the Step-8 film to reuse. **That file holds a working bearer — write it only under a gitignored path.**
 
-1. **Draft selectors from source + the probed live app.** Read the changed component(s) for roles/labels/testids. Where blind-drafting a big or gated page would thrash the heal loop, `snapshot` the target once through the probe (scope with `"selector"` on big pages). An accelerator, not a required step.
+1. **Draft selectors from source + the probed live app.** Read the changed component(s) for roles/labels/testids. Where blind-drafting a big or gated page would thrash the heal loop, `snapshot` the target once through the probe (scope with `"selector"` on big pages).
 2. **Drive mocks from the probe's `network-summary`.** After navigating (and interacting) through the probe, its aggregation lists the endpoints the surface actually calls — including proxy (`/api/request?cmd=`) and SSR calls that source-reading misses, with the observed query suffixes the mock patterns must tolerate — and the `page.route` mocks are written against them (per `code-rules.md` › Network Determinism).
 3. **Let the test run heal the rest.** A wrong selector fails the run; Step 7 re-snapshots and fixes it by intent. Never npx-float Playwright when the project pins it — a floated runner breaks the heal loop. **Sole exception: greenfield with no runner at all (`hasTestRunner: false`) — Step 5b bootstraps Playwright as a *pinned dev-dep*, not a floated install.**
 
 **Non-deliverable spec probes are forbidden.** Never create a spec file that is not a deliverable to answer a recon or debug question — no `_recon.spec.ts`, no `zz-debug.spec.ts`: the test runner is not a REPL (the worst audited run wrote 8 throwaway probe specs and invoked `playwright test` 48 times). The probe is the recon channel; the only sanctioned throwaway spec in the whole pipeline is Step 8's film spec. The heal loop's existing bounds — rerun only the failing test, full suite once at the end — stay the enforcement for post-recon iteration.
 
-**Source recon uses the Grep tool (ripgrep), never bash `grep --include=*.vue`** — unquoted globs and bracket paths (a Nuxt dynamic route `pages/person/[id].vue`) trip zsh `nomatch` and abort the whole `&&`-chain. Quote any glob you must hand to bash. Ad-hoc shell must be portable (the shell may be zsh, grep may be BSD): no `${!var}` indirection, quote every expansion, no GNU-only grep flags. End any sweep that can silently no-op with an explicit non-empty check on its output or exit code — "found nothing" must be distinguishable from "never actually ran".
+**Source recon uses the Grep tool (ripgrep), never bash `grep --include=*.vue`** — unquoted globs and bracket paths (a Nuxt dynamic route `pages/person/[id].vue`) trip zsh `nomatch` and abort the whole `&&`-chain. Quote any glob you must hand to bash. Ad-hoc shell must be portable (the shell may be zsh, grep may be BSD): no `${!var}` indirection, quote every expansion, no GNU-only grep flags. End any sweep that can silently no-op with an explicit non-empty check on its output or exit code — "found nothing" must be distinguishable from "never actually ran". **The same care applies to the pattern itself:** a hand-assembled alternation is the repeat offender (`rg: regex parse error: unclosed group` in three audited runs) — build `(a|b|c)` in one piece and close it, rather than growing it term by term across an edit.
 
 **Accessible-name reality check:** confirm from the live DOM (or the heal-loop failure) whether inputs actually carry labels/aria. Label-less inputs (placeholder/title only) are common — `getByLabel` matches nothing; use `getByPlaceholder()` / `getByRole('textbox')` and record the reason in the Locator Mapping Table.
 
@@ -270,6 +284,7 @@ Cover at minimum: one happy path + one error/edge case per feature. **PR-mode:**
 **Coverage floors (PR-mode):**
 
 - **Locale floor** — the diff touches locale/i18n resource files (`locales/**`, `messages.*.json`, `*.i18n.*`) → at least one scenario runs in a **non-default locale**, and every locator in it is locale-safe (role/testid — never default-language text).
+  - **App-controlled locale** — the app overrides the URL/browser locale on mount from the user's profile language, so no URL or header reaches a second locale without mocking the current-user response → prove the diff's localization contract **inside the rendered locale** (the changed keys resolve, no raw key leaks, locators stay locale-safe) and record the override as an Assumptions line. Do not mock the user just to satisfy the floor: an unsatisfiable floor teaches the agent to wave floors through.
 - **Gated surfaces stay visible** — a surface unreachable with the available auth/entitlements keeps its scenario in the plan marked `unproven — gated: <what blocks it>`, and that marker flows into the Step 9 report's `ACs` line. Silently dropping a gated surface is a coverage lie.
 
 ### Locator Mapping Table
@@ -399,15 +414,22 @@ The spec is hermetic by default (`code-rules.md` › Network Determinism). From 
 - Every live call is named in a `// CARVE-OUT:` line in the spec header → pass; the report's `Tests` line carries `hermetic (carve-outs: <list>)`.
 - **Any undeclared live call → the run FAILS**, even though the spec is green: mock it (or declare the carve-out if the real round-trip genuinely IS the AC) and re-run. An undeclared live *write* to a shared tenant is additionally a data-pollution incident — say so in the report.
 
-### Mutation check (optional — hard-bounded)
+### Mutation check (PR-mode: REQUIRED — hard-bounded)
 
-Proving the spec *guards* the change (not merely that it passes) is sanctioned via ONE bounded source mutation:
+Proving the spec *guards* the change (not merely that it passes) is **required in PR-mode** and sanctioned elsewhere, via ONE bounded source mutation:
 
 1. **Record the pre-state:** `git status --porcelain > /tmp/pre.status && git diff > /tmp/pre.patch`.
 2. **Mutate** the changed behavior (one line is enough).
-3. **Run the spec — it must go red.** Green on a mutated source means the spec doesn't guard the change: strengthen the terminal assertion, then repeat this check.
+3. **Run the spec.** Three verdicts, and exactly one retry:
+   - **Red** → the spec guards the change. Done.
+   - **Green** → strengthen the terminal assertion and repeat **once**.
+   - **Green again, and the behavior is not isolable at the browser layer** (another layer independently preserves the observable outcome — e.g. a read-modify-write that re-reads and merges the full record) → **"unguardable at this layer"**. Never a third cycle. State it in the Step 9 report and the PR comment, naming the layer that masks it: a silently dropped mutation check is a worse outcome than a stated limitation.
 4. **Revert the mutation exactly** (`git checkout -- <file>`).
-5. **Verify the tree is byte-identical** to the recording: `git status --porcelain | diff - /tmp/pre.status && git diff | diff - /tmp/pre.patch`. Any residue = **HARD STOP**: report it immediately; never continue to Step 8/9 on a polluted tree.
+5. **Verify the tree is unchanged** — compare with process substitution on **both** sides, so a trailing-newline artifact from the captured file is not mistaken for residue (the piped form reported a difference on a byte-identical tree in 4 of 15 audited runs):
+   ```bash
+   diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch
+   ```
+   Real residue = **HARD STOP**: report it immediately; never continue to Step 8/9 on a polluted tree.
 
 **On full pass:** PR-mode → Step 8, then Step 9. Target mode with `HOSTING_READY=yes` → Step 8 (film + publish by default), then Step 9. Coverage-gap mode (and target mode with `HOSTING_READY=no`) → Step 9's completion report directly (Step 8 only on request). The completion report and its required lines live in Step 9 — there is no "Complete" to emit here.
 
@@ -420,20 +442,21 @@ Proving the spec *guards* the change (not merely that it passes) is sanctioned v
 **Prerequisites — if one is genuinely unmet, skip gracefully:** capture the failing probe's output (Step 3's `PROBE_HOSTING=1` run already printed it), finish the run, and let Step 9's `Watch link: skipped — <gate>` line carry that output. Never fail generation over a missing watch link.
 
 - **Gate the film-server through `preflight.mjs`** (Step 3) — it treats any HTTP answer as "up", clearing a legitimate `307`/`401` that a `grep '200\|302'` poll would miss while burning its whole loop.
-- **Per-spec video, filmed in real Chrome at an explicit size** — add to the top of the film spec, **per-spec only**; never touch the global `playwright.config` `use` (that films the whole suite on every run):
+- **Per-spec video, filmed in real Chrome at an explicit size** — configured **per-spec only**; never touch the global `playwright.config` `use` (that films the whole suite on every run):
   ```typescript
-  test.use({ video: { mode: 'on', size: { width: 1600, height: 900 } }, viewport: { width: 1600, height: 900 }, channel: 'chrome' });
+  test.use({ viewport: { width: 1600, height: 900 }, channel: 'chrome' });
   ```
-  The explicit `size` stops Playwright shrinking the film to its 800×450 default (chapter titles and UI text become illegible). `channel: 'chrome'` renders what a human sees — bundled Chromium ships **no PDF viewer** and some media codecs, so an inline-PDF or media feature films **blank** in it. No Chrome installed → drop the `channel`, film in the default browser, NOTE the fidelity caveat. The **durable committed test keeps the project's default browser** — only the throwaway film spec gets this block.
+  `channel: 'chrome'` renders what a human sees — bundled Chromium ships **no PDF viewer** and some media codecs, so an inline-PDF or media feature films **blank** in it. No Chrome installed → drop the `channel`, film in the default browser, NOTE the fidelity caveat. The **durable committed test keeps the project's default browser** — only the throwaway film spec gets this block.
 - **`wrangler` authenticated** (`npx wrangler whoami` succeeds — **don't** add `--no-install`; unlike the pinned playwright/tsc, wrangler may need provisioning and `--no-install` false-negatives). `host-on-r2.mjs` has the R2 bucket + public domain hard-coded near the top (`BUCKET`, `PUB`). `<skill-base>` is the Skill tool's "Base directory" output. A `5xx` from `wrangler whoami` or the upload is transient (Cloudflare-side) — retry once before reporting a hosting blocker; never bake a transient 500 into the completion report.
 
-### Film-spec shape — every scenario, no blank lead, film the payoff
+### Film-spec shape — every scenario, chapter 1 past the lead, film the payoff
 
 The film is a **second run** (`record.mjs` re-executes the film spec to capture the video), and Playwright ends the recording at context close. Author it as:
 
 - **One film test that walks EVERY approved scenario in order** — one `chapter()` per scenario (the proof-film contract; `record.mjs`'s chapter floor enforces the count via `SCENARIOS=<n>`). Fewer scenarios than the spec = a defective proof — unless demoted under the flake screen or refilm budget below, and a demotion is named in the report, never silently absorbed.
 - **Chapters share ONE browser context** — committed tests each get a fresh one; the film does not. A scenario whose committed test depends on fresh-context state (cookies, localStorage, locale, auth) must open its chapter with an explicit state reset (clear cookies + storage, re-auth) or be excluded from the film and demoted — leaked chapter state (an i18n cookie, a persisted user profile) causes film-only failures the committed spec never had.
-- **Open on the feature, not on boot — kill the blank lead.** Recording starts the moment the filmed page exists: warm the route first (the Step 7 run usually has; else one `page.request.get(target)` compiles it server-side), authenticate **before** the filmed `goto` (token/`storageState` — never film a login dance unless login IS the AC), and make the first chapter's first line an assertion on a **feature-anchored element** so the first frames show the surface under proof.
+- **Open on the feature, not on boot — shorten the lead, then seek past it.** Recording starts the moment the filmed context exists, and an SPA always films its own ~3s boot; the goal is a short lead the first chapter seeks past, not a zero-frame one. Warm the route first (the Step 7 run usually has; else one `page.request.get(target)` compiles it server-side), authenticate **before** the filmed `goto` (token/`storageState` — never film a login dance unless login IS the AC), and make the first chapter's first line an assertion on a **feature-anchored element** so the frames the chapter link lands on show the surface under proof.
+- **Authenticate in the *unfilmed* fixture page, film in a manually-created context** (the canonical SPA shape, below). `test.use({ video })` applies only to the fixture `page`'s context — a context you create with `browser.newContext()` gets **no video from it**, so the recorded one is created with an explicit `recordVideo` and its webm is landed via `testInfo.outputPath()` where `record.mjs` looks for it.
 - **The terminal assertion must be the success signal itself** — the toast / `alert` / redirect / empty-state the app shows on success, *not* an earlier DOM change (a row disappearing) that resolves before the payoff paints. That frame **is** the proof, and asserting on it makes Playwright wait until it's on screen, so the video captures it.
 - **Hold the payoff on screen ≥3s** so the video — and the contact sheet's final tile (sampled every duration/30 s; hold ≥ duration/30 on films past 90s) — ends on the success, not after a toast auto-dismisses. A fixed `waitForTimeout` is legitimate **in the throwaway film spec only** — never in the committed test.
 - **Persistence-proof films reload, and each reload films white on a dev server** (an SSR repaint — up to ~40% white tiles that still pass every QA check). Anchor each chapter timestamp on the **post-reload painted assertion**, not the reload, so the seekable frame shows the surface; note in the PR comment that the white flashes are the persistence proof, not a broken film.
@@ -446,14 +469,30 @@ The film is a **second run** (`record.mjs` re-executes the film spec to capture 
 
 Wrap each phase in `test.step(...)` and write a `test-results/chapters.json` sidecar of `{name, t}` offsets; `record.mjs` turns it into the watch page's clickable chapter list and enforces the chapter floor from it. **Anchor each chapter's `t` the moment the chapter starts on screen** — captured inside the chapter, before its first action/assertion, never collected in a loop after the run: post-hoc stamps bunch every offset at one timestamp (the `:0:11` incident — a rail of N buttons that all seek to the same frame), and `record.mjs` rejects a chapter list whose offsets all fall within 3s of each other (exit 5, `bunched chapters`).
 
+**`t0` is the video's zero, so stamp it the instant the recorded context is created — before any navigation, warm-up or `goto`.** Every second of setup that happens after `t0` shifts *every* chapter offset early by that amount, and the bunched-offsets gate does not catch it: the offsets are still correctly spread, just uniformly wrong (six chapter links all seeking into the previous chapter, in the audited run).
+
 ```typescript
 // THROWAWAY film spec (not committed): video + chapters + payoff hold. The committed test asserts the same
 // success signal but keeps the default browser, no video, no waitForTimeout (see code-rules.md).
 import fs from 'node:fs';
-test.use({ video: { mode: 'on', size: { width: 1600, height: 900 } }, viewport: { width: 1600, height: 900 }, channel: 'chrome' });
+// Applies to the fixture `page` only — the recorded context below gets its own recordVideo.
+test.use({ viewport: { width: 1600, height: 900 }, channel: 'chrome' });
 
-test('delete removes the legal notice', async ({ page }) => {
+test('delete removes the legal notice', async ({ page, browser }, testInfo) => {
+  // 1. Authenticate + warm the route in the UNFILMED fixture page, then hand the session over.
+  await authenticate(page);                                   // Step 3's mechanism, whatever it was
+  const storageState = await page.context().storageState();
+  await page.request.get('/legal-notice');                    // compile the route server-side
+
+  // 2. The recorded context. t0 is its creation — the video's zero.
+  const context = await browser.newContext({
+    storageState,
+    viewport: { width: 1600, height: 900 },
+    recordVideo: { dir: testInfo.outputPath('video'), size: { width: 1600, height: 900 } },
+  });
   const t0 = Date.now();
+  const filmed = await context.newPage();
+
   const chapters: { name: string; t: number }[] = [];
   const chapter = (name: string, fn: () => Promise<void>) =>
     test.step(name, async () => {
@@ -461,18 +500,22 @@ test('delete removes the legal notice', async ({ page }) => {
       await fn();
     });
 
+  await filmed.goto('/legal-notice');                          // the ~3s SPA boot IS the lead; chapter 1 seeks past it
   await chapter('item present', async () => { await expect(row).toBeVisible(); });
   await chapter('click delete',  async () => { await row.getByRole('button', { name: 'Delete' }).click(); });
-  await chapter('confirm',       async () => { await page.getByRole('button', { name: 'Confirm' }).click(); });
+  await chapter('confirm',       async () => { await filmed.getByRole('button', { name: 'Confirm' }).click(); });
   await chapter('deleted ✓',     async () => {
-    await expect(page.getByRole('alert')).toContainText('deleted');  // ← the payoff: terminal assertion = success signal
-    await page.waitForTimeout(3000);                                  // ← film-only hold (≥3s) so the video and the sheet's final tile end ON the toast
+    await expect(filmed.getByRole('alert')).toContainText('deleted');  // ← the payoff: terminal assertion = success signal
+    await filmed.waitForTimeout(3000);                                 // ← film-only hold (≥3s) so the video and the sheet's final tile end ON the toast
   });
 
   fs.mkdirSync('test-results', { recursive: true });
   fs.writeFileSync('test-results/chapters.json', JSON.stringify(chapters));
+  await context.close();   // Playwright finalizes the webm on context close — without this there is no film
 });
 ```
+
+The explicit `size` on `recordVideo` stops Playwright shrinking the film to its 800×450 default (chapter titles and UI text become illegible).
 
 ### 1. Film + contact sheet + watch page
 
@@ -503,7 +546,7 @@ BASE_URL="http://localhost:$PORT" PROOF_SHA="$(git rev-parse HEAD)" TITLE="PR #<
 
 Before publishing, **Read the `CONTACT=` image** (30 frames spanning the whole film) and answer four checks with your own eyes:
 
-1. **No blank lead** — the feature is visible in the first strip of frames, not a spinner/blank shell.
+1. **Chapter 1 seeks past the lead** — the frames at chapter 1's timestamp show the feature, not the boot spinner/blank shell. A short lead is expected (an SPA films its own boot); a chapter link that lands *in* it is the defect.
 2. **Chapters seekable** — the sheet shows distinct scenario phases where the chapter timestamps claim them.
 3. **Payoff on the final tile** — the last tile shows the success signal (the ≥3s payoff hold puts it there).
 4. **Feature actually shown** — the surface under proof is on screen, not just app chrome.
