@@ -197,7 +197,10 @@ if (!(RC === 0 && nonEmpty(WEBM))) {
     err('record: the proof FAILED - the spec did not pass (see the test output above). No watch link.\n');
     if (nonEmpty(WEBM)) err(`record: a failure video is at ${WEBM} - it shows what broke.\n`);
   } else {
-    err('record: the spec passed but no video was produced. Does it carry the per-spec test.use video block?\n');
+    err(
+      'record: the spec passed but no video was produced. Does the filmed context carry ' +
+        'recordVideo, and does the spec close() it? (SKILL Step 8 film-spec shape)\n',
+    );
   }
   process.exit(3);
 }
@@ -251,7 +254,7 @@ if (sheet.status !== 0 || !nonEmpty(CONTACT)) {
 // unparseable, not an array, or timestamps that go backwards — so one gate covers all three.
 // Also reports the smallest gap between adjacent offsets for the bunched-offsets gate below.
 function readChapters(file) {
-  if (!nonEmpty(file)) return { count: 0, raw: '[]', minGap: Infinity };
+  if (!nonEmpty(file)) return { count: 0, raw: '[]', minGap: Infinity, list: [] };
   const raw = fs.readFileSync(file, 'utf8').replace(/\n+$/, ''); // as `$(cat …)` would give it
   let parsed;
   try {
@@ -265,7 +268,7 @@ function readChapters(file) {
     if (parsed[i].t < parsed[i - 1].t) return null;
     minGap = Math.min(minGap, parsed[i].t - parsed[i - 1].t);
   }
-  return { count: parsed.length, raw, minGap };
+  return { count: parsed.length, raw, minGap, list: parsed };
 }
 
 const chapters = readChapters(CH);
@@ -313,6 +316,50 @@ if (DUR_INT < minSeconds) {
       "to show every scenario's payoff.",
   );
 }
+
+// Static chapters: a chapter whose interval never changes on screen proves nothing about its
+// scenario — the failure class three films were rejected for by eye AFTER passing every structural
+// gate above ("I don't see any actions at all"). One extra ffmpeg pass with freezedetect; no pixel
+// math here, and ffmpeg is already a hard dependency (:86).
+//
+// ponytail: ADVISORY — reports, never stop()s. The 0.9 threshold is calibrated against one failure
+// class and the >=3s payoff hold that SKILL Step 8 REQUIRES is the pattern most likely to trip it.
+// Promote it to a real gate (stop('static chapters', …), and add it to the :43 exit-5 list) once a
+// few real films confirm the clean line stays clean.
+const freeze = run('ffmpeg', [
+  '-nostats', '-i', WEBM, '-vf', 'freezedetect=n=-55dB:d=2', '-map', '0:v', '-f', 'null', '-',
+]);
+// freezedetect writes to stderr; read both streams the way filmDurationSeconds does at :220.
+const frozen = [
+  ...`${freeze.stdout ?? ''}${freeze.stderr ?? ''}`.matchAll(
+    /freeze_start: ([0-9.]+)[^]*?freeze_duration: ([0-9.]+)/g,
+  ),
+].map(([, start, dur]) => ({ start: Number(start), end: Number(start) + Number(dur) }));
+
+// Each chapter runs until the next starts; the last runs to the measured float duration, not DUR_INT.
+const spans = chapters.list.map((ch, i) => ({
+  name: ch.name,
+  start: ch.t,
+  end: i + 1 < chapters.list.length ? chapters.list[i + 1].t : durSeconds,
+}));
+const dead = spans.filter((s) => {
+  const len = s.end - s.start;
+  if (len <= 0) return false;
+  const still = frozen.reduce(
+    (acc, f) => acc + Math.max(0, Math.min(f.end, s.end) - Math.max(f.start, s.start)),
+    0,
+  );
+  return still / len > 0.9;
+});
+// Always prints: the clean line is the calibration record for promoting this to a gate.
+out(
+  dead.length
+    ? `record: film QA - static chapters (ADVISORY, not blocking): ${dead.map((d) => `"${d.name}"`).join(', ')} ` +
+        'show no visible change across their whole interval. The film does not prove those ' +
+        'scenarios - check the chapter drove a real interaction, and that its offset is anchored ' +
+        'where the action starts.\n'
+    : `record: film QA - static chapters: none across ${spans.length} chapter(s).\n`,
+);
 
 // ============================================================ watch page
 // ONE self-contained page — the webm inlined as a data URI — so the watch link is a single HTML

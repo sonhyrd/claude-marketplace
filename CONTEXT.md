@@ -21,6 +21,15 @@ The video behind the watch link. Covers every approved scenario, one titled chap
 ## Chapter
 A titled segment of the proof film corresponding to exactly one approved scenario. Chapter titles must be readable in the published video (on screen long enough and at legible resolution).
 
+## Recon probe
+The persistent browser context (`scripts/probe.mjs`) that answers batched recon questions during Step 3. The recon channel; the test run is the validator, never the question channel. A run reaches Step 4 in exactly one of two states — a probe session that answered at least one batch, or a recorded exit-2 (browserless) refusal with the source-reading fallback named in the Assumptions block. Neither state is a HARD STOP. Decided 2026-07-24: of 15 audited runs, the 10 that skipped the probe ran the test runner 9–42 times each; the 5 that used it ran it 5–8 times.
+
+## Unguardable at this layer
+The mutation check's third verdict: the mutation did not turn the spec red, and no browser-layer assertion can distinguish the mutated behavior because another layer independently preserves the observable outcome (e.g. a read-modify-write that re-reads and merges the full record). A stated verdict in the report and the PR comment, never a silent skip, and never a third strengthen-and-retry cycle.
+
+## Static chapter
+A proof-film chapter whose interval shows no visible change on screen — it proves nothing about its scenario. Detected by `record.mjs` with an ffmpeg `freezedetect` pass over each chapter's interval (>90% frozen). **Advisory as of 2026-07-24:** it prints its verdict on every run, clean or not, and does not block publication; the threshold is promoted to a real Film QA gate only once the printed record shows the required ≥3s payoff hold never trips it.
+
 ## Hermetic spec
 A generated spec whose every network call is mocked. The default for all PTG output; Step 7 fails a run on any live call that is not part of a declared carve-out.
 
@@ -34,7 +43,7 @@ The complete PR-mode deliverable: green spec + POM committed to the PR branch, p
 The single film-QA evidence artifact record.mjs extracts: 30 frames spanning the whole film, tiled on one image (`CONTACT=`). Its final tile is the film's final-frame evidence (there is no separate poster). Step 8 reads it once per film before publishing; the report's `Film QA:` line is filled from it.
 
 ## Film QA gate
-The Step 8 structural gate on the proof film: record.mjs's scripted floors (duration ≥ 4s + ~3s per scenario, chapter count ≥ scenario count, ordered timestamps, contact-sheet extraction — any failure is exit 5) plus the agent's one contact-sheet screening. Film runs are single-attempt (`--retries=0`): a flaky film is a re-shoot, not a proof. Publishing past a failed gate is forbidden.
+The Step 8 structural gate on the proof film: record.mjs's scripted floors (duration ≥ 4s + ~3s per scenario, chapter count ≥ scenario count, ordered timestamps, contact-sheet extraction — any failure is exit 5), the advisory [static chapter](#static-chapter) check, plus the agent's one contact-sheet screening. Film runs are single-attempt (`--retries=0`): a flaky film is a re-shoot, not a proof. Publishing past a failed gate is forbidden.
 
 ## Refilm budget
 The bound on Step 8's fix-and-refilm loop: one diagnose+fix+refilm attempt per failing chapter. A chapter that fails its second film is dropped from the film and its scenario demoted — never a third cycle. Decided 2026-07-10 after a run spent three full-price refilm cycles on a chapter that was deleted anyway.

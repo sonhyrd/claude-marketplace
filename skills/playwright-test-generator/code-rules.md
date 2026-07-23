@@ -42,6 +42,8 @@ Non-negotiable for every generated spec, regardless of project shape:
 
 **Project-configured test ids rank with role+name.** When `playwright.config.*` sets `use: { testIdAttribute: '...' }`, or `data-testid` (or the project's equivalent) is pervasive in the components under test, treat `getByTestId` as a **tier-1 locator alongside role+name** — not #4. A deliberate, stable test hook beats brittle text/placeholder locators; keep `getByText`/`getByPlaceholder` as the fallback when no role or test id fits.
 
+**Anchored regexes are a trap in `getByText` on mixed-content elements.** `getByText` matches the element's *text content*, and an element that also holds an icon, a `<span>`, or any other child yields a string the anchor no longer fits — `getByText(/^(Vererbt|Inherited)/)` matched nothing against a badge whose span held an icon element plus the text node, while the unanchored `/(Vererbt|Inherited)/` matched immediately. Drop the anchors in `getByText` unless the element is a pure text node. Anchors stay correct in `getByRole(…, { name: /^X$/ })` — that matches the **accessible name**, which is already normalized.
+
 Never use XPath. Never use CSS class chains that couple to styling.
 
 ---
@@ -216,6 +218,18 @@ await likeToggle.click();
 await call; // without this line the test passes even if the wiring to the API is deleted
 await expect(likeToggle).toHaveAttribute('aria-pressed', 'true');
 ```
+
+**Read the payload off the awaited `Request` — never off a route-handler closure.** `waitForRequest` resolves on the request *event*, which fires **before** the matching route handler's body runs, so a variable the handler assigns may still be `undefined` at the line that asserts it. The awaited request is the only source that is guaranteed populated:
+
+```typescript
+const call = page.waitForRequest(r => r.method() === 'PATCH' && r.url().includes('/api/settings'));
+await page.route('**/api/settings', r => r.fulfill({ status: 200, body: '{}' }));  // hermetic: nothing reaches the tenant
+await saveButton.click();
+const body = (await call).postDataJSON();          // ← populated; a `let captured` set inside the handler is not
+expect(body).toMatchObject({ locale: 'de' });
+```
+
+Fulfilling locally in the route handler is also what keeps a mutation proof hermetic — no write leaves the browser, so re-running the spec (or filming it) never touches shared data.
 
 **…but prove the call HAPPENS before asserting it (the inverse trap).** "Prove the call" applies only to calls the app actually makes at runtime. Canonical counterexample: unmount-cleanup API calls — an empty-deps effect's cleanup captures its guard as a stale closure from mount time, so if the guard (e.g. a `quizSetId` arriving with the fetch response) was empty at mount, `if (id) api.cancel(id)` is a dead path forever, and a `waitForRequest` on it times out against correct test code. Before shipping a call-proof assertion on exit/unmount/cleanup paths, verify the request fires at least once (solo run, network log); if it never does, assert the user-visible outcome instead, file the stale closure as an app defect, and leave a comment with the file:line so the proof can be added when the defect is fixed.
 
