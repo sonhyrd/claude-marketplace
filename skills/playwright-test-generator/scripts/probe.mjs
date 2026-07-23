@@ -27,13 +27,20 @@
 //                                                      network log (summaries are per-page)
 //   {"cmd":"click","selector":"text=Sign in"}          5s timeout ("timeout" overrides, ms)
 //   {"cmd":"fill","selector":"#email","value":"a@b.c"}
+//   {"cmd":"wait","ms":6000}                           settle wait; or {"selector":…,"state":…} to
+//                                                      wait for a condition (default state: visible)
 //   {"cmd":"snapshot"}                                 compact aria snapshot of body — "selector"
 //                                                      scopes it, "max" caps lines (default 120).
 //                                                      NEVER a raw DOM dump.
-//   {"cmd":"eval","expression":"location.href"}        JSON-stringified result, truncated
+//   {"cmd":"eval","expression":"location.href"}        JSON-stringified result, truncated at 2000
+//                                                      chars — "max" raises the cap, "out":"<path>"
+//                                                      writes the FULL result to a file instead
 //   {"cmd":"network-summary"}                          method+path aggregation since last navigate;
 //                                                      document/xhr/fetch only (the mock targets) —
 //                                                      "all": true includes scripts/styles/assets
+//   {"cmd":"storage-state","path":".auth/x.json"}      save the live session for the film/spec to
+//                                                      reuse. Holds a working bearer — write ONLY
+//                                                      under a gitignored path.
 //   {"cmd":"close"}                                    same as the close subcommand
 //
 // The browser is the TARGET project's own pinned Playwright, resolved from the cwd — never an
@@ -290,6 +297,18 @@ if (MODE === 'start') {
           await page.locator(c.selector).fill(String(c.value ?? ''), { timeout: t });
           return `fill ${c.selector} -> ok`;
         }
+        case 'wait': {
+          // Both forms: "selector" for a condition, "ms" for a settle. A batch without a settle-wait
+          // is the most common reason an agent gives up on the probe and reaches for the test runner.
+          if (typeof c.selector === 'string') {
+            await page.locator(c.selector).waitFor({ state: c.state || 'visible', timeout: t });
+            return `wait ${c.selector} (${c.state || 'visible'}) -> ok`;
+          }
+          const ms = Number(c.ms);
+          if (!Number.isFinite(ms) || ms < 0) throw new Error('wait needs a "ms" number or a "selector"');
+          await page.waitForTimeout(ms);
+          return `wait ${ms}ms -> ok`;
+        }
         case 'snapshot': {
           const scope = typeof c.selector === 'string' ? c.selector : 'body';
           const loc = page.locator(scope);
@@ -313,7 +332,16 @@ if (MODE === 'start') {
           } catch {
             s = String(v);
           }
-          if (s.length > CAP.evalChars) s = `${s.slice(0, CAP.evalChars)}… truncated (${s.length} chars)`;
+          // "out" is the escape hatch for a result too big to read through the transcript — truncated
+          // JSON is unparsable, and reconstructing it by hand is what produces throwaway specs.
+          if (typeof c.out === 'string') {
+            fs.writeFileSync(c.out, s);
+            return `eval -> ${s.length} chars written to ${c.out}`;
+          }
+          const max = Number(c.max) || CAP.evalChars;
+          if (s.length > max) {
+            s = `${s.slice(0, max)}… truncated (${s.length} chars — raise "max" or use "out")`;
+          }
           return `eval -> ${s}`;
         }
         case 'network-summary': {
@@ -344,10 +372,20 @@ if (MODE === 'start') {
             (rows.length ? `\n${rows.slice(0, CAP.networkRows).join('\n')}` : '')
           ) + cut;
         }
+        case 'storage-state': {
+          // The bridge between Step 3's auth ladder and Step 8's film: mint the session once here,
+          // hand the file to the spec. STORAGE_STATE loads one at start; this saves one back.
+          if (typeof c.path !== 'string') throw new Error('storage-state needs a "path"');
+          await context.storageState({ path: c.path });
+          return `storage-state -> ${c.path} (live session — keep it under a gitignored path)`;
+        }
         case 'close':
           return 'closing — browser down, socket removed';
         default:
-          throw new Error(`unknown cmd '${c.cmd}' (navigate|click|fill|snapshot|eval|network-summary|close)`);
+          throw new Error(
+            `unknown cmd '${c.cmd}' ` +
+              '(navigate|click|fill|wait|snapshot|eval|network-summary|storage-state|close)',
+          );
       }
     }
 
