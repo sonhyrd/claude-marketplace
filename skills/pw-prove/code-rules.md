@@ -135,7 +135,7 @@ test.describe('Login', () => {
 
 | Forbidden | Use instead |
 |-----------|-------------|
-| `waitForTimeout(N)` | `await expect(el).toBeVisible({ timeout: N })` |
+| `waitForTimeout(N)` | `await expect(el).toBeVisible({ timeout: N })` — sole exception: the env-gated payoff dwell (see [Clip Fidelity](#clip-fidelity-viewport-pin--payoff-dwell)) |
 | `expect(await el.isVisible()).toBe(true)` | `await expect(el).toBeVisible()` |
 | `const n = await el.count()` | `await expect(el).toHaveCount(N)` or `.first()` + `toBeVisible()` |
 | `toBeAttached()` | `toBeVisible()` — `toBeAttached` is vacuous on always-rendered elements. Negative `not.toBeAttached()` and checks on dynamically-injected elements are acceptable (matches e2e-reviewer #4b). |
@@ -147,6 +147,56 @@ test.describe('Login', () => {
 | Framework component selectors in spec (`app-button`, `my-component`) | POM only |
 | XPath selectors | `getByRole` / `getByLabel` / `getByTestId` |
 | `import { URL } from '@playwright/test'` | Use the global `URL` (or the `(route, request)` route-callback signature) — Playwright doesn't export `URL`; the param is the DOM global, and importing it fails typecheck |
+
+---
+
+## Clip Fidelity (viewport pin + payoff dwell)
+
+The Proof clip is **reviewer-facing evidence**, not a leftover (`docs/adr/0007`). Two generation-time rules make it usable. Both belong in the **committed** spec, so the Step-7 proof run and the CI run render identically by construction rather than by luck.
+
+### Viewport pin
+
+Resolve the **effective viewport** from the project's Playwright config:
+
+| What the config carries | Verdict | Action |
+|---|---|---|
+| An explicit `viewport:` key, in top-level `use` or a project's `use` | **Deliberate** | Respect it. Never pin over it. |
+| A viewport arriving only from a desktop device-descriptor spread (`...devices['Desktop Chrome']`) | **Scaffold default** | Pin over it. |
+| A **mobile / non-desktop** descriptor (`...devices['iPhone 15']`, `isMobile: true`) | **Deliberate** | Respect it — a desktop pin over a mobile descriptor is nonsense. |
+| Nothing at all (Playwright's 1280×720 default) | **Scaffold default** | Pin over it. |
+
+Only an **explicit key** counts as deliberate. Nearly every scaffolded config spreads a device descriptor carrying 1280×720; reading that as a project decision would mean the pin never fires on real projects.
+
+When the verdict is *scaffold default*, pin a legible desktop viewport in the spec:
+
+```typescript
+test.use({ viewport: { width: 1600, height: 900 } });
+```
+
+Pin in the **spec** — never by editing the project's committed `playwright.config` (out of bounds), and never *only* in the ephemeral proof config. A viewport that exists solely while filming means locator healing, the hermetic audit and the mutation check all ran against a rendering CI never produces: a viewport-axis silent-always-pass, which is precisely the family this pipeline exists to prevent.
+
+Report the resolved effective viewport in the run's Assumptions block. Step 7 sets the recording size to match it, so the clip is never downscaled.
+
+### Payoff dwell
+
+The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. Hold it:
+
+```typescript
+// Then: the save is confirmed
+await expect(page.getByRole('status')).toHaveText('Saved');   // terminal assertion
+// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
+// run), after the terminal assertion, so it cannot affect pass/fail. CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
+```
+
+Every constraint here is load-bearing:
+
+- **After the terminal assertion only.** A dwell before or between assertions is the #9 band-aid papering over a race, and the reviewer is right to flag it. Placed after the last assertion it is incapable of changing the verdict, which is what makes the conditional safe — unlike the viewport, where conditionality would not be.
+- **Env-gated on `PW_PROVE_CLIP`.** Only the Step-7 proof run sets it. CI never does, so the suite does not get slower with every proof that lands.
+- **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful.
+- **One per test**, at the very end.
+
+This is the **only** sanctioned `page.waitForTimeout()` in generated output. Any other one is #9 and gets fixed, not justified.
 
 ---
 
@@ -255,7 +305,7 @@ Fulfilling locally in the route handler is also what keeps a mutation proof herm
 - Preferred gate, in order:
   1. An app-provided hydration marker: `await expect(page.locator('html[data-hydrated]')).toBeAttached();` — if the app exposes none, propose the one-line marker upstream (set an attribute in a root `useEffect`/`onMounted`); it fixes every spec at once.
   2. A self-verifying first action: `await expect(async () => { await button.click(); await expect(dialog).toBeVisible({ timeout: 1000 }); }).toPass();` — retries the click until it lands.
-- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI.
+- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI. (The one sanctioned dwell is the [payoff hold](#clip-fidelity-viewport-pin--payoff-dwell): env-gated, and *after* the terminal assertion — never a wait for something to become ready.)
 - Nuance: Qwik apps are resumable, not hydrated — no page-global gate needed. Island frameworks (Astro) hydrate per-island per their `client:*` directive — gate on the specific island's readiness (its own marker or a self-verifying action on that island), not a page-global signal.
 
 ---

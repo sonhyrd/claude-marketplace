@@ -29,9 +29,9 @@ Step 1  Dispatch + Environment      (change to prove → PR-mode · route → ta
 Step 2  Diff → AC                    (PR-mode: PR state read + diff→AC · target: skip · coverage-gap: gap analysis)
 Step 3  Bring-up + Probe            (ONE live pass: merge base, serve the branch, app-native auth, probe recon, record api.har, save storageState)
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
-Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers — see code-rules.md)
+Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + e2e-reviewer skill quality gate)
-Step 7  Verify                       (tsc → proof run [video+trace via ephemeral --config] → hermetic audit → mutation check)
+Step 7  Verify                       (tsc → warm route → proof run [video+trace via ephemeral --config, PW_PROVE_CLIP=1] → hermetic audit → mutation check)
 Step 8  Deliver                      (PR-mode: upload clips → R2 · commit spec+POM+api.har · push · PR comment · report)
 ```
 
@@ -275,7 +275,9 @@ Cover at minimum one happy path + one error/edge case. **PR-mode:** at minimum o
 
 ### Assumptions (required block in the PR-mode plan)
 
-One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth). This block is the audit trail that replaces the questions.
+One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth, **effective viewport**). This block is the audit trail that replaces the questions.
+
+**Effective viewport** is resolved here, from the Step-1 `configPath`, by the rule in `code-rules.md` → Clip Fidelity — state the value *and* which branch produced it (`deliberate: <w>x<h>` when the config carries an explicit `viewport:` key or a mobile descriptor, `pinned: 1600x900` when it carries only a desktop descriptor or nothing). Step 5 writes the pin; Step 7 sizes the recording to match.
 
 **Exit:** PR-mode → Step 5 now. Coverage-gap → wait for approval.
 
@@ -292,6 +294,8 @@ Follow `code-rules.md`: structure detection (always POM), selector priority, POM
 **HAR-first mocking.** Replay read traffic from the committed `api.har` via `page.routeFromHAR('<feature>.api.har', { url: '**/api/**', notFound: 'abort' })` — `notFound: 'abort'` keeps the spec strictly hermetic (an unrecorded call aborts, surfacing as a visible failure rather than a silent live round-trip). Hand-write `route.fulfill` **only** for the mutation under assertion (the stateful write the scenario tests). The HAR is committed, API-scoped, and auth-scrubbed (see `code-rules.md`).
 
 **Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion word-for-word — Step 6 audits it before Step 7.
+
+**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Close each test with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell **after** the terminal assertion. Both are committed, so the proof run and CI render identically by construction.
 
 ### Step 5b: Conventions & Seed (first run on a project)
 
@@ -344,18 +348,40 @@ npx --no-install tsc --noEmit -p <e2e/tsconfig.json or tsconfig.json>
 // <configDir>/.pw-prove.proof.config.ts  (throwaway — deleted after the run, never committed)
 import base from './playwright.config';
 import { defineConfig } from '@playwright/test';
-export default defineConfig({ ...base, use: { ...(base.use ?? {}), video: 'on', trace: 'on' } });
+// Substitute the run's EFFECTIVE viewport (the Step-5 pin, or the project's deliberate
+// viewport) — NOT a fixed literal. Playwright's default recording size is the viewport
+// scaled into an 800x800 box (~800x450, illegible), which is what this override exists to kill.
+const size = { width: <effective.width>, height: <effective.height> };
+export default defineConfig({
+  ...base,
+  use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' },
+});
 ```
 
+**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`). Three things make it usable; none of them re-runs the spec or post-processes the recording:
+
+| | What | Why |
+|---|---|---|
+| **Size** | `video.size` = the effective viewport, from `code-rules.md` → Clip Fidelity | `size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. Deliberately **do not** set `viewport` in this ephemeral config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
+| **Warm lead** | One request to the route under proof, just before filming | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. |
+| **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` post-assertion dwell. It sits *after* the terminal assertion, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
+
 ```bash
-# Run the proof spec through the ephemeral config. video:'on' records ONE webm per test (per AC);
+# Warm the route so the clip opens on a compiled app, not a cold build. Never fails the run —
+# but a warm that didn't land is stated in the report, not swallowed (the clip will be boot-heavy).
+curl -sS -o /dev/null --max-time 60 -w '%{http_code}\n' "<baseURL><route under proof>" \
+  || echo "warm-failed"
+
+# Run the proof spec through the ephemeral config. video records ONE webm per test (per AC);
 # trace:'on' leaves a per-test trace.zip for healing + the playwright-debugger handoff.
-npx --no-install playwright test <spec> --project=chromium \
+PW_PROVE_CLIP=1 npx --no-install playwright test <spec> --project=chromium \
   --config <configDir>/.pw-prove.proof.config.ts --reporter=html
 # webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
 ```
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), fall back to adding a dedicated `use.video`/`use.trace` inside the ephemeral config's own `use` block — still never editing the committed config.
+
+Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `size` must be substituted from the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the ephemeral config. A non-2xx warm (or `warm-failed`) is reported as `Proof clips: <url> — warm miss, clip is boot-heavy`.
 
 ### Failure handling (max 3 auto-fix attempts)
 

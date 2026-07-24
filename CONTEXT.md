@@ -6,7 +6,13 @@ Two E2E-generation skills coexist. **playwright-test-generator** (`PTG`) is the 
 The lean E2E proof skill. North star: the fastest correct proof of a change, under one rule — a best-practice earns its place only if it also cuts steps or model output. Same guarantees as PR-mode (mutation check, hermetic-by-default, POM-always, PROVES headers, stop-report), but evidence is a byproduct of the single proof run rather than a separate film step. 8 steps; probe-required recon; HAR-first mocks.
 
 ## Proof clip
-pw-prove's evidence artifact: the per-test webm Playwright records when the proof run enables `video: 'on'` via an ephemeral config. One clip per scenario (per AC), not one chaptered film. Uploaded to R2 by `host-video.mjs`; the PR comment lists one URL per AC. The `trace.zip` from the same run is a local heal/debug aid, not a delivered clip.
+pw-prove's evidence artifact: the per-test webm Playwright records when the proof run enables video via an ephemeral config. One clip per scenario (per AC), not one chaptered film. Uploaded to R2 by `host-video.mjs`; the PR comment lists one URL per AC. The `trace.zip` from the same run is a local heal/debug aid, not a delivered clip. Reviewer-facing, and therefore held to a [fidelity contract](#clip-fidelity-contract).
+
+## Clip fidelity contract
+The three properties a Proof clip must have to be usable as evidence: recorded at the **effective viewport** (never Playwright's 800×800-box downscale), opening on a **warmed** route rather than a cold compile, and ending on the success signal **held** on screen. Held at authoring time — a committed viewport pin plus a `PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell — never by a second run, a measurement gate, or editing the recording. A clip that fails the contract is a defect, not a trade-off. See `docs/adr/0007`.
+
+## Effective viewport
+The viewport a generated spec actually renders at, and the size its clip is recorded at. Resolved from the project's Playwright config by one rule: only an **explicit `viewport:` key** is a deliberate project decision and is respected; a viewport arriving solely from a *desktop* device-descriptor spread is scaffold default and is pinned over (1600×900). A **mobile/non-desktop** descriptor is always respected. Resolved in the Step-4 Assumptions block as either a `deliberate:` or a `pinned:` verdict. The pin lives in the committed spec, never only in the ephemeral proof config — otherwise the proof renders at a size CI never produces.
 
 ## HAR fixture
 pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`), auth-scrubbed HAR recorded during the probe pass and committed alongside the spec. `routeFromHAR(..., { notFound: 'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Hand-written `route.fulfill` remains only for the mutation under assertion.
@@ -48,7 +54,7 @@ A generated spec whose every network call is mocked. The default for all PTG out
 The sanctioned exception to hermetic specs: a real-backend interaction that is itself the acceptance criterion under proof. Must be named in the scenario plan and in the spec header. Reads freely; writes only with a proven restore; never creates data on a shared tenant.
 
 ## Proof
-The complete PR-mode deliverable: green spec + POM committed to the PR branch, plus the watch link. A run that ends with uncommitted tests or no watch link has not delivered a proof.
+The complete PR-mode deliverable: green spec + POM committed to the PR branch, plus the published evidence — the **watch link** in PTG, the per-AC **Proof clips** in pw-prove. A run that ends with uncommitted tests, or with no published evidence, has not delivered a proof.
 
 ## Contact sheet
 The single film-QA evidence artifact record.mjs extracts: 30 frames spanning the whole film, tiled on one image (`CONTACT=`). Its final tile is the film's final-frame evidence (there is no separate poster). Step 8 reads it once per film before publishing; the report's `Film QA:` line is filled from it.
@@ -69,4 +75,4 @@ Recording a scenario as `unproven — gated: <reason>` on the report's ACs line 
 The film-spec authoring constraint that follows from chapters sharing one browser context (unlike committed tests, which each get a fresh one): any scenario whose committed test depends on fresh-context state (cookies, storage, locale, auth) must open with an explicit state reset or be excluded from the film via demotion.
 
 ## Land the proof
-Step 9, the deterministic PR-mode tail: hygiene sweep → commit spec+POM to the PR branch → push → watch-link PR comment (creating a PR when none exists) → completion report. The report format is the run's exit gate: structurally invalid in PR-mode without its Watch link, Film QA, Committed, Pushed, and PR comment lines.
+The deterministic PR-mode tail — PTG's Step 9, pw-prove's Step 8: upload/host the evidence → hygiene sweep → commit spec+POM to the PR branch → push → PR comment (creating a PR when none exists) → completion report. The report format is the run's exit gate, structurally invalid in PR-mode without its Committed, Pushed and PR comment lines, plus the mode's evidence lines: **Watch link + Film QA** in PTG, **Proof clips + Mutation** in pw-prove.
