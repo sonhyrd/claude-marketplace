@@ -1,5 +1,16 @@
 # Glossary
 
+Two E2E-generation skills coexist. **playwright-test-generator** (`PTG`) is the heavyweight, invoke-by-name variant that ships a hosted, chaptered proof film. **pw-prove** is the lean default for proving a change fast, whose evidence is a byproduct of its one proof run. Terms shared by both (PR-mode, Coverage-gap mode, Approval gate, Notify-and-continue, Recon probe, Hermetic spec, Declared carve-out, Mutation check / Unguardable at this layer, Land the proof) apply to both. The **film vocabulary** — Watch link, Proof film, Chapter, Contact sheet, Static chapter, Film QA gate, Refilm budget, Flake screen, State-isolation rule, Demotion — is **PTG-only**; pw-prove retires it in favor of Proof clip + HAR fixture (below). See `docs/adr/0005`, `docs/adr/0006`.
+
+## pw-prove
+The lean E2E proof skill. North star: the fastest correct proof of a change, under one rule — a best-practice earns its place only if it also cuts steps or model output. Same guarantees as PR-mode (mutation check, hermetic-by-default, POM-always, PROVES headers, stop-report), but evidence is a byproduct of the single proof run rather than a separate film step. 8 steps; probe-required recon; HAR-first mocks.
+
+## Proof clip
+pw-prove's evidence artifact: the per-test webm Playwright records when the proof run enables `video: 'on'` via an ephemeral config. One clip per scenario (per AC), not one chaptered film. Uploaded to R2 by `host-video.mjs`; the PR comment lists one URL per AC. The `trace.zip` from the same run is a local heal/debug aid, not a delivered clip.
+
+## HAR fixture
+pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`), auth-scrubbed HAR recorded during the probe pass and committed alongside the spec. `routeFromHAR(..., { notFound: 'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Hand-written `route.fulfill` remains only for the mutation under assertion.
+
 ## PR-mode
 The playwright-test-generator pipeline variant that proves a specific change (PR, branch, ticket, or prose "prove this change" argument) end-to-end. Scope is closed: acceptance criteria are derived from the diff.
 
