@@ -32,10 +32,10 @@ Step 4  Plan                         (scenarios + locator table + assumptions; P
 Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + e2e-reviewer skill quality gate)
 Step 7  Verify                       (tsc → warm route → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → hermetic audit → mutation check)
-Step 8  Deliver                      (PR-mode: upload clips → R2 · commit spec+POM+api.har · push · PR comment · report)
+Step 8  Deliver                      (PR-mode: publish ONE proof page → R2 · commit spec+POM+api.har · push · PR comment · report)
 ```
 
-**A PR-mode run ends at Step 8's completion report and nowhere else.** The report is structurally invalid without its `Proof clips`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines. The only sanctioned PR-mode stop is a base-merge conflict (Step 3); everything else resolves from the contract with a stated assumption.
+**A PR-mode run ends at Step 8's completion report and nowhere else.** The report is structurally invalid without its `Proof page`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines. The only sanctioned PR-mode stop is a base-merge conflict (Step 3); everything else resolves from the contract with a stated assumption.
 
 **Stop reports (target & coverage-gap modes).** A run that cannot legitimately produce coverage (flow absent, dev server won't boot, auth wall with no discoverable credential) STOPs with a report — never a fabricated pass. In order:
 
@@ -396,7 +396,7 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
-Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `PW_PROVE_W`/`PW_PROVE_H` must carry the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config. A non-2xx warm (or `warm-failed`) is reported as `Proof clips: <url> — warm miss, clip is boot-heavy`.
+Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `PW_PROVE_W`/`PW_PROVE_H` must carry the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config. A non-2xx warm (or `warm-failed`) is reported as `Proof page: <url> — warm miss, clips are boot-heavy`.
 
 ### Failure handling (max 3 auto-fix attempts)
 
@@ -441,7 +441,7 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
    ```
    Real residue = **HARD STOP**: report immediately; never continue on a polluted tree.
 
-**On full pass:** PR-mode → Step 8. Target/coverage-gap → the completion report directly (Step 8's clip upload only when a proof clip was requested or hosting is ready).
+**On full pass:** PR-mode → Step 8. Target/coverage-gap → the completion report directly (Step 8's proof page only when a clip was requested or hosting is ready).
 
 ---
 
@@ -449,23 +449,36 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 
 PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips is not delivered. Coverage/target mode: skip to item 5 (report only). Run in order:
 
-1. **Locate + upload the proof clips.** Find the per-test webms under `test-results/**/*.webm` (one per scenario). Upload each with an AC-named key; `host-video.mjs` prints the public URL as stdout line 1:
+1. **Publish ONE proof page for the run.** Find the per-test webms under `test-results/**/*.webm` (one per scenario) and map each to the AC it proves. Write a manifest, then hand the whole run to `host-proof.mjs`: it uploads every clip under one key prefix and publishes a single `index.html` that plays them in order with an AC rail (`docs/adr/0009`). **N clips, one link** — a reviewer opens one URL and watches the whole proof.
    ```bash
    PROJECT=$(basename "$(git rev-parse --show-toplevel)")
    SHA=$(git rev-parse --short HEAD)
+   cat > /tmp/pw-prove-manifest.json <<'JSON'
+   {
+     "title":    "PR #<N> — <change in a phrase>",
+     "prUrl":    "<PR url, or omit to let gh resolve it>",
+     "spec":     "<generated-spec-file>",
+     "mutation": "RED — <the mutation that turned it red> | unguardable at <layer>",
+     "clips": [
+       { "ac": "<AC verbatim>", "scenario": "<the test's title>", "file": "test-results/<...>/video.webm" }
+     ]
+   }
+   JSON
    # BEARER + SCAN protect the PUBLIC upload — the gate greps the webm bytes for the token. Prefer
    # programmatic auth (Step 3) so no credential ever enters the frame; a filmed UI login would trip it.
-   URL=$(BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file>" \
-     node <skill-base>/scripts/host-video.mjs "<webm>" "$PROJECT" "proof/<ac-slug>-$SHA.webm" | head -n1)
+   PAGE=$(BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file>" \
+     node <skill-base>/scripts/host-proof.mjs /tmp/pw-prove-manifest.json "$PROJECT" "proof/pr<N>-$SHA" | head -n1)
    ```
-   Gate exits: degenerate-key (2), empty webm (3), token leak (6). On any gate, report **which** gate fired and print **no** link. A hosting-not-ready environment (Step 3 `PROBE_HOSTING` WARN) skips gracefully: `Proof clips: skipped — <gate>` with the probe output pasted beneath (never fail the run over a missing clip).
+   Clip order in `clips[]` is the order a reviewer watches, so it is the **AC order**, not the order `test-results/` happened to list. Each clip stays individually linkable at `$PAGE#<ac-slug>` — the AC table in the PR comment links those anchors, and `host-proof` prints every clip URL on stderr.
+
+   Gate exits (per clip, and for the page): degenerate-key (2), empty webm (3), token leak (6). A gate that trips on any clip **aborts the page** — a proof page with a hole in it is worse than none. On any gate, report **which** gate fired and print **no** link. A hosting-not-ready environment (Step 3 `PROBE_HOSTING` WARN) skips gracefully: `Proof page: skipped — <gate>` with the probe output pasted beneath (never fail the run over a missing page).
 2. **Hygiene sweep** before staging:
    - Delete `test-results/`/`playwright-report/` litter, plus any legacy throwaway `.pw-prove.proof.config.*` left by an older run. **Keep `playwright.proof.config.ts`** — it is a deliverable, not litter; stage it when this run created it.
    - Revert codegen churn (`git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'` on Nuxt-style repos).
    - **Scrub the HAR:** confirm no `Authorization`/cookie/token value remains in `<feature>.api.har` before it is staged. A leaked bearer in a committed HAR is the same incident as one in a log line.
    - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
-4. **Push**, then **post the clips on the PR**: `gh pr comment <N> --body "<per-AC clip URLs + mutation verdict + AC table>"`.
+4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<proof page link + AC table whose rows deep-link $PAGE#<ac-slug> + mutation verdict>"`. Lead with the one page link; the table's per-AC anchors are navigation inside it, not five competing links.
    - **No PR exists** (prose/branch run): push, `gh pr create` with the AC table as body, comment there.
    - **Merged-PR retarget** (Step 2): fresh test-only branch off the default, push, `gh pr create`, comment there.
 5. **Completion report** — the run's exit artifact:
@@ -483,9 +496,9 @@ ACs: <N proven> / <M total>          # list each `unproven — gated: <what>` ex
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed · hermetic (carve-outs: none | <declared list>)
 Mutation: RED (spec guards the change) | unguardable at <layer>
-Proof clips:
-- <AC1> -> <public R2 URL>
-- <AC2> -> <public R2 URL>
+Proof page: <public R2 URL of index.html> (N clips)
+- <AC1> -> <page URL>#<ac1-slug>
+- <AC2> -> <page URL>#<ac2-slug>
 Committed: <short-sha> on <branch>
 Pushed: <remote>/<branch>
 PR comment: <url>
@@ -493,11 +506,11 @@ PR comment: <url>
 
 **Report invariant (PR-mode):** structurally invalid unless every line above is present.
 
-- `Proof clips:` is either one URL per proven AC, or `skipped — <gate>` **with the failing probe's output pasted directly beneath** (never from memory). A skip line with no probe output is a silent drop.
+- `Proof page:` is either ONE page URL followed by its per-AC anchors, or `skipped — <gate>` **with the failing probe's output pasted directly beneath** (never from memory). A skip line with no probe output is a silent drop. N bare clip URLs and no page is the pre-`0009` shape and is not a valid report.
 - `Mutation:` is `RED` or `unguardable at <layer>` — never absent in PR-mode.
 - `Committed / Pushed / PR comment` have **no skip form**: if the tail cannot complete (push rejected, `gh` unauthenticated), report the blocking error and the exact failing command output *instead of* a Complete report.
 
-In coverage-gap mode (and target mode without a requested clip) the report is the first block (`Generated` through `Mutation`), plus `Proof clips` only if a clip was requested or produced.
+In coverage-gap mode (and target mode without a requested clip) the report is the first block (`Generated` through `Mutation`), plus `Proof page` only if a page was requested or produced.
 
 ---
 
@@ -509,7 +522,8 @@ All paths are in this directory.
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
 - Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` probes wrangler/Chrome): `scripts/preflight.mjs`
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
-- Step-8 clip upload (R2 put + degenerate-key/empty-file/token-redaction gates): `scripts/host-video.mjs`
+- Step-8 proof page (N clips + one index.html under one key prefix; AC rail, auto-advance, `#slug` deep links): `scripts/host-proof.mjs`
+- Single-object R2 put (degenerate-key/empty-file/token-redaction gates; `host-proof.mjs` publishes through it): `scripts/host-video.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`
 - Conventions & seed template (Step 5b): `conventions-template.md`
 - Playwright Agents interop (≥ 1.56 planner/generator/healer): `playwright-agents.md`

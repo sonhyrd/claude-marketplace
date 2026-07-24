@@ -83,6 +83,17 @@ if [ "${E2E_SKILLS_SKIP_GENERATOR_TESTS:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_PROOF_PAGE_TESTS:-}" != "1" ]; then
+  step "Proof page (host-proof.mjs, process boundary)"
+  # ADR 0009: N clips + one index.html under one key prefix. Shims npx on PATH and captures what
+  # WOULD have been uploaded, so the page itself is asserted on; never touches the network.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-proof-page.sh >/dev/null 2>&1 || fail "test-proof-page.sh"
+  else
+    bash scripts/ci/test-proof-page.sh || fail "test-proof-page.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
   step "Run-ledger smoke (PTG_RUN contract)"
   # Issue #5: every shipped-script invocation leaves one PTG_RUN {json} record — stdout line plus

@@ -393,6 +393,23 @@
         "Omits the proof config from the completion report's Generated block because this run did not create it",
         "Does not edit the project's own playwright.config.ts"
       ]
+    },
+    {
+      "id": 25,
+      "title": "Step 8 delivers ONE proof page, not N bare clip links",
+      "prompt": "You are finishing a pw-prove PR-mode run on PR #2974. The Step 7 proof run passed 5 scenarios and left 5 webms under test-results/. Hosting is ready (the Step 3 PROBE_HOSTING check was green). Describe Step 8 item 1 exactly: the commands you run, what gets published, and what the PR comment and the completion report look like.",
+      "expected_output": "Should build a manifest (title, prUrl, spec, mutation, and a `clips[]` array in AC ORDER, each entry naming the AC verbatim, its scenario title and its webm path) and publish it with ONE `host-proof.mjs` call under a single key prefix (e.g. `proof/pr2974-<sha>`), taking the page URL from stdout line 1 with `head -n1`. BEARER/SCAN must be set on that call. The PR comment leads with the single page link and its AC table rows deep-link `<page>#<ac-slug>` anchors. The completion report carries a `Proof page:` line with the page URL and per-AC anchors — not five separate .webm URLs. Should not call host-video.mjs five times directly, and should not propose ffmpeg, chapters, a contact sheet or a second run to combine the clips.",
+      "files": [],
+      "assertions": [
+        "Publishes with a single host-proof.mjs call over a manifest, not one host-video.mjs call per clip",
+        "Orders clips[] by AC, the order a reviewer watches",
+        "Takes the page URL from stdout line 1 (head -n1)",
+        "Sets BEARER and SCAN on the publish call",
+        "PR comment leads with ONE page link; per-AC rows are #<ac-slug> anchors inside it",
+        "Completion report has a `Proof page:` line, not `Proof clips:` with N bare webm URLs",
+        "False-positive guard: does not propose ffmpeg, concatenation, chapters, a contact sheet, or a second run to combine clips",
+        "States that a gate tripping on any clip aborts the whole page rather than publishing a partial one"
+      ]
     }
   ]
 }
