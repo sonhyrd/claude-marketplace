@@ -482,6 +482,48 @@
         "On an empty URL, reads the log and reports the gate instead of immediately re-uploading",
         "False-positive guard: does not pipe `2>&1` into a bare `head -n1` to capture the URL"
       ]
+    },
+    {
+      "id": 31,
+      "title": "The runner's origin is proven reachable before the proof run, not inferred from a healthy localhost",
+      "prompt": "Step 3. You started the dev server on port 4000 and `curl http://localhost:4000` returns 200. `playwright.config.ts` has `webServer: { url: 'http://127.0.0.1:4000', reuseExistingServer: !process.env.CI }` and `use: { baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4000' }`. Confirm bring-up and record the Assumptions line.",
+      "expected_output": "Should curl the exact `http://127.0.0.1:4000` string the config carries, discover it is refused while `localhost:4000` answers, and name the cause: the dev server bound `[::1]` only. Should resolve it by exporting `E2E_BASE_URL=http://localhost:4000` and carrying that variable on every later runner invocation (typecheck, proof run, heal runs, mutation run), and record `Runner origin: http://localhost:4000 via E2E_BASE_URL — config's http://127.0.0.1:4000 refused (loopback mismatch)` in the Assumptions block. Editing the project's config to fix it is out of bounds.",
+      "files": [],
+      "assertions": [
+        "Curls the literal `http://127.0.0.1:4000` from the config, not only the `localhost` form it already verified",
+        "On a refusal, names the loopback-family mismatch (server bound to [::1]) rather than concluding the server is down",
+        "Sets E2E_BASE_URL to the reachable form and states it will prefix EVERY later runner invocation, not just the proof run",
+        "Records a `Runner origin:` line in the Step-4 Assumptions block",
+        "False-positive guard: does not edit webServer.url or use.baseURL in the project's playwright.config.ts"
+      ]
+    },
+    {
+      "id": 32,
+      "title": "A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec",
+      "prompt": "Step 7. The proof run exits with `Error: Timed out waiting 120000ms from config.webServer.` and the report shows 0 tests run, 0 clips. The dev server you started is still logging requests and answers `curl http://localhost:4000` with 200.",
+      "expected_output": "Should read the failure as Playwright never reaching `webServer.url` — it therefore tried to boot a second server and timed out — rather than as a slow app or a defective spec. Zero tests run is the tell: a broken spec still runs. Should re-dial the config's literal URL, then re-run with the Step-3 Runner-origin env var. Should not raise the webServer timeout, add spec timeouts, or add retries, and should not confuse this with the worker-saturation signature where every test times out on its first `page.goto` (that one is fixed with `--workers=1`).",
+      "files": [],
+      "assertions": [
+        "Identifies that Playwright could not reach webServer.url and tried to boot a duplicate server",
+        "Re-dials the config's literal URL to confirm, rather than raising the webServer timeout",
+        "Carries the Runner-origin env var on the retried invocation",
+        "False-positive guard: does not add timeouts to the spec, does not add retries, and does not treat this as a locator or assertion failure",
+        "False-positive guard: does not confuse it with the every-test-times-out-on-first-goto signature (that one is worker saturation and is fixed with --workers=1)"
+      ]
+    },
+    {
+      "id": 33,
+      "title": "A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks",
+      "prompt": "Step 3 ran the probe with RECORD_HAR set and the batches answered normally. In Step 5 you are about to write the spec's network determinism. `ls tests/e2e/<feature>.api.har` shows no such file.",
+      "expected_output": "Should stop before writing `routeFromHAR` against a file that does not exist — a spec replaying a missing HAR aborts every call under `notFound: 'abort'`, which reads as a broken surface. Should check the probe's close output, which reports either the written path with a byte count or a warning that no HAR landed. Should then either re-record the pass or state the deviation explicitly (`no api.har — <reason>`) in the Assumptions block and the completion report, and hand-mock only what the scenario needs. A missing HAR is never evidence that the surface makes no API calls.",
+      "files": [],
+      "assertions": [
+        "Notices the missing HAR before writing `routeFromHAR` against it",
+        "Does not commit a spec that replays a HAR file that does not exist",
+        "Either re-records with the probe or states the no-HAR deviation explicitly in the plan's Assumptions block and in the completion report",
+        "Reads the probe's close output for the RECORD_HAR verdict (written path + byte count, or the warning) instead of assuming the recon was clean",
+        "False-positive guard: does not treat an absent HAR as evidence that the surface makes no API calls"
+      ]
     }
   ]
 }

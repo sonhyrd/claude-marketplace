@@ -258,6 +258,31 @@ if (MODE === 'start') {
       if (closing) return;
       closing = true;
       err(`probe: closing (${why}) — no zombie browser outlives the session\n`);
+      // The context closes FIRST and on its own: Playwright flushes recordHar on context close, and
+      // browser.close() alone does not produce the file. Skipping this made RECORD_HAR a silent
+      // no-op — the recon pass reported clean, wrote nothing, and the spec fell back to hand-mocks.
+      try {
+        await context.close();
+      } catch {
+        /* already gone */
+      }
+      if (process.env.RECORD_HAR) {
+        const p = process.env.RECORD_HAR;
+        const size = (() => {
+          try {
+            return fs.statSync(p).size;
+          } catch {
+            return -1;
+          }
+        })();
+        err(
+          size > 0
+            ? `probe: HAR written ${p} (${size} bytes, filter ${process.env.HAR_URL_FILTER || '**/api/**'})\n`
+            : `probe: WARNING — RECORD_HAR was set but no HAR landed at ${p}. Nothing matched\n` +
+              `       ${process.env.HAR_URL_FILTER || '**/api/**'}, or the path is unwritable. Do NOT\n` +
+              `       commit a routeFromHAR spec against a HAR that does not exist.\n`,
+        );
+      }
       try {
         await browser.close();
       } catch {

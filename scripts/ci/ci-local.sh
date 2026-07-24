@@ -105,6 +105,17 @@ if [ "${E2E_SKILLS_SKIP_PROOF_PAGE_TESTS:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_PROBE_HAR:-}" != "1" ]; then
+  step "Probe RECORD_HAR contract (probe.mjs, structural)"
+  # ADR 0011: recordHar flushes on CONTEXT close, so a shutdown that only closes the browser makes
+  # HAR-first mocking a silent no-op. Structural — the live flush needs a browser CI lacks.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-probe-har.sh >/dev/null 2>&1 || fail "test-probe-har.sh"
+  else
+    bash scripts/ci/test-probe-har.sh || fail "test-probe-har.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
   step "Run-ledger smoke (PTG_RUN contract)"
   # Issue #5: every shipped-script invocation leaves one PTG_RUN {json} record — stdout line plus

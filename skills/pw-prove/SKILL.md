@@ -166,7 +166,12 @@ Prove the change, not the whole app.
    BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
    ```
    On STOP: read the dev-server log and check `playwright.config.*` for a `webServer` block whose command differs from what you started; fix and re-run.
-4. **Probe hosting prerequisites now (PR-mode) — with the readiness poll:**
+4. **Pin the origin *Playwright itself* will dial, and prove that exact string reachable.** Your `curl http://localhost:$PORT` answering does **not** mean the runner can connect: dev servers commonly bind `[::1]` only, so `localhost` resolves and `127.0.0.1` refuses — and `webServer.url` in a scaffolded config is usually the literal `http://127.0.0.1:<port>`. Playwright then concludes no server is up, boots a duplicate, and dies on `Timed out waiting 120000ms from config.webServer`, burning the whole proof run. Read `webServer.url` / `use.baseURL` out of the config **after** env overrides, and curl that literal origin:
+   ```bash
+   curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
+   ```
+   Reachable → record it as `Runner origin:` in the Step-4 Assumptions block. **Refused while your `localhost:$PORT` answers** → loopback-family mismatch: set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
+5. **Probe hosting prerequisites now (PR-mode) — with the readiness poll:**
    ```bash
    PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
    ```
@@ -281,7 +286,9 @@ Cover at minimum one happy path + one error/edge case. **PR-mode:** at minimum o
 
 ### Assumptions (required block in the PR-mode plan)
 
-One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth, **effective viewport**). This block is the audit trail that replaces the questions.
+One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth, **effective viewport**, **runner origin**). This block is the audit trail that replaces the questions.
+
+**Runner origin** is the Step-3 item 4 verdict, carried here verbatim: `Runner origin: <url>` when the config's own `webServer.url`/`baseURL` answered, or `Runner origin: <url> via <ENV_VAR> — config's <url> refused (loopback mismatch)` when it did not. The env-var form is a standing instruction to Steps 6–7, not a note: every runner invocation from here on prefixes it.
 
 **Effective viewport** is resolved here, from the Step-1 `configPath`, by the rule in `code-rules.md` → Clip Fidelity — state the value *and* which branch produced it (`deliberate: <w>x<h>` when the config carries an explicit `viewport:` key or a mobile descriptor, `pinned: 1600x900` when it carries only a desktop descriptor or nothing). Step 5 writes the pin; Step 7 sizes the recording to match.
 
@@ -421,6 +428,7 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | Structural | Fix missing `await`, wrong setup, incorrect `beforeEach` |
 | Unrecorded call aborted (`notFound:'abort'`) | The surface calls an endpoint the HAR didn't capture — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
 | **Every** test times out on its first `page.goto` | Not a spec defect — a saturated dev server. Confirm the origin is alive (`curl -w '%{time_total}'`), then re-run with `--workers=1`. Never "fix" this in the spec with longer timeouts. |
+| **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | Not a spec defect either, and not a slow server: Playwright could not reach `webServer.url`, so it tried to boot a second one. Almost always a loopback-family mismatch (`127.0.0.1` in the config, a dev server bound to `[::1]`). Re-dial that literal URL with `curl`; on refusal, carry the Step-3 `Runner origin:` env var on this invocation. |
 
 **Rerun only what failed.** During the ≤3 attempts, run just the failing test(s) — `-g "<title>"`. The full spec runs **once** after the last fix, as the gate. A **type-only fix** is gated by `tsc` — batch it into the next behavioral rerun.
 
