@@ -314,8 +314,8 @@
     {
       "id": 21,
       "title": "Clip fidelity: the full bundle (size, warm lead, held payoff) on a project that declares no viewport",
-      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-flat/. The Playwright config declares no explicit `viewport:` key anywhere. Generate the proof spec and describe the Step 7 proof run: the ephemeral proof config, the commands, and anything you do before filming. State the effective viewport you resolved and where the pin lives.",
-      "expected_output": "Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should set the ephemeral proof config's recording size equal to that viewport (`video: { mode: 'on', size: { width: 1600, height: 900 } }`) rather than leaving Playwright's default 800x800-box downscale. Should warm the route under proof with a single request immediately before the proof run. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell placed AFTER the terminal assertion. Should not edit the committed playwright.config, and should not pin the viewport only in the ephemeral config.",
+      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-flat/. The Playwright config declares no explicit `viewport:` key anywhere and there is no proof config in the repo yet. Generate the proof spec and describe the Step 7 proof run: the proof config, the commands, and anything you do before filming. State the effective viewport you resolved and where the pin lives.",
+      "expected_output": "Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should write `playwright.proof.config.ts` next to the project config as a STATIC file — `video: { mode: 'on', size }` with size read from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, no per-run literal substituted into the file — and pass `PW_PROVE_W=1600 PW_PROVE_H=900` on the proof command so the clip is never left at Playwright's 800x800-box downscale. Should warm the route under proof with a single request immediately before the proof run. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell placed AFTER the terminal assertion. Should not edit the committed playwright.config, should not pin the viewport only in the proof config, and should stage (not delete) the proof config in Step 8.",
       "files": [
         "evals/files/project-flat/playwright.config.ts",
         "evals/files/project-flat/tests/login.spec.ts"
@@ -323,9 +323,11 @@
       "assertions": [
         "Resolves the effective viewport as a scaffold default (config declares no explicit viewport key)",
         "Pins viewport 1600x900 in the generated spec via test.use()",
-        "Places the viewport pin in the committed spec, not only in the ephemeral proof config",
+        "Places the viewport pin in the committed spec, not only in the proof config",
         "Does not edit the project's committed playwright.config.ts",
-        "Sets the ephemeral proof config's video recording size equal to the effective viewport (1600x900)",
+        "Writes the proof config as `playwright.proof.config.ts` next to the project config, and stages it rather than deleting it in Step 8 hygiene",
+        "Keeps the proof config static — recording size comes from PW_PROVE_W/PW_PROVE_H with a 1600x900 default, not a literal substituted per run",
+        "Passes the effective viewport on the proof command as PW_PROVE_W=1600 PW_PROVE_H=900",
         "Uses the object form `video: { mode: 'on', size: ... }` rather than bare `video: 'on'`",
         "Warms the route under proof with one request before the proof run",
         "Sets PW_PROVE_CLIP=1 on the Step 7 proof run",
@@ -339,8 +341,8 @@
     {
       "id": 22,
       "title": "Clip fidelity guard: respect a deliberate project viewport",
-      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-viewport/, proving a change to the /reports surface. Generate the proof spec and the Step 7 ephemeral proof config. State the effective viewport you resolved and which branch of the rule produced it.",
-      "expected_output": "Should read the explicit `viewport: { width: 1440, height: 900 }` key in the chromium project's `use` block, classify it as a DELIBERATE project decision, and respect it. Must NOT pin 1600x900 and must not emit a `test.use({ viewport: ... })` override in the spec. The ephemeral proof config's recording size must match the project's own viewport (1440x900) so the clip is still never downscaled. The dwell, route warm and PW_PROVE_CLIP gating are unchanged by this branch.",
+      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-viewport/, proving a change to the /reports surface. Generate the proof spec and the Step 7 proof run. State the effective viewport you resolved and which branch of the rule produced it.",
+      "expected_output": "Should read the explicit `viewport: { width: 1440, height: 900 }` key in the chromium project's `use` block, classify it as a DELIBERATE project decision, and respect it. Must NOT pin 1600x900 and must not emit a `test.use({ viewport: ... })` override in the spec. The recording size must match the project's own viewport, passed as `PW_PROVE_W=1440 PW_PROVE_H=900` on the proof command — the proof config file itself stays static with its 1600x900 default untouched, since the size is the one per-run value and it travels on the command line. The dwell, route warm and PW_PROVE_CLIP gating are unchanged by this branch.",
       "files": [
         "evals/files/project-viewport/playwright.config.ts",
         "evals/files/project-viewport/src/routes.ts"
@@ -350,7 +352,8 @@
         "Classifies an explicit viewport key as a deliberate project decision",
         "Does NOT pin 1600x900",
         "Does NOT emit a test.use({ viewport: ... }) override in the generated spec",
-        "Sets the ephemeral proof config's recording size to 1440x900, matching the project's viewport",
+        "Passes PW_PROVE_W=1440 PW_PROVE_H=900 on the proof command, matching the project's viewport",
+        "False-positive guard: does NOT hardcode 1440x900 into playwright.proof.config.ts — the file stays static and project-agnostic",
         "Still warms the route before the proof run",
         "Still generates the JUSTIFIED, PW_PROVE_CLIP-gated dwell after the terminal assertion",
         "Does not edit the project's committed playwright.config.ts"
@@ -359,20 +362,36 @@
     {
       "id": 23,
       "title": "Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport",
-      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-pom/, proving a change to the /checkout surface. Read its Playwright config and generate the proof spec plus the Step 7 ephemeral proof config. Report the Assumptions block line for the effective viewport.",
-      "expected_output": "The chromium project spreads `...devices[\"Desktop Chrome\"]` (which carries 1280x720) and the config has no explicit `viewport:` key anywhere. The agent must resolve this to a `pinned: 1600x900` verdict rather than `deliberate: 1280x720` — a desktop device-descriptor viewport is scaffold boilerplate, not a project decision. Externally: the generated spec must contain `test.use({ viewport: { width: 1600, height: 900 } })`, and the ephemeral proof config's `video.size` must be 1600x900. Failing this branch is the regression that would silently nullify the legibility fix on nearly every real project, since almost every scaffolded config spreads a descriptor.",
+      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-pom/, proving a change to the /checkout surface. Read its Playwright config and generate the proof spec plus the Step 7 proof run. Report the Assumptions block line for the effective viewport.",
+      "expected_output": "The chromium project spreads `...devices[\"Desktop Chrome\"]` (which carries 1280x720) and the config has no explicit `viewport:` key anywhere. The agent must resolve this to a `pinned: 1600x900` verdict rather than `deliberate: 1280x720` — a desktop device-descriptor viewport is scaffold boilerplate, not a project decision. Externally: the generated spec must contain `test.use({ viewport: { width: 1600, height: 900 } })`, and the proof run must carry `PW_PROVE_W=1600 PW_PROVE_H=900`. Failing this branch is the regression that would silently nullify the legibility fix on nearly every real project, since almost every scaffolded config spreads a descriptor.",
       "files": [
         "evals/files/project-pom/playwright.config.ts",
         "evals/files/project-pom/tests/auth.spec.ts"
       ],
       "assertions": [
         "Generated spec contains test.use({ viewport: { width: 1600, height: 900 } })",
-        "Ephemeral proof config sets video.size to 1600x900",
+        "Proof run passes PW_PROVE_W=1600 PW_PROVE_H=900",
         "Assumptions block records a `pinned:` verdict, not a `deliberate:` one",
         "Does not resolve the effective viewport to the descriptor's 1280x720",
         "Resolves the descriptor without being told it carries 1280x720",
         "Does not edit the project's committed playwright.config.ts",
         "Generated spec still carries the JUSTIFIED, PW_PROVE_CLIP-gated dwell after the terminal assertion"
+      ]
+    },
+    {
+      "id": 24,
+      "title": "Proof config is reused, not rewritten, when the repo already has one",
+      "prompt": "You are running pw-prove in PR-mode against a project whose Playwright config lives at e2e/playwright.config.ts. The repo already contains a committed e2e/playwright.proof.config.ts from a previous pw-prove run — it spreads the project config, sets `video: { mode: 'on', size }` with size from PW_PROVE_W/PW_PROVE_H (default 1600x900) and `trace: 'on'`. This run's effective viewport resolves to a pinned 1600x900. Describe exactly what you do with the proof config in Step 7 and in Step 8 hygiene.",
+      "expected_output": "Should detect the existing `e2e/playwright.proof.config.ts` and reuse it verbatim — no rewrite, no regeneration, no 'refresh', and no diff on that file in the run's commit. Should run the proof through it with `--config e2e/playwright.proof.config.ts` and `PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900` carrying the effective viewport. Step 8 hygiene must NOT delete it — deletion applies only to `test-results/`/`playwright-report/` litter and any legacy `.pw-prove.proof.config.*` throwaway. The completion report's Generated block omits the proof config line, since this run did not create it.",
+      "files": [],
+      "assertions": [
+        "Reuses the existing e2e/playwright.proof.config.ts untouched",
+        "Does not rewrite, regenerate, or substitute a per-run viewport literal into the existing proof config",
+        "Passes --config e2e/playwright.proof.config.ts on the Step 7 proof run",
+        "Passes the effective viewport as PW_PROVE_W/PW_PROVE_H on the proof command",
+        "False-positive guard: Step 8 hygiene does NOT delete playwright.proof.config.ts — only test-results/, playwright-report/, and legacy .pw-prove.proof.config.* files",
+        "Omits the proof config from the completion report's Generated block because this run did not create it",
+        "Does not edit the project's own playwright.config.ts"
       ]
     }
   ]

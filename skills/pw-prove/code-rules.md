@@ -173,9 +173,9 @@ When the verdict is *scaffold default*, pin a legible desktop viewport in the sp
 test.use({ viewport: { width: 1600, height: 900 } });
 ```
 
-Pin in the **spec** — never by editing the project's committed `playwright.config` (out of bounds), and never *only* in the ephemeral proof config. A viewport that exists solely while filming means locator healing, the hermetic audit and the mutation check all ran against a rendering CI never produces: a viewport-axis silent-always-pass, which is precisely the family this pipeline exists to prevent.
+Pin in the **spec** — never by editing the project's committed `playwright.config` (out of bounds), and never *only* in the proof config. A viewport that exists solely while filming means locator healing, the hermetic audit and the mutation check all ran against a rendering CI never produces: a viewport-axis silent-always-pass, which is precisely the family this pipeline exists to prevent.
 
-Report the resolved effective viewport in the run's Assumptions block. Step 7 sets the recording size to match it, so the clip is never downscaled.
+Report the resolved effective viewport in the run's Assumptions block. Step 7 passes it as `PW_PROVE_W`/`PW_PROVE_H` so the recording size matches and the clip is never downscaled — the proof config itself stays static and carries no per-run value.
 
 ### Payoff dwell
 

@@ -31,7 +31,7 @@ Step 3  Bring-up + Probe            (ONE live pass: merge base, serve the branch
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
 Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + e2e-reviewer skill quality gate)
-Step 7  Verify                       (tsc → warm route → proof run [video+trace via ephemeral --config, PW_PROVE_CLIP=1] → hermetic audit → mutation check)
+Step 7  Verify                       (tsc → warm route → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → hermetic audit → mutation check)
 Step 8  Deliver                      (PR-mode: upload clips → R2 · commit spec+POM+api.har · push · PR comment · report)
 ```
 
@@ -75,7 +75,8 @@ The mode steers **Step 2** (what to derive), **Step 4** (notify-and-continue vs 
 
 | What | Where |
 |------|-------|
-| Playwright config | `playwright.config.ts` / `.js` (record its path — Step 7's ephemeral config sits next to it) |
+| Playwright config | `playwright.config.ts` / `.js` (record its path — Step 7's proof config sits next to it) |
+| Proof config | `<configDir>/playwright.proof.config.ts` — present = a previous run committed it, reuse untouched; absent = Step 7 writes it once |
 | Base URL | `baseURL` in config → `PLAYWRIGHT_BASE_URL` → else ask |
 | Test directory | config `testDir` → scan `e2e/`, `tests/`, `playwright/` |
 | POM inventory | `models/`, `pages/`, `page-objects/` dirs; for each Page Object, record the route(s) it covers → `pomInventory` |
@@ -342,27 +343,39 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 npx --no-install tsc --noEmit -p <e2e/tsconfig.json or tsconfig.json>
 ```
 
-**2. Proof run — video + trace as byproducts, committed config untouched.** There is no `--video` CLI flag, so enable video via an **ephemeral config passed with `--config`** that spreads the project config and overrides `use`. Write it next to the detected `configPath` (so its relative import resolves), then delete it in Step 8 hygiene:
+**2. Proof run — video + trace as byproducts, the project's own config untouched.** There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run (`docs/adr/0008`).
+
+- **Present** (a previous run committed it) → use it as-is. Do **not** rewrite, re-derive or "refresh" it; a per-run diff on this file is the churn it exists to remove.
+- **Absent** → write it exactly as below — no substitutions, nothing per-run in it — and stage it in Step 8.
 
 ```ts
-// <configDir>/.pw-prove.proof.config.ts  (throwaway — deleted after the run, never committed)
-import base from './playwright.config';
+// <configDir>/playwright.proof.config.ts  (committed once, reused by every pw-prove run)
+// Spreads the project config and overrides only `use`, so video + trace fall out of the proof
+// run as byproducts. Recording size comes from the env the proof run sets (the effective
+// viewport), defaulting to 1600x900 — Playwright's own default is the viewport scaled into an
+// 800x800 box (~800x450, illegible), which is what this override exists to kill.
+// Deliberately never sets `viewport`: the viewport pin belongs in the committed spec.
 import { defineConfig } from '@playwright/test';
-// Substitute the run's EFFECTIVE viewport (the Step-5 pin, or the project's deliberate
-// viewport) — NOT a fixed literal. Playwright's default recording size is the viewport
-// scaled into an 800x800 box (~800x450, illegible), which is what this override exists to kill.
-const size = { width: <effective.width>, height: <effective.height> };
+import base from './playwright.config';
+
+const size = {
+  width: Number(process.env.PW_PROVE_W) || 1600,
+  height: Number(process.env.PW_PROVE_H) || 900,
+};
+
 export default defineConfig({
   ...base,
   use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' },
 });
 ```
 
+The **only** legitimate reason to edit an existing proof config is a structural mismatch with the project's own config (below) — a one-time, committed fix, never a per-run edit.
+
 **Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`). Three things make it usable; none of them re-runs the spec or post-processes the recording:
 
 | | What | Why |
 |---|---|---|
-| **Size** | `video.size` = the effective viewport, from `code-rules.md` → Clip Fidelity | `size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. Deliberately **do not** set `viewport` in this ephemeral config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
+| **Size** | `PW_PROVE_W`/`PW_PROVE_H` = the effective viewport, from `code-rules.md` → Clip Fidelity | `video.size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. That is why size arrives by env and the config stays static: it is the one per-run value, and it belongs on the command line, not in a file diff. Deliberately **do not** set `viewport` in the proof config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
 | **Warm lead** | One request to the route under proof, just before filming | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. |
 | **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` post-assertion dwell. It sits *after* the terminal assertion, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
 
@@ -372,16 +385,18 @@ export default defineConfig({
 curl -sS -o /dev/null --max-time 60 -w '%{http_code}\n' "<baseURL><route under proof>" \
   || echo "warm-failed"
 
-# Run the proof spec through the ephemeral config. video records ONE webm per test (per AC);
+# Run the proof spec through the proof config. video records ONE webm per test (per AC);
 # trace:'on' leaves a per-test trace.zip for healing + the playwright-debugger handoff.
-PW_PROVE_CLIP=1 npx --no-install playwright test <spec> --project=chromium \
-  --config <configDir>/.pw-prove.proof.config.ts --reporter=html
+# PW_PROVE_W/H carry the run's EFFECTIVE viewport — always pass them, never a fixed literal.
+PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
+  npx --no-install playwright test <spec> --project=chromium \
+  --config <configDir>/playwright.proof.config.ts --reporter=html
 # webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
 ```
 
-If the project config is not spread-friendly (a function export, or per-project `use` that must win), fall back to adding a dedicated `use.video`/`use.trace` inside the ephemeral config's own `use` block — still never editing the committed config.
+If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
-Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `size` must be substituted from the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the ephemeral config. A non-2xx warm (or `warm-failed`) is reported as `Proof clips: <url> — warm miss, clip is boot-heavy`.
+Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `PW_PROVE_W`/`PW_PROVE_H` must carry the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config. A non-2xx warm (or `warm-failed`) is reported as `Proof clips: <url> — warm miss, clip is boot-heavy`.
 
 ### Failure handling (max 3 auto-fix attempts)
 
@@ -445,10 +460,10 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    ```
    Gate exits: degenerate-key (2), empty webm (3), token leak (6). On any gate, report **which** gate fired and print **no** link. A hosting-not-ready environment (Step 3 `PROBE_HOSTING` WARN) skips gracefully: `Proof clips: skipped — <gate>` with the probe output pasted beneath (never fail the run over a missing clip).
 2. **Hygiene sweep** before staging:
-   - Delete the ephemeral proof config (`.pw-prove.proof.config.*`) and any `test-results/`/`playwright-report/` litter.
+   - Delete `test-results/`/`playwright-report/` litter, plus any legacy throwaway `.pw-prove.proof.config.*` left by an older run. **Keep `playwright.proof.config.ts`** — it is a deliverable, not litter; stage it when this run created it.
    - Revert codegen churn (`git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'` on Nuxt-style repos).
    - **Scrub the HAR:** confirm no `Authorization`/cookie/token value remains in `<feature>.api.har` before it is staged. A leaked bearer in a committed HAR is the same incident as one in a log line.
-   - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir.
+   - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
 4. **Push**, then **post the clips on the PR**: `gh pr comment <N> --body "<per-AC clip URLs + mutation verdict + AC table>"`.
    - **No PR exists** (prose/branch run): push, `gh pr create` with the AC table as body, comment there.
@@ -462,6 +477,7 @@ Generated:
 - <path to POM file> (new | modified)
 - <path to spec file> (new, N scenarios)
 - <path to api.har> (scoped **/api/**, auth-scrubbed)
+- <configDir>/playwright.proof.config.ts (new — first run in this repo only; omit the line when reused)
 
 ACs: <N proven> / <M total>          # list each `unproven — gated: <what>` explicitly
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
