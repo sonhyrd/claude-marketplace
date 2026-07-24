@@ -28,9 +28,11 @@
 // keeps working if the bucket or its public host ever changes. Every clip also stays individually
 // linkable as `<page-url>#<slug>` — the AC table in the PR comment uses those anchors.
 //
-// Prints the page URL as the FIRST stdout line (per-clip URLs go to stderr; the trailing
-// PWPROVE_RUN ledger line follows) so callers can do:
-//   URL=$(node host-proof.mjs manifest.json myproj proof/pr42-abc1234 | head -n1)
+// Prints the page URL as the FIRST stdout line, then repeats it on a MARKER line (per-clip URLs
+// go to stderr; the trailing PWPROVE_RUN ledger line follows). Read the MARKER, not line 1 — a
+// caller that adds `2>&1` puts npm/wrangler chatter on line 1 instead:
+//   URL=$(node host-proof.mjs manifest.json myproj proof/pr42-abc1234 2>&1 \
+//           | sed -n 's/^PWPROVE_URL //p' | head -n1)
 // Needs wrangler authenticated (`npx wrangler whoami`). Exits non-zero if a gate trips or an
 // upload fails.
 import { spawnSync } from 'node:child_process';
@@ -104,7 +106,10 @@ function publish(file, key) {
     err(`host-proof: STOP — publishing '${file}' failed (host-video exit ${r.status}). No page.\n`);
     process.exit(r.status ?? 1);
   }
-  return (r.stdout ?? '').split('\n')[0].trim();
+  // Read the child's MARKER line, not its line 1 — same reason this script emits one.
+  const lines = (r.stdout ?? '').split('\n');
+  const marked = lines.find((l) => l.startsWith('PWPROVE_URL '));
+  return (marked ? marked.slice('PWPROVE_URL '.length) : lines[0]).trim();
 }
 
 const published = clips.map((c, i) => {
@@ -208,4 +213,8 @@ try {
 }
 
 err(`host-proof: page -> ${pageUrl} (${published.length} clip(s))\n`);
+// Per-clip anchors on stderr: the PR table links them, and a human debugging a bad clip needs the
+// direct URL. The page URL is what stdout is for.
+for (const p of published) err(`host-proof: anchor ${p.slug} -> ${pageUrl}#${p.slug}\n`);
 out(`${pageUrl}\n`);
+out(`PWPROVE_URL ${pageUrl}\n`);

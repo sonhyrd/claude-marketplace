@@ -19,9 +19,13 @@
 //     listed in $SCAN (the committed spec + proof script). Seed auth out-of-band so this never
 //     fires; the gate is the backstop, not the plan.
 //
-// Prints the public URL as the FIRST stdout line (wrangler chatter goes to stderr; the trailing
-// PWPROVE_RUN ledger line follows it) so callers can do:
-//   URL=$(node host-video.mjs demo.webm myproj | head -n1)
+// Prints the public URL as the FIRST stdout line, then repeats it on a MARKER line:
+//   https://…/key.webm
+//   PWPROVE_URL https://…/key.webm
+// Read the marker, not line 1. `head -n1` is correct only while stdout is unmerged, and a caller
+// that adds `2>&1` (every agent's reflex) puts npm/wrangler chatter on line 1 instead — observed
+// eating all five URLs of a real run. The marker survives any interleaving:
+//   URL=$(node host-video.mjs demo.webm myproj 2>&1 | sed -n 's/^PWPROVE_URL //p' | head -n1)
 // Needs wrangler authenticated (`npx wrangler whoami`). Exits non-zero if a gate trips or the
 // upload fails.
 import { spawnSync } from 'node:child_process';
@@ -120,3 +124,4 @@ const r = spawnSync(
 if (r.status !== 0) process.exit(r.status ?? 1);
 
 out(`${PUB}/${KEY}\n`);
+out(`PWPROVE_URL ${PUB}/${KEY}\n`);

@@ -20,6 +20,9 @@ The viewport a generated spec actually renders at, and the size its clip is reco
 ## Proof config
 `<configDir>/playwright.proof.config.ts` — the second Playwright config pw-prove runs the proof through, spreading the project's own config and overriding only `use` (`video`, `trace`). **Static, project-agnostic and committed once**, then reused verbatim by every later run: the single per-run value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a file edit. The project's own `playwright.config` is never edited. Superseded the throwaway `.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`.
 
+## Hermetic audit
+The Step-7 check that the passing proof run reached nothing it did not declare. `hermetic.mjs` classifies every request from the run's traces — LIVE (the browser put it on the wire: the trace entry carries `serverIPAddress`), MOCKED (a `route.fulfill()` answered it), FAILED — and separately greps the spec for `route.fetch()` call sites, which perform a real round-trip from the Playwright process and therefore look mocked in a browser trace. The verdict stays with the agent: every LIVE call must appear in a `// CARVE-OUT:` line or the run fails despite being green. See `docs/adr/0010`.
+
 ## HAR fixture
 pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`), auth-scrubbed HAR recorded during the probe pass and committed alongside the spec. `routeFromHAR(..., { notFound: 'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Hand-written `route.fulfill` remains only for the mutation under assertion.
 

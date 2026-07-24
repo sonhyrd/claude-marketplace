@@ -83,6 +83,17 @@ if [ "${E2E_SKILLS_SKIP_GENERATOR_TESTS:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_HERMETIC_TESTS:-}" != "1" ]; then
+  step "Hermetic audit (hermetic.mjs, process boundary)"
+  # ADR 0010: trace classification (serverIPAddress = went to the wire) + the route.fetch blind
+  # spot. Synthesized trace fixture; skips if zip/unzip are absent; never touches the network.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-hermetic.sh >/dev/null 2>&1 || fail "test-hermetic.sh"
+  else
+    bash scripts/ci/test-hermetic.sh || fail "test-hermetic.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_PROOF_PAGE_TESTS:-}" != "1" ]; then
   step "Proof page (host-proof.mjs, process boundary)"
   # ADR 0009: N clips + one index.html under one key prefix. Shims npx on PATH and captures what

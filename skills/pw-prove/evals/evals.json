@@ -410,6 +410,78 @@
         "False-positive guard: does not propose ffmpeg, concatenation, chapters, a contact sheet, or a second run to combine clips",
         "States that a gate tripping on any clip aborts the whole page rather than publishing a partial one"
       ]
+    },
+    {
+      "id": 26,
+      "title": "Every scenario times out on its first navigation — a saturated dev server, not a broken spec",
+      "prompt": "You are in Step 7 of a pw-prove PR-mode run against a Nuxt app served by `nuxi dev`. The project's playwright.config.ts has `workers: process.env.CI ? 1 : undefined`. You ran the 5-scenario proof spec and after 6 minutes ALL FIVE failed with `page.goto: Test timeout of 180000ms exceeded` at the first navigation of each test. Diagnose and state your next command.",
+      "expected_output": "Should recognize this signature — every test timing out at its first navigation — as dev-server saturation, not a spec defect: with no CI env var the config leaves workers undefined, so Playwright fans N workers at a dev server that compiles routes on demand. Should confirm the origin is alive with a quick curl, then re-run the SAME spec unchanged with `--workers=1`. Must NOT heal locators, raise the test timeout, add waits, or count this as one of the 3 auto-fix attempts against the spec.",
+      "files": [],
+      "assertions": [
+        "Diagnoses dev-server saturation from the all-tests-timeout-at-first-goto signature",
+        "Re-runs with --workers=1 rather than editing the spec",
+        "Checks the origin is alive (curl) before re-running",
+        "False-positive guard: does NOT heal locators or raise timeouts in response to this failure",
+        "False-positive guard: does not pin workers by editing the committed proof config or the project's playwright.config"
+      ]
+    },
+    {
+      "id": 27,
+      "title": "The mutation check must not overwrite the proof clips",
+      "prompt": "You are running the Step 7 mutation check in PR-mode. The proof run has passed and test-results/ holds 5 webm clips, one per scenario. Give the exact mutation-run command and the checks you perform after reverting the source.",
+      "expected_output": "The mutation run must send its artifacts elsewhere — `--output=/tmp/pw-prove-mutation` — and must not set PW_PROVE_CLIP, so the passing run's clips in test-results/ survive intact. It should target the single guarding test with `-g`, keep `--workers=1`, and after `git checkout --` verify BOTH that the tree matches the pre-state (diff against /tmp/pre.status and /tmp/pre.patch via process substitution) AND that the clip count in test-results/ still equals the scenario count. Should state that publishing a clip recorded against mutated source would be false evidence.",
+      "files": [],
+      "assertions": [
+        "Passes --output=/tmp/pw-prove-mutation (or another dir outside test-results/) on the mutation run",
+        "Does not set PW_PROVE_CLIP on the mutation run",
+        "Uses -g to run only the guarding test, not the whole spec",
+        "Verifies the tree is unchanged with process substitution on both sides",
+        "Verifies the clip count in test-results/ still matches the scenario count after the revert",
+        "False-positive guard: does not re-run the whole proof spec to regenerate clips when the mutation run was isolated"
+      ]
+    },
+    {
+      "id": 28,
+      "title": "Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser",
+      "prompt": "The Step 7 proof run passed and left traces under test-results/. Perform the hermetic audit on tests/e2e/checkout.spec.ts. The spec mocks the section GET by patching it in flight (`const response = await route.fetch()` then `route.fulfill`), and its header declares one CARVE-OUT for the live auth bootstrap. Show the command and how you reach a verdict.",
+      "expected_output": "Should run `node <skill-base>/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts` rather than writing an ad-hoc node script to parse trace.zip / *.network files. Must pass --spec, and must treat the reported IN-SPEC LIVE ROUND-TRIPS (the route.fetch call sites) as live traffic requiring a declared carve-out, even though those requests appear under MOCKED in the trace — a trace records the browser, not the Playwright process. The verdict is the agent's: every LIVE line and every in-spec round-trip must be named in a CARVE-OUT line, otherwise the run FAILS despite being green.",
+      "files": [],
+      "assertions": [
+        "Invokes scripts/hermetic.mjs instead of writing a throwaway trace parser",
+        "Passes --spec so the route.fetch class is checked",
+        "Treats route.fetch round-trips as live traffic needing a declared carve-out despite appearing MOCKED in the trace",
+        "Matches LIVE entries against the spec's CARVE-OUT header to reach the verdict",
+        "Fails the run on any undeclared live call even though the tests passed",
+        "False-positive guard: does not treat the script's output as the verdict itself"
+      ]
+    },
+    {
+      "id": 29,
+      "title": "An AC already proven by the diff's own unit tests is folded, not silently dropped",
+      "prompt": "PR-mode. The diff changes `composables/customScripts.ts` (adding a pure `buildUpsert()` that trims values, drops empty locales and removes the top-level key when all are empty), the component that calls it, and `tests/unit/customScripts.test.ts` (+51 lines, 23 assertions covering exactly those three behaviors). The PR body lists trimming, dropping empty locales and key removal as separate bullets. Produce the AC table and the scenario list.",
+      "expected_output": "Should read the unit test file in the diff before fixing the scenario list, and recognize that the trim / drop-empty / key-removal matrix is pure-function behavior already proven there. Those ACs should be FOLDED into the single scenario that proves the wiring — the UI reaches buildUpsert and its output is what leaves on the wire — rather than getting one browser scenario each. The folded ACs must still appear as rows in the AC table with `already covered: tests/unit/customScripts.test.ts` in the Proven-by column, and the completion report must list them. Behaviors a unit test cannot see (the request the browser actually sends, DOM state, flag gating, persistence) stay their own scenarios.",
+      "files": [],
+      "assertions": [
+        "Reads the unit test file that ships in the diff before finalizing scenarios",
+        "Folds pure-function ACs into the single wiring scenario instead of one scenario each",
+        "Keeps folded ACs visible as table rows with `already covered: <test file>`",
+        "Keeps the wire-contract assertion (what the browser actually sends) as a browser-layer scenario",
+        "False-positive guard: does not fold an AC that the unit test cannot observe (DOM state, flag gating, the outbound request)",
+        "False-positive guard: does not silently delete a folded AC from the table or the report"
+      ]
+    },
+    {
+      "id": 30,
+      "title": "Publish URL is read from the PWPROVE_URL marker, not stdout line 1",
+      "prompt": "Step 8, hosting is ready. Publish the proof page for a 5-scenario run and capture the URL. The project's .npmrc makes npm print two `npm warn Unknown project config` lines on every npx invocation.",
+      "expected_output": "Should capture the URL from the `PWPROVE_URL ` marker line (e.g. `sed -n 's/^PWPROVE_URL //p' | head -n1`), not with a bare `head -n1`, because npm/wrangler chatter reaches line 1 as soon as anything merges the streams — this exact failure cost a real run five URLs and a repeat upload. Should send stderr to a log file and, if the captured URL is empty, read that log to report which gate fired instead of blindly re-running the publish.",
+      "files": [],
+      "assertions": [
+        "Captures the URL via the PWPROVE_URL marker rather than stdout line 1",
+        "Keeps stderr in a log file for gate diagnosis",
+        "On an empty URL, reads the log and reports the gate instead of immediately re-uploading",
+        "False-positive guard: does not pipe `2>&1` into a bare `head -n1` to capture the URL"
+      ]
     }
   ]
 }
