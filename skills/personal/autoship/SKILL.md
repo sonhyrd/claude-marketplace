@@ -1,7 +1,6 @@
 ---
 name: autoship
 description: Take a free-text idea or an Issue reference through the autonomous pipeline — spec, Issues, Frontier drain — to one reviewable PR. Requires Orca orchestration and a repo configured by /setup-matt-pocock-skills.
-disable-model-invocation: true
 ---
 
 # Autoship
