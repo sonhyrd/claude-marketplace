@@ -35,12 +35,41 @@
 // The token is minted PER PUBLISH with a five-minute life and a single import scope, so nothing
 // long-lived sits on disk and a captured bearer authorises only this one action.
 //
+// FOUR gates run before anything leaves the machine, and a gate trip publishes NOTHING and names
+// itself. They also WITHHOLD the local file — a gate means the artifact is *wrong*, not merely
+// undelivered, and a video known to be wrong must never be handed over as evidence:
+//   • EMPTY-RECORDING gate (exit 3) — per source clip, before concat. A dead screencast.start() or a
+//     crashed page yields a sub-1KB webm with no readable video; publishing it proves nothing.
+//   • TOKEN-LEAK gate (exit 6) — if $BEARER is set, refuse when it appears in the video bytes (each
+//     source clip and the concatenated output), in any artifact listed in $SCAN, OR in the chapter
+//     titles / title / description. The text half is not decoration: the ACs now travel as JSON to a
+//     recording that is PUBLIC by default, so a credential pasted into an AC is a live leak path a
+//     byte scan alone would miss.
+//   • HOMOGENEITY gate (exit 8) — all source clips must agree on codec and dimensions, before concat.
+//     Stream-copy concatenation of mismatched inputs produces corrupt output *without failing*: a
+//     silent-always-pass in artifact form.
+//   • DURATION-RECONCILIATION gate (exit 9) — the concatenated output against the sum of its inputs.
+//     If they diverge, every chapter after the divergence points at the wrong footage — evidence that
+//     reads as complete while being wrong.
+// Both new gates read the probe data already gathered for the chapter offsets, so neither costs an
+// additional subprocess.
+//
+// The OPPOSITE posture applies to delivery: a 500, a refused connection or a rejected credential does
+// NOT fail the run (exit stays 0). The proof is the passing test plus the mutation verdict, and a run
+// never fails over undelivered evidence. The concatenated video is kept at a stable path and that
+// path is printed on a PWPROVE_PROOF_FILE marker line, so the proof can be attached by hand.
+//
 // Prints the share URL as the FIRST stdout line, then repeats it on a MARKER line (progress goes to
 // stderr; the trailing PWPROVE_RUN ledger line follows). Read the MARKER, not line 1 — a caller that
 // adds `2>&1` puts npm/ffmpeg chatter on line 1 instead:
 //   URL=$(node publish-proof.mjs manifest.json 2>&1 | sed -n 's/^PWPROVE_URL //p' | head -n1)
+// When delivery fails there is no PWPROVE_URL; read PWPROVE_PROOF_FILE the same way.
 //
-// Exit codes: 1 usage/manifest/configuration, 4 video tooling, 7 publish failed.
+// Exit codes: 0 published — or delivery failed and the run carries on with the kept file;
+//             1 usage/manifest/configuration, 4 video tooling,
+//             3/6/8/9 the four gates above, in the order they run.
+// (Exit 2 is retired along with the fifth gate that used it: Clips assigns the recording identifier,
+// so this script builds no object name and there is nothing left for that gate to refuse.)
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -61,6 +90,33 @@ const stop = (code, message) => {
 // fails for transport reasons the operator needs a file they can attach by hand, and a path that
 // moves every run is a path nobody can be told about in advance.
 const PROOF_FILE = path.join(os.tmpdir(), 'pw-prove-proof.webm');
+
+// A gate trip means the artifact is WRONG, not undelivered — so it withholds the file as well as the
+// publish. The unlink is unconditional and covers the stable path itself: a good proof left there by
+// an earlier run would otherwise be offered as this run's evidence.
+const gate = (code, name, ...lines) => {
+  try {
+    fs.unlinkSync(PROOF_FILE);
+  } catch {
+    /* nothing concatenated yet, or nothing left behind — either way the file is now absent */
+  }
+  err(`publish-proof: GATE ${name} — ${lines[0]}\n`);
+  for (const extra of lines.slice(1)) err(`            ${extra}\n`);
+  err('publish-proof: nothing was published, and no local file is offered — this artifact is wrong, '
+    + 'not merely undelivered.\n');
+  process.exit(code);
+};
+
+// Delivery is the opposite posture: undelivered evidence never fails a run. The proof is the passing
+// test plus the mutation verdict, so the exit code stays 0 and the operator gets a file to attach.
+const undelivered = (message) => {
+  err(`publish-proof: publish failed — ${message}\n`);
+  err('publish-proof: the run STAYS ALIVE — the proof is the passing test plus the mutation verdict, '
+    + 'not its delivery.\n');
+  err(`publish-proof: the concatenated proof is at ${PROOF_FILE} — attach it to the PR by hand.\n`);
+  out(`PWPROVE_PROOF_FILE ${PROOF_FILE}\n`);
+  process.exit(0);
+};
 
 // ============================================================ manifest
 const [MANIFEST] = process.argv.slice(2);
@@ -83,6 +139,17 @@ for (const [i, c] of clips.entries()) {
     stop(1, `clips[${i}] needs both an "ac" string and a "file" path.`);
   }
 }
+
+// ============================================================ the text that travels as JSON
+// Built here, before any work, because the TOKEN-LEAK gate scans it: the PR link, the spec path and
+// the mutation verdict travel WITH the recording, since met outside the PR a bare video says a test
+// passed but not which change it proves, nor that the test can fail at all.
+const descriptionLines = [];
+if (manifest.prUrl) descriptionLines.push(`PR: ${manifest.prUrl}`);
+if (manifest.spec) descriptionLines.push(`Spec: ${manifest.spec}`);
+if (manifest.mutation) descriptionLines.push(`Mutation: ${manifest.mutation}`);
+const description = descriptionLines.join('\n');
+const title = manifest.title || 'E2E proof';
 
 // ============================================================ configuration
 const CLIPS = clipsConfig();
@@ -143,12 +210,85 @@ function decodedSeconds(file) {
   return parts[0];
 }
 
+// ============================================================ GATE: token leak (the text half)
+// Runs first of all the gates, because it needs no probe and no concatenation: if a credential is
+// sitting in an AC there is nothing to gain by measuring video before refusing.
+const BEARER = process.env.BEARER;
+const needle = BEARER ? Buffer.from(BEARER, 'utf8') : null;
+const LEAK_REMEDY =
+  'Seed auth out-of-band (env + addInitScript / gitignored storageState), scrub it, then retry.';
+if (needle) {
+  const fields = [
+    ['the recording title', title],
+    ['the description (PR / spec / mutation)', description],
+    ...clips.map((c, i) => [`chapter ${i + 1}'s title (clips[${i}].ac)`, c.ac]),
+  ];
+  for (const [where, text] of fields) {
+    if (typeof text === 'string' && text.includes(BEARER)) {
+      gate(6, 'TOKEN-LEAK', `the auth token ($BEARER) appears in ${where}.`,
+        'That text is sent as JSON to a recording that is PUBLIC by default, so publishing would leak it.',
+        LEAK_REMEDY);
+    }
+  }
+}
+
+// ============================================================ probe + GATE: empty/broken recording
+// Size is checked BEFORE the probe: a 1-byte "video" makes ffprobe fail, and a tooling error (exit 4)
+// would then mask the recording defect the gate exists to name.
 const probed = clips.map((c, i) => {
   if (!fs.existsSync(c.file)) stop(4, `clips[${i}] names a file that does not exist: '${c.file}'`);
-  const p = probe(path.resolve(c.file));
+  const file = path.resolve(c.file);
+  const bytes = fs.statSync(file).size;
+  if (bytes < 1024) {
+    gate(3, 'EMPTY-RECORDING', `clips[${i}] '${c.file}' is only ${bytes}B (< 1KB).`,
+      'That is a broken or empty screencast, not a proof. Re-run the proof spec, then retry.');
+  }
+  const p = probe(file);
+  if (!p.codec || !(p.seconds > 0) || !p.width || !p.height) {
+    gate(3, 'EMPTY-RECORDING',
+      `clips[${i}] '${c.file}' carries no readable video (${p.seconds.toFixed(3)}s, ${p.width}x${p.height}, `
+        + `codec '${p.codec}').`,
+      'A recording nothing can play proves nothing. Re-run the proof spec, then retry.');
+  }
   err(`publish-proof: clip ${i + 1}/${clips.length} ${p.seconds.toFixed(3)}s ${p.width}x${p.height} ${p.codec}\n`);
   return p;
 });
+
+// ============================================================ GATE: token leak (the byte half)
+// Binary-safe literal search over the raw bytes: decoding a webm as UTF-8 first would mangle the byte
+// sequences a token could be hiding in. This is the equivalent of `LC_ALL=C grep -qF`.
+const scanBytes = (file, where) => {
+  if (!needle) return;
+  let haystack;
+  try {
+    if (!fs.statSync(file).isFile()) return;
+    haystack = fs.readFileSync(file);
+  } catch {
+    return; //                                       an unreadable scan target is not a leak finding
+  }
+  if (haystack.includes(needle)) {
+    gate(6, 'TOKEN-LEAK', `the auth token ($BEARER) appears in the bytes of ${where} ('${file}').`,
+      'The recording is public by default, so publishing it would leak the credential.', LEAK_REMEDY);
+  }
+};
+if (needle) {
+  for (const [i, p] of probed.entries()) scanBytes(p.file, `clip ${i + 1}`);
+  for (const f of (process.env.SCAN ?? '').split(/\s+/).filter(Boolean)) scanBytes(f, 'a $SCAN artifact');
+}
+
+// ============================================================ GATE: homogeneity
+// Stream copy muxes the inputs' existing packets into one container without decoding them, so it
+// cannot reconcile a disagreement: a clip at another codec or another size produces output that plays
+// wrong (or not at all) while ffmpeg exits 0. Reads the probe data already gathered above.
+const shape = (p) => `${p.codec} ${p.width}x${p.height}`;
+const odd = probed.findIndex((p) => shape(p) !== shape(probed[0]));
+if (odd > 0) {
+  gate(8, 'HOMOGENEITY',
+    `clips[${odd}] is ${shape(probed[odd])} but clips[0] is ${shape(probed[0])}.`,
+    'Stream-copy concatenation of mismatched inputs yields a corrupt video WITHOUT failing, so this is '
+      + 'refused before concatenation runs.',
+    'Re-record the odd clip at the same viewport, or drop it from the manifest.');
+}
 
 // Chapter offsets are the CUMULATIVE measured durations, in manifest order — the order a reviewer
 // watches, which is AC order.
@@ -190,18 +330,31 @@ err(
     `(${proof.seconds.toFixed(3)}s, sum of inputs ${inputSeconds.toFixed(3)}s)\n`,
 );
 
-// ============================================================ the one request
-// The PR link, the spec path and the mutation verdict travel WITH the recording: met outside the PR,
-// a bare video says a test passed but not which change it proves, nor that the test can fail at all.
-const descriptionLines = [];
-if (manifest.prUrl) descriptionLines.push(`PR: ${manifest.prUrl}`);
-if (manifest.spec) descriptionLines.push(`Spec: ${manifest.spec}`);
-if (manifest.mutation) descriptionLines.push(`Mutation: ${manifest.mutation}`);
+// ============================================================ GATE: duration reconciliation
+// The chapter offsets are cumulative INPUT durations, so the output must total the same. If it does
+// not, every chapter after the divergence points at the wrong footage — and a reviewer sent to the
+// wrong second reads it as the criterion failing. Tolerance is a container-rounding allowance, not a
+// negotiation: 0.75s, or 2% of a long run, whichever is larger.
+const drift = Math.abs(proof.seconds - inputSeconds);
+const tolerance = Math.max(0.75, inputSeconds * 0.02);
+if (drift > tolerance) {
+  gate(9, 'DURATION-RECONCILIATION',
+    `the concatenated video reports ${proof.seconds.toFixed(3)}s but its inputs sum to `
+      + `${inputSeconds.toFixed(3)}s (off by ${drift.toFixed(3)}s, tolerance ${tolerance.toFixed(3)}s).`,
+    'Chapter markers computed from the inputs would point at the wrong footage, so this publishes '
+      + 'nothing.',
+    'Usually one input is truncated or its container duration lies — re-record the clips, then retry.');
+}
 
+// The bytes that would ACTUALLY be sent, scanned last: concatenation copies packets, and a container
+// this script did not write is not a container it gets to vouch for.
+scanBytes(PROOF_FILE, 'the concatenated proof');
+
+// ============================================================ the one request
 const body = {
   data: `data:video/webm;base64,${fs.readFileSync(PROOF_FILE).toString('base64')}`,
-  title: manifest.title || 'E2E proof',
-  description: descriptionLines.join('\n'),
+  title,
+  description,
   chapters,
   durationMs: Math.round(proof.seconds * 1000),
   width: proof.width,
@@ -225,15 +378,11 @@ try {
   });
   text = await res.text();
 } catch (e) {
-  err(`publish-proof: publish failed — ${CLIPS.origin} unreachable (${e.message})\n`);
-  err(`publish-proof: the concatenated proof is at ${PROOF_FILE}\n`);
-  process.exit(7);
+  undelivered(`${CLIPS.origin} unreachable (${e.message})`);
 }
 
 if (!res.ok) {
-  err(`publish-proof: publish failed — HTTP ${res.status} from ${CLIPS.origin}: ${text.slice(0, 400)}\n`);
-  err(`publish-proof: the concatenated proof is at ${PROOF_FILE}\n`);
-  process.exit(7);
+  undelivered(`HTTP ${res.status} from ${CLIPS.origin}: ${text.slice(0, 400)}`);
 }
 
 let result;
@@ -244,9 +393,7 @@ try {
 }
 const shareUrl = typeof result?.shareUrl === 'string' ? result.shareUrl : '';
 if (!shareUrl) {
-  err(`publish-proof: publish returned no shareUrl: ${text.slice(0, 400)}\n`);
-  err(`publish-proof: the concatenated proof is at ${PROOF_FILE}\n`);
-  process.exit(7);
+  undelivered(`the destination returned no shareUrl: ${text.slice(0, 400)}`);
 }
 
 err(`publish-proof: ${chapters.length} chapter(s) published -> ${shareUrl}\n`);

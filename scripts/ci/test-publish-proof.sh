@@ -241,6 +241,167 @@ publish does-not-exist.json
 [ "$?" = 1 ] && ok "an unreadable manifest is refused (exit 1)" || bad "missing manifest should exit 1"
 
 echo ""
+echo "-- the four gates: nothing sent, and NO local fallback file offered --"
+# A gate means the artifact is WRONG, not undelivered — so every case below asserts three things:
+# a non-zero exit that names the gate, an empty capture, and no file at the stable proof path.
+#
+# The stable path is SEEDED with a good file before each gate case. A gate that merely declined to
+# write would still leave the previous run's proof sitting there to be attached by hand, which is the
+# defect this triple assertion exists to catch.
+gate_case() { # usage: gate_case <name> <expected rc> <expected GATE token> <manifest> [extra env...]
+  local name="$1" want_rc="$2" token="$3" manifest="$4"; shift 4
+  start_stub ok
+  cp "$W/a.webm" "$PROOF" #                        seeded: a gate must actively withhold, not abstain
+  publish "$manifest" "$@"
+  local rc=$?
+  if [ "$rc" = "$want_rc" ]; then ok "$name — exit $want_rc"; else
+    bad "$name — exit $rc, wanted $want_rc"; sed 's/^/         /' "$W/err" | tail -4
+  fi
+  grep -q "GATE $token" "$W/err" \
+    && ok "$name — the report names the $token gate" \
+    || { bad "$name — the gate is not named"; sed 's/^/         /' "$W/err" | tail -3; }
+  [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ] \
+    && ok "$name — nothing was sent" \
+    || bad "$name — a request went out past the gate"
+  [ ! -e "$PROOF" ] \
+    && ok "$name — no local fallback file is offered" \
+    || bad "$name — the wrong artifact was left at $PROOF for someone to attach by hand"
+}
+
+# EMPTY-RECORDING: a sub-threshold clip. 3 bytes is a real dead screencast, not a fabricated probe.
+printf 'x' > "$W/tiny.webm"
+cat > "$W/tiny.json" <<'JSON'
+{
+  "title": "dead screencast",
+  "clips": [
+    { "ac": "Per-locale EN/DE/ID authoring", "file": "a.webm" },
+    { "ac": "Every locale empty removes the key", "file": "tiny.webm" }
+  ]
+}
+JSON
+gate_case "empty recording" 3 EMPTY-RECORDING tiny.json
+
+# TOKEN-LEAK, byte half: the token is written into a real webm's container tags by ffmpeg itself, so
+# the gate is proven against bytes a recording tool actually produced.
+LEAK_TOKEN="tok_LEAKED_SECRET_abc123"
+ffmpeg -y -f lavfi -i testsrc=size=320x180:rate=10:duration=2 -c:v libvpx-vp9 -b:v 200k \
+  -metadata title="$LEAK_TOKEN" "$W/leak.webm" >/dev/null 2>&1
+if node -e '
+  const fs = require("fs");
+  if (!fs.readFileSync(process.argv[1]).includes(Buffer.from(process.argv[2]))) process.exit(1);
+' "$W/leak.webm" "$LEAK_TOKEN"; then
+  cat > "$W/leakbytes.json" <<'JSON'
+{
+  "title": "PR #2974 — cookie consent text authoring",
+  "clips": [
+    { "ac": "Per-locale EN/DE/ID authoring", "file": "a.webm" },
+    { "ac": "Every locale empty removes the key", "file": "leak.webm" }
+  ]
+}
+JSON
+  gate_case "token in the video bytes" 6 TOKEN-LEAK leakbytes.json BEARER="$LEAK_TOKEN"
+else
+  echo "  [SKIP] this ffmpeg build wrote no readable container tag — no byte-leak fixture"
+fi
+
+# TOKEN-LEAK, text half: the SAME gate, reached by a credential pasted into an AC. The ACs travel as
+# JSON to a public-by-default recording, so this path is a live leak a byte scan alone would miss.
+cat > "$W/leakac.json" <<'JSON'
+{
+  "title": "PR #2974 — cookie consent text authoring",
+  "clips": [
+    { "ac": "Admin API accepts Bearer tok_LEAKED_SECRET_abc123", "file": "a.webm" },
+    { "ac": "Every locale empty removes the key", "file": "b.webm" }
+  ]
+}
+JSON
+gate_case "token in an AC title" 6 TOKEN-LEAK leakac.json BEARER="$LEAK_TOKEN"
+grep -q "chapter 1's title" "$W/err" \
+  && ok "the AC leak report names which chapter title carries the token" \
+  || { bad "the AC leak report does not say where the token is"; sed 's/^/         /' "$W/err" | tail -3; }
+
+# HOMOGENEITY: a real 640x360 clip beside the 320x180 pair. Nothing is fabricated — ffmpeg would
+# stream-copy these into a corrupt video and still exit 0, which is why the gate exists.
+ffmpeg -y -f lavfi -i testsrc=size=640x360:rate=10:duration=2 -c:v libvpx-vp9 -b:v 200k \
+  "$W/wide.webm" >/dev/null 2>&1
+cat > "$W/mixed.json" <<'JSON'
+{
+  "title": "mismatched viewports",
+  "clips": [
+    { "ac": "Per-locale EN/DE/ID authoring", "file": "a.webm" },
+    { "ac": "Every locale empty removes the key", "file": "wide.webm" }
+  ]
+}
+JSON
+gate_case "mismatched dimensions" 8 HOMOGENEITY mixed.json
+grep -q '320x180' "$W/err" && grep -q '640x360' "$W/err" \
+  && ok "the homogeneity report names both shapes it could not reconcile" \
+  || bad "the homogeneity report does not name the shapes"
+
+# DURATION RECONCILIATION: a truncated webm still declares its original duration in the Segment Info
+# at the head of the file, so ffprobe reports 3s while only ~1.7s of packets survive. Stream-copy
+# concatenation swallows that silently and exits 0 — measured, not fabricated: the output reports
+# ~3.7s against inputs summing to 5.0s, and every chapter after clip 1 would point at wrong footage.
+SZ=$(wc -c < "$W/b.webm" | tr -d ' ')
+head -c $((SZ / 2)) "$W/b.webm" > "$W/short.webm"
+cat > "$W/drift.json" <<'JSON'
+{
+  "title": "truncated recording",
+  "clips": [
+    { "ac": "Per-locale EN/DE/ID authoring", "file": "a.webm" },
+    { "ac": "Every locale empty removes the key", "file": "short.webm" }
+  ]
+}
+JSON
+DECLARED=$(probe_dur "$W/short.webm")
+if node -e 'if (!(Number(process.argv[1]) > 2.5)) process.exit(1)' "$DECLARED"; then
+  gate_case "concatenated duration diverging from its inputs" 9 DURATION-RECONCILIATION drift.json
+else
+  echo "  [SKIP] this ffmpeg build wrote no container duration — a truncated file cannot lie about it"
+fi
+
+echo ""
+echo "-- transport failure keeps the run ALIVE and hands back the file --"
+# The opposite posture to a gate: undelivered evidence never fails a run, because the proof is the
+# passing test plus the mutation verdict. Exit 0, the path on a marker line, and the file really there.
+alive_case() { # usage: alive_case <name> [extra env...]
+  local name="$1"; shift
+  publish m.json "$@"
+  local rc=$?
+  [ "$rc" = 0 ] && ok "$name — exit 0, the run is still passing" \
+    || { bad "$name — exit $rc: a run must never fail over undelivered evidence"
+         sed 's/^/         /' "$W/err" | tail -3; }
+  local kept
+  kept=$(sed -n 's/^PWPROVE_PROOF_FILE //p' "$W/out" | head -n1)
+  [ -n "$kept" ] && ok "$name — the fallback path is on a PWPROVE_PROOF_FILE marker line" \
+    || bad "$name — no fallback path was printed"
+  [ -n "$kept" ] && [ -s "$kept" ] && ok "$name — the concatenated proof exists at that exact path" \
+    || bad "$name — nothing at '$kept'"
+  [ -z "$(sed -n 's/^PWPROVE_URL //p' "$W/out")" ] \
+    && ok "$name — no share URL is claimed" \
+    || bad "$name — a share URL was printed although nothing was delivered"
+}
+start_stub error
+name="a 500 from the destination"; alive_case "$name"
+# A refused connection, not a slow one: port 1 on loopback answers with ECONNREFUSED immediately.
+name="a refused connection"; ORIGIN_OK="$ORIGIN"; ORIGIN="http://127.0.0.1:1"
+alive_case "$name"
+ORIGIN="$ORIGIN_OK"
+
+echo ""
+echo "-- the retired fifth gate leaves no object-name vocabulary behind --"
+# Clips assigns the recording identifier, so there is nothing for this script to name or to refuse.
+if grep -niE 'keyname|key-prefix|key_prefix|KEY_PREFIX|object key|degenerate|slugify|\bkeys?\b' \
+     "$S/publish-proof.mjs" > "$W/keyhits" 2>&1; then
+  bad "object-name vocabulary survives in publish-proof.mjs"; sed 's/^/         /' "$W/keyhits" | head -4
+else
+  ok "no key/slug/degenerate vocabulary remains in publish-proof.mjs"
+fi
+[ "$(grep -cF 'process.exit(2)' "$S/publish-proof.mjs")" = 0 ] \
+  && ok "exit 2 is retired with the gate that used it" \
+  || bad "publish-proof.mjs can still exit 2"
+
+echo ""
 echo "-- preflight: the credential round-trip, warn-only in every outcome --"
 # BASE_URL points at the stub too: readiness only asks whether SOMETHING answers, and any code that
 # is not 000/502/503/504 is a live server.
