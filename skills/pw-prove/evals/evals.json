@@ -408,7 +408,7 @@
         "Sets BEARER and SCAN on the publish call",
         "PR comment leads with ONE share link; per-AC rows are ?t=<seconds> timestamp deep links inside the same recording",
         "Completion report has a `Proof page:` line carrying the share URL, not `Proof clips:` with N bare webm URLs",
-        "Inverted contract (was: propose no ffmpeg/chapters/concatenation): the clips ARE concatenated by ffmpeg stream copy into one recording with one chapter per AC -- and stream copy only, never a re-encode, a trim, a second run, a contact sheet or a film step",
+        "Requires the clips to be concatenated by ffmpeg stream copy into ONE recording with one chapter per AC — and stream copy only: no re-encode, no trim, no second run, no contact sheet, no film step",
         "States that a gate tripping on any clip aborts the whole recording rather than publishing a partial one"
       ]
     },

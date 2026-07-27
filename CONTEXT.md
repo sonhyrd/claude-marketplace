@@ -48,7 +48,7 @@ The hosted, shareable proof of a PR-mode run: a watch.html page (title + chapter
 The video behind the watch link. Covers every approved scenario, one titled chapter per scenario, ending with the final scenario's payoff held on screen. A film that covers fewer scenarios than the spec, or ends before the success state is visible, is a defective proof.
 
 ## Chapter
-A titled segment of the proof film corresponding to exactly one approved scenario. Chapter titles must be readable in the published video (on screen long enough and at legible resolution).
+A titled segment of a published recording corresponding to exactly one scenario. **PTG:** a segment of the proof film, whose title must be readable *in* the video (on screen long enough and at legible resolution) — a filmed artifact. **pw-prove:** metadata only — one chapter per AC, titled with the AC verbatim, at the cumulative measured offset of the clips before it, sent as JSON with the [proof page](#proof-page) recording and rendered by Clips as a scrubber marker. Nothing is filmed and no frame is touched, so this is not the film vocabulary returning to pw-prove. See `docs/adr/0012`.
 
 ## Recon probe
 The persistent browser context (`scripts/probe.mjs`) that answers batched recon questions during Step 3. The recon channel; the test run is the validator, never the question channel. A run reaches Step 4 in exactly one of two states — a probe session that answered at least one batch, or a recorded exit-2 (browserless) refusal with the source-reading fallback named in the Assumptions block. Neither state is a HARD STOP. Decided 2026-07-24: of 15 audited runs, the 10 that skipped the probe ran the test runner 9–42 times each; the 5 that used it ran it 5–8 times.

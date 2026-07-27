@@ -173,10 +173,10 @@ Prove the change, not the whole app.
    Reachable → record it as `Runner origin:` in the Step-4 Assumptions block. **Refused while your `localhost:$PORT` answers** → loopback-family mismatch: set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
 5. **Probe the publish prerequisites now (PR-mode) — with the readiness poll:**
    ```bash
-   CLIPS_ORIGIN="$CLIPS_ORIGIN" CLIPS_A2A_SECRET="$CLIPS_A2A_SECRET" \
-     PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
+   PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
    ```
-   Probes the publish credential by **running** the real call — a POST to the Clips import action with a body its schema must reject, where a schema-validation failure is the PASS (it proves the request got past auth, so reachability, secret currency, scope and org resolution all hold; a bare `GET` is answered by the route's method check before auth is ever consulted). Also probes `ffmpeg`/`ffprobe`, and Chrome for clip fidelity. Reports `PUBLISH_READY`, `VIDEO_TOOLING`, and `HOSTING_READY` as their conjunction. WARN-only: `HOSTING_READY=no` never stops generation — its printed output is the evidence a later `Proof page: skipped — <gate>` line must paste (Step 8).
+   The publish credential comes from the environment (`CLIPS_ORIGIN` + `CLIPS_A2A_SECRET`, the same two Step 8 uses) — unset means `PUBLISH_READY=no`, which is a WARN, never a stop.
+   Probes the publish credential by **running** the real call — a POST to the Clips import action with a body its schema must reject, where a schema-validation failure is the PASS (it proves the request got past auth, so reachability, secret currency, scope and org resolution all hold; a bare `GET` is answered by the route's method check before auth is ever consulted). Also probes `ffmpeg`/`ffprobe`, and Chrome for clip fidelity. Reports `PUBLISH_READY`, `VIDEO_TOOLING`, and `HOSTING_READY` as their conjunction. WARN-only: `HOSTING_READY=no` never stops generation — its printed output is the evidence a later `Proof page: skipped — publish prerequisites not ready` line must paste (Step 8).
 
 **Autonomy line:** start/stop the dev server · mint a token via the project's own login · **read-only** data discovery (query list/read endpoints to find a valid entity — sample a handful, never enumerate the tenant). **Never** seed or create backend data on a shared/staging tenant, register accounts, or invent credentials. Required sub-resource absent in the sample → go straight to a `page.route` mock; only if a real record is truly unavoidable, stop and ask.
 
@@ -520,6 +520,12 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    RC=$?
    PAGE=$(sed -n 's/^PWPROVE_URL //p' /tmp/pw-prove-publish.out | head -n1)
    KEPT=$(sed -n 's/^PWPROVE_PROOF_FILE //p' /tmp/pw-prove-publish.out | head -n1)
+   # Branch on the EXIT CODE, not on an empty $PAGE — 0-with-no-URL and a gate are different outcomes.
+   case "$RC" in
+     0) [ -n "$PAGE" ] && echo "published: $PAGE" \
+          || echo "UNDELIVERED — attach by hand: $KEPT"; tail -5 /tmp/pw-prove-publish.log ;;
+     *) echo "GATE (exit $RC) — nothing published, no file offered:"; tail -20 /tmp/pw-prove-publish.log ;;
+   esac
    ```
    **Three outcomes, and they are not interchangeable — read the exit code, not just `$PAGE`:**
 
@@ -531,7 +537,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
 
    Never conflate the last two: an empty `$PAGE` alone does not say whether the proof is undeliverable or wrong.
 
-   Gate exits: empty recording (3), token leak (6, widened to the title, description and chapter titles), homogeneity (8, mismatched codec/dimensions — stream copy would corrupt the video *without failing*), duration reconciliation (9). Exit 1 is usage/manifest/configuration, exit 4 is the video tooling. A gate that trips on any clip **aborts the whole recording** — a proof with a hole in it is worse than none. A publish-not-ready environment (Step 3 `PROBE_HOSTING` WARN) skips gracefully: `Proof page: skipped — <gate>` with the probe output pasted beneath (never fail the run over a missing link).
+   Gate exits: empty recording (3), token leak (6, widened to the title, description and chapter titles), homogeneity (8, mismatched codec/dimensions — stream copy would corrupt the video *without failing*), duration reconciliation (9). Exit 1 is usage/manifest/configuration, exit 4 is the video tooling. A gate that trips on any clip **aborts the whole recording** — a proof with a hole in it is worse than none. A publish-not-ready environment (Step 3 `PROBE_HOSTING` reported `HOSTING_READY=no`) skips before the call altogether: `Proof page: skipped — publish prerequisites not ready` with the probe output pasted beneath. That is a third skip cause, not a gate — never fail the run over a missing link.
 
    Clip order in `clips[]` is the order a reviewer watches, so it is the **AC order**, not the order `test-results/` happened to list — it is chapter order, and the script prints each chapter's deep link on stderr.
 2. **Hygiene sweep** before staging:
@@ -561,7 +567,7 @@ Dev server: stopped (port <N>) | left running (pre-existing)
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed · hermetic (carve-outs: none | <declared list>)
 Mutation: RED (spec guards the change) | unguardable at <layer>
-Proof page: <https://clips.paulsjob.ai/share/<id>> (N chapters)
+Proof page: https://clips.paulsjob.ai/share/<id> (N chapters)
 - <AC1> -> <share URL>?t=<seconds>
 - <AC2> -> <share URL>?t=<seconds>
 Committed: <short-sha> on <branch>
@@ -571,7 +577,7 @@ PR comment: <url>
 
 **Report invariant (PR-mode):** structurally invalid unless every line above is present.
 
-- `Proof page:` is either ONE share URL followed by its per-AC timestamp links, or `skipped — <gate>` **with the failing probe's or the publish log's output pasted directly beneath** (never from memory). A skip line with no output is a silent drop. N bare clip URLs and no recording is the pre-`0009` shape and is not a valid report.
+- `Proof page:` is either ONE share URL followed by its per-AC timestamp links, or `skipped — <the gate, the transport failure, or the unmet prerequisite>` **with the failing probe's or the publish log's output pasted directly beneath** (never from memory). A skip line with no output is a silent drop. N bare clip URLs and no recording is the pre-`0009` shape and is not a valid report.
 - A skip caused by **undelivered** transport (exit 0 with a kept file) carries a `Kept locally: <path>` line beneath it and says the file was attached by hand; a skip caused by a **gate** never names a local file, because none is offered.
 - `Mutation:` is `RED` or `unguardable at <layer>` — never absent in PR-mode.
 - `Committed / Pushed / PR comment` have **no skip form**: if the tail cannot complete (push rejected, `gh` unauthenticated), report the blocking error and the exact failing command output *instead of* a Complete report.

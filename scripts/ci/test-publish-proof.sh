@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Process-boundary tests for publish-proof.mjs — the ONE Clips recording a pw-prove run publishes.
-# Same shape as test-proof-page.sh: spawn the real script, assert its exit code, its marker line and
-# the bytes it sent.
+# Same shape as the proof-page check it replaced: spawn the real script, assert its exit code, its
+# marker line and the bytes it sent — never an internal call.
 #
 # ONE seam, and it is configuration the design already required: CLIPS_ORIGIN points at a throwaway
 # local HTTP server (scripts/ci/fixtures/clips-stub-server.mjs) that captures the request. Everything
@@ -499,9 +499,11 @@ grep -q 'publish-proof.mjs cannot concatenate' "$W/pf.err" \
 
 echo ""
 echo "-- the R2 path is gone, not dormant: two publish shapes cannot both be emitted --"
-[ -e "$S/host-proof.mjs" ] || [ -e "$S/host-video.mjs" ] \
-  && bad "host-proof.mjs / host-video.mjs still ship — a second publish shape is still reachable" \
-  || ok "host-proof.mjs and host-video.mjs are deleted"
+if [ -e "$S/host-proof.mjs" ] || [ -e "$S/host-video.mjs" ]; then
+  bad "host-proof.mjs / host-video.mjs still ship — a second publish shape is still reachable"
+else
+  ok "host-proof.mjs and host-video.mjs are deleted"
+fi
 # The whole pw-prove surface, not just its scripts: a SKILL step or an eval that still names a
 # deleted script points an agent at a file that is not there.
 if grep -rlE 'host-proof|host-video|wrangler' skills/pw-prove > "$W/stale" 2>/dev/null; then
