@@ -1,0 +1,5 @@
+interface:
+  display_name: "Delegate Tickets"
+  short_description: "Run a ticket tree across parallel workers"
+policy:
+  allow_implicit_invocation: false
