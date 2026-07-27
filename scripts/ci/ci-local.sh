@@ -41,7 +41,7 @@ step "Node syntax"
 while IFS= read -r file; do
   [ -z "$file" ] && continue
   node --check "$file" || fail "node syntax: $file"
-done < <(find skills -name '*.mjs' -type f 2>/dev/null)
+done < <(find skills scripts -name '*.mjs' -type f 2>/dev/null)
 [ "$QUIET" = "1" ] || echo "  all shipped .mjs scripts parse"
 
 step "Review checks"
@@ -102,6 +102,19 @@ if [ "${E2E_SKILLS_SKIP_PROOF_PAGE_TESTS:-}" != "1" ]; then
     bash scripts/ci/test-proof-page.sh >/dev/null 2>&1 || fail "test-proof-page.sh"
   else
     bash scripts/ci/test-proof-page.sh || fail "test-proof-page.sh"
+  fi
+fi
+
+if [ "${E2E_SKILLS_SKIP_PUBLISH_PROOF:-}" != "1" ]; then
+  step "Publish proof (publish-proof.mjs, process boundary)"
+  # Manifest in, one Clips share link out. CLIPS_ORIGIN points at a throwaway local stub server that
+  # captures the request; ffmpeg/ffprobe stay REAL over real synthetic clips, so the chapter offsets
+  # and the stream-copy claim are proven against actual files. Skips if ffmpeg is absent; never
+  # touches the network.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-publish-proof.sh >/dev/null 2>&1 || fail "test-publish-proof.sh"
+  else
+    bash scripts/ci/test-publish-proof.sh || fail "test-publish-proof.sh"
   fi
 fi
 

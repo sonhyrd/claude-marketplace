@@ -16,11 +16,20 @@
 //   PROBE_HOSTING  optional — set to 1 in PR-mode: also probe the proof-clip hosting prerequisites
 //                  (wrangler auth, Chrome) NOW, while there is still time to fix them. WARN-only:
 //                  hosting never blocks readiness; the summary reports HOSTING_READY=yes|no.
+//                  It additionally probes what publish-proof.mjs needs — the publish credential and
+//                  the video tooling — reporting PUBLISH_READY=yes|no and VIDEO_TOOLING=yes|no.
+//                  A rotated secret or a missing ffmpeg surfaces at minute zero rather than after a
+//                  fifty-minute run, and neither ever blocks: a run must still be able to prove a
+//                  change and skip delivery.
+//   CLIPS_ORIGIN / CLIPS_A2A_SECRET
+//                  optional — publish-proof.mjs's configuration. When PROBE_HOSTING=1 and both are
+//                  set, the credential is round-tripped against the real import action.
 //
 //   exit 3 = not ready
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { clipsConfig, probeImportCredential } from './clips.mjs';
 import { pwproveRun } from './pwprove-run.mjs';
 
 const out = (s) => process.stdout.write(s);
@@ -136,8 +145,48 @@ if (PROBE_HOSTING) {
   }
 }
 
+// --- publish probes (PR-mode) — WARN-only, never block ----------------------------------------
+// Everything publish-proof.mjs needs, learned at minute zero instead of at minute fifty: the
+// credential and the video tooling. Both warn and neither blocks — a run must still be able to prove
+// a change and skip delivery, because the proof is the passing test plus the mutation verdict.
+let publishReady = 'no';
+let videoTooling = 'no';
+if (PROBE_HOSTING) {
+  // The credential is round-tripped by RUNNING the real call, per the same probe doctrine as
+  // wrangler above: POST the import action a body its schema must reject. A schema-validation
+  // failure is the PASS — it means the request got past auth, so reachability, secret currency,
+  // adapter wiring, scope and org resolution all hold. A bare GET would prove none of that: the
+  // route answers it with its method check before auth is ever consulted.
+  const config = clipsConfig();
+  if (!config.ok) {
+    warn(`preflight: WARN - publish credential not configured (${config.reason}); the proof link will be skipped.\n`);
+  } else {
+    const { verdict, detail } = await probeImportCredential(config);
+    if (verdict === 'usable') {
+      publishReady = 'yes';
+      warn(`preflight: publish credential usable - ${detail}\n`);
+    } else {
+      warn('preflight: WARN - publish credential unusable; the proof link will be skipped. Probe output:\n');
+      warn(`preflight:   ${verdict}: ${detail}\n`);
+    }
+  }
+
+  // ffmpeg/ffprobe are real binaries — command -v is honest for them, unlike wrangler above.
+  const missing = ['ffmpeg', 'ffprobe'].filter((tool) => !commandExists(tool));
+  if (missing.length === 0) {
+    videoTooling = 'yes';
+  } else {
+    warn(
+      `preflight: WARN - ${missing.join(' and ')} not found; publish-proof.mjs cannot concatenate ` +
+        'the clips into one recording. Install ffmpeg now.\n',
+    );
+  }
+}
+
 // --- summary (machine-readable) ---------------------------------------------------------------
 out('---preflight---\n');
 out(`BASE_URL=${BASE_URL}\n`);
 out('READY=yes\n');
 if (PROBE_HOSTING) out(`HOSTING_READY=${hostingReady}\n`);
+if (PROBE_HOSTING) out(`PUBLISH_READY=${publishReady}\n`);
+if (PROBE_HOSTING) out(`VIDEO_TOOLING=${videoTooling}\n`);
