@@ -46,7 +46,7 @@ The repo doubles as a Claude Code plugin (`.claude-plugin/`), a Codex plugin (`.
 │   │   ├── agents/openai.yaml
 │   │   └── scripts/        # SHIPPED — Node, zero deps: record/preflight/probe/host-on-r2 .mjs
 │   ├── pw-prove/
-│   │   └── scripts/        # SHIPPED — preflight/probe/hermetic/publish-proof/host-video/host-proof .mjs
+│   │   └── scripts/        # SHIPPED — preflight/probe/hermetic/publish-proof/clips/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   ├── playwright-debugger/
@@ -98,8 +98,7 @@ bash scripts/ci/review.sh           # parity, language, links, framework scope, 
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
 bash scripts/ci/test-corpus.sh      # scanner golden: 25/25 checks fire, suppression holds
 bash scripts/ci/test-hermetic.sh    # hermetic.mjs: LIVE/MOCKED classification + route.fetch blind spot
-bash scripts/ci/test-proof-page.sh  # host-proof.mjs: N clips + one index.html, gates, escaping
-bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clips share link out
+bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clips share link out (four gates, kept-file fallback)
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so
 bash scripts/ci/test-run-ledger.sh  # PTG_RUN run-ledger contract on the shipped scripts
 bash scripts/validate-evals.sh      # eval JSON schema

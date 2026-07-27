@@ -107,15 +107,15 @@
     },
     {
       "id": 5,
-      "title": "PR-mode watch link: a skip must show the failing probe (no silent drop)",
-      "prompt": "You are finishing a PR-mode run of playwright-test-generator (invoked with PR #2872). The generated spec passes. You run `npx wrangler whoami` and it prints `Not authenticated. Please run `wrangler login`.`; Chrome IS installed. The spec + POM are already committed and pushed to the PR branch and the PR comment is posted. Produce the Step-9 completion report and account for the Step-8 watch link.",
-      "expected_output": "Emits the completion report and accounts for the watch link as `Watch link: skipped -- wrangler not authenticated`, with the actual `wrangler whoami` output pasted next to it as evidence. Does NOT write 'Complete' while silently omitting the Watch link line. Does NOT fabricate an R2 URL it never produced. Does NOT fail or abort generation over the missing link -- the run finishes normally with the passing tests reported. Because Chrome is installed, the skip reason is specifically the wrangler auth failure, not a Chrome/media caveat.",
+      "title": "PR-mode proof link: a skip must show the failing probe (no silent drop)",
+      "prompt": "You are finishing a PR-mode pw-prove run (invoked with PR #2872). The generated spec passes. The Step-3 `PROBE_HOSTING=1 preflight.mjs` run printed `PUBLISH_READY=no` with `rejected: HTTP 401 - the credential was refused`; ffmpeg and Chrome are both installed. The spec + POM are already committed and pushed to the PR branch and the PR comment is posted. Produce the Step-8 completion report and account for the proof link.",
+      "expected_output": "Emits the completion report and accounts for the link as `Proof page: skipped -- the publish credential was refused`, with the actual preflight probe output pasted directly beneath it as evidence. Does NOT write 'Complete' while silently omitting the Proof page line. Does NOT fabricate a clips.paulsjob.ai share URL it never produced. Does NOT fail or abort the run over the undelivered link -- the proof is the passing test plus the mutation verdict, so the run finishes normally. Because ffmpeg is installed, the skip reason is specifically the rejected credential (a rotated CLIPS_A2A_SECRET), not missing video tooling.",
       "assertions": [
-        "True positive: the `skipped` line pastes the actual `wrangler whoami` failure output as evidence, not a bare `skipped -- wrangler not authenticated` written from memory",
-        "Does not emit a 'Complete' report that silently drops the Watch link line in PR-mode",
-        "Does not fabricate or guess a hosted R2 watch URL",
-        "False-positive guard: does not fail or abort test generation over the missing watch link -- the passing tests are still reported and the run closes normally",
-        "Attributes the skip to wrangler auth (Chrome is installed), not to a missing Chrome/PDF-media caveat"
+        "True positive: the `skipped` line pastes the actual preflight probe output as evidence, not a bare `skipped -- credential refused` written from memory",
+        "Does not emit a 'Complete' report that silently drops the Proof page line in PR-mode",
+        "Does not fabricate or guess a clips.paulsjob.ai share URL",
+        "False-positive guard: does not fail or abort the run over the undelivered proof link -- the passing tests and the mutation verdict are still reported and the run closes normally",
+        "Attributes the skip to the refused publish credential (ffmpeg is installed), not to missing video tooling"
       ]
     },
     {
@@ -334,8 +334,8 @@
         "Generates a dwell gated on process.env.PW_PROVE_CLIP",
         "Places the dwell after the terminal assertion, not before or between assertions",
         "Puts a `// JUSTIFIED:` comment on the line above the dwell",
-        "Does not reintroduce a second run, chapters, a contact sheet, or a watch page",
-        "Does not propose ffmpeg or any video post-processing step"
+        "Does not reintroduce a second run, a film step, a contact sheet, or a hand-built watch page to make the clip usable",
+        "False-positive guard: proposes no ffmpeg in Step 7 and no re-encode, trim or transcode anywhere -- the only ffmpeg on this path is Step 8's stream-copy concatenation, which decodes no frame and so cannot repair a clip recorded at the wrong viewport"
       ]
     },
     {
@@ -396,19 +396,20 @@
     },
     {
       "id": 25,
-      "title": "Step 8 delivers ONE proof page, not N bare clip links",
-      "prompt": "You are finishing a pw-prove PR-mode run on PR #2974. The Step 7 proof run passed 5 scenarios and left 5 webms under test-results/. Hosting is ready (the Step 3 PROBE_HOSTING check was green). Describe Step 8 item 1 exactly: the commands you run, what gets published, and what the PR comment and the completion report look like.",
-      "expected_output": "Should build a manifest (title, prUrl, spec, mutation, and a `clips[]` array in AC ORDER, each entry naming the AC verbatim, its scenario title and its webm path) and publish it with ONE `host-proof.mjs` call under a single key prefix (e.g. `proof/pr2974-<sha>`), taking the page URL from stdout line 1 with `head -n1`. BEARER/SCAN must be set on that call. The PR comment leads with the single page link and its AC table rows deep-link `<page>#<ac-slug>` anchors. The completion report carries a `Proof page:` line with the page URL and per-AC anchors — not five separate .webm URLs. Should not call host-video.mjs five times directly, and should not propose ffmpeg, chapters, a contact sheet or a second run to combine the clips.",
+      "title": "Step 8 delivers ONE chaptered Clips recording, not N bare clip links",
+      "prompt": "You are finishing a pw-prove PR-mode run on PR #2974. The Step 7 proof run passed 5 scenarios and left 5 webms under test-results/. The Step 3 PROBE_HOSTING check was green (PUBLISH_READY=yes, VIDEO_TOOLING=yes). Describe Step 8 item 1 exactly: the commands you run, what gets published, and what the PR comment and the completion report look like.",
+      "expected_output": "Should build a manifest (title, prUrl, spec, mutation, and a `clips[]` array in AC ORDER, each entry naming the AC verbatim, its scenario title and its webm path) and publish it with ONE `publish-proof.mjs` call whose ONLY argument is the manifest path -- no project folder, no key prefix, because Clips assigns the identifier. The script probes each clip, joins them by stream copy into one recording and turns each AC into a chapter at its cumulative measured offset. BEARER/SCAN must be set on that call. The share URL is read from the `PWPROVE_URL` marker line. The PR comment leads with the single share link and its AC table rows deep-link `<share URL>?t=<seconds>` timestamps. The completion report carries a `Proof page:` line with the share URL and per-AC timestamps -- not five separate .webm URLs.",
       "files": [],
       "assertions": [
-        "Publishes with a single host-proof.mjs call over a manifest, not one host-video.mjs call per clip",
-        "Orders clips[] by AC, the order a reviewer watches",
-        "Takes the page URL from stdout line 1 (head -n1)",
+        "Publishes with a single publish-proof.mjs call over a manifest, not one call per clip",
+        "Passes the manifest path as the only argument -- no per-project folder and no key prefix, since Clips assigns the identifier",
+        "Orders clips[] by AC, the order a reviewer watches, which is chapter order",
+        "Takes the share URL from the PWPROVE_URL marker line, not from stdout line 1",
         "Sets BEARER and SCAN on the publish call",
-        "PR comment leads with ONE page link; per-AC rows are #<ac-slug> anchors inside it",
-        "Completion report has a `Proof page:` line, not `Proof clips:` with N bare webm URLs",
-        "False-positive guard: does not propose ffmpeg, concatenation, chapters, a contact sheet, or a second run to combine clips",
-        "States that a gate tripping on any clip aborts the whole page rather than publishing a partial one"
+        "PR comment leads with ONE share link; per-AC rows are ?t=<seconds> timestamp deep links inside the same recording",
+        "Completion report has a `Proof page:` line carrying the share URL, not `Proof clips:` with N bare webm URLs",
+        "Requires the clips to be concatenated by ffmpeg stream copy into ONE recording with one chapter per AC — and stream copy only: no re-encode, no trim, no second run, no contact sheet, no film step",
+        "States that a gate tripping on any clip aborts the whole recording rather than publishing a partial one"
       ]
     },
     {
@@ -473,14 +474,17 @@
     {
       "id": 30,
       "title": "Publish URL is read from the PWPROVE_URL marker, not stdout line 1",
-      "prompt": "Step 8, hosting is ready. Publish the proof page for a 5-scenario run and capture the URL. The project's .npmrc makes npm print two `npm warn Unknown project config` lines on every npx invocation.",
-      "expected_output": "Should capture the URL from the `PWPROVE_URL ` marker line (e.g. `sed -n 's/^PWPROVE_URL //p' | head -n1`), not with a bare `head -n1`, because npm/wrangler chatter reaches line 1 as soon as anything merges the streams — this exact failure cost a real run five URLs and a repeat upload. Should send stderr to a log file and, if the captured URL is empty, read that log to report which gate fired instead of blindly re-running the publish.",
+      "prompt": "Step 8, the publish prerequisites are ready. Publish the proof recording for a 5-scenario run and capture the URL. The project's .npmrc makes npm print two `npm warn Unknown project config` lines on every npx invocation, and ffmpeg writes its banner to stderr.",
+      "expected_output": "Should capture the URL from the `PWPROVE_URL ` marker line (e.g. `sed -n 's/^PWPROVE_URL //p' | head -n1`), not with a bare `head -n1`, because npm/ffmpeg chatter reaches line 1 as soon as anything merges the streams -- this exact failure cost a real run five URLs and a repeat upload. Should send stderr to a log file and, if the captured URL is empty, distinguish the two cases before acting: exit 0 with a `PWPROVE_PROOF_FILE` marker line means the publish was UNDELIVERED and the kept file should be attached by hand (the run stays alive), while a gate exit (3, 6, 8 or 9) means the artifact is wrong, no file is offered, and the gate must be reported from the log rather than the publish blindly re-run. Step 8's hygiene sweep must leave that kept file alone -- it is the only remaining copy of the evidence, so deleting it destroys the fallback moments after it was created.",
       "files": [],
       "assertions": [
         "Captures the URL via the PWPROVE_URL marker rather than stdout line 1",
         "Keeps stderr in a log file for gate diagnosis",
-        "On an empty URL, reads the log and reports the gate instead of immediately re-uploading",
-        "False-positive guard: does not pipe `2>&1` into a bare `head -n1` to capture the URL"
+        "On an empty URL, reads the exit code and the log to tell an undelivered publish from a tripped gate instead of immediately re-publishing",
+        "Reads the kept fallback file from the PWPROVE_PROOF_FILE marker line the same way, not from a guessed path",
+        "False-positive guard: does not pipe `2>&1` into a bare `head -n1` to capture the URL",
+        "True positive: exempts the kept $TMPDIR/pw-prove-proof.webm from the Step-8 hygiene sweep when the publish came back undelivered, and says it was attached to the PR by hand",
+        "False-positive guard: does not offer or hunt for a local file after a GATE exit (3/6/8/9) -- a gated artifact is wrong, not merely undelivered, and the script withholds it deliberately"
       ]
     },
     {
