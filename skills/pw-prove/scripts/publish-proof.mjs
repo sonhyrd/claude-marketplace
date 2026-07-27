@@ -168,7 +168,13 @@ for (const tool of ['ffprobe', 'ffmpeg']) {
 
 // One probe per file answers everything downstream needs: chapter offsets, the reported dimensions,
 // and whether the recording carries audio at all.
-function probe(file) {
+//
+// `unreadable` decides what an unprobeable file MEANS, which differs by caller and is not ffprobe's
+// call to make: a source clip ffprobe cannot open is a broken recording (a gate, named as such), while
+// the concatenated output failing to probe is this machine's tooling misbehaving (exit 4). Without the
+// hook every corrupt clip would exit 4 and no gate would be named for a defect that is squarely a
+// recording defect.
+function probe(file, unreadable = (why) => stop(4, why)) {
   const r = run('ffprobe', [
     '-v', 'error',
     '-show_entries', 'stream=codec_type,codec_name,width,height',
@@ -176,12 +182,14 @@ function probe(file) {
     '-of', 'json',
     file,
   ]);
-  if (r.status !== 0) stop(4, `ffprobe cannot read '${file}': ${(r.stderr ?? '').trim() || `exit ${r.status}`}`);
+  if (r.status !== 0) {
+    return unreadable(`ffprobe cannot read '${file}': ${(r.stderr ?? '').trim() || `exit ${r.status}`}`);
+  }
   let json;
   try {
     json = JSON.parse(r.stdout ?? '{}');
   } catch (e) {
-    stop(4, `ffprobe returned unparseable output for '${file}': ${e.message}`);
+    return unreadable(`ffprobe returned unparseable output for '${file}': ${e.message}`);
   }
   const streams = Array.isArray(json.streams) ? json.streams : [];
   const video = streams.find((s) => s.codec_type === 'video') ?? {};
@@ -243,7 +251,9 @@ const probed = clips.map((c, i) => {
     gate(3, 'EMPTY-RECORDING', `clips[${i}] '${c.file}' is only ${bytes}B (< 1KB).`,
       'That is a broken or empty screencast, not a proof. Re-run the proof spec, then retry.');
   }
-  const p = probe(file);
+  const p = probe(file, (why) =>
+    gate(3, 'EMPTY-RECORDING', `clips[${i}] '${c.file}' cannot be read as video — ${why}`,
+      'A recording no tool can open proves nothing. Re-run the proof spec, then retry.'));
   if (!p.codec || !(p.seconds > 0) || !p.width || !p.height) {
     gate(3, 'EMPTY-RECORDING',
       `clips[${i}] '${c.file}' carries no readable video (${p.seconds.toFixed(3)}s, ${p.width}x${p.height}, `
@@ -281,10 +291,10 @@ if (needle) {
 // cannot reconcile a disagreement: a clip at another codec or another size produces output that plays
 // wrong (or not at all) while ffmpeg exits 0. Reads the probe data already gathered above.
 const shape = (p) => `${p.codec} ${p.width}x${p.height}`;
-const odd = probed.findIndex((p) => shape(p) !== shape(probed[0]));
-if (odd > 0) {
+const oddClip = probed.findIndex((p) => shape(p) !== shape(probed[0]));
+if (oddClip > 0) {
   gate(8, 'HOMOGENEITY',
-    `clips[${odd}] is ${shape(probed[odd])} but clips[0] is ${shape(probed[0])}.`,
+    `clips[${oddClip}] is ${shape(probed[oddClip])} but clips[0] is ${shape(probed[0])}.`,
     'Stream-copy concatenation of mismatched inputs yields a corrupt video WITHOUT failing, so this is '
       + 'refused before concatenation runs.',
     'Re-record the odd clip at the same viewport, or drop it from the manifest.');
@@ -321,6 +331,13 @@ try {
   /* a stray list file is not worth failing over */
 }
 if (concat.status !== 0) {
+  // The partial output goes with it. ffmpeg that died mid-mux leaves a truncated video at the STABLE
+  // path, and a path an operator has been told to attach by hand must never hold a half-written file.
+  try {
+    fs.unlinkSync(PROOF_FILE);
+  } catch {
+    /* nothing was written — the path is already clear */
+  }
   stop(4, `ffmpeg could not concatenate the clips: ${(concat.stderr ?? '').trim().split('\n').slice(-3).join(' ')}`);
 }
 
@@ -333,10 +350,15 @@ err(
 // ============================================================ GATE: duration reconciliation
 // The chapter offsets are cumulative INPUT durations, so the output must total the same. If it does
 // not, every chapter after the divergence points at the wrong footage — and a reviewer sent to the
-// wrong second reads it as the criterion failing. Tolerance is a container-rounding allowance, not a
-// negotiation: 0.75s, or 2% of a long run, whichever is larger.
+// wrong second reads it as the criterion failing.
+//
+// The tolerance is a container-rounding allowance and nothing more. It grows PER CLIP, not per second:
+// rounding accrues once per input muxed, so a fraction of a percent of the total would hand a 40-minute
+// run tens of seconds of slack — enough to swallow an entire missing clip while the gate stayed quiet.
+// A stream copy of well-formed inputs lands exact (a measured 34.680s clip concatenated with itself
+// reported 69.360s), so this is deliberately tight.
 const drift = Math.abs(proof.seconds - inputSeconds);
-const tolerance = Math.max(0.75, inputSeconds * 0.02);
+const tolerance = 0.75 + 0.05 * probed.length;
 if (drift > tolerance) {
   gate(9, 'DURATION-RECONCILIATION',
     `the concatenated video reports ${proof.seconds.toFixed(3)}s but its inputs sum to `

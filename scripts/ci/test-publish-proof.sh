@@ -268,6 +268,15 @@ gate_case() { # usage: gate_case <name> <expected rc> <expected GATE token> <man
     || bad "$name — the wrong artifact was left at $PROOF for someone to attach by hand"
 }
 
+# A pre-concat gate has to be observably pre-concat: the script announces its concatenation on stderr,
+# so the ABSENCE of that line is what proves nothing was muxed. Withholding the file cannot prove it —
+# a gate that concatenated and then deleted the output looks identical from the path alone.
+refused_before_concat() { # usage: refused_before_concat <name>
+  grep -q 'publish-proof: concatenated' "$W/err" \
+    && bad "$1 — concatenation ran anyway; the gate must refuse before muxing" \
+    || ok "$1 — nothing was concatenated: the gate refused first"
+}
+
 # EMPTY-RECORDING: a sub-threshold clip. 3 bytes is a real dead screencast, not a fabricated probe.
 printf 'x' > "$W/tiny.webm"
 cat > "$W/tiny.json" <<'JSON'
@@ -280,6 +289,23 @@ cat > "$W/tiny.json" <<'JSON'
 }
 JSON
 gate_case "empty recording" 3 EMPTY-RECORDING tiny.json
+refused_before_concat "empty recording"
+
+# A recording that is BROKEN rather than empty: 4KB of noise clears the size floor, so only ffprobe
+# failing to open it can catch this. It must still name the recording gate — reporting it as a video
+# TOOLING error (exit 4) would blame the machine for what is squarely a defective screencast.
+head -c 4096 /dev/urandom > "$W/corrupt.webm"
+cat > "$W/corrupt.json" <<'JSON'
+{
+  "title": "broken screencast",
+  "clips": [
+    { "ac": "Per-locale EN/DE/ID authoring", "file": "a.webm" },
+    { "ac": "Every locale empty removes the key", "file": "corrupt.webm" }
+  ]
+}
+JSON
+gate_case "an unprobeable clip above the size floor" 3 EMPTY-RECORDING corrupt.json
+refused_before_concat "an unprobeable clip above the size floor"
 
 # TOKEN-LEAK, byte half: the token is written into a real webm's container tags by ffmpeg itself, so
 # the gate is proven against bytes a recording tool actually produced.
@@ -301,7 +327,10 @@ if node -e '
 JSON
   gate_case "token in the video bytes" 6 TOKEN-LEAK leakbytes.json BEARER="$LEAK_TOKEN"
 else
-  echo "  [SKIP] this ffmpeg build wrote no readable container tag — no byte-leak fixture"
+  # NOT a skip. This ffmpeg already proved it writes vp9 webm, so a fixture that comes out without the
+  # token in its bytes is a broken fixture — and letting it pass quietly would leave one of the four
+  # gates unexercised in a suite reporting green, which is the silent-always-pass this repo calls P0.
+  bad "the byte-leak fixture carries no token — the byte half of the leak gate went unexercised"
 fi
 
 # TOKEN-LEAK, text half: the SAME gate, reached by a credential pasted into an AC. The ACs travel as
@@ -334,6 +363,7 @@ cat > "$W/mixed.json" <<'JSON'
 }
 JSON
 gate_case "mismatched dimensions" 8 HOMOGENEITY mixed.json
+refused_before_concat "mismatched dimensions"
 grep -q '320x180' "$W/err" && grep -q '640x360' "$W/err" \
   && ok "the homogeneity report names both shapes it could not reconcile" \
   || bad "the homogeneity report does not name the shapes"
@@ -357,7 +387,10 @@ DECLARED=$(probe_dur "$W/short.webm")
 if node -e 'if (!(Number(process.argv[1]) > 2.5)) process.exit(1)' "$DECLARED"; then
   gate_case "concatenated duration diverging from its inputs" 9 DURATION-RECONCILIATION drift.json
 else
-  echo "  [SKIP] this ffmpeg build wrote no container duration — a truncated file cannot lie about it"
+  # NOT a skip, for the same reason: the truncated fixture declaring its original duration is HOW this
+  # divergence is manufactured from real files. If it stops declaring one, the gate is untested and the
+  # suite must say so rather than report green over a hole.
+  bad "the truncated fixture declares no duration ($DECLARED) — the duration gate went unexercised"
 fi
 
 echo ""
