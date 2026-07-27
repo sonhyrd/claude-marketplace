@@ -4,12 +4,25 @@
 // zero, publish-proof.mjs uses it at minute fifty. A probe that minted its token differently from
 // the publish would prove nothing about the publish — so the minting lives here, once.
 //
-// Configuration is two environment variables:
-//   CLIPS_ORIGIN      the Clips deployment, e.g. https://clips.paulsjob.ai
-//   CLIPS_A2A_SECRET  its organization-level signing secret
-// Two optional refinements carry the token's identity claims when a deployment needs them:
-//   CLIPS_ORG         organization id / domain hint (default: the origin's hostname)
-//   CLIPS_SUBJECT     the caller identity the token asserts (default: pw-prove@<hostname>)
+// Configuration is five environment variables, and all five are REQUIRED:
+//   CLIPS_ORIGIN      the Clips deployment, e.g. https://clips.paulsjob.ai. Must equal the
+//                     deployment's own APP_URL, which is what it checks the token's audience against.
+//   CLIPS_A2A_SECRET  the organization's signing secret (its `a2a_secret` row value)
+//   CLIPS_ORG_ID      the organization the import runs under (its `id`)
+//   CLIPS_ORG_DOMAIN  the organization's `allowed_domain`
+//   CLIPS_SUBJECT     an email that is ALREADY A MEMBER of that organization. The import runs as
+//                     that person and the recording lands in their library.
+//
+// CLIPS_ORG_ID and CLIPS_ORG_DOMAIN are two different values doing two different jobs, and an
+// earlier version of this file carried one variable for both. The domain is what selects which
+// organization's secret the receiver even tries; the id is the organization the import then runs
+// under, and the receiver refuses unless the domain owns the id. Collapsing them mints a token that
+// travels the whole way and is refused at the far end with a bare 401.
+//
+// None of the three identity values is defaulted. A guess — the origin's hostname for the id, or
+// pw-prove@<hostname> for the subject — produces a credential that is refused remotely (401 for a
+// mismatched org, 403 for a non-member) and has to be diagnosed against someone else's server, when
+// the absence was knowable here.
 //
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention: signing is HMAC-SHA256
 // through node:crypto, so publishing a proof installs nothing into a user's repository.
@@ -32,18 +45,31 @@ export function clipsConfig(env = process.env) {
         'secret) are not both set',
     };
   }
-  let hostname;
   try {
-    hostname = new URL(origin).hostname;
+    new URL(origin);
   } catch {
     return { ok: false, reason: `CLIPS_ORIGIN is not a URL: '${origin}'` };
+  }
+  // Named one at a time rather than as a set: an operator holding two of the three needs to be told
+  // which one is missing, not that "the identity is incomplete".
+  const orgId = (env.CLIPS_ORG_ID ?? '').trim();
+  const orgDomain = (env.CLIPS_ORG_DOMAIN ?? '').trim();
+  const subject = (env.CLIPS_SUBJECT ?? '').trim();
+  const missing = [
+    !orgId && "CLIPS_ORG_ID (the organization's id)",
+    !orgDomain && "CLIPS_ORG_DOMAIN (the organization's allowed_domain)",
+    !subject && 'CLIPS_SUBJECT (an email that is already a member of that organization)',
+  ].filter(Boolean);
+  if (missing.length) {
+    return { ok: false, reason: `not set: ${missing.join('; ')}` };
   }
   return {
     ok: true,
     origin,
     secret,
-    org: (env.CLIPS_ORG ?? '').trim() || hostname,
-    subject: (env.CLIPS_SUBJECT ?? '').trim() || `pw-prove@${hostname}`,
+    orgId,
+    orgDomain,
+    subject,
     actionUrl: `${origin}/_agent-native/actions/${IMPORT_ACTION}`,
   };
 }
@@ -57,11 +83,11 @@ const b64url = (value) => Buffer.from(value).toString('base64url');
 export function mintImportToken(config, now = Math.floor(Date.now() / 1000)) {
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
-    sub: config.subject,
-    iss: config.origin,
-    aud: config.origin, //      the receiver checks this against its own app URL
-    org_id: config.org,
-    org_domain: config.org, //  the org-secret lookup hint
+    sub: config.subject, //          the member the import runs as; the recording lands in their library
+    iss: 'pw-prove', //              who minted it, recorded with the resolved caller
+    aud: config.origin, //           the receiver checks this against its own app URL
+    org_id: config.orgId, //         the organization the import runs under
+    org_domain: config.orgDomain, // selects WHICH organization's secret the receiver tries
     jti: crypto.randomUUID(),
     scope: IMPORT_SCOPE,
     iat: now,

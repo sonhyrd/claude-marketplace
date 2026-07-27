@@ -505,10 +505,14 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    }
    JSON
    # The manifest path is the ONLY argument — Clips assigns the identifier, so there is no project
-   # folder and no key prefix to pass. Configuration is CLIPS_ORIGIN + CLIPS_A2A_SECRET (the token is
-   # minted per publish, five-minute life, import scope only); CLIPS_ORG / CLIPS_SUBJECT are optional
-   # overrides and default off the origin's hostname — set CLIPS_ORG when the deployment's claims
-   # verifier expects an organization id that is not that hostname.
+   # folder and no key prefix to pass. Configuration is FIVE variables, all required, all described
+   # in scripts/clips.mjs: CLIPS_ORIGIN (= the deployment's own APP_URL), CLIPS_A2A_SECRET, and the
+   # three identity values CLIPS_ORG_ID, CLIPS_ORG_DOMAIN and CLIPS_SUBJECT. The token is minted per
+   # publish, five-minute life, import scope only.
+   # CLIPS_ORG_ID and CLIPS_ORG_DOMAIN are DIFFERENT values — the domain selects which organization's
+   # secret the deployment tries, the id is the organization the import runs under — and CLIPS_SUBJECT
+   # must be an email that is ALREADY A MEMBER of it. None is defaulted: a guessed value mints a token
+   # that is refused at the far end with a bare 401 or 403, hours from where the mistake was made.
    # BEARER + SCAN protect the PUBLIC recording — the gate greps the webm bytes AND the chapter
    # titles / description for the token. Prefer programmatic auth (Step 3) so no credential ever
    # enters the frame; a recorded UI login would trip it.
@@ -548,7 +552,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    - **Scrub the HAR:** confirm no `Authorization`/cookie/token value remains in `<feature>.api.har` before it is staged. A leaked bearer in a committed HAR is the same incident as one in a log line.
    - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
-4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<share link + AC table whose rows deep-link $PAGE?t=<seconds> + mutation verdict>"`. Lead with the one share link; the table's per-AC timestamps are navigation inside the same recording, not five competing links. The per-chapter deep links are printed on the publish log's stderr — copy them, never compute a timestamp by hand.
+4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<share link + AC table whose rows deep-link the per-chapter URLs + mutation verdict>"`. Lead with the one share link; the table's per-AC timestamps are navigation inside the same recording, not five competing links. **Copy the per-chapter deep links from the publish log's stderr — never build one by appending `?t=` to the share URL.** They are `/embed/<id>?t=<seconds>`, a different route from `/share/<id>`, because on the share route `t` is the agent-access token and a timestamp appended there is silently discarded: the reviewer lands at 0:00 and reads the wrong footage as the criterion.
    - **No PR exists** (prose/branch run): push, `gh pr create` with the AC table as body, comment there.
    - **Merged-PR retarget** (Step 2): fresh test-only branch off the default, push, `gh pr create`, comment there.
 5. **Completion report** — the run's exit artifact:
@@ -568,8 +572,8 @@ e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed · hermetic (carve-outs: none | <declared list>)
 Mutation: RED (spec guards the change) | unguardable at <layer>
 Proof page: https://clips.paulsjob.ai/share/<id> (N chapters)
-- <AC1> -> <share URL>?t=<seconds>
-- <AC2> -> <share URL>?t=<seconds>
+- <AC1> -> https://clips.paulsjob.ai/embed/<id>?t=<seconds>
+- <AC2> -> https://clips.paulsjob.ai/embed/<id>?t=<seconds>
 Committed: <short-sha> on <branch>
 Pushed: <remote>/<branch>
 PR comment: <url>

@@ -15,6 +15,14 @@ cd "$REPO_ROOT" || exit 1
 S="skills/pw-prove/scripts"
 STUB="scripts/ci/fixtures/clips-stub-server.mjs"
 
+# The organization's id and its domain are DELIBERATELY different strings here, and nothing in the
+# fixtures lets one stand in for the other. A deployment looks its signing key up by the domain and
+# then checks that the domain owns the id, so a caller that collapses the two into one value mints a
+# token that 401s with nothing in the response to say why. Keeping them distinct in the fixture is
+# what makes that collapse a test failure rather than a live-run surprise.
+STUB_ORG_ID="0000acme0000000000000000000000ff"
+STUB_ORG_DOMAIN="acme.test"
+
 pass=0; fail=0
 ok()  { echo "  [PASS] $1"; pass=$((pass + 1)); }
 bad() { echo "  [FAIL] $1"; fail=$((fail + 1)); }
@@ -68,7 +76,8 @@ start_stub() { # usage: start_stub <mode>
 publish() { # usage: publish <manifest> [extra env...]
   local manifest="$1"; shift
   ( cd "$W" && env TMPDIR="$W" CLIPS_ORIGIN="$ORIGIN" CLIPS_A2A_SECRET="stub-signing-secret" \
-      CLIPS_ORG="acme-org" CLIPS_SUBJECT="proof@acme.test" PWPROVE_LEDGER="$W/ledger.jsonl" "$@" \
+      CLIPS_ORG_ID="$STUB_ORG_ID" CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN" \
+      CLIPS_SUBJECT="proof@acme.test" PWPROVE_LEDGER="$W/ledger.jsonl" "$@" \
       node "$REPO_ROOT/$S/publish-proof.mjs" "$manifest" >"$W/out" 2>"$W/err" )
 }
 
@@ -182,15 +191,48 @@ if node -e '
   const c = JSON.parse(Buffer.from(p, "base64url"));
   if (c.scope !== "recordings:import") throw new Error(`scope ${c.scope}`);
   if (c.aud !== origin) throw new Error(`aud ${c.aud}`);
-  if (c.org_id !== "acme-org") throw new Error(`org_id ${c.org_id}`);
   if (!c.jti) throw new Error("no jti");
   const life = c.exp - c.iat;
   if (!(life > 0 && life <= 900)) throw new Error(`lifetime ${life}s is not short-lived`);
 ' "$REQ" "$ORIGIN" "stub-signing-secret" 2>"$W/jerr"; then
-  ok "an HS256 bearer verifies against the secret and carries scope, audience, org and a short life"
+  ok "an HS256 bearer verifies against the secret and carries scope, audience and a short life"
 else
   bad "bearer claims violate the contract"; sed 's/^/         /' "$W/jerr" | tail -2
 fi
+
+# The identity claims, asserted separately because they are the ones a collapse silently corrupts.
+# `org_id` and `org_domain` are two different lookups on the receiving side — the domain selects the
+# signing key, the id is the organization the import runs under — and `sub` must be a member of it.
+if ORG_ID="$STUB_ORG_ID" ORG_DOMAIN="$STUB_ORG_DOMAIN" node -e '
+  const fs = require("fs");
+  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)[0]);
+  const c = JSON.parse(Buffer.from(r.headers.authorization.slice(7).split(".")[1], "base64url"));
+  const { ORG_ID, ORG_DOMAIN } = process.env;
+  if (c.org_id !== ORG_ID) throw new Error(`org_id is ${c.org_id}, wanted ${ORG_ID}`);
+  if (c.org_domain !== ORG_DOMAIN) throw new Error(`org_domain is ${c.org_domain}, wanted ${ORG_DOMAIN}`);
+  if (c.org_id === c.org_domain) throw new Error("org_id and org_domain carry the same value");
+  if (c.sub !== "proof@acme.test") throw new Error(`sub is ${c.sub}`);
+' "$REQ" 2>"$W/jerr"; then
+  ok "org_id, org_domain and sub each carry their own configured value"
+else
+  bad "the token's identity claims are wrong"; sed 's/^/         /' "$W/jerr" | tail -2
+fi
+
+echo ""
+echo "-- per-chapter deep links point at the route whose ?t= is a timestamp --"
+# On /share/<id> the `t` parameter is the agent-access token, NOT a timestamp: a deep link built
+# there opens the recording from the top and silently drops the offset, so a reviewer sent to a
+# criterion watches the run from the beginning and reads it as the wrong evidence. /embed/<id>
+# is the route that parses `t` as seconds.
+deep=$(sed -n 's/^publish-proof: chapter 2 .* -> //p' "$W/err" | head -n1)
+case "$deep" in
+  */embed/rec_stub_1\?t=*) ok "chapter deep links use /embed/<id>?t=<seconds> ($deep)" ;;
+  */share/*) bad "chapter deep link uses /share/<id>?t=, where t is the access token: '$deep'" ;;
+  *) bad "no chapter deep link was reported: '$deep'" ;;
+esac
+# The offset is the chapter's own start, in seconds — clip a.webm is 2s, so chapter 2 opens at 2.
+[ "${deep##*t=}" = 2 ] && ok "the offset is the chapter's measured start in seconds" \
+  || bad "chapter 2 should open at t=2, got t=${deep##*t=}"
 
 echo ""
 echo "-- run ledger --"
@@ -214,7 +256,8 @@ echo ""
 echo "-- marker survives merged streams (a caller's \`2>&1\` reflex) --"
 start_stub ok
 ( cd "$W" && env TMPDIR="$W" CLIPS_ORIGIN="$ORIGIN" CLIPS_A2A_SECRET="stub-signing-secret" \
-    CLIPS_ORG="acme-org" PWPROVE_LEDGER="$W/ledger.jsonl" \
+    CLIPS_ORG_ID="$STUB_ORG_ID" CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN" CLIPS_SUBJECT="proof@acme.test" \
+    PWPROVE_LEDGER="$W/ledger.jsonl" \
     node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/merged" 2>&1 )
 merged=$(sed -n 's/^PWPROVE_URL //p' "$W/merged" | head -n1)
 [ "$merged" = "$ORIGIN/share/rec_stub_1" ] \
@@ -232,6 +275,33 @@ rc=$?
 [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ] \
   && ok "nothing is sent when the configuration is missing" \
   || bad "a request went out without configuration"
+
+# The three identity variables are REQUIRED, not defaulted. A default that guesses is worse than a
+# refusal here: an id derived from the origin's hostname, or a subject like pw-prove@<hostname>, mints
+# a token that reaches the deployment and is refused there — a 401 or a 403 an operator then has to
+# diagnose against someone else's server, when this script already knew the value was never supplied.
+for missing in CLIPS_ORG_ID CLIPS_ORG_DOMAIN CLIPS_SUBJECT; do
+  start_stub ok
+  # Built by omission rather than `env -u`: env applies its unsets BEFORE its assignments, so
+  # `env -u CLIPS_ORG_ID CLIPS_ORG_ID=…` would hand the variable straight back and the case would
+  # prove nothing.
+  set -- TMPDIR="$W" CLIPS_ORIGIN="$ORIGIN" CLIPS_A2A_SECRET="stub-signing-secret" \
+    PWPROVE_LEDGER="$W/ledger.jsonl"
+  [ "$missing" = CLIPS_ORG_ID ]     || set -- "$@" CLIPS_ORG_ID="$STUB_ORG_ID"
+  [ "$missing" = CLIPS_ORG_DOMAIN ] || set -- "$@" CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN"
+  [ "$missing" = CLIPS_SUBJECT ]    || set -- "$@" CLIPS_SUBJECT="proof@acme.test"
+  ( cd "$W" && env -u CLIPS_ORG_ID -u CLIPS_ORG_DOMAIN -u CLIPS_SUBJECT "$@" \
+      node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/out" 2>"$W/err" )
+  rc=$?
+  if [ "$rc" = 1 ] && grep -q "$missing" "$W/err" \
+     && [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ]; then
+    ok "a missing $missing refuses to publish and names the variable"
+  else
+    bad "missing $missing: exit $rc, wanted 1 with the name in the report"
+    sed 's/^/         /' "$W/err" | tail -2
+  fi
+done
+
 cat > "$W/empty.json" <<'JSON'
 { "title": "nothing to see", "clips": [] }
 JSON
@@ -444,7 +514,8 @@ echo "-- preflight: the credential round-trip, warn-only in every outcome --"
 # the only outbound call preflight makes is the credential round-trip against the stub.
 preflight() { # usage: preflight <extra env...>
   ( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 PWPROVE_LEDGER="$W/ledger.jsonl" \
-      CLIPS_A2A_SECRET="stub-signing-secret" CLIPS_ORG="acme-org" "$@" \
+      CLIPS_A2A_SECRET="stub-signing-secret" CLIPS_ORG_ID="$STUB_ORG_ID" \
+      CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN" CLIPS_SUBJECT="proof@acme.test" "$@" \
       node "$REPO_ROOT/$S/preflight.mjs" >"$W/pf.out" 2>"$W/pf.err" )
 }
 pf_says() { # usage: pf_says <name> <expected summary line> <expected rc>

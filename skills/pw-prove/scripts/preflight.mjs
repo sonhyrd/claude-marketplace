@@ -21,9 +21,10 @@
 //                  without moving HOSTING_READY. A rotated secret or a missing ffmpeg surfaces at
 //                  minute zero rather than after a fifty-minute run, and none of it ever blocks: a
 //                  run must still be able to prove a change and skip delivery.
-//   CLIPS_ORIGIN / CLIPS_A2A_SECRET
-//                  optional — publish-proof.mjs's configuration. When PROBE_HOSTING=1 and both are
-//                  set, the credential is round-tripped against the real import action.
+//   CLIPS_ORIGIN / CLIPS_A2A_SECRET / CLIPS_ORG_ID / CLIPS_ORG_DOMAIN / CLIPS_SUBJECT
+//                  optional as a set — publish-proof.mjs's configuration, described in clips.mjs.
+//                  When PROBE_HOSTING=1 and all five are set, the credential is round-tripped against
+//                  the real import action; any one of them missing is a named WARN, never a block.
 //
 //   exit 3 = not ready
 import { spawnSync } from 'node:child_process';

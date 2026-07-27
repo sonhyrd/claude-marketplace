@@ -24,14 +24,14 @@
 // URL the destination returns. Stream copy re-encodes nothing, so the Clip fidelity contract
 // (docs/adr/0007) survives bit-for-bit and the cost is a byte copy rather than a transcode.
 //
-// Configuration is two environment variables:
-//   CLIPS_ORIGIN      required — the Clips deployment, e.g. https://clips.paulsjob.ai
-//   CLIPS_A2A_SECRET  required — the organization-level signing secret. Minting is HMAC-SHA256 via
-//                     node:crypto alone, so no dependency lands in a user's repository.
-//   CLIPS_ORG         optional — organization id / domain hint for the token's claims. Defaults to
-//                     the origin's hostname, which is right for a single-org deployment.
-//   CLIPS_SUBJECT     optional — the caller identity the token asserts (`sub`). Defaults to
-//                     pw-prove@<origin hostname>.
+// Configuration is five environment variables, all REQUIRED (see clips.mjs for why none is defaulted):
+//   CLIPS_ORIGIN      the Clips deployment, e.g. https://clips.paulsjob.ai — and equal to its APP_URL
+//   CLIPS_A2A_SECRET  the organization's signing secret. Minting is HMAC-SHA256 via node:crypto
+//                     alone, so no dependency lands in a user's repository.
+//   CLIPS_ORG_ID      the organization the import runs under (its `id`)
+//   CLIPS_ORG_DOMAIN  the organization's `allowed_domain` — a DIFFERENT value from the id, and the
+//                     one that selects which organization's secret the receiver tries
+//   CLIPS_SUBJECT     an email already a member of that organization; the import runs as that person
 // The token is minted PER PUBLISH with a five-minute life and a single import scope, so nothing
 // long-lived sits on disk and a captured bearer authorises only this one action.
 //
@@ -418,9 +418,28 @@ if (!shareUrl) {
   undelivered(`the destination returned no shareUrl: ${text.slice(0, 400)}`);
 }
 
+// The share URL is what a reviewer opens; the per-chapter deep links are NOT built on it. On
+// /share/<id> the `t` parameter is the agent-access token, not a timestamp — a deep link built there
+// opens at the top and drops the offset silently, so a reviewer sent to one criterion watches the run
+// from the beginning and reads it as the wrong evidence. /embed/<id> is the route that parses `t` as
+// seconds, so the per-chapter links are built from the returned recording id against this origin.
+//
+// When the destination returns no usable id there is nothing honest to build, and a link that opens
+// at the wrong moment is worse than no link — so the offsets are reported without one.
+const recordingId = typeof result?.recordingId === 'string' ? result.recordingId : '';
+const deepLink = recordingId
+  ? (seconds) => `${CLIPS.origin}/embed/${recordingId}?t=${seconds}`
+  : null;
+
 err(`publish-proof: ${chapters.length} chapter(s) published -> ${shareUrl}\n`);
+if (!deepLink) {
+  err('publish-proof: the destination returned no recordingId, so no per-chapter deep links are '
+    + 'offered — the chapters are still markers on the share page.\n');
+}
 for (const [i, ch] of chapters.entries()) {
-  err(`publish-proof: chapter ${i + 1} @${ch.startMs}ms -> ${shareUrl}?t=${Math.round(ch.startMs / 1000)}\n`);
+  const seconds = Math.round(ch.startMs / 1000);
+  const target = deepLink ? ` -> ${deepLink(seconds)}` : '';
+  err(`publish-proof: chapter ${i + 1} @${ch.startMs}ms${target}\n`);
 }
 out(`${shareUrl}\n`);
 out(`PWPROVE_URL ${shareUrl}\n`);
