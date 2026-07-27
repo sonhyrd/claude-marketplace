@@ -94,23 +94,13 @@ if [ "${E2E_SKILLS_SKIP_HERMETIC_TESTS:-}" != "1" ]; then
   fi
 fi
 
-if [ "${E2E_SKILLS_SKIP_PROOF_PAGE_TESTS:-}" != "1" ]; then
-  step "Proof page (host-proof.mjs, process boundary)"
-  # ADR 0009: N clips + one index.html under one key prefix. Shims npx on PATH and captures what
-  # WOULD have been uploaded, so the page itself is asserted on; never touches the network.
-  if [ "$QUIET" = "1" ]; then
-    bash scripts/ci/test-proof-page.sh >/dev/null 2>&1 || fail "test-proof-page.sh"
-  else
-    bash scripts/ci/test-proof-page.sh || fail "test-proof-page.sh"
-  fi
-fi
-
 if [ "${E2E_SKILLS_SKIP_PUBLISH_PROOF:-}" != "1" ]; then
   step "Publish proof (publish-proof.mjs, process boundary)"
-  # Manifest in, one Clips share link out. CLIPS_ORIGIN points at a throwaway local stub server that
-  # captures the request; ffmpeg/ffprobe stay REAL over real synthetic clips, so the chapter offsets
-  # and the stream-copy claim are proven against actual files. Skips if ffmpeg is absent; never
-  # touches the network.
+  # ADR 0012: manifest in, ONE Clips share link out — this replaced the proof-page check when the
+  # R2 path was deleted, so there is one publish shape and one check over it. CLIPS_ORIGIN points at
+  # a throwaway local stub server that captures the request; ffmpeg/ffprobe stay REAL over real
+  # synthetic clips, so the chapter offsets and the stream-copy claim are proven against actual
+  # files. Skips if ffmpeg is absent; never touches the network.
   if [ "$QUIET" = "1" ]; then
     bash scripts/ci/test-publish-proof.sh >/dev/null 2>&1 || fail "test-publish-proof.sh"
   else

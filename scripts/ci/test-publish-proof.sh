@@ -439,16 +439,12 @@ echo "-- preflight: the credential round-trip, warn-only in every outcome --"
 # BASE_URL points at the stub too: readiness only asks whether SOMETHING answers, and any code that
 # is not 000/502/503/504 is a live server.
 #
-# PROBE_HOSTING also runs the pre-existing `npx wrangler whoami` probe, which would reach the
-# network. It is shimmed to a fast failure here: this check is about the publish probes, and the
-# wrangler probe's own contract is warn-only either way.
-mkdir -p "$W/bin"
-printf '#!/bin/sh\necho "not logged in" >&2\nexit 1\n' > "$W/bin/npx"
-chmod +x "$W/bin/npx"
-
+# Nothing on this path is shimmed any more: PROBE_HOSTING used to shell out to `npx wrangler whoami`,
+# which reached the network and had to be intercepted on PATH. That probe is gone with the bucket, so
+# the only outbound call preflight makes is the credential round-trip against the stub.
 preflight() { # usage: preflight <extra env...>
   ( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 PWPROVE_LEDGER="$W/ledger.jsonl" \
-      PATH="$W/bin:$PATH" CLIPS_A2A_SECRET="stub-signing-secret" CLIPS_ORG="acme-org" "$@" \
+      CLIPS_A2A_SECRET="stub-signing-secret" CLIPS_ORG="acme-org" "$@" \
       node "$REPO_ROOT/$S/preflight.mjs" >"$W/pf.out" 2>"$W/pf.err" )
 }
 pf_says() { # usage: pf_says <name> <expected summary line> <expected rc>
@@ -459,6 +455,10 @@ pf_says() { # usage: pf_says <name> <expected summary line> <expected rc>
 start_stub validation
 preflight CLIPS_ORIGIN="$ORIGIN"; pfrc=$?
 pf_says "a schema-validation rejection reports the credential as usable" "PUBLISH_READY=yes" 0
+pf_says "delivery-readiness is the conjunction of the credential and the tooling" "HOSTING_READY=yes" 0
+grep -qi 'wrangler' "$W/pf.out" "$W/pf.err" \
+  && { bad "preflight still speaks of wrangler — the bucket left this path"; } \
+  || ok "preflight never mentions wrangler: no bucket session is probed for"
 grep -q '"url":"/_agent-native/actions/import-recording-from-url"' "$W/cap/requests.jsonl" \
   && ok "the probe POSTs the import action itself (a bare GET would answer before auth)" \
   || bad "the probe did not POST the import action: $(head -c 200 "$W/cap/requests.jsonl")"
@@ -467,6 +467,7 @@ pf_says "the video tooling probe reports what it found" "VIDEO_TOOLING=yes" 0
 start_stub unauthorized
 preflight CLIPS_ORIGIN="$ORIGIN"; pfrc=$?
 pf_says "a 401 warns without blocking" "PUBLISH_READY=no" 0
+pf_says "a refused credential makes the run's delivery not ready" "HOSTING_READY=no" 0
 grep -q 'WARN - publish credential unusable' "$W/pf.err" \
   && ok "the 401 warning pastes the probe output" \
   || bad "no credential warning on 401"
@@ -497,10 +498,21 @@ grep -q 'publish-proof.mjs cannot concatenate' "$W/pf.err" \
   || bad "no video-tooling warning"
 
 echo ""
-echo "-- the old path is untouched: both host scripts still ship --"
-[ -f "$S/host-proof.mjs" ] && [ -f "$S/host-video.mjs" ] \
-  && ok "host-proof.mjs and host-video.mjs still exist" \
-  || bad "the R2 path was removed — that belongs to the cutover ticket, not this one"
+echo "-- the R2 path is gone, not dormant: two publish shapes cannot both be emitted --"
+[ -e "$S/host-proof.mjs" ] || [ -e "$S/host-video.mjs" ] \
+  && bad "host-proof.mjs / host-video.mjs still ship — a second publish shape is still reachable" \
+  || ok "host-proof.mjs and host-video.mjs are deleted"
+# The whole pw-prove surface, not just its scripts: a SKILL step or an eval that still names a
+# deleted script points an agent at a file that is not there.
+if grep -rlE 'host-proof|host-video|wrangler' skills/pw-prove > "$W/stale" 2>/dev/null; then
+  bad "the pw-prove surface still names the retired path"; sed 's/^/         /' "$W/stale"
+else
+  ok "nothing under skills/pw-prove names host-proof, host-video or wrangler"
+fi
+# playwright-test-generator keeps its watch page and its bucket — this cutover moved ONE skill.
+[ -f "skills/playwright-test-generator/scripts/host-on-r2.mjs" ] \
+  && ok "playwright-test-generator's bucket path is untouched" \
+  || bad "playwright-test-generator lost host-on-r2.mjs — it was explicitly out of scope"
 
 echo ""
 echo "  publish-proof: $pass passed, $fail failed"

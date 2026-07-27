@@ -13,14 +13,14 @@
 //   BASE_URL       required — the server you already started on this worktree's resolved port.
 //   READY_TIMEOUT  optional — seconds to wait (default 90; a cold dev server's first heavy route
 //                  can compile for ~1 min).
-//   PROBE_HOSTING  optional — set to 1 in PR-mode: also probe the proof-clip hosting prerequisites
-//                  (wrangler auth, Chrome) NOW, while there is still time to fix them. WARN-only:
-//                  hosting never blocks readiness; the summary reports HOSTING_READY=yes|no.
-//                  It additionally probes what publish-proof.mjs needs — the publish credential and
-//                  the video tooling — reporting PUBLISH_READY=yes|no and VIDEO_TOOLING=yes|no.
-//                  A rotated secret or a missing ffmpeg surfaces at minute zero rather than after a
-//                  fifty-minute run, and neither ever blocks: a run must still be able to prove a
-//                  change and skip delivery.
+//   PROBE_HOSTING  optional — set to 1 in PR-mode: also probe everything Step 8's publish needs NOW,
+//                  while there is still time to fix it. The publish credential (PUBLISH_READY=yes|no)
+//                  and the video tooling (VIDEO_TOOLING=yes|no) are what delivery actually rests on,
+//                  and HOSTING_READY is their conjunction — the one line the Step-8 skip form reads.
+//                  Chrome is probed too, for clip fidelity rather than for delivery, so it warns
+//                  without moving HOSTING_READY. A rotated secret or a missing ffmpeg surfaces at
+//                  minute zero rather than after a fifty-minute run, and none of it ever blocks: a
+//                  run must still be able to prove a change and skip delivery.
 //   CLIPS_ORIGIN / CLIPS_A2A_SECRET
 //                  optional — publish-proof.mjs's configuration. When PROBE_HOSTING=1 and both are
 //                  set, the credential is round-tripped against the real import action.
@@ -108,39 +108,19 @@ for (;;) {
   sleep(2000);
 }
 
-// --- hosting probe (PR-mode) — WARN-only, never blocks ----------------------------------------
-// Probe by RUNNING the tool, never by `command -v` alone: npx-provisioned tools (wrangler) are
-// invisible to PATH in a non-interactive shell, so `command -v wrangler` false-negatives. The
-// failing probe output printed here is the evidence a later `Watch link: skipped - <gate>` report
-// line must paste (SKILL Step 9).
-let hostingReady = 'yes';
+// --- clip-fidelity probe (PR-mode) — WARN-only, never blocks ----------------------------------
+// Chrome affects how the proof clip RECORDS, not whether it can be delivered, so it warns and moves
+// nothing: a run on bundled Chromium still publishes. Chrome is a real binary on PATH or in
+// /Applications, so `command -v` is honest for it.
 if (PROBE_HOSTING) {
-  const who = spawnSync('npx', ['wrangler', 'whoami'], { encoding: 'utf8' });
-  const whoText = `${who.stdout ?? ''}${who.stderr ?? ''}`;
-  if (/logged in/i.test(whoText)) {
-    warn('preflight: wrangler authenticated\n');
-  } else {
-    hostingReady = 'no';
-    warn(
-      'preflight: WARN - wrangler not authenticated; the watch link will be skipped unless you ' +
-        '`wrangler login` now. Probe output:\n',
-    );
-    for (const line of whoText.replace(/\n+$/, '').split('\n').slice(-3)) {
-      warn(`preflight:   ${line}\n`);
-    }
-  }
-
-  // Chrome is a real binary on PATH or in /Applications — command -v is honest for it, unlike
-  // wrangler above.
   const chromeFound =
     fs.existsSync('/Applications/Google Chrome.app') ||
     commandExists('google-chrome') ||
     commandExists('google-chrome-stable');
   if (!chromeFound) {
-    hostingReady = 'no';
     warn(
-      'preflight: WARN - Chrome not found; the film falls back to bundled Chromium (no PDF viewer, ' +
-        'fewer codecs - inline-PDF/media features film blank).\n',
+      'preflight: WARN - Chrome not found; the proof clips fall back to bundled Chromium (no PDF ' +
+        'viewer, fewer codecs - inline-PDF/media surfaces record blank).\n',
     );
   }
 }
@@ -152,8 +132,9 @@ if (PROBE_HOSTING) {
 let publishReady = 'no';
 let videoTooling = 'no';
 if (PROBE_HOSTING) {
-  // The credential is round-tripped by RUNNING the real call, per the same probe doctrine as
-  // wrangler above: POST the import action a body its schema must reject. A schema-validation
+  // The credential is round-tripped by RUNNING the real call, per this repo's probe doctrine —
+  // probe by running the tool, never by presence-checking: POST the import action a body its schema
+  // must reject, so the whole path is exercised while nothing is created. A schema-validation
   // failure is the PASS — it means the request got past auth, so reachability, secret currency,
   // adapter wiring, scope and org resolution all hold. A bare GET would prove none of that: the
   // route answers it with its method check before auth is ever consulted.
@@ -171,7 +152,8 @@ if (PROBE_HOSTING) {
     }
   }
 
-  // ffmpeg/ffprobe are real binaries — command -v is honest for them, unlike wrangler above.
+  // ffmpeg/ffprobe are real binaries on PATH, so `command -v` is honest for them — the doctrine
+  // above is about tools a shell cannot see, which these are not.
   const missing = ['ffmpeg', 'ffprobe'].filter((tool) => !commandExists(tool));
   if (missing.length === 0) {
     videoTooling = 'yes';
@@ -187,6 +169,9 @@ if (PROBE_HOSTING) {
 out('---preflight---\n');
 out(`BASE_URL=${BASE_URL}\n`);
 out('READY=yes\n');
-if (PROBE_HOSTING) out(`HOSTING_READY=${hostingReady}\n`);
+// HOSTING_READY is the conjunction, not a fourth probe: delivery needs BOTH a usable credential and
+// the tooling to build the recording, so one line answers "can this run end at a proof link?" and
+// the two beneath it say which half is missing.
+if (PROBE_HOSTING) out(`HOSTING_READY=${publishReady === 'yes' && videoTooling === 'yes' ? 'yes' : 'no'}\n`);
 if (PROBE_HOSTING) out(`PUBLISH_READY=${publishReady}\n`);
 if (PROBE_HOSTING) out(`VIDEO_TOOLING=${videoTooling}\n`);
