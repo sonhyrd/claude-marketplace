@@ -94,6 +94,8 @@ export function readClipsEnvFile(filePath = clipsEnvFilePath()) {
 
 export const IMPORT_ACTION = 'import-recording-from-url'; // the machine-caller door; no new endpoint
 export const IMPORT_SCOPE = 'recordings:import'; //         authorises the import and nothing else
+export const COMMENT_ACTION = 'add-comment'; //             the per-scenario narration lands here
+export const COMMENT_SCOPE = 'recordings:comment'; //       authorises comments and nothing else
 export const TOKEN_LIFETIME_S = 300; //                     minted per request, never stored
 
 // Returns { ok: true, ...config } or { ok: false, reason } — a caller that must WARN and one that
@@ -151,6 +153,7 @@ export function clipsConfig(env = process.env) {
     orgDomain,
     subject,
     actionUrl: `${origin}/_agent-native/actions/${IMPORT_ACTION}`,
+    commentUrl: `${origin}/_agent-native/actions/${COMMENT_ACTION}`,
   };
 }
 
@@ -160,7 +163,7 @@ const b64url = (value) => Buffer.from(value).toString('base64url');
 // side, revocation costs a secret rotation either way — so a five-minute minted token is strictly
 // better than a long-lived one sitting on disk, and a compromised machine cannot delete or export
 // recordings with it.
-export function mintImportToken(config, now = Math.floor(Date.now() / 1000)) {
+export function mintToken(config, scope, now = Math.floor(Date.now() / 1000)) {
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
     sub: config.subject, //          the member the import runs as; the recording lands in their library
@@ -169,13 +172,71 @@ export function mintImportToken(config, now = Math.floor(Date.now() / 1000)) {
     org_id: config.orgId, //         the organization the import runs under
     org_domain: config.orgDomain, // selects WHICH organization's secret the receiver tries
     jti: crypto.randomUUID(),
-    scope: IMPORT_SCOPE,
+    scope,
     iat: now,
     exp: now + TOKEN_LIFETIME_S,
   };
   const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
   const signature = crypto.createHmac('sha256', config.secret).update(signingInput).digest();
   return `${signingInput}.${b64url(signature)}`;
+}
+
+export function mintImportToken(config, now = Math.floor(Date.now() / 1000)) {
+  return mintToken(config, IMPORT_SCOPE, now);
+}
+
+// Minted separately from the import token, and carrying ONLY the comment scope. The receiver checks
+// the scope per action, so a token that could do both jobs would be a wider credential than either
+// step needs — and minting costs nothing, because it touches no server.
+export function mintCommentToken(config, now = Math.floor(Date.now() / 1000)) {
+  return mintToken(config, COMMENT_SCOPE, now);
+}
+
+/**
+ * Attach one timestamped comment per chapter to a published recording.
+ *
+ * Why comments rather than chapter titles: a chapter title renders as a scrubber tooltip, which is a
+ * label-sized space. Acceptance criteria are sentences — the ones that prompted this were 54 to 167
+ * characters — and at that length the tooltip overlays the video and clips. The comments panel is the
+ * default tab on a share page, is readable by a signed-out reviewer, and has room to wrap.
+ *
+ * Best-effort by design: the film is already published and its URL is already worth reporting, so a
+ * failed comment must not retract it. Returns { posted, failed, firstError } and lets the caller say
+ * so plainly rather than throwing away the link.
+ */
+export async function postChapterComments(config, recordingId, entries, timeoutMs = 30_000) {
+  let posted = 0;
+  let failed = 0;
+  let firstError = '';
+  for (const entry of entries) {
+    try {
+      const res = await fetch(config.commentUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // One token per request, five-minute life. A long narration is still minutes of requests
+          // at worst, but re-minting removes any question of expiry mid-loop.
+          Authorization: `Bearer ${mintCommentToken(config)}`,
+        },
+        body: JSON.stringify({
+          recordingId,
+          content: entry.content,
+          videoTimestampMs: entry.startMs,
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok) {
+        posted += 1;
+      } else {
+        failed += 1;
+        if (!firstError) firstError = `HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      }
+    } catch (e) {
+      failed += 1;
+      if (!firstError) firstError = e.message;
+    }
+  }
+  return { posted, failed, firstError };
 }
 
 // Round-trip the credential by POSTing a body the action's schema MUST reject.

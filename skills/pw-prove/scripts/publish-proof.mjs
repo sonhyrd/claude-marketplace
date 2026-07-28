@@ -74,7 +74,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { clipsConfig, mintImportToken } from './clips.mjs';
+import { clipsConfig, mintImportToken, postChapterComments } from './clips.mjs';
 import { pwproveRun } from './pwprove-run.mjs';
 
 pwproveRun(import.meta.url, 'publish'); // run ledger — registered before any validation
@@ -229,7 +229,11 @@ if (needle) {
   const fields = [
     ['the recording title', title],
     ['the description (PR / spec / mutation)', description],
-    ...clips.map((c, i) => [`chapter ${i + 1}'s title (clips[${i}].ac)`, c.ac]),
+    ...clips.map((c, i) => [`chapter ${i + 1}'s criterion (clips[${i}].ac)`, c.ac]),
+    // `scenario` became publishable text the moment it started supplying the chapter label. A field
+    // that is sent to a public recording and NOT scanned here is exactly the hole this gate exists
+    // to close, so it is listed even though it is usually a bare test title.
+    ...clips.map((c, i) => [`chapter ${i + 1}'s label (clips[${i}].scenario)`, c.scenario]),
   ];
   for (const [where, text] of fields) {
     if (typeof text === 'string' && text.includes(BEARER)) {
@@ -302,10 +306,32 @@ if (oddClip > 0) {
 
 // Chapter offsets are the CUMULATIVE measured durations, in manifest order — the order a reviewer
 // watches, which is AC order.
+//
+// A chapter title is a LABEL: it renders as a scrubber tooltip, in tooltip-sized space. An
+// acceptance criterion is a sentence — the run that prompted this carried titles of 54 to 167
+// characters, which overlaid the video and clipped. So the title is the scenario name (the test's
+// own title, which is already short) and the criterion verbatim goes to a timestamped comment,
+// where there is room to wrap. `ac` remains the source of truth for both; nothing is paraphrased.
+const CHAPTER_LABEL_MAX = 60;
+
+function chapterLabel(clip, index) {
+  const raw = (typeof clip.scenario === 'string' && clip.scenario.trim()) || clip.ac || `Scenario ${index + 1}`;
+  const collapsed = raw.replace(/\s+/g, ' ').trim();
+  if (collapsed.length <= CHAPTER_LABEL_MAX) return collapsed;
+  // Cut on a word boundary when there is one near the limit — a label severed mid-word reads as
+  // corruption rather than as truncation.
+  const cut = collapsed.slice(0, CHAPTER_LABEL_MAX - 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > CHAPTER_LABEL_MAX * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
 const chapters = [];
+const narration = [];
 let cursor = 0;
 for (const [i, c] of clips.entries()) {
-  chapters.push({ startMs: Math.round(cursor * 1000), title: c.ac });
+  const startMs = Math.round(cursor * 1000);
+  chapters.push({ startMs, title: chapterLabel(c, i) });
+  narration.push({ startMs, content: c.ac });
   cursor += probed[i].seconds;
 }
 const inputSeconds = cursor;
@@ -430,6 +456,25 @@ const recordingId = typeof result?.recordingId === 'string' ? result.recordingId
 const deepLink = recordingId
   ? (seconds) => `${CLIPS.origin}/embed/${recordingId}?t=${seconds}`
   : null;
+
+// The narration, as timestamped comments. Deliberately AFTER the film is published and its id is in
+// hand: the recording is the proof, the comments are its captions, and a caption that fails to post
+// must not cost a reviewer the link. Reported, never fatal.
+if (recordingId) {
+  const { posted, failed, firstError } = await postChapterComments(CLIPS, recordingId, narration);
+  if (posted) err(`publish-proof: ${posted} timestamped comment(s) attached\n`);
+  if (failed) {
+    err(
+      `publish-proof: ${failed} of ${narration.length} comment(s) could not be attached (${firstError}). `
+        + 'The film and its chapter markers are published and correct; the per-scenario text is what is '
+        + 'missing, so the criteria are in the chapter labels only. A 401 here usually means the '
+        + 'deployment predates the recordings:comment scope.\n',
+    );
+  }
+} else {
+  err('publish-proof: no recordingId returned, so no timestamped comments were attached — the '
+    + 'criteria are in the chapter labels only.\n');
+}
 
 err(`publish-proof: ${chapters.length} chapter(s) published -> ${shareUrl}\n`);
 if (!deepLink) {
