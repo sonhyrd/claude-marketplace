@@ -175,7 +175,7 @@ Prove the change, not the whole app.
    ```bash
    PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
    ```
-   The publish credential comes from the environment (`CLIPS_ORIGIN` + `CLIPS_A2A_SECRET`, the same two Step 8 uses) — unset means `PUBLISH_READY=no`, which is a WARN, never a stop.
+   The publish credential comes from the environment (`CLIPS_ORIGIN` + `CLIPS_A2A_SECRET`, the same two Step 8 uses), or — when those are unset — from `~/.config/pw-prove-clips.env` (override the path with `PW_PROVE_CLIPS_ENV`). An explicitly-set variable always beats the file. Neither source means `PUBLISH_READY=no`, which is a WARN, never a stop; the reason names the file path it looked at, so an unread credential file is visible rather than silent.
    Probes the publish credential by **running** the real call — a POST to the Clips import action with a body its schema must reject, where a schema-validation failure is the PASS (it proves the request got past auth, so reachability, secret currency, scope and org resolution all hold; a bare `GET` is answered by the route's method check before auth is ever consulted). Also probes `ffmpeg`/`ffprobe`, and Chrome for clip fidelity. Reports `PUBLISH_READY`, `VIDEO_TOOLING`, and `HOSTING_READY` as their conjunction. WARN-only: `HOSTING_READY=no` never stops generation — its printed output is the evidence a later `Proof page: skipped — publish prerequisites not ready` line must paste (Step 8).
 
 **Autonomy line:** start/stop the dev server · mint a token via the project's own login · **read-only** data discovery (query list/read endpoints to find a valid entity — sample a handful, never enumerate the tenant). **Never** seed or create backend data on a shared/staging tenant, register accounts, or invent credentials. Required sub-resource absent in the sample → go straight to a `page.route` mock; only if a real record is truly unavoidable, stop and ask.
@@ -509,6 +509,9 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    # in scripts/clips.mjs: CLIPS_ORIGIN (= the deployment's own APP_URL), CLIPS_A2A_SECRET, and the
    # three identity values CLIPS_ORG_ID, CLIPS_ORG_DOMAIN and CLIPS_SUBJECT. The token is minted per
    # publish, five-minute life, import scope only.
+   # All five are read from the environment, falling back to ~/.config/pw-prove-clips.env
+   # (PW_PROVE_CLIPS_ENV overrides the path). You do NOT need to export or `source` anything — a run
+   # starts in a fresh environment every time, which is exactly why the file exists.
    # CLIPS_ORG_ID and CLIPS_ORG_DOMAIN are DIFFERENT values — the domain selects which organization's
    # secret the deployment tries, the id is the organization the import runs under — and CLIPS_SUBJECT
    # must be an email that is ALREADY A MEMBER of it. None is defaulted: a guessed value mints a token

@@ -24,9 +24,73 @@
 // mismatched org, 403 for a non-member) and has to be diagnosed against someone else's server, when
 // the absence was knowable here.
 //
+// Where those five come from: the process environment first, and failing that a credential FILE at
+// ~/.config/pw-prove-clips.env (override with PW_PROVE_CLIPS_ENV). The file exists because a run is
+// launched from a fresh environment every time — a different workspace, a subagent, a scheduled
+// job — and "export them in your shell first" is a step that is silently skipped far more often
+// than it is performed. The symptom is not an error: the preflight correctly reports the credential
+// as absent and the run finishes green with `Proof page: skipped`, so the operator learns nothing
+// is wrong until they go looking for a link that was never produced.
+//
+// The real environment WINS over the file, so CI and a one-off override keep working. Only the five
+// names below are ever taken from it: a credential file is not a general-purpose way to inject
+// environment into someone's test run.
+//
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention: signing is HMAC-SHA256
 // through node:crypto, so publishing a proof installs nothing into a user's repository.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+/** The only names read from the credential file. Order is the order they are documented above. */
+const CLIPS_VARS = [
+  'CLIPS_ORIGIN',
+  'CLIPS_A2A_SECRET',
+  'CLIPS_ORG_ID',
+  'CLIPS_ORG_DOMAIN',
+  'CLIPS_SUBJECT',
+];
+
+export function clipsEnvFilePath(env = process.env) {
+  const override = (env.PW_PROVE_CLIPS_ENV ?? '').trim();
+  if (override) return override;
+  return path.join(env.HOME || os.homedir(), '.config', 'pw-prove-clips.env');
+}
+
+/**
+ * Read the five CLIPS_* values out of a `KEY=value` file. Absent or unreadable returns `{}` — a
+ * missing file is the normal case for anyone who sets the variables directly, not a fault.
+ *
+ * Deliberately a minimal parser rather than a dotenv dependency: `export ` prefixes and surrounding
+ * quotes are tolerated because the file is also meant to be `source`-able from a shell, and nothing
+ * else is interpreted. No variable expansion, no multi-line values — a secret with a `$` in it must
+ * survive verbatim.
+ */
+export function readClipsEnvFile(filePath = clipsEnvFilePath()) {
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return {};
+  }
+  const values = {};
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const withoutExport = trimmed.startsWith('export ') ? trimmed.slice(7).trim() : trimmed;
+    const eq = withoutExport.indexOf('=');
+    if (eq <= 0) continue;
+    const key = withoutExport.slice(0, eq).trim();
+    if (!CLIPS_VARS.includes(key)) continue;
+    let value = withoutExport.slice(eq + 1).trim();
+    if (value.length >= 2 && ((value[0] === '"' && value.endsWith('"')) || (value[0] === "'" && value.endsWith("'")))) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value;
+  }
+  return values;
+}
 
 export const IMPORT_ACTION = 'import-recording-from-url'; // the machine-caller door; no new endpoint
 export const IMPORT_SCOPE = 'recordings:import'; //         authorises the import and nothing else
@@ -35,14 +99,30 @@ export const TOKEN_LIFETIME_S = 300; //                     minted per request, 
 // Returns { ok: true, ...config } or { ok: false, reason } — a caller that must WARN and one that
 // must STOP both need the same answer, so this reports rather than exits.
 export function clipsConfig(env = process.env) {
+  // File first, real environment over the top: an explicitly-set variable must always beat a
+  // stale line in a file the operator forgot they wrote.
+  const filePath = clipsEnvFilePath(env);
+  const fromFile = readClipsEnvFile(filePath);
+  const resolved = { ...fromFile };
+  for (const name of CLIPS_VARS) {
+    const direct = (env[name] ?? '').trim();
+    if (direct) resolved[name] = direct;
+  }
+  env = resolved;
+
   const origin = (env.CLIPS_ORIGIN ?? '').trim().replace(/\/+$/, '');
   const secret = env.CLIPS_A2A_SECRET ?? '';
   if (!origin || !secret) {
+    // Name the file that was consulted. Without it the operator is told the credential is unset
+    // while a file holding it sits unread at a path they were never shown.
+    const fileNote = Object.keys(fromFile).length
+      ? `; ${filePath} was read but does not set both`
+      : `; no credential file at ${filePath}`;
     return {
       ok: false,
       reason:
         'CLIPS_ORIGIN (the Clips deployment) and CLIPS_A2A_SECRET (its organization signing ' +
-        'secret) are not both set',
+        `secret) are not both set${fileNote}`,
     };
   }
   try {
