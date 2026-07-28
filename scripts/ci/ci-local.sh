@@ -119,6 +119,19 @@ if [ "${E2E_SKILLS_SKIP_PROBE_HAR:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_PROBE_WARM:-}" != "1" ]; then
+  step "Probe warm-lead contract (probe.mjs warm, exit codes)"
+  # ADR 0013: the Step-7 warm lead is a browser load, not a curl — a curl warms the document and
+  # leaves the client module graph cold, which Playwright then films. The SKILL's fallback chain is
+  # written against warm's exit codes (1 usage / 2 browserless / 0 even on a warm miss), so those
+  # codes are the contract this freezes.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-probe-warm.sh >/dev/null 2>&1 || fail "test-probe-warm.sh"
+  else
+    bash scripts/ci/test-probe-warm.sh || fail "test-probe-warm.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
   step "Run-ledger smoke (PTG_RUN contract)"
   # Issue #5: every shipped-script invocation leaves one PTG_RUN {json} record — stdout line plus

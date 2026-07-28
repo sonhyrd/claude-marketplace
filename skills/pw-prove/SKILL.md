@@ -389,13 +389,18 @@ The **only** legitimate reason to edit an existing proof config is a structural 
 | | What | Why |
 |---|---|---|
 | **Size** | `PW_PROVE_W`/`PW_PROVE_H` = the effective viewport, from `code-rules.md` → Clip Fidelity | `video.size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. That is why size arrives by env and the config stays static: it is the one per-run value, and it belongs on the command line, not in a file diff. Deliberately **do not** set `viewport` in the proof config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
-| **Warm lead** | One request to the route under proof, just before filming | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. |
+| **Warm lead** | One **browser** load of the route under proof, just before filming — `probe.mjs warm`, with `curl` as the browserless fallback | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. A curl alone is not enough: it never executes JS, so on a Vite-family dev server the client module graph and the dep pre-bundle stay cold and get paid *inside* the recording. |
 | **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` post-assertion dwell. It sits *after* the terminal assertion, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
 
 ```bash
 # Warm the route so the clip opens on a compiled app, not a cold build. Never fails the run —
 # but a warm that didn't land is stated in the report, not swallowed (the clip will be boot-heavy).
-curl -sS -o /dev/null --max-time 60 -w '%{http_code}\n' "<baseURL><route under proof>" \
+# Run from the APP ROOT: warm drives the project's own pinned Playwright, same rule as recon.
+# A real browser load, not a curl: curl warms the document only. Playwright video is context-scoped
+# (recording starts at context creation, no delayed start, no trim), so anything left cold is paid
+# inside the film. exit 2 = browserless -> fall back to the curl below and say so in the report.
+node <skill-base>/scripts/probe.mjs warm "<baseURL><route under proof>" \
+  || curl -sS -o /dev/null --max-time 60 -w '%{http_code}\n' "<baseURL><route under proof>" \
   || echo "warm-failed"
 
 # Clear stale recordings FIRST: whatever sits in test-results/ at publish time becomes the
@@ -416,7 +421,7 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
-Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `PW_PROVE_W`/`PW_PROVE_H` must carry the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config. A non-2xx warm (or `warm-failed`) is reported as `Proof page: <url> — warm miss, clips are boot-heavy`.
+Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `PW_PROVE_W`/`PW_PROVE_H` must carry the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config. A non-2xx warm (or a `warm-failed:` line) is reported as `Proof page: <url> — warm miss, clips are boot-heavy`. A browserless fallback to `curl` is reported the same way, for the same reason: the document is warm but the client module graph is not, so the boot still lands in the recording.
 
 ### Failure handling (max 3 auto-fix attempts)
 
@@ -600,7 +605,7 @@ All paths are in this directory.
 - Playwright best practices: `best-practices.md`
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
 - Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` round-trips the publish credential and probes ffmpeg/Chrome): `scripts/preflight.mjs`
-- Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
+- Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2) **and the Step-7 warm lead** (`probe.mjs warm <url>` — one-shot unfilmed browser load): `scripts/probe.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`
