@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Rename the marketplace from `alberto-marketplace` to `sss-marketplace`. Installs and updates now use the new name (`/plugin marketplace update sss-marketplace`, cache path `~/.claude/plugins/cache/sss-marketplace/`); the generated Codex mirror displayName follows automatically
+- Restructure `CLAUDE.md` into a short always-applies section plus task-scoped skills under `.claude/skills/` (`release-version-bump`, `add-marketplace-skill`, `add-mcp-plugin`), so release and authoring guidance loads only when relevant
+- Add an `## Agent skills` section to `CLAUDE.md` plus `docs/agents/` config (issue tracker, triage labels, domain docs) consumed by the engineering skills
+
+### Fixed
+- Regenerate stale Codex plugin manifests: add missing `.codex-plugin/plugin.json` for `model-routing` and `code-walkthrough`, and refresh drifted cachebuster hashes for `agent-skill-init`, `git-absorb`, `linear`, `skill-creator`, `skill-reviewer`, `sqlite`, and `tmux` (`make check-codex-plugins` now clean)
+
 ## [0.45.0] - 2026-07-29
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "skill-reviewer",
-  "version": "1.1.0+codex.70f8c3d7a22a",
+  "version": "1.1.0+codex.5f5c9e4d9b91",
   "description": "Review and ensure skills maintain high quality standards. Use when creating new skills, updating existing skills, or auditing skill quality. Checks for progressive disclosure, mental model shift, appropriate scope, and documentation clarity.",
   "author": {
     "name": "Alberto Leal"

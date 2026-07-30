@@ -16,7 +16,7 @@ A curated collection of Agent Skills for extending Claude Code and Codex capabil
 /plugin marketplace add /path/to/claude-marketplace
 
 # 2. Install skills
-/plugin  # Browse and install plugins → alberto-marketplace
+/plugin  # Browse and install plugins → sss-marketplace
 
 # 3. Restart Claude Code to load new skills
 /exit
@@ -242,7 +242,7 @@ The linear skill requires Node.js dependencies and a Linear API key:
 
 ```bash
 # 1. Install dependencies in the plugin cache directory
-cd ~/.claude/plugins/cache/alberto-marketplace/linear/2.3.1
+cd ~/.claude/plugins/cache/sss-marketplace/linear/2.3.1
 npm install
 
 # 2. Create a Linear API key at https://linear.app/settings/api
@@ -275,13 +275,13 @@ uv run --with playwright playwright install
 ### Update the marketplace
 
 ```bash
-/plugin marketplace update alberto-marketplace
+/plugin marketplace update sss-marketplace
 ```
 
 ### Install skills
 
 1. Select `/plugin` and then `Browse and install plugins`
-2. Select `alberto-marketplace`
+2. Select `sss-marketplace`
 3. Choose the skills to install
 4. Restart Claude Code
 

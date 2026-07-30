@@ -1,6 +1,6 @@
 {
   "name": "tmux",
-  "version": "1.5.0+codex.b02f9ba3d35c",
+  "version": "1.5.0+codex.0425a2ad05d7",
   "description": "Remote control tmux sessions for interactive CLIs (python, gdb, etc.) by sending keystrokes and scraping pane output. Use when debugging applications, running interactive REPLs (Python, gdb, ipdb, psql, mysql, node), automating terminal workflows, or when user mentions tmux, debugging, or interactive shells.",
   "author": {
     "name": "Alberto Leal"

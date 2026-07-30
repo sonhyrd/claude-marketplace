@@ -1,6 +1,6 @@
 {
   "name": "git-absorb",
-  "version": "1.1.0+codex.dc8775e4d0e2",
+  "version": "1.1.0+codex.7bf9867a4aff",
   "description": "Automatically fold uncommitted changes into appropriate commits. Use for applying review feedback and maintaining atomic commit history.",
   "author": {
     "name": "Alberto Leal"

@@ -1,7 +1,7 @@
 {
-  "name": "alberto-marketplace",
+  "name": "sss-marketplace",
   "interface": {
-    "displayName": "Alberto Marketplace"
+    "displayName": "Sss Marketplace"
   },
   "plugins": [
     {
@@ -609,6 +609,30 @@
       "source": {
         "source": "local",
         "path": "./plugins/pytest"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "model-routing",
+      "source": {
+        "source": "local",
+        "path": "./plugins/model-routing"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "code-walkthrough",
+      "source": {
+        "source": "local",
+        "path": "./plugins/code-walkthrough"
       },
       "policy": {
         "installation": "AVAILABLE",
