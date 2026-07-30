@@ -1281,6 +1281,28 @@
       "skills": [
         "./skills"
       ]
+    },
+    {
+      "name": "sss",
+      "version": "1.1.0",
+      "source": "./plugins/sss",
+      "description": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS \u2014 use when drafting or filing a ticket, rewriting a Description or Acceptance Criteria, or picking a parent epic. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version.",
+      "author": {
+        "name": "sonhyrd"
+      },
+      "repository": "https://github.com/sonhyrd/claude-marketplace/tree/master/plugins/sss",
+      "license": "MIT",
+      "keywords": [
+        "jira",
+        "tickets",
+        "acceptance-criteria",
+        "release",
+        "personal"
+      ],
+      "strict": false,
+      "skills": [
+        "./skills"
+      ]
     }
   ]
 }

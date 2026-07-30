@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- sss plugin: personal skill bundle shipping two skills. `jira-ticket` — Story / Task / Bug / Sub-task authoring for the hyrd Jira (project MAMAS), with ticket grammar, `## Description` / `## Acceptance Criteria` structure, a pre-create gate checklist, vertical story-splitting patterns, and a field-review reference. `release-readiness` — read-only report on what is going into the next release (commits since the last release, the Jira tickets they bundle, ticket statuses, blockers, suggested next version); never writes tags, releases, or Jira transitions
+
 ### Changed
 - Rename the marketplace from `alberto-marketplace` to `sss-marketplace`. Installs and updates now use the new name (`/plugin marketplace update sss-marketplace`, cache path `~/.claude/plugins/cache/sss-marketplace/`); the generated Codex mirror displayName follows automatically
 - Restructure `CLAUDE.md` into a short always-applies section plus task-scoped skills under `.claude/skills/` (`release-version-bump`, `add-marketplace-skill`, `add-mcp-plugin`), so release and authoring guidance loads only when relevant
