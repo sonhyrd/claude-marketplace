@@ -583,3 +583,17 @@ A plugin may declare both `"skills": [...]` and `"mcpServers": "./.mcp.json"` if
 - **Repository**: https://github.com/dashed/claude-marketplace
 - **Owner**: Alberto Leal (mail4alberto@gmail.com)
 - **Primary Branch**: master
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on our fork `sonhyrd/claude-marketplace` (`origin`), not upstream `dashed/claude-marketplace`. Managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, both created lazily. See `docs/agents/domain.md`.
