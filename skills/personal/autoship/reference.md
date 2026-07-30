@@ -29,6 +29,39 @@ test -f docs/agents/issue-tracker.md
 
 Missing → run `/setup-matt-pocock-skills` in the target repo, then re-invoke autoship.
 
+### Engine setup — only when `--engine cursor`
+
+```bash
+which cursor-agent && cursor-agent status
+```
+
+Either failing → stop and report: run `/setup-cursor-worker` on this machine, then re-invoke autoship. Never fall back to `claude` when `cursor` was asked for.
+
+## Worker engine argv
+
+Every worker terminal in the run launches with the argv for the run's engine. Nothing else about dispatch differs.
+
+| `--engine` | terminal command |
+| ---------- | ---------------- |
+| `claude` (default) | `claude` |
+| `cursor` | `cursor-agent` |
+| `cursor:<model-id>` | `cursor-agent --model <model-id>` |
+
+**Launch cursor bare unless a model was explicitly requested.** A bare `cursor-agent` inherits the account's current model selection — set in the TUI's `/model` picker and synced account-side (see `/setup-cursor-worker`). That is the only route to 1M context: every flat id passed via `--model` resolves to 300K, and the base id and the bracket syntax in `cursor-agent --help` are both rejected outright, which kills the agent on startup. So `cursor:<model-id>` is an explicit trade the user opted into — worth taking for a cheap fast model on mechanical work, worth avoiding otherwise. Never edit `~/.cursor/cli-config.json` to change a worker's model; launching cursor rewrites it from the account preference.
+
+## Worker readiness — before every dispatch
+
+`tui-idle` is satisfied by a bare shell, so it never proves an agent launched. It is a cheap first gate, not the check. Applies to **every** engine:
+
+```bash
+orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
+orca terminal read --terminal <handle> --json    # must show a rendered agent frame
+```
+
+Read the pane. A pane holding only a shell prompt is **not ready**: either the TUI has not mounted yet, or the agent exited on startup and left the shell behind — the two are indistinguishable in a single read, so re-read rather than judging on the first one. Re-read up to 5 times before giving up.
+
+Ready means the pane shows agent chrome — a statusline, a composer, a banner — not just a prompt. If the scrollback instead shows an error and a returned prompt (a rejected `--model` id does exactly this, printing the full model list and exiting), the worker is dead: **never dispatch into it.** Close it, create a fresh terminal, and count the attempt against the task's failure budget.
+
 ## Intake lookups
 
 To resolve an Issue reference, follow the target repo's `docs/agents/issue-tracker.md` — it names the configured tracker and how to read from it (e.g. `gh issue view <n>` for GitHub, `glab issue view <n>` for GitLab, or a file under `.scratch/` for the local-markdown convention). Record the tracker and fetch date in the source brief's provenance.
@@ -37,19 +70,28 @@ To resolve an Issue reference, follow the target repo's `docs/agents/issue-track
 
 Derive `<run-name>` from the brief: a short kebab-case slug prefixed `autoship-`, e.g. `autoship-dark-mode`.
 
+On `--engine claude`, let Orca launch the spec worker in the worktree's first terminal:
+
 ```bash
 orca worktree create --name <run-name> --no-parent --agent claude --json
 ```
 
+On any other engine, create the worktree plain and add the worker terminal with the engine's argv — `--agent` takes a fixed argv and cannot carry a model:
+
+```bash
+orca worktree create --name <run-name> --no-parent --json
+orca terminal create --worktree id:<worktreeId> --title align --command "<engine argv>" --json
+```
+
 - `--no-parent` sets Orca lineage only (top-level worktree); the Git base comes from **omitting `--base-branch`**, which uses the repo default base. Never pass the invoking branch. To be explicit, pass the default base from `orca repo show --repo <selector> --json`.
 - Omit `--repo` only when running inside an Orca-managed worktree; otherwise pass `--repo <selector>`.
-- `--agent claude` launches the spec worker's agent in the worktree's first terminal — do not create a separate startup terminal. If an older CLI rejects `--agent`, create the worktree plain, then `orca terminal create --worktree id:<worktreeId> --title align --command "claude" --json`.
+- `--agent claude` launches the agent in the first terminal — do not create a separate startup terminal on that path. If an older CLI rejects `--agent`, fall back to the two-step form above.
+- The two-step form can leave an unused fallback shell alongside the agent terminal. Target the agent handle only; close the other one solely after `terminal list` confirms it is an unused shell.
 
-Read `worktreeId` from the output, then find the worker's terminal handle and wait for it to be ready:
+Read `worktreeId` from the output, find the worker's terminal handle, and confirm readiness per **Worker readiness** above — `tui-idle` alone is not enough:
 
 ```bash
 orca terminal list --worktree id:<worktreeId> --json
-orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
 ```
 
 ## Align dispatch
@@ -140,13 +182,10 @@ orca orchestration task-list --ready --json   # Issues whose blockers are all co
 One Issue at a time, in dependency order. Every dispatch gets a fresh terminal in the run worktree — never the spec worker's terminal, never a previous Issue's:
 
 ```bash
-orca terminal create --worktree id:<worktreeId> --title issue-<id> --command "claude" --json
-orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
-orca terminal read --terminal <handle> --json    # verify the agent TUI actually rendered
+orca terminal create --worktree id:<worktreeId> --title issue-<id> --command "<engine argv>" --json
+# then confirm readiness per "Worker readiness" above — tui-idle alone is not enough
 orca orchestration dispatch --task <task_id> --to <handle> --inject --json
 ```
-
-`tui-idle` is trivially satisfied by a bare shell, so it alone does not prove the agent launched — if `terminal read` shows only a shell prompt (no agent statusline), the agent exited or never started: treat it as a dead worker and retry in a fresh terminal, never dispatch into it.
 
 Issue worker spec template (fill per Issue):
 

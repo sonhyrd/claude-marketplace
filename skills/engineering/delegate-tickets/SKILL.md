@@ -33,7 +33,23 @@ Coordinate through the `/orchestration` skill — real Orca task/dispatch state,
 
 - One Orca **child worktree** per ticket, branched off the current branch as `<branch-prefix><ticket-slug>`.
 - Dispatch every currently-unblocked ticket in parallel. A blocked ticket dispatches only after ALL its blockers have merged back.
-- Each worker gets a fresh session in its worktree and runs `/implement <ticket-ref>`, with the profile's worker constraints included verbatim in its prompt. Launch every worker as `claude --effort medium --dangerously-skip-permissions` (use orca-cli's custom-argv path — `terminal create --command 'claude --effort medium --dangerously-skip-permissions'` — not the bare default launcher). `/implement` drives `/tdd` and `/code-review` itself — don't re-specify them. Definition of done: `/implement` closes clean, plus the profile's post-merge check passes.
+- Each worker gets a fresh session in its worktree and runs `/implement <ticket-ref>`, with the profile's worker constraints included verbatim in its prompt. `/implement` drives `/tdd` and `/code-review` itself — don't re-specify them. Definition of done: `/implement` closes clean, plus the profile's post-merge check passes.
+- Launch every worker with the run's engine argv (below), via orca-cli's custom-argv path — `terminal create --command '<engine argv>'` — not the bare default launcher.
+- **Confirm each worker actually started before dispatching.** `terminal wait --for tui-idle` is satisfied by the bare shell that exists before a TUI mounts, and by the shell an agent leaves behind when it dies on startup — so follow it with `terminal read` and require a rendered agent frame, re-reading up to 5 times. A pane showing only a shell prompt is a dead worker: close it, create a fresh terminal, never dispatch into it.
+
+### Worker engine
+
+Workers run on `claude` by default; `--engine cursor` runs them all on `cursor-agent`. One engine per run. The coordinator is always the invoking Claude Code session.
+
+| `--engine` | terminal command |
+| ---------- | ---------------- |
+| `claude` (default) | `claude --effort medium --dangerously-skip-permissions` |
+| `cursor` | `cursor-agent` |
+| `cursor:<model-id>` | `cursor-agent --model <model-id>` |
+
+`--engine cursor` requires `/setup-cursor-worker` to have been run on this machine — check `which cursor-agent && cursor-agent status` first and stop if either fails; never silently fall back to `claude`.
+
+Launch cursor **bare** unless the user named a model: a bare `cursor-agent` inherits the account's current model selection (set in the TUI's `/model` picker — see `/setup-cursor-worker`), which is the only route to 1M context. Every flat id passed via `--model` resolves to 300K, and the base id and the bracket syntax from `--help` are rejected outright, killing the agent on startup.
 
 ## 5. Merge back in DAG order
 

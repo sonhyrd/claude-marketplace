@@ -9,12 +9,19 @@ Autoship takes one argument — an idea or an existing Issue — and drives it t
 
 This file states what each phase must achieve. The concrete commands behind the checks and lookups live in [reference.md](./reference.md).
 
+## The worker engine
+
+Workers run on `claude` by default. `--engine cursor` runs every worker in the run on `cursor-agent` instead — the spec worker and the Issue workers alike. **One engine per run, never a mix**: the run's whole audit surface is a single PR, and mixed engines make that PR unreadable as evidence about either one.
+
+The coordinator is always the invoking Claude Code session, whatever the engine. Engine selection changes exactly one thing — the argv a worker terminal is launched with (argv in [reference.md](./reference.md)); task DAG, dispatch, `ask`/`reply`, and `worker_done` are engine-agnostic.
+
 ## Preconditions — stop and report
 
-Verify both before doing anything else (check commands in [reference.md](./reference.md)). A failed precondition ends the run immediately with a report of exactly what is missing and how to fix it. Never improvise around a missing precondition — no fallback agents, no substitute trackers, no partial runs.
+Verify these before doing anything else (check commands in [reference.md](./reference.md)). A failed precondition ends the run immediately with a report of exactly what is missing and how to fix it. Never improvise around a missing precondition — no fallback agents, no substitute trackers, no partial runs, and never silently fall back to a different engine than the one asked for.
 
 1. **Orca orchestration is available.** The Orca runtime is running and orchestration commands answer. Fix: start Orca and enable orchestration in Settings > Experimental.
 2. **The target repo is configured.** `/setup-matt-pocock-skills` has been run here — its Issue-tracker output exists in the repo. Fix: run `/setup-matt-pocock-skills` in the target repo first.
+3. **The engine is set up** — only when `--engine cursor`. `/setup-cursor-worker` has been run on this machine. Fix: run `/setup-cursor-worker`, then re-invoke autoship.
 
 ## Phases
 
@@ -75,5 +82,5 @@ Either way the PR is where the human judges the run, so the description must be 
 - **Read, never invoke — code-review is the one exception.** to-spec, to-tickets, and implement are user-only (`disable-model-invocation: true`) — no worker can Skill-invoke them. Workers read those SKILL.md files and follow them in their own context, which is also what keeps the spec worker's grill → spec → slice sequence in the single window to-spec requires. code-review is model-invocable, so an Issue worker may Skill-invoke it where implement calls for it.
 - **A fresh terminal per Issue is non-negotiable.** A reused terminal drags the previous Issue's assumptions, half-read files, and debugging state into work that must stand alone. New terminal per Issue — even when an idle one is sitting right there.
 - **Sequential on purpose.** The Issues are vertical slices of one feature, sharing one worktree and one branch; two workers at once collide in the same files. One at a time, in dependency order — parallel drain is out of scope.
-- **Wait for tui-idle before dispatching.** Dispatching into a worker terminal that is still starting up races the agent's TUI and loses the task.
+- **`tui-idle` does not mean the agent is ready.** It is satisfied by the bare shell that exists before any TUI mounts, and by the shell left behind when an agent dies on startup. Never dispatch on `tui-idle` alone — always confirm a rendered agent frame first (procedure in [reference.md](./reference.md)). Dispatching into a terminal that is still starting races the TUI and loses the task; dispatching into a dead one loses it silently and burns the whole wait window.
 - **A silent wait window is a checkpoint, not a failure.** Align interviews and Issue implementations run long. When a wait returns nothing, check that the worker terminal is alive and keep waiting — never restart or kill a worker just because it is slow.
