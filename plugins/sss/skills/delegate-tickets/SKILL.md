@@ -10,6 +10,10 @@ Delegate a ticket tree produced by `/to-tickets` to parallel workers, coordinate
 
 The tickets' **blocking edges ARE the dependency DAG** — use them as-is, never re-derive dependencies. Wide refactors already serialize through their edges by construction.
 
+> **Plugin prerequisites.** Requires the `mattpocock-skills` plugin from this marketplace (for
+> `/to-tickets` and `/implement`) and an Orca install (for `/orchestration`). See
+> [references/quickstart.md](references/quickstart.md).
+
 ## 1. Resolve the repo profile
 
 Match `git remote get-url origin` against the profiles in [PROFILES.md](PROFILES.md). No match → interview the user for each field in the profile template, append the new profile to `PROFILES.md`, then continue. The profile supplies every repo-specific value the steps below reference: branch prefix, post-merge check, commit policy, worker constraints.

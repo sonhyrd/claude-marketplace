@@ -9,6 +9,10 @@ description: One-time machine setup that makes cursor-agent usable as an Orca wo
 
 It is machine-scoped, not repo-scoped. Run it once; re-run it after a Cursor upgrade, after changing your Cursor model, or whenever a cursor worker fails to start.
 
+> **Prerequisites.** `cursor-agent` on `PATH` and authenticated, plus an Orca install. Only useful
+> alongside `/autoship` and `/delegate-tickets` (also in this plugin), which in turn need the
+> `mattpocock-skills` plugin from this marketplace.
+
 Its output is a verdict, not a config dump: either **ready** (the smoke test received `worker_done`) or **not ready** plus exactly what is missing.
 
 ## Why each step exists

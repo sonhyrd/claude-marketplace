@@ -9,6 +9,11 @@ Autoship takes one argument — an idea or an existing Issue — and drives it t
 
 This file states what each phase must achieve. The concrete commands behind the checks and lookups live in [reference.md](./reference.md).
 
+> **Plugin prerequisites.** This skill depends on skills shipped by a *different* plugin. Install
+> `mattpocock-skills` from this marketplace (it provides `/setup-matt-pocock-skills`, `/to-spec`,
+> `/to-tickets`, `/implement`) and have Orca available for `/orchestration`. Without them the
+> preconditions below fail and the run stops. The other `sss` skills have no such dependency.
+
 ## The worker engine
 
 Workers run on `claude` by default. `--engine cursor` runs every worker in the run on `cursor-agent` instead — the spec worker and the Issue workers alike. **One engine per run, never a mix**: the run's whole audit surface is a single PR, and mixed engines make that PR unreadable as evidence about either one.

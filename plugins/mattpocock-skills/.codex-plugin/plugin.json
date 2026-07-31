@@ -1,0 +1,33 @@
+{
+  "name": "mattpocock-skills",
+  "version": "1.2.0+codex.1219850002bd",
+  "description": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 22 skills upstream's plugin.json declares.",
+  "author": {
+    "name": "Matt Pocock"
+  },
+  "license": "MIT",
+  "keywords": [
+    "engineering",
+    "skills",
+    "tdd",
+    "code-review",
+    "grilling",
+    "domain-modeling",
+    "productivity"
+  ],
+  "interface": {
+    "displayName": "Mattpocock Skills",
+    "shortDescription": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git...",
+    "longDescription": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 22 skills upstream's plugin.json declares.",
+    "developerName": "Matt Pocock",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills"
+    ],
+    "defaultPrompt": [
+      "Use $mattpocock-skills for this task."
+    ]
+  },
+  "repository": "https://github.com/mattpocock/skills",
+  "skills": "./skills/"
+}

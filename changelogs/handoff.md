@@ -1,5 +1,12 @@
 # Changelog - handoff
 
+> **Removed in 0.46.0.** The `handoff` plugin was retired when `mattpocock-skills` was vendored
+> into this marketplace; use `mattpocock-skills:handoff` instead. Note that upstream's skill is the
+> *ancestor* of this one — the extensions documented below (`--workspace` / `--tracked` modes,
+> timestamped filenames, `.git/info/exclude` handling, verifiable-state anchors, the
+> `references/handoff-template.md` template, and the "when NOT to use this" section) are **not**
+> present upstream and were given up deliberately. This file is kept as a record.
+
 All notable changes to the handoff skill in this marketplace will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).

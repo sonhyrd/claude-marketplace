@@ -1,7 +1,7 @@
 {
   "name": "sss",
-  "version": "1.1.0+codex.26a302e2cb1c",
-  "description": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS \u2014 use when drafting or filing a ticket, rewriting a Description or Acceptance Criteria, or picking a parent epic. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version.",
+  "version": "1.2.0+codex.481171f36cda",
+  "description": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the mattpocock-skills plugin and an Orca install.",
   "author": {
     "name": "sonhyrd"
   },
@@ -11,12 +11,14 @@
     "tickets",
     "acceptance-criteria",
     "release",
-    "personal"
+    "personal",
+    "orca",
+    "autonomous"
   ],
   "interface": {
     "displayName": "Sss",
-    "shortDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS \u2014 use when drafting or filing a ticket, rewriting a...",
-    "longDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS \u2014 use when drafting or filing a ticket, rewriting a Description or Acceptance Criteria, or picking a parent epic. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version.",
+    "shortDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going...",
+    "longDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the mattpocock-skills plugin and an Orca install.",
     "developerName": "sonhyrd",
     "category": "Productivity",
     "capabilities": [

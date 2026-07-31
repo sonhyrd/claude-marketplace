@@ -437,18 +437,6 @@
       "category": "Productivity"
     },
     {
-      "name": "teach",
-      "source": {
-        "source": "local",
-        "path": "./plugins/teach"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    },
-    {
       "name": "ansible",
       "source": {
         "source": "local",
@@ -593,18 +581,6 @@
       "category": "Productivity"
     },
     {
-      "name": "handoff",
-      "source": {
-        "source": "local",
-        "path": "./plugins/handoff"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    },
-    {
       "name": "pytest",
       "source": {
         "source": "local",
@@ -633,6 +609,18 @@
       "source": {
         "source": "local",
         "path": "./plugins/code-walkthrough"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "mattpocock-skills",
+      "source": {
+        "source": "local",
+        "path": "./plugins/mattpocock-skills"
       },
       "policy": {
         "installation": "AVAILABLE",
