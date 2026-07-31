@@ -30,7 +30,7 @@ Reach for it when a ticket tree exists and you'd rather the tree were worked in 
 
 ## The frontier
 
-The skill prints the DAG, then dispatches every unblocked ticket at once. As each worktree merges back — conflicts resolved, the profile's post-merge check rerun on the merged result, the ticket marked done — the tickets it was blocking join the frontier and dispatch in turn. Workers stay dumb on purpose: each just runs `/implement` on its ticket, and `/implement`'s own `/tdd` and `/code-review` are the definition of done. The coordinator escalates only on an unresolvable merge conflict or a ticket whose acceptance criteria contradict the spec, and closes with a per-ticket report.
+The skill prints the DAG, then dispatches the unblocked frontier in parallel — two workers at a time by default, because concurrent worktree creation puts each repo's setup hook in contention and a wider fan-out leaves half-built workers behind. As each worktree merges back — conflicts resolved, the profile's post-merge check rerun on the merged result, the ticket marked done — the tickets it was blocking join the frontier and dispatch in turn. Workers stay dumb on purpose: each is pointed at [implement](https://aihero.dev/skills-implement)'s `SKILL.md` by absolute path for its ticket, and implement's own [tdd](https://aihero.dev/skills-tdd) and [code-review](https://aihero.dev/skills-code-review) are the definition of done — the coordinator never hand-writes a substitute process into a worker's brief. The coordinator escalates only on an unresolvable merge conflict or a ticket whose acceptance criteria contradict the spec, and closes with a per-ticket report.
 
 ## Where it fits
 
