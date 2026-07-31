@@ -11,6 +11,30 @@ from rich.table import Table
 console = Console()
 
 
+def find_skill_dirs(skills_dir: Path) -> List[Path]:
+    """
+    Find skill directories under a plugin's skills/ directory.
+
+    Supports both the flat layout used by most plugins (skills/<name>/SKILL.md)
+    and the category-nested layout of vendored upstream plugins such as
+    mattpocock-skills (skills/<category>/<name>/SKILL.md).
+    """
+    if not skills_dir.is_dir():
+        return []
+
+    found: List[Path] = []
+    for entry in sorted(skills_dir.iterdir()):
+        if not entry.is_dir():
+            continue
+        if (entry / "SKILL.md").is_file():
+            found.append(entry)
+            continue
+        for nested in sorted(entry.iterdir()):
+            if nested.is_dir() and (nested / "SKILL.md").is_file():
+                found.append(nested)
+    return found
+
+
 class StructureValidator:
     """Validate plugin and skill directory structure."""
 
@@ -51,11 +75,7 @@ class StructureValidator:
 
         has_plugin_json = plugin_json.exists()
         has_skill_md = (plugin_dir / "SKILL.md").exists()
-        has_skills_dir = (
-            any((d / "SKILL.md").exists() for d in (plugin_dir / "skills").iterdir() if d.is_dir())
-            if (plugin_dir / "skills").is_dir()
-            else False
-        )
+        has_skills_dir = bool(find_skill_dirs(plugin_dir / "skills"))
 
         if not has_plugin_json and not has_skill_md and not has_skills_dir:
             self.warnings.append(
@@ -185,12 +205,9 @@ class StructureValidator:
                     skill_valid = self.validate_skill_structure(plugin_dir)
                     is_valid = is_valid and skill_valid
 
-                skills_subdir = plugin_dir / "skills"
-                if skills_subdir.is_dir():
-                    for skill_dir in sorted(skills_subdir.iterdir()):
-                        if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
-                            skill_valid = self.validate_skill_structure(skill_dir)
-                            is_valid = is_valid and skill_valid
+                for skill_dir in find_skill_dirs(plugin_dir / "skills"):
+                    skill_valid = self.validate_skill_structure(skill_dir)
+                    is_valid = is_valid and skill_valid
 
                 results["plugins"].append(
                     {

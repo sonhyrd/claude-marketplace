@@ -141,11 +141,24 @@ def short_description(description: str, *, max_length: int = 180) -> str:
 
 
 def has_skills(plugin_dir: Path) -> bool:
-    """Return whether a plugin has at least one nested Codex-compatible skill."""
+    """
+    Return whether a plugin has at least one nested Codex-compatible skill.
+
+    Handles the flat layout (skills/<name>/SKILL.md) used by most plugins and the
+    category-nested layout (skills/<category>/<name>/SKILL.md) of vendored upstream
+    plugins such as mattpocock-skills.
+    """
     skills_dir = plugin_dir / "skills"
     if not skills_dir.is_dir():
         return False
-    return any(path.is_dir() and (path / "SKILL.md").is_file() for path in skills_dir.iterdir())
+    for path in skills_dir.iterdir():
+        if not path.is_dir():
+            continue
+        if (path / "SKILL.md").is_file():
+            return True
+        if any(child.is_dir() and (child / "SKILL.md").is_file() for child in path.iterdir()):
+            return True
+    return False
 
 
 def has_mcp_servers(plugin_dir: Path) -> bool:
