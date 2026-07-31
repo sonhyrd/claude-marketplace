@@ -18,15 +18,10 @@ A `wayfinder` unit — a child **Issue** of a `wayfinder:map` holding a *questio
 **Triage role**:
 A canonical state-machine label applied to an **Issue** during triage (e.g. `needs-triage`, `ready-for-afk`). Each role maps to a real label string in the **Issue tracker** via `docs/agents/triage-labels.md`.
 
-**Frontier**:
-The set of **Issues** whose blocking edges are all completed — the ones that can start right now. `to-tickets` publishes issues with blocking edges; workers drain the frontier one issue at a time.
-_Avoid_: queue (a frontier is recomputed as blockers complete, not a static FIFO)
-
 ## Relationships
 
 - An **Issue tracker** holds many **Issues**
 - An **Issue** carries one **Triage role** at a time
-- The **Frontier** is the subset of **Issues** in an **Issue tracker** whose blockers are all done
 - A **Decision ticket** is an **Issue** (a child of a `wayfinder:map`)
 
 ## Flagged ambiguities
