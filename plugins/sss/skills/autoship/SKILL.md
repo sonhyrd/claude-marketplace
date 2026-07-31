@@ -10,7 +10,7 @@ Autoship takes one argument — an idea or an existing Issue — and drives it t
 This file states what each phase must achieve. The concrete commands behind the checks and lookups live in [reference.md](./reference.md).
 
 > **Plugin prerequisites.** This skill depends on skills shipped by a *different* plugin. Install
-> `mattpocock-skills` from this marketplace (it provides `/setup-matt-pocock-skills`, `/to-spec`,
+> `matt` from this marketplace (it provides `/setup-matt-pocock-skills`, `/to-spec`,
 > `/to-tickets`, `/implement`) and have Orca available for `/orchestration`. Without them the
 > preconditions below fail and the run stops. The other `sss` skills have no such dependency.
 

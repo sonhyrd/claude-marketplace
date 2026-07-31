@@ -17,13 +17,16 @@ These live as skills so they load only when you're doing the task:
 - Keep vendored/ported plugin code **verbatim** from upstream — do not reformat it. The lint targets
   deliberately exclude `plugins/*/scripts/`.
 - `plugins/mattpocock-skills/` is a **git subtree** of [mattpocock/skills](https://github.com/mattpocock/skills),
-  not hand-maintained code. Never edit anything in it: every upstream-tracked file is byte-identical
-  to upstream, and the only local addition is the generated `.codex-plugin/plugin.json`. Sync with
+  not hand-maintained code, and it is published as the plugin **`matt`** (so skills invoke as
+  `/matt:<skill>`). Never edit anything in it beyond the two known deviations: `plugin.json`'s
+  `"name"` is `matt`, not `mattpocock-skills`, and `.codex-plugin/plugin.json` is generated. Every
+  other byte matches upstream. Sync with
   `git subtree pull --prefix=plugins/mattpocock-skills mattpocock main`, then mirror upstream's new
   version number into `.claude-plugin/marketplace.json`. It keeps upstream's category-nested
   `skills/<category>/<name>/` layout — do not flatten it, or subtree pulls will recreate the nested
   paths alongside the flattened copies. Locally-authored skills built on top of it live in
-  `plugins/sss/`, never here.
+  `plugins/sss/`, never here. The directory keeps its `mattpocock-skills` name because it is the
+  subtree prefix; do not rename it to match the plugin.
 - Never reference a plugin MCP tool by its bare `mcp__<server>__<tool>` name; plugin tools are
   namespaced `mcp__plugin_<plugin>_<server>__<tool>`. Verify the real id after install.
 

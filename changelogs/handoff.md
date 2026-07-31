@@ -1,7 +1,7 @@
 # Changelog - handoff
 
-> **Removed in 0.46.0.** The `handoff` plugin was retired when `mattpocock-skills` was vendored
-> into this marketplace; use `mattpocock-skills:handoff` instead. Note that upstream's skill is the
+> **Removed in 0.46.0.** The `handoff` plugin was retired when the `matt` plugin (mattpocock/skills) was vendored
+> into this marketplace; use `matt:handoff` instead. Note that upstream's skill is the
 > *ancestor* of this one — the extensions documented below (`--workspace` / `--tracked` modes,
 > timestamped filenames, `.git/info/exclude` handling, verifiable-state anchors, the
 > `references/handoff-template.md` template, and the "when NOT to use this" section) are **not**

@@ -10,7 +10,7 @@ Delegate a ticket tree produced by `/to-tickets` to parallel workers, coordinate
 
 The tickets' **blocking edges ARE the dependency DAG** — use them as-is, never re-derive dependencies. Wide refactors already serialize through their edges by construction.
 
-> **Plugin prerequisites.** Requires the `mattpocock-skills` plugin from this marketplace (for
+> **Plugin prerequisites.** Requires the `matt` plugin from this marketplace (for
 > `/to-tickets` and `/implement`) and an Orca install (for `/orchestration`). See
 > [references/quickstart.md](references/quickstart.md).
 

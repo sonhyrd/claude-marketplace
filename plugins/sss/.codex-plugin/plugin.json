@@ -1,7 +1,7 @@
 {
   "name": "sss",
-  "version": "1.2.0+codex.481171f36cda",
-  "description": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the mattpocock-skills plugin and an Orca install.",
+  "version": "1.2.0+codex.a3bc0e7ce812",
+  "description": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the matt plugin and an Orca install.",
   "author": {
     "name": "sonhyrd"
   },
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "Sss",
     "shortDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going...",
-    "longDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the mattpocock-skills plugin and an Orca install.",
+    "longDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the matt plugin and an Orca install.",
     "developerName": "sonhyrd",
     "category": "Productivity",
     "capabilities": [

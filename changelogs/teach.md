@@ -1,7 +1,7 @@
 # Changelog - teach
 
-> **Removed in 0.46.0.** The `teach` plugin was retired when `mattpocock-skills` was vendored into
-> this marketplace. Be aware that `mattpocock-skills:teach` is **not** a replacement — it shares
+> **Removed in 0.46.0.** The `teach` plugin was retired when the `matt` plugin (mattpocock/skills) was vendored into
+> this marketplace. Be aware that `matt:teach` is **not** a replacement — it shares
 > only the name. Upstream's skill teaches a concept within the workspace; the skill documented
 > below ran a Socratic quiz loop over `~/.claude/projects/` session history with a per-concept
 > mastery checklist. That capability is no longer shipped by this marketplace. This file is kept as

@@ -1,6 +1,6 @@
 {
-  "name": "mattpocock-skills",
-  "version": "1.2.0+codex.69487ddfe238",
+  "name": "matt",
+  "version": "1.2.0+codex.287dd7f7e4a8",
   "description": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 22 skills upstream's plugin.json declares.",
   "author": {
     "name": "Matt Pocock"
@@ -16,7 +16,7 @@
     "productivity"
   ],
   "interface": {
-    "displayName": "Mattpocock Skills",
+    "displayName": "Matt",
     "shortDescription": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git...",
     "longDescription": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 22 skills upstream's plugin.json declares.",
     "developerName": "Matt Pocock",
@@ -25,7 +25,7 @@
       "Skills"
     ],
     "defaultPrompt": [
-      "Use $mattpocock-skills for this task."
+      "Use $matt for this task."
     ]
   },
   "repository": "https://github.com/mattpocock/skills",
