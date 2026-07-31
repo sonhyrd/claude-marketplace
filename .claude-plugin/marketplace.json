@@ -1254,10 +1254,7 @@
         "domain-modeling",
         "productivity"
       ],
-      "strict": false,
-      "skills": [
-        "./skills"
-      ]
+      "strict": false
     },
     {
       "name": "sss",
