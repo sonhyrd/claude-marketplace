@@ -77,6 +77,40 @@ Matched by `git remote get-url origin` — the profile whose **Remote** is a sub
   - Tests are vitest. Prefer the established seam: extract a pure module and test it directly (prior art: `actions/lib/create-recording-schema.ts` + `actions/create-recording.test.ts`) over HTTP-route tests with hoisted module mocks.
   - Don't run the dev server (`just dev` / `pnpm dev`) — it runs behind portless in the user's own long-running stack. Never `pkill` on "agent-native dev".
 
+## agent-native (Agent Native framework monorepo)
+
+- **Remote**: `BuilderIO/agent-native` — the checkout's `origin`. **Tickets live on the fork `sonhyrd/agent-native`, not on origin.** Every `gh issue` call must carry `--repo sonhyrd/agent-native`; a bare `gh issue view 4` resolves against BuilderIO upstream and returns an unrelated issue.
+- **Branch prefix**: `sss/`
+- **Post-merge check**: `pnpm typecheck && pnpm test:fast && pnpm guards` — the substance of `pnpm prep` without the oxfmt write. **`pnpm install` first**: a fresh checkout has no `node_modules` and the Orca setup hook for this repo is empty, so nothing is installed for you.
+  - **`pnpm guards` is a real gate — clean on `main` at `d04621c8c` (2026-08-01), EXIT=0.** Any guard failure is a real regression.
+  - **`pnpm test:fast` is NOT clean on `main`.** Verified known-failing baseline at `d04621c8c` (2026-08-01), 4 spec files:
+    - `packages/core` — `src/cli/connect.spec.ts` (14 tests: `writeConfigs`, `runConnect`, `reconnect — URL-based discovery`)
+    - `packages/docs` — `app/components/docs-content.test.ts` (2 tests)
+    - `templates/design` — `app/components/design/bridge/bridge.guard.spec.ts` (5 tests, all 30s timeouts — reads as parallel-load noise)
+    - `templates/design` — `app/components/design/bridge/reparent-matrix.guard.spec.ts` (`Chromium reparent matrix`)
+  - Because the chain is `&&`, a `test:fast` failure means `guards` never runs. Run `pnpm guards` separately so a known-noise test failure cannot hide a real guard regression.
+  - **Rebuild `packages/core` before typechecking when a merge adds a core export that a template imports.** Templates typecheck against `packages/core/dist`, not source, so a fresh export reads as `error TS2305: Module '"@agent-native/core/server"' has no exported member 'x'` — a stale artifact wearing the shape of a missing implementation. `pnpm --filter @agent-native/core build`, then re-run. Hit for real merging #7 (clips imported `sendBackgroundQueueMessage`); earlier merges passed only because no template imported the new symbols yet.
+  - **Run `pnpm install` in the integration checkout after merging a branch that changed any `package.json`/`pnpm-lock.yaml`.** The worker installed into its own worktree; your checkout did not. Symptom is `error TS2307: Cannot find module 'x'` for a package that is plainly in `package.json` — another stale-environment failure wearing the shape of a code defect. Hit merging #9 (`@cloudflare/playwright`).
+  - **`pnpm test:fast` is broadly load-sensitive while a dispatch fan-out is live.** Running it alongside two Claude workers produced timeout-only failures in `packages/core` `src/deploy/build.spec.ts`, `packages/docs` `app/vite-sitemap-plugin.spec.ts`, and `packages/docs` `tests/templates-routes.test.ts` — every one passed on a targeted isolated rerun. **Before treating any new failing file as a regression, rerun that file alone.** A bare `Test timed out in <n>ms` with no assertion is the tell.
+  - **`packages/core` `src/deploy/build.spec.ts` `generateWorkerEntry > *` is load-sensitive flake, not a regression.** Times out at its 15s allowance whenever parallel workers are running; the failing count varies run to run (observed 1, 9, then 3 across three runs of the same tree) and every failure is a bare `Test timed out in 15000ms`, never an assertion. Passes at idle. Two independent workers reproduced it against an untouched merge-base. Do not chase it while a dispatch fan-out is live — confirm on a quiet machine or in CI.
+  - Compare each merge-back against that list; only a *new* failing file is a regression. `templates/design` `bridge.guard.spec.ts` alone takes ~5.4 minutes.
+- **Commit policy**: conventional commit, no issue-closing trailers — `feat(core): resolve dispatch target as a typed union`. **Never `closes #N` / `resolves #N`**: origin is BuilderIO/agent-native, so a fork issue number in a commit points at an unrelated upstream issue. The coordinator closes fork issues explicitly. Never add `Co-Authored-By` or any agent attribution.
+- **Worker constraints**:
+  - Read `CLAUDE.md` first — it is authoritative and overrides defaults. Read the matching skill in `.agents/skills/` before changing that area; `portability`, `reliable-mutations`, `verifying-changes`, and `secrets` are the load-bearing ones for hosting/runtime work.
+  - **Changeset required** for any source change under `packages/core`, `packages/dispatch`, `packages/scheduling`, or `packages/pinpoint` (`pnpm changeset:add`). Never hand-bump a package version.
+  - **A `catch`, default, or coercion returning a value callers cannot distinguish from success is a bug, not a guard.** Enforced by `guard:no-silent-coercion` on added lines. This is the whole point of the Cloudflare tickets — a silent degrade to inline is the defect under repair.
+  - Migrations are additive only; never drop, rename, or truncate. `guard:additive-migrations`.
+  - TypeScript only — no new `.js` or `.mjs` source files. Run `oxfmt --write` on files you modified.
+  - Never hardcode API keys, tokens, webhook URLs, or signing secrets, in source, tests, fixtures, or issue comments. One resolver per credential key; run `pnpm guard:no-env-credentials` after a credential change.
+  - **Never `git stash`** — the stash is shared across worktrees and would steal another worker's WIP. Use `git checkout` for baselines.
+  - **Measure any baseline against `git merge-base main HEAD`, never `HEAD` and never `main..HEAD`** — once siblings merge, a plain range diff renders their work as deletions.
+  - **Stay on your own branch.** Never create, switch, delete, reset, rebase, or stash branches. The coordinator owns merge-back.
+  - `scripts/hooks/file-lease.mjs` denies a write when a peer session holds the file or it changed on disk under you. Re-read and build on their change; never force past it.
+  - Actions are the single source of truth. Do not add a handler under `server/routes/api/` where an action fits (`guard:no-action-twin-routes`).
+  - Run the narrow gate for your slice, not the monorepo: `pnpm --filter <pkg> exec vitest --run <spec>`. Reserve `pnpm typecheck && pnpm test:fast && pnpm guards` for the final pass.
+  - Don't `pkill` on `agent-native dev` — the pattern matches the user's own long-running stack.
+  - **Worker shells may have no outbound network.** A failed request to an external host proves nothing about that host. `ask` the coordinator to probe rather than concluding a service is down.
+
 ## Template
 
 - **Remote**: `<org>/<repo>` — substring of the origin URL
