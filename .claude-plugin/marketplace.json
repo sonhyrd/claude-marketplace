@@ -1278,8 +1278,7 @@
       "strict": false,
       "skills": [
         "./skills"
-      ],
-      "hooks": "./hooks/hooks.json"
+      ]
     }
   ]
 }
