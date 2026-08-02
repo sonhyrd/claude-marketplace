@@ -4,6 +4,16 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.3.0] - 2026-08-02
+
+### Added
+
+- Plugin-shipped hook (`hooks/hooks.json`, declared as `"hooks"` in the marketplace entry): `rtk.sh` on `PreToolUse(Bash)` → `rtk hook claude`, replacing the copy that lived in `~/.claude/settings.json`. One tracked copy now installs identically on every host instead of a settings blob hand-edited per machine
+- The wrapper resolves rtk off `PATH` rather than an absolute user path, and is a **no-op that exits 0 when rtk is absent** — so a host without rtk installs cleanly with no hook blocking a Bash call. It drains stdin before exiting; when rtk is present it `exec`s through so stdout and exit code pass unchanged, which rtk needs since it returns hook JSON that rewrites the command
+- Overrides: `SSS_HOOKS_DISABLED=1` (kill switch) and `SSS_RTK_BIN`. `hooks/README.md` documents the contract and the per-host migration step
+- The Orca, Superset and herdr hooks are installed per machine by their own tooling and stay in `~/.claude/settings.json`; the plugin deliberately does not ship them
+- **Migration:** this fires in addition to anything still in `~/.claude/settings.json`. Delete the `rtk hook claude` entry there after enabling the plugin on a host, or the rewrite runs twice
+
 ## [1.2.0] - 2026-07-31
 
 ### Added
