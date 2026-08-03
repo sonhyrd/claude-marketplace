@@ -30,6 +30,11 @@ each machine. Two directions: **apply** (baseline → machine) and **capture** (
 Writing `env` or `hooks` from a shared baseline would break the machine it lands on. Do not
 add them without changing the paths to be `$HOME`-relative first — that is a separate change.
 
+Because `enabledPlugins` cannot sync, plugins are installed by hand on each machine.
+`references/external-plugins.md` is the roster to work through when setting one up: which
+marketplaces to add, which plugins to enable, and which ship built-in. Read it during **apply**
+on a fresh machine — the settings merge alone does not give the user their plugins.
+
 ## Why the statusline script is copied, not referenced
 
 A plugin **cannot** ship a main `statusLine`. Plugin `settings.json` supports only the `agent`
