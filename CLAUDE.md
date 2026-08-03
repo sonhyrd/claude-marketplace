@@ -45,13 +45,25 @@ These live as skills so they load only when you're doing the task:
   - The directory keeps the name `e2e-skills` because it is the subtree prefix; renaming it to
     `e2e` would break both `pull` and `push`. Plugin name ≠ directory name, same as `matt`.
   - Only two of the five on-disk skills are declared in `plugin.json`: `pw-prove` and
-    `e2e-reviewer`. The other three — `cypress-debugger`, `playwright-debugger` and
-    `playwright-test-generator` — still load and still appear to the host as `e2e:<name>`; the
-    `skills` array shapes the published manifest, not host discovery. Do not delete them:
+    `e2e-reviewer`. The other two live ones — `cypress-debugger` and `playwright-debugger` — still
+    load and still appear to the host as `e2e:<name>`; the `skills` array shapes the published
+    manifest, not host discovery. Do not delete the `playwright-test-generator` directory:
     `e2e-reviewer/scripts/scan.mjs` best-effort-imports
     `playwright-test-generator/scripts/ptg-run.mjs`. Re-declaring one is a one-line `skills` array
     edit in *both* `plugins/e2e-skills/.claude-plugin/plugin.json` and
     `.claude-plugin/marketplace.json`.
+  - **`playwright-test-generator` is fully off.** Since the `skills` array does not gate discovery,
+    the only thing that does is the entry file: its `SKILL.md` is renamed `SKILL.md.disabled`
+    (`claude plugin details e2e` → `Skills (4)`). Renaming the entry file rather than moving or
+    deleting the directory is deliberate — it keeps `scripts/ptg-run.mjs` at the relative path
+    `scan.mjs` imports, and keeps the rest as reference until it is removed outright. To revive it,
+    rename the file back.
+  - `disable-model-invocation: true` also removes a skill from the model-facing skill listing
+    entirely, so a hidden skill can be *shadowed*: if the user's `/e2e:pw-prove` fails to parse as a
+    command (e.g. a leading U+00A0 from a paste), the model sees no `pw-prove` and falls through to
+    whatever listed skill advertises the same job. `playwright-test-generator` was that skill — its
+    description claimed "or prove a PR/branch/ticket/diff with one". The rename removes the shadow
+    at the source.
   - `pw-prove` carries `disable-model-invocation: true` in its frontmatter. That is the *only*
     mechanism that pins a plugin skill to user-invocable-only — `skillOverrides` in
     `~/.claude/settings.json` is inert for skills whose source is a plugin. Do not "fix" this by

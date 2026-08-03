@@ -36,6 +36,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Dropped the flag from `e2e-reviewer`: a skill that is a documented handoff target cannot be
   pinned user-invocable-only. `pw-prove` keeps its own pin — it is an entry point, never a target.
 
+- `playwright-test-generator` no longer shadows `/e2e:pw-prove`. Session
+  `31c05f72-b031-4071-afa7-5d643f611c55` sent `/e2e:pw-prove <PR url>` with a leading U+00A0
+  (non-breaking space) in front of the slash, so Claude Code's command parser did not recognise it
+  and passed the line through as ordinary prose. `pw-prove` carries
+  `disable-model-invocation: true`, which removes it from the model-facing skill listing entirely —
+  so the model had no `pw-prove` to reach for, and picked the one listed skill whose description
+  claimed the job: `playwright-test-generator` ("…or prove a PR/branch/ticket/diff with one"). The
+  whole PR then ran through the wrong pipeline. Note the correction below — the `skills` array was
+  never what kept it out of the model's hands.
+
+### Removed
+
+- `playwright-test-generator` is disabled. Its `SKILL.md` is renamed `SKILL.md.disabled`, which is
+  what actually stops Claude Code's auto-discovery — `claude plugin details e2e` now reports
+  `Skills (4)` and ~100 fewer always-on tokens. It is unused in practice and `pw-prove` covers the
+  proving path; the directory stays as reference pending outright removal. The entry file is
+  renamed rather than the directory moved or deleted so `scripts/ptg-run.mjs` keeps the relative
+  path `e2e-reviewer/scripts/scan.mjs` imports for run-ledger telemetry. Its frontmatter also gains
+  `disable-model-invocation: true` and drops the "or prove a PR/branch/ticket/diff with one" claim,
+  so a revival by rename comes back inert instead of re-shadowing `pw-prove`. Upstream
+  `voidmatcha` actively edits this file, so a `git subtree pull` will conflict here, and the fork's
+  own `scripts/ci/review.sh` public-skill-surface check expects five `SKILL.md` files — both
+  expected, both resolved in favour of the rename. This also retires the Step 6 handoff *out of*
+  `playwright-test-generator` noted in the fix above — `pw-prove` is now the only skill that reaches
+  `e2e-reviewer`.
+
 ### Notes
 
 - **Never pin a handoff target.** A SKILL.md line saying "invoke `<x>` (Skill tool)" is only valid
@@ -47,9 +73,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   leftover `~/.claude/skills` symlinks in play. So `pw-prove`'s `playwright-debugger` handoff is
   not the dangling reference the note below assumed; the `skills` array affects the published
   manifest, not host discovery.
-- **Two of five skills are declared.** `cypress-debugger`, `playwright-debugger` and
-  `playwright-test-generator` ship inside the subtree as files but are not registered as skills.
-  This is load-bearing in one place: `e2e-reviewer/scripts/scan.mjs` dynamically imports
+- **Two of the four live skills are declared.** `cypress-debugger` and `playwright-debugger` ship
+  inside the subtree and load, but are not registered in the manifest;
+  `playwright-test-generator` is off entirely (see Removed). Keeping its files is load-bearing in
+  one place: `e2e-reviewer/scripts/scan.mjs` dynamically imports
   `../../playwright-test-generator/scripts/ptg-run.mjs` for run-ledger telemetry. The import is
   already wrapped in `try`/`catch`, but the file being present keeps it working. Re-declaring one
   is a one-line edit to the `skills` array in `.claude-plugin/plugin.json` and
