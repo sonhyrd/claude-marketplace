@@ -26,8 +26,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `e2e-reviewer` — static review of Playwright/Cypress specs and Page Object Models, flagging 24
   anti-patterns grouped P0 (silently always-pass) / P1 (poor diagnostics) / P2 (maintenance).
 
+### Fixed
+
+- **The Step 6 quality gate could not run.** `pw-prove` and `playwright-test-generator` both
+  invoke `e2e-reviewer` through the Skill tool, which failed outright with
+  `Skill e2e:e2e-reviewer cannot be used with Skill tool due to disable-model-invocation`.
+  `disable-model-invocation: true` blocks *every* model-initiated launch — including a chained one
+  from inside a skill the user invoked by name, which is the only path that ever reached this gate.
+  Dropped the flag from `e2e-reviewer`: a skill that is a documented handoff target cannot be
+  pinned user-invocable-only. `pw-prove` keeps its own pin — it is an entry point, never a target.
+
 ### Notes
 
+- **Never pin a handoff target.** A SKILL.md line saying "invoke `<x>` (Skill tool)" is only valid
+  when `<x>` carries no `disable-model-invocation`. That now holds for both handoff targets in this
+  bundle: `e2e-reviewer` (Step 6) and `playwright-debugger` (Step 7, never pinned).
+- **Declaring a skill in `plugin.json` is not what makes it load.** All five on-disk skills appear
+  to the host as `e2e:<name>`, including the three the manifest omits — verified against the
+  installed cache at `~/.claude/plugins/cache/sss-marketplace/e2e/1.0.0/skills/`, with no
+  leftover `~/.claude/skills` symlinks in play. So `pw-prove`'s `playwright-debugger` handoff is
+  not the dangling reference the note below assumed; the `skills` array affects the published
+  manifest, not host discovery.
 - **Two of five skills are declared.** `cypress-debugger`, `playwright-debugger` and
   `playwright-test-generator` ship inside the subtree as files but are not registered as skills.
   This is load-bearing in one place: `e2e-reviewer/scripts/scan.mjs` dynamically imports
@@ -35,9 +54,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   already wrapped in `try`/`catch`, but the file being present keeps it working. Re-declaring one
   is a one-line edit to the `skills` array in `.claude-plugin/plugin.json` and
   `.claude-plugin/marketplace.json`.
-- **Both declared skills are user-invocable only**, via `disable-model-invocation: true` in their
-  frontmatter. That field is the only mechanism that pins a plugin-sourced skill —
-  `skillOverrides` in `~/.claude/settings.json` does not apply to plugin skills.
+- **`pw-prove` is user-invocable only**, via `disable-model-invocation: true` in its frontmatter.
+  That field is the only mechanism that pins a plugin-sourced skill — `skillOverrides` in
+  `~/.claude/settings.json` does not apply to plugin skills. `e2e-reviewer` deliberately carries
+  no such flag; see Fixed above.
 - **Version is fresh, not borrowed.** Upstream publishes no plugin and no repo version; the only
   signals are per-skill `metadata.version` (`1.9.0` on the four voidmatcha skills, `0.1.0` on
   `pw-prove`). Those disagree, and `1.9.0` describes a five-skill bundle. `1.0.0` is the honest

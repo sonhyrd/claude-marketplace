@@ -39,7 +39,11 @@ as the plugin **`e2e`**, and make that the only copy that gets edited.
    into the fork in the old clone, push, then `git subtree pull` here.
 4. **Two of five skills declared** — `pw-prove` and `e2e-reviewer` — enumerated as explicit paths
    rather than a `./skills` glob, which would ship all five.
-5. **Both declared skills pinned user-invocable-only** via `disable-model-invocation: true`.
+5. **`pw-prove` pinned user-invocable-only** via `disable-model-invocation: true`. `e2e-reviewer`
+   was pinned the same way at first and un-pinned immediately after: the pin blocks *chained*
+   Skill-tool launches too, which killed the Step 6 quality gate in both `pw-prove` and
+   `playwright-test-generator` with `Skill e2e:e2e-reviewer cannot be used with Skill tool due to
+   disable-model-invocation`.
 6. **Fresh `1.0.0`**, `Apache-2.0`, marketplace `0.46.0 → 0.47.0`.
 
 ## Rationale
