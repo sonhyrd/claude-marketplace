@@ -1,0 +1,32 @@
+{
+  "name": "e2e",
+  "version": "1.0.0+codex.369d706684f5",
+  "description": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. Both are user-invocable only; the subtree's three other skills ship as files but are not declared.",
+  "author": {
+    "name": "voidmatcha"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "e2e",
+    "playwright",
+    "cypress",
+    "testing",
+    "test-review",
+    "verification"
+  ],
+  "interface": {
+    "displayName": "E2e",
+    "shortDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer...",
+    "longDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. Both are user-invocable only; the subtree's three other skills ship as files but are not declared.",
+    "developerName": "voidmatcha",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills"
+    ],
+    "defaultPrompt": [
+      "Use $e2e for this task."
+    ]
+  },
+  "repository": "https://github.com/sonhyrd/e2e-skills",
+  "skills": "./skills/"
+}
