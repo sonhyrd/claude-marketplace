@@ -4,6 +4,19 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Changed
+
+- `delegate-tickets` skill: repo profiles moved out of the skill and into the repo they describe, as `docs/agents/delegate-profile.md` — alongside the `issue-tracker.md` / `domain.md` / `triage-labels.md` that `/setup-matt-pocock-skills` already writes there, and summarised in that repo's `CLAUDE.md` under `## Agent skills`. A profile now versions with the code it constrains, is visible to anyone working in that repo, and can be amended by the coordinator mid-run
+- `delegate-tickets` skill: step 1 discovery is presence-based rather than a lookup — the profile is in the repo or it isn't. `Remote` is demoted from match key to self-check, compared against `git remote get-url origin` and warned on mismatch, so a profile that arrived with a copied checkout is caught. A repo with no profile is interviewed **inline in step 1** rather than being sent to a setup skill, so a first run reaches the DAG
+- `delegate-tickets` skill: step 6 amends the target repo's profile when a merge-back reveals a baseline, known-noise test, or environment trap it doesn't record — the capability the move unlocks
+- `delegate-tickets` skill: ticket location is no longer a profile field. It lives only in `docs/agents/issue-tracker.md`, which step 2 already reads, so the two files cannot disagree
+
+### Removed
+
+- `delegate-tickets` skill: `PROFILES.md` deleted, with no central fallback — a two-tier lookup would make "which of these two is stale?" a permanent question. New: `references/profile-template.md` (the field schema an interview fills), and `references/unmigrated-profiles.md`, a temporary archive holding verbatim the profiles for repos not checked out at migration time. The skill does not read the archive; each entry is to be moved into its repo and deleted
+
 ## [1.3.0] - 2026-08-02
 
 ### Added

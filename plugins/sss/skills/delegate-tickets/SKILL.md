@@ -16,7 +16,12 @@ The tickets' **blocking edges ARE the dependency DAG** — use them as-is, never
 
 ## 1. Resolve the repo profile
 
-Match `git remote get-url origin` against the profiles in [PROFILES.md](PROFILES.md). No match → interview the user for each field in the profile template, append the new profile to `PROFILES.md`, then continue. The profile supplies every repo-specific value the steps below reference: branch prefix, post-merge check, commit policy, worker constraints.
+Read the target repo's `docs/agents/delegate-profile.md`. It supplies every repo-specific value the steps below reference: branch prefix, post-merge check, commit policy, worker constraints. Ticket location is **not** a profile field — that comes from `issue-tracker.md` in step 2.
+
+Discovery is presence-based, not a lookup: the profile is in this repo or it isn't.
+
+- **Present** → compare its `Remote` field against `git remote get-url origin`. On mismatch, **warn — loudly, then continue.** A profile naming another repo usually means a checkout was copied and the profile came with it. This is a warning, not a gate: presence-based discovery cannot tell a copied profile from a renamed remote, and blocking on the ambiguous case would stall more runs than it saves.
+- **Absent** → interview the user inline, here, for each field in [references/profile-template.md](references/profile-template.md). Do not send them off to a setup skill; a first run must not die before it prints the DAG. Write the answers to `docs/agents/delegate-profile.md` **and** add the pointer line under `## Agent skills` in the repo's `CLAUDE.md`, then continue.
 
 ## 2. Resolve the ticket tree
 
@@ -77,6 +82,8 @@ As each worktree finishes: merge it into the current branch, resolve conflicts, 
 Review each worker's branch against `git merge-base <integration-branch> HEAD`, never `<integration-branch>..HEAD`. A branch is cut from the base at dispatch time, so once siblings merge, a plain range diff renders **their** work as deletions and a clean branch reads as a revert.
 
 Commits follow the profile's commit policy. Never bare `git stash` in shared worktrees.
+
+When a merge-back reveals a baseline, known-noise test, or environment trap the profile doesn't record, **amend `docs/agents/delegate-profile.md` before dispatching the next frontier** — and commit it with the work that discovered it. The profile lives in the tree you are merging into, so this is one edit, and the next worker's brief carries it.
 
 ## 7. Run to completion
 

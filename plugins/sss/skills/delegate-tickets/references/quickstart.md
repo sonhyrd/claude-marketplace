@@ -26,7 +26,7 @@ Reach for it when a ticket tree exists and you'd rather the tree were worked in 
 
 - **Orca** — workers run in Orca child worktrees, coordinated by the orchestration layer.
 - **A ticket tree** — from [to-tickets](https://aihero.dev/skills-to-tickets): local files under `.scratch/<feature-slug>/issues/`, or GitHub issues with blocking links, per the tracker [setup-matt-pocock-skills](https://aihero.dev/skills-setup-matt-pocock-skills) configured.
-- **A repo profile** — branch prefix, post-merge check, commit policy, and worker constraints, stored in the skill's `PROFILES.md` and matched by git remote. First run on a new repo interviews you once and saves the profile.
+- **A repo profile** — branch prefix, post-merge check, commit policy, and worker constraints, stored in the repo it describes as `docs/agents/delegate-profile.md`. First run on a repo without one interviews you once and writes it there, where it versions with the code it constrains and the coordinator can amend it during merge-back.
 
 ## The frontier
 
