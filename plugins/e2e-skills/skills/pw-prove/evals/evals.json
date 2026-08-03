@@ -1,0 +1,533 @@
+{
+  "skill_name": "pw-prove",
+  "evals": [
+    {
+      "id": 1,
+      "title": "Coverage gap analysis with POM project",
+      "prompt": "Analyze the project in evals/files/project-pom/ and identify coverage gaps. The project has routes defined in src/routes.ts including /login, /dashboard, /dashboard/analytics, /settings, /settings/notifications, /settings/security, /profile, /checkout, and /checkout/confirmation. Currently only auth tests exist in tests/auth.spec.ts. Identify what is covered, what is not, and how new tests should be structured.",
+      "expected_output": "Should detect POM pattern (tests/pages/ directory with BasePage and LoginPage). Should identify /login as covered via auth.spec.ts. Should identify /dashboard, /dashboard/analytics, /settings, /settings/notifications, /settings/security, /profile, /checkout, /checkout/confirmation as uncovered routes. Should flag auth-related paths as already covered. Should flag /checkout as high priority (form-heavy). Should recommend new tests follow the existing POM pattern with classes extending BasePage.",
+      "files": [
+        "evals/files/project-pom/playwright.config.ts",
+        "evals/files/project-pom/tests/auth.spec.ts",
+        "evals/files/project-pom/tests/pages/login-page.ts",
+        "evals/files/project-pom/tests/pages/base-page.ts",
+        "evals/files/project-pom/src/routes.ts"
+      ],
+      "assertions": [
+        "Detects POM pattern (tests/pages/ directory exists)",
+        "Identifies BasePage as base class for POMs",
+        "Identifies LoginPage as existing POM",
+        "Recognizes /login route as covered by auth.spec.ts",
+        "Identifies /dashboard as uncovered route",
+        "Identifies /settings as uncovered route",
+        "Identifies /profile as uncovered route",
+        "Identifies /checkout as uncovered route",
+        "Flags /checkout as high priority (form-heavy page)",
+        "Recommends new POMs extend BasePage",
+        "Detects baseURL as http://localhost:3000 from playwright.config.ts",
+        "Detects testDir as ./tests from playwright.config.ts",
+        "Does not hallucinate routes not in src/routes.ts",
+        "Lists at least 4 uncovered routes"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Test generation plan for /checkout with POM",
+      "prompt": "Generate a test plan for the /checkout page based on the project structure in evals/files/project-pom/. The project uses POM pattern with BasePage and LoginPage in tests/pages/. The routes file shows /checkout (show + process) and /checkout/confirmation endpoints. Show what scenarios, locators, and POM structure you would create. Do not write code yet — present the plan for approval.",
+      "expected_output": "Should propose a CheckoutPage class extending BasePage in tests/pages/checkout-page.ts. Should propose a checkout.spec.ts in tests/. Should include happy path scenario (complete purchase flow). Should include error scenarios (validation errors, payment failure). Should include a Locator Mapping Table. Should reference existing patterns from auth.spec.ts and LoginPage.",
+      "files": [
+        "evals/files/project-pom/playwright.config.ts",
+        "evals/files/project-pom/tests/auth.spec.ts",
+        "evals/files/project-pom/tests/pages/login-page.ts",
+        "evals/files/project-pom/tests/pages/base-page.ts",
+        "evals/files/project-pom/src/routes.ts"
+      ],
+      "assertions": [
+        "Proposes CheckoutPage class extending BasePage",
+        "Places POM file in tests/pages/checkout-page.ts",
+        "Places spec file in tests/checkout.spec.ts",
+        "Includes happy path scenario (successful checkout/purchase)",
+        "Includes error/validation scenario (e.g., invalid payment, missing fields)",
+        "Includes Locator Mapping Table with selector candidates",
+        "Locators use getByRole, getByLabel, or getByTestId (not CSS selectors)",
+        "Proposes authentication setup in beforeEach (checkout is protected route)",
+        "References /checkout/confirmation as expected post-purchase URL",
+        "Does not propose getters for locators (uses readonly properties)",
+        "Scenario format includes Given/When/Then or equivalent structure",
+        "Does not hallucinate UI elements not inferable from routes"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Flat-sibling repo — scaffold a POM anyway (POM is always the default)",
+      "prompt": "Analyze the project in evals/files/project-flat/ for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Its existing E2E tests are flat (direct page interactions, no Page Object Model) and there is no POM directory anywhere. Identify the project pattern, coverage gaps, and how new tests should be structured.",
+      "expected_output": "Should detect no POM directory (no pages/, models/, or page-objects/ used as Page Objects) and that the existing specs are flat. POM is ALWAYS the default with no flat opt-out, so it should still SCAFFOLD a POM for the new coverage — a Page Object class + spec under tests/pages/ — and NOT match the flat siblings. It must NOT rewrite or retro-refactor the existing tests/login.spec.ts (add the POM for new coverage, leave siblings untouched). Should identify login as covered. Should identify home page, signup, dashboard, profile, notifications as coverage gaps from page.tsx links. Note: a Next.js app/ or pages/ ROUTE folder is not a Playwright POM directory and must not be mistaken for one.",
+      "files": [
+        "evals/files/project-flat/playwright.config.ts",
+        "evals/files/project-flat/tests/login.spec.ts",
+        "evals/files/project-flat/src/app/page.tsx"
+      ],
+      "assertions": [
+        "Detects no POM directory and that the existing specs are flat",
+        "Scaffolds a POM for the new coverage even though the existing specs are all flat",
+        "Does NOT match the flat siblings — does not recommend a flat spec for the new coverage",
+        "Places the new POM at the test root (tests/pages/<Feature>Page.ts)",
+        "False-positive guard: does NOT rewrite or retro-refactor the existing tests/login.spec.ts — flat siblings are left untouched",
+        "Does not mistake a Next.js route folder (app/ or pages/) for a Playwright POM dir",
+        "Identifies login as covered by login.spec.ts",
+        "Identifies home page (/) as uncovered",
+        "Identifies /signup as uncovered (linked in page.tsx)",
+        "Detects baseURL as http://localhost:3000",
+        "Detects testDir as ./tests",
+        "Detects Next.js App Router structure (src/app/)",
+        "Does not hallucinate pages not present in project files"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Exploration auth/seed gate: stop and ask when credentials are missing",
+      "prompt": "You are at Step 3 (Browser Exploration) of playwright-test-generator, targeting the protected /dashboard route of the project in evals/files/project-pom/. The project config has no storageState, no setup project, and no globalSetup; there are no seed scripts; no TEST_USER/TEST_PASSWORD-style env vars are set. Existing tests in tests/auth.spec.ts drive the login UI with inline example credentials. Describe exactly how you proceed with exploration for /dashboard, and separately for the public /login route.",
+      "expected_output": "For /dashboard: detects that no auth setup exists (no storageState in playwright.config.ts, no setup project, no globalSetup, no auth state files) and that the flow requires credentials the agent does not have — must STOP and ask the user for credentials or a seeding command before any navigation to /dashboard. Must not invent credentials, reuse the fixture's example credentials as if they were real, register a real account, or mutate backend data to reach the target state. For /login: must NOT stop — the login page itself is public (tests/auth.spec.ts line 7 `await loginPage.open()` reaches it with no session), so exploration of /login proceeds normally; requiring credentials to view a public page would be a false positive.",
+      "files": [
+        "evals/files/project-pom/playwright.config.ts",
+        "evals/files/project-pom/tests/auth.spec.ts",
+        "evals/files/project-pom/tests/pages/login-page.ts",
+        "evals/files/project-pom/tests/pages/base-page.ts",
+        "evals/files/project-pom/src/routes.ts"
+      ],
+      "assertions": [
+        "Detects that playwright.config.ts contains no storageState, no setup project, and no globalSetup",
+        "Detects that no seed scripts or auth state files exist in the project",
+        "True positive: STOPS and asks the user for credentials or a seeding command before exploring /dashboard",
+        "Does not invent credentials or treat the example credentials in tests/auth.spec.ts as real accounts",
+        "Does not register real accounts or mutate backend data to reach the target state",
+        "False-positive guard: does NOT stop-and-ask for the public /login route — tests/auth.spec.ts reaches it via loginPage.open() with no prior session, so no credentials are required to explore it",
+        "Does not hallucinate auth mechanisms (storageState files, setup projects) not present in the fixture"
+      ]
+    },
+    {
+      "id": 5,
+      "title": "PR-mode proof link: a skip must show the failing probe (no silent drop)",
+      "prompt": "You are finishing a PR-mode pw-prove run (invoked with PR #2872). The generated spec passes. The Step-3 `PROBE_HOSTING=1 preflight.mjs` run printed `PUBLISH_READY=no` with `rejected: HTTP 401 - the credential was refused`; ffmpeg and Chrome are both installed. The spec + POM are already committed and pushed to the PR branch and the PR comment is posted. Produce the Step-8 completion report and account for the proof link.",
+      "expected_output": "Emits the completion report and accounts for the link as `Proof page: skipped -- the publish credential was refused`, with the actual preflight probe output pasted directly beneath it as evidence. Does NOT write 'Complete' while silently omitting the Proof page line. Does NOT fabricate a clips.paulsjob.ai share URL it never produced. Does NOT fail or abort the run over the undelivered link -- the proof is the passing test plus the mutation verdict, so the run finishes normally. Because ffmpeg is installed, the skip reason is specifically the rejected credential (a rotated CLIPS_A2A_SECRET), not missing video tooling.",
+      "assertions": [
+        "True positive: the `skipped` line pastes the actual preflight probe output as evidence, not a bare `skipped -- credential refused` written from memory",
+        "Does not emit a 'Complete' report that silently drops the Proof page line in PR-mode",
+        "Does not fabricate or guess a clips.paulsjob.ai share URL",
+        "False-positive guard: does not fail or abort the run over the undelivered proof link -- the passing tests and the mutation verdict are still reported and the run closes normally",
+        "Attributes the skip to the refused publish credential (ffmpeg is installed), not to missing video tooling"
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Film spec ends on the success signal (film the payoff); committed test has no film-only hold",
+      "prompt": "In Step 8 of playwright-test-generator you are authoring the THROWAWAY film spec for a delete flow: the user clicks Delete, confirms a dialog, the row disappears, and the app shows a success toast reading 'Notice deleted'. Show the film spec you would write, and state how the durable committed test differs.",
+      "expected_output": "The film spec's terminal assertion is the success toast/alert ('Notice deleted'), not merely the row's disappearance -- that success frame is the proof the film must end on. It adds a film-only hold (waitForTimeout(3000), ≥3s) after the success assertion so the video and the contact sheet's final tile end on the toast before it auto-dismisses. It wraps each phase in test.step(...) and writes a test-results/chapters.json sidecar of {name,t} offsets for the watch-page chapter list. It uses a per-spec test.use block with channel: 'chrome' and an explicit video size (1600x900 — not Playwright's 800x450 default, which renders chapter titles illegible). The durable committed test asserts the SAME success signal but keeps the project default browser, no video, and NO waitForTimeout hold.",
+      "assertions": [
+        "True positive: the film spec's terminal assertion targets the success signal (the 'Notice deleted' toast/alert), not only the row removal",
+        "Film spec holds the payoff on screen ≥3s (a film-only waitForTimeout after the success assertion) so the video and the contact sheet's final tile end on the toast",
+        "Film spec wraps phases in test.step and writes test-results/chapters.json for the chapter list",
+        "Film spec sets an explicit video size (1600x900) rather than inheriting the 800x450 default",
+        "False-positive guard: the committed durable test does NOT include the waitForTimeout hold and does NOT set video:'on' -- those belong only to the throwaway film spec",
+        "Committed test still asserts the user-visible success signal, not just the DOM side effect"
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate",
+      "prompt": "You are at Step 4 of playwright-test-generator in PR-mode (invoked with PR #412). The scenario plan is written: two scenarios plus a locator mapping table. Context: the repo's existing specs are all flat (no POM anywhere), the worktree had uncommitted changes that Step 3 stashed, and one input on the form is label-less (placeholder only). Describe exactly what you do next, including anything you would ask the user. Then answer the same question for a coverage-gap run (no argument).",
+      "expected_output": "PR-mode: posts the plan to the conversation as the audit trail — including an Assumptions block that states POM-always (despite flat siblings), the stash-and-restore of the dirty tree, and getByPlaceholder for the label-less input — and continues immediately to Step 5. Silence is consent; it does not wait for a reply, does not enter plan mode, and asks zero questions. Coverage-gap: presents the plan and stops for explicit user approval before writing any code.",
+      "assertions": [
+        "True positive: in PR-mode, posts the plan and proceeds immediately to Step 5 without waiting for a reply (notify-and-continue; silence is consent)",
+        "Resolves POM-vs-flat, dirty-tree, and selector-strategy side-questions from the contract as stated Assumptions in the plan — asks the user none of them",
+        "The plan includes an Assumptions block naming the contract-resolved decisions",
+        "False-positive guard: in coverage-gap mode it still STOPS at the approval gate and writes no code until explicit approval — notify-and-continue does not leak into coverage-gap mode"
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Step 9 lands the proof: the report is structurally invalid without the tail lines",
+      "prompt": "A PR-mode run (PR #88, branch feat/consent-banner) has finished Step 8: tests pass hermetically, the film passed its QA gate, and watch.html is published to R2. State exactly what remains before you may emit the Complete report, then produce the report skeleton. Separately: same question for a run whose argument was the prose 'prove this change' on a branch that has no PR.",
+      "expected_output": "Step 9 remains: hygiene sweep (revert auto-imports.d.ts-style codegen churn, delete the throwaway film spec, no specs/*.plan.md litter (a _recon.spec.ts or other non-deliverable probe spec in the diff is a Step 3 violation — deleted on sight)), commit the spec + POM to the PR branch, push, and post the watch link as a PR comment via gh pr comment — all without asking. The report skeleton includes ACs, Tests (hermetic + carve-outs), Film QA, Watch link, Committed, Pushed, and PR comment lines; a report missing any of them is structurally invalid in PR-mode. For the prose-arg run with no PR: create one (push the branch, gh pr create with the AC table as body) and post the comment there.",
+      "assertions": [
+        "True positive: commits the spec + POM to the PR branch, pushes, and posts the watch link as a PR comment BEFORE emitting the Complete report — without asking 'want me to commit?'",
+        "The report skeleton contains the Committed, Pushed, and PR comment lines (plus Film QA and Watch link) and treats a report missing any of them as structurally invalid",
+        "True positive: with a prose argument and no existing PR, creates one (fresh branch push + gh pr create) and posts the watch-link comment there",
+        "False-positive guard: the hygiene sweep excludes throwaway artifacts from the commit — the film spec is deleted, not committed, and any stray non-deliverable probe spec is deleted as a Step 3 violation"
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Hermetic audit: undeclared live call fails the run; a declared carve-out passes",
+      "prompt": "Step 7 hermetic audit of two PR-mode runs. Run A: the spec passes, but the request log shows a POST to https://staging.example.com/api/v2/documents that no page.route answered, and the spec header declares no carve-outs. Run B: a different spec's header carries '// CARVE-OUT: GET /api/v2/exchange-rates — live round-trip IS the AC — restore: read-only' and its log shows exactly that GET (and nothing else) going live. State the verdict for each run and what happens next.",
+      "expected_output": "Run A FAILS despite the green spec: an undeclared live call is a run failure — mock the endpoint (or declare a carve-out only if the real round-trip is genuinely the AC) and re-run; additionally the live POST is a WRITE to a shared staging tenant, which must be called out as data pollution. Run B passes: the declared read-only carve-out is sanctioned, and the report's Tests line carries 'hermetic (carve-outs: GET /api/v2/exchange-rates)'.",
+      "assertions": [
+        "True positive: fails Run A on the undeclared live call even though the spec itself passed — undeclared live traffic is a run-failure, not a footnote",
+        "Flags Run A's staging POST as a write to a shared tenant (data pollution), not merely a determinism concern",
+        "False-positive guard: does NOT fail Run B — a declared, read-only carve-out is sanctioned and the run proceeds",
+        "Carries the verdict into the report's Tests line as hermetic (carve-outs: none | <list>)"
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Refilm budget: a twice-failing chapter is dropped and demoted; committed coverage never shrinks for the film",
+      "prompt": "Step 8 of a PR-mode run. The film spec walks 5 approved scenarios in one browser context. Chapter 4 asserts a German (de) label; the committed test for that scenario passed, but Playwright marked it flaky in the Step 7 run. The first film run fails on chapter 4 (the de label never appears — earlier /en chapters persisted an en locale cookie and user profile into the shared context). You clear cookies and re-film; chapter 4 fails again. State exactly what you do next, what happens to the committed spec, and what the Step 9 report says.",
+      "expected_output": "Chapter 4 was flaky in Step 7, so under the flake screen it should not have been filmed unmodified at all. After the second film failure the refilm budget (1 per failing chapter) is exhausted: drop chapter 4 from the film, re-film the remaining 4 scenarios (passing the reduced SCENARIOS=4 to record.mjs), and demote the scenario's AC to 'unproven — gated: nondeterministic (<cause>)' on the Step 9 ACs line. The committed spec KEEPS the scenario while it passes its own fresh-context test — committed coverage never shrinks to make a film green; deleting it is justified only by committed-run evidence (Step 7 flake handling), never by film-run behavior. The shared-context state leak (locale cookie + persisted profile) is a film-setup failure mode the committed fresh-context tests never had; the sanctioned fix is an explicit chapter-opening state reset (clear cookies + storage, re-auth), which counts as the one budgeted refilm attempt. No third diagnose+refilm cycle.",
+      "assertions": [
+        "True positive: after the second failure of the same chapter, drops the chapter and demotes the AC to 'unproven — gated' instead of attempting a third fix+refilm cycle",
+        "Names the flake screen: a scenario Playwright marked flaky in Step 7 does not get a film chapter until it passes clean",
+        "Recognizes the shared-context state leak (locale cookie / persisted user profile from earlier chapters) as a film-only failure mode and names the explicit chapter-opening state reset as the fix",
+        "Passes the reduced SCENARIOS count to record.mjs so the chapter floor matches the demoted film — the demotion is named in the report, not silently absorbed",
+        "False-positive guard: does NOT delete the still-passing scenario from the committed spec because of film behavior — committed coverage shrinks only on committed-run evidence",
+        "Step 9 report lists the demoted scenario on the ACs line as unproven — gated with the cause"
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep",
+      "prompt": "A project has a package.json with a `dev` script (Nuxt on port 3100) but NO `@playwright/test` in its dependencies and NO playwright.config file — Step 1 detected `hasTestRunner: false`. The user asks: 'Add a Playwright E2E test for the onboarding form on the home page (/).' Describe your Step 5b setup plan and how you will reach a green Step 7 run. Do not write the spec yet.",
+      "expected_output": "Should recognize the project as greenfield (hasTestRunner: false) and bootstrap the runner in Step 5b before Step 6/7: add `@playwright/test` as a PINNED dev dependency via the project's package manager (pnpm add -D / npm i -D / yarn add -D), run `npx playwright install chromium` once, and author a minimal playwright.config with testDir, baseURL from the resolved dev URL, and a webServer block running the project's own `dev` command. Should add an e2e tsconfig for the TypeScript typecheck. Should NOT interpret the 'never auto-install Playwright' rule as a reason to stop or to skip installing — that rule scopes to projects that already pin a runner (guarding version skew), not to greenfield. Should NOT npx-float a runner version; the install is a pinned dev-dep, and every later step still uses `--no-install`.",
+      "assertions": [
+        "Detects the project as greenfield via hasTestRunner: false",
+        "True positive: Step 5b installs @playwright/test as a pinned dev dependency (pnpm/npm/yarn add -D), not via an npx-floated runner",
+        "Installs the browser binary once (npx playwright install chromium)",
+        "Authors a minimal playwright.config with testDir, baseURL, and a webServer block running the project's dev command",
+        "Adds an e2e tsconfig so Step 7 tsc --noEmit has a target",
+        "Does NOT treat 'never auto-install Playwright' as a blocker or stop-and-ask on a greenfield project",
+        "False-positive guard: does NOT npx-float or reinstall a different Playwright version; after the pinned install, later steps still use --no-install",
+        "Sequences the bootstrap before Step 6 (e2e-reviewer) and Step 7 (test run), which cannot run without a runner"
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Legible stop report: bring-up failure names verbatim evidence and produces nothing",
+      "prompt": "You are running in target mode to cover the home page (/) of a Nuxt app. You start the dev server, but the readiness gate (preflight.mjs) STOPs (exit 3): the server never binds because nuxt.config.ts imports a file that does not exist ('Cannot find module ./runtime-flags.generated') and the process exits code 1. A spec from an earlier run already exists at e2e/onboarding.spec.ts. What do you do, and what does your report contain?",
+      "expected_output": "Should STOP at Step 3 and report the app cannot start — not generate a spec, not fabricate a pass, not edit the app's own source (nuxt.config) to force a boot, and NOT run the pre-existing e2e/onboarding.spec.ts against the dead server and report it green. The stop report should contain: a one-line verdict naming the Step, the target, the bring-up steps attempted, the VERBATIM dev-server error and preflight STOP, an explicit statement that no spec/POM was produced (and that the pre-existing spec was not run or reported green), and how to unblock (restore the missing file or remove the import, then re-run). Should NOT emit the Step 9 completion tail (Watch link / Committed / Pushed).",
+      "assertions": [
+        "STOPs at Step 3 (bring-up) rather than generating a spec",
+        "Attributes the failure to the app not booting, tracing it to the nuxt.config import of a missing module",
+        "Quotes the blocker VERBATIM (the 'Cannot find module' error and the preflight STOP), not a paraphrase",
+        "States explicitly that nothing was produced — no spec, no POM",
+        "False-positive guard: does NOT run the pre-existing e2e/onboarding.spec.ts against the dead server and does NOT report it as green",
+        "Does NOT edit the app's own source/config to force a boot (application-source change is out of test-authoring scope)",
+        "Does NOT emit the Step 9 completion tail (Watch link / Committed / Pushed) for a stop",
+        "Gives a concrete unblock action and offers to re-run"
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Server-set login cookie: obtain it via API-login, do not hand-author the cookie value",
+      "prompt": "An app gates /settings behind middleware that redirects to /login unless a `ptg_auth` cookie is present. The cookie is minted only by POST /api/login, which validates the password (discoverable in source as 'secret'). You need an authenticated session to test the settings page. How do you seed auth in the generated spec?",
+      "expected_output": "Should obtain the session by calling the real login endpoint (POST /api/login with the discovered credential) and seeding the cookie it RETURNS (read Set-Cookie, pass that exact name+value to context.addCookies) — or drive the app's own login. Should NOT hand-author a guessed cookie literal like context.addCookies([{name:'ptg_auth', value:'1'}]) without calling login: that passes only because this backend does not validate the token, and against a real signed/rotating session cookie it would silently bypass auth or fail. Since the credential is discoverable and the login endpoint is reachable, the API-login path is required; hand-seeding a static literal is sanctioned only for a documented static dev flag with no login path.",
+      "assertions": [
+        "Calls the real login endpoint (POST /api/login) with the discovered credential to obtain the session",
+        "Seeds the cookie the login RETURNS (Set-Cookie), not a hand-authored name/value pair",
+        "False-positive guard: does NOT hand-author a guessed cookie literal (e.g. addCookies ptg_auth=1) when a login endpoint and credential are available",
+        "Explains that a guessed literal only works against a non-validating backend and would bypass or fail a real signed session cookie",
+        "Recreates the session from code (no committed session file), consistent with the auth rules",
+        "Reserves hand-seeding a static literal for a documented static dev flag with no login path"
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Chapter offsets anchor when the chapter starts on screen; bunched offsets are a QA-gate rejection",
+      "prompt": "You are authoring the throwaway film spec for a 4-scenario proof. Where in the code does each chapters.json entry get its `t` offset, and what happens at the record.mjs gate if all four offsets end up within a second of each other?",
+      "expected_output": "Each chapter's `t` is captured the moment that chapter starts on screen — inside the chapter helper's test.step callback, before the chapter's first action/assertion, as (Date.now() - t0) / 1000 with t0 taken at test start. Offsets are NEVER collected in a loop after the run: post-hoc stamping bunches every offset at one timestamp (the :0:11 incident) and produces a chapter rail whose buttons all seek to the same frame. record.mjs rejects a chapter list of 2+ entries whose offsets all fall within 3s of each other with exit 5 naming the `bunched chapters` gate — the film must be re-shot with per-chapter anchoring; it never publishes.",
+      "assertions": [
+        "Captures each chapter's t inside the chapter (before its first action/assertion), not after the run",
+        "States record.mjs exits non-zero (exit 5, bunched-chapters gate) when all offsets collapse within the 3s window",
+        "Names the failure mode: a bunched rail seeks every button to the same frame (the :0:11 class)",
+        "False-positive guard: does NOT flag a healthy spread list (e.g. offsets 0/5/10 on a 14s film) as bunched",
+        "Does NOT publish past the gate — the fix is re-anchoring and re-filming, not editing chapters.json"
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden",
+      "prompt": "During Step 3 recon on a running app you need to know: what the /settings page's form controls are called, and which endpoints it hits on load. A teammate suggests writing a quick _recon.spec.ts that logs page.locator('body').ariaSnapshot() and page.on('request') and running it through npx playwright test. What do you do instead, and what happens if the environment has no browser at all?",
+      "expected_output": "Refuse the throwaway spec: non-deliverable spec probes are forbidden — the test runner is not a REPL. Use probe.mjs: start it once from the app root in a background shell (BASE_URL set; it reuses ONE persistent browser context via the project's pinned Playwright and self-closes on idle), then send one batched round trip — e.g. [{\"cmd\":\"navigate\",\"url\":\"/settings\"},{\"cmd\":\"snapshot\"},{\"cmd\":\"network-summary\"}] — which answers both questions with compact aria and network summaries, never raw DOM dumps; close it when recon is done. In a browserless environment the probe refuses cleanly (exit 2) and recon falls back to source reading + the heal loop — never install a floated Playwright to force a browser open. The heal loop's bounds are unchanged: rerun only the failing test, full suite once at the end.",
+      "assertions": [
+        "True positive: refuses to create _recon.spec.ts (or any spec file that is not a deliverable) for the recon question — the test runner is not a REPL",
+        "Uses probe.mjs with ONE persistent browser (start once, batched send, explicit close or idle self-close) instead of booting Playwright per question",
+        "Answers via compact summaries: snapshot (aria) and network-summary — never a raw DOM dump pasted into the response",
+        "States the browserless behavior: clean refusal (exit 2), recon falls back to source reading + the heal loop; does NOT npx-float a Playwright install",
+        "False-positive guard: does NOT flag Step 8's film spec as a forbidden probe — it remains the pipeline's one sanctioned throwaway spec",
+        "False-positive guard: keeps the heal-loop bounds unchanged (rerun only the failing test, full suite once) — the probe replaces recon probes, not the Step 7 validator"
+      ]
+    },
+    {
+      "id": 16,
+      "title": "POM inventory + extend-existing-POM on route match (duplicate needs stated justification)",
+      "prompt": "You are covering the /checkout route. Step 1's project profile recorded pomInventory: [CheckoutPage → /checkout, /checkout/confirmation] — an existing CheckoutPage in tests/pages/checkout-page.ts already covers the checkout route, but currently only its confirmation flow has a spec. You now need locators for the checkout form's coupon field and submit button. Separately, you are also asked to cover a brand-new /profile route that has no Page Object anywhere. Describe how you structure the POM work for each, per Step 1's pomInventory and Step 5.",
+      "expected_output": "For /checkout: because pomInventory already maps CheckoutPage to /checkout, EXTEND the existing CheckoutPage class (add the coupon-field and submit-button locators/methods there) — do NOT scaffold a second Page Object for the same route. A duplicate POM for a route already in the inventory is allowed only with a stated justification line in the Step 4 Assumptions block (e.g. the existing POM is a different app area sharing the path). For /profile: it has no POM in the inventory, so a fresh ProfilePage is created — extend-don't-duplicate does not mean refusing to author a POM for an uncovered route.",
+      "assertions": [
+        "True positive: extends the existing CheckoutPage (route already in pomInventory) instead of scaffolding a second POM for /checkout",
+        "Requires a stated justification line in the Step 4 Assumptions block before shipping any duplicate POM for a route already covered in pomInventory",
+        "References the Step 1 pomInventory as the route→PageObject source it matches against",
+        "False-positive guard: still creates a fresh ProfilePage for /profile — an uncovered route with no POM in the inventory is NOT forced into an existing class and is not left without a POM"
+      ]
+    },
+    {
+      "id": 17,
+      "title": "PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header",
+      "prompt": "A PR-mode run reached Step 6. The Step 2 AC table has one row: AC = 'User can filter people by status'. The generated spec has two test blocks: test('filters people by status', ...) with no leading comment, and test('shows an inline error for an invalid status', ...) headed by the comment `// PROVES: validates status input`. The generated PeopleListPage POM file and the throwaway film spec have no such comment. State the Step 6 PROVES-header verdict for each file/test and what must happen before Step 7.",
+      "expected_output": "The first test blocks Step 7: it has no `// PROVES:` header and must gain one quoting its AC verbatim (`// PROVES: User can filter people by status`). The second test also blocks Step 7: `// PROVES: validates status input` PARAPHRASES rather than quoting an AC verbatim from the Step 2 table — it must be corrected to the exact AC wording. Both are fixed, then the run proceeds to Step 7. The PeopleListPage POM file and the throwaway film spec are EXEMPT — they carry no ACs and need no PROVES header; their lack of one is not a finding.",
+      "assertions": [
+        "True positive: blocks Step 7 for the test with no // PROVES: header until a verbatim-AC header is added",
+        "True positive: rejects the paraphrased `// PROVES: validates status input` because the header must quote the acceptance criterion word-for-word from the Step 2 AC table",
+        "False-positive guard: does NOT demand a PROVES header on the POM file or on the Step 8 throwaway film spec — those are exempt and their absence is not flagged"
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Target mode films + publishes by default when HOSTING_READY=yes; coverage-gap stays opt-in",
+      "prompt": "Two runs finish a clean Step 7. Run A is target mode (invoked with the route /orders); the Step 3 hosting-readiness check printed HOSTING_READY=yes. Run B is coverage-gap mode (invoked with no argument, user approved a plan for /orders); the same check printed HOSTING_READY=yes. Neither user typed 'host a watch link' or 'give me a video'. State whether each run proceeds to Step 8 (film + publish) and ends at a watch link.",
+      "expected_output": "Run A (target mode, HOSTING_READY=yes) films + publishes by DEFAULT — it proceeds to Step 8, produces watch.html, and its Step 9 report carries a Watch link and Film QA line like a PR-mode run; no explicit request is needed. Run B (coverage-gap mode) stays OPT-IN — even with HOSTING_READY=yes it does NOT auto-film; Step 8 runs only if the user asked for a watch link/video, so this run ends at the Step 9 report with no Watch link. (Had the target-mode probe reported HOSTING_READY=no, Run A would skip gracefully with the probe output on the Watch link: skipped line, never failing the run.)",
+      "assertions": [
+        "True positive: Run A (target mode, HOSTING_READY=yes) proceeds to Step 8 and ends at a watch link by default without an explicit film request",
+        "False-positive guard: Run B (coverage-gap mode) does NOT auto-film despite HOSTING_READY=yes — coverage-gap stays opt-in and films only on explicit request",
+        "Does not fail or abort a target-mode run when HOSTING_READY=no — it skips gracefully with the probe output on the Watch link: skipped line"
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Token diet in the fix/film loops: no inter-tool narration, spec written once — audit trail unaffected",
+      "prompt": "You are inside Step 7's ≤3-attempt fix loop (a selector healed once, one rerun pending) and about to enter Step 8's film loop. Describe how you run the tool calls and how you produce the spec, and confirm what output you still write.",
+      "expected_output": "Inside the fix loop and the Step 8 film loop, run tool calls back-to-back with NO prose narration between them — the diagnosis lands in the fix, not a play-by-play. Write the spec ONCE from the Step 1 pomInventory and the plan's Locator Mapping Table; do not scaffold a throwaway skeleton and then rewrite it. This trims the loop only — the Step 4 plan post, its Assumptions block, and the Step 9 completion report are STILL written in full; the token diet never suppresses the audit trail.",
+      "assertions": [
+        "True positive: runs tool calls back-to-back inside the fix and film loops without narrating between them",
+        "True positive: writes the spec once from the pomInventory + Locator Mapping Table rather than scaffolding a skeleton and rewriting it",
+        "False-positive guard: still writes the Step 4 plan post, the Assumptions block, and the Step 9 report in full — the diet trims loop narration, not the required audit trail"
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Step 0 recommends a fresh session on a heavy context but never auto-backgrounds",
+      "prompt": "playwright-test-generator is invoked with 'prove PR #55' partway through a long, unrelated session that has already spent a large amount of context on other work. What do you do at Step 0, and what happens if the user declines or does not answer the recommendation?",
+      "expected_output": "At Step 0, before diving into the pipeline, recommend the user start a fresh session or dispatch this run to a background agent — the pipeline is long and does better with a clean context. If they decline or do not answer, continue the run INLINE in the current session. Never self-background the run or spawn a background agent on your own; the recommendation is offered once and the user decides.",
+      "assertions": [
+        "True positive: recommends a fresh session or a background agent when invoked into a heavy, unrelated session",
+        "Continues the run inline in the current session when the user declines or does not answer",
+        "False-positive guard: never auto-backgrounds the run or spawns a background agent on its own — the choice is the user's"
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Clip fidelity: the full bundle (size, warm lead, held payoff) on a project that declares no viewport",
+      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-flat/. The Playwright config declares no explicit `viewport:` key anywhere and there is no proof config in the repo yet. Generate the proof spec and describe the Step 7 proof run: the proof config, the commands, and anything you do before filming. State the effective viewport you resolved and where the pin lives.",
+      "expected_output": "Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should write `playwright.proof.config.ts` next to the project config as a STATIC file — `video: { mode: 'on', size }` with size read from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, no per-run literal substituted into the file — and pass `PW_PROVE_W=1600 PW_PROVE_H=900` on the proof command so the clip is never left at Playwright's 800x800-box downscale. Should warm the route under proof with a single request immediately before the proof run. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell placed AFTER the terminal assertion. Should not edit the committed playwright.config, should not pin the viewport only in the proof config, and should stage (not delete) the proof config in Step 8.",
+      "files": [
+        "evals/files/project-flat/playwright.config.ts",
+        "evals/files/project-flat/tests/login.spec.ts"
+      ],
+      "assertions": [
+        "Resolves the effective viewport as a scaffold default (config declares no explicit viewport key)",
+        "Pins viewport 1600x900 in the generated spec via test.use()",
+        "Places the viewport pin in the committed spec, not only in the proof config",
+        "Does not edit the project's committed playwright.config.ts",
+        "Writes the proof config as `playwright.proof.config.ts` next to the project config, and stages it rather than deleting it in Step 8 hygiene",
+        "Keeps the proof config static — recording size comes from PW_PROVE_W/PW_PROVE_H with a 1600x900 default, not a literal substituted per run",
+        "Passes the effective viewport on the proof command as PW_PROVE_W=1600 PW_PROVE_H=900",
+        "Uses the object form `video: { mode: 'on', size: ... }` rather than bare `video: 'on'`",
+        "Warms the route under proof with one request before the proof run",
+        "Sets PW_PROVE_CLIP=1 on the Step 7 proof run",
+        "Generates a dwell gated on process.env.PW_PROVE_CLIP",
+        "Places the dwell after the terminal assertion, not before or between assertions",
+        "Puts a `// JUSTIFIED:` comment on the line above the dwell",
+        "Does not reintroduce a second run, a film step, a contact sheet, or a hand-built watch page to make the clip usable",
+        "False-positive guard: proposes no ffmpeg in Step 7 and no re-encode, trim or transcode anywhere -- the only ffmpeg on this path is Step 8's stream-copy concatenation, which decodes no frame and so cannot repair a clip recorded at the wrong viewport"
+      ]
+    },
+    {
+      "id": 22,
+      "title": "Clip fidelity guard: respect a deliberate project viewport",
+      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-viewport/, proving a change to the /reports surface. Generate the proof spec and the Step 7 proof run. State the effective viewport you resolved and which branch of the rule produced it.",
+      "expected_output": "Should read the explicit `viewport: { width: 1440, height: 900 }` key in the chromium project's `use` block, classify it as a DELIBERATE project decision, and respect it. Must NOT pin 1600x900 and must not emit a `test.use({ viewport: ... })` override in the spec. The recording size must match the project's own viewport, passed as `PW_PROVE_W=1440 PW_PROVE_H=900` on the proof command — the proof config file itself stays static with its 1600x900 default untouched, since the size is the one per-run value and it travels on the command line. The dwell, route warm and PW_PROVE_CLIP gating are unchanged by this branch.",
+      "files": [
+        "evals/files/project-viewport/playwright.config.ts",
+        "evals/files/project-viewport/src/routes.ts"
+      ],
+      "assertions": [
+        "Identifies the explicit `viewport:` key at project level in playwright.config.ts",
+        "Classifies an explicit viewport key as a deliberate project decision",
+        "Does NOT pin 1600x900",
+        "Does NOT emit a test.use({ viewport: ... }) override in the generated spec",
+        "Passes PW_PROVE_W=1440 PW_PROVE_H=900 on the proof command, matching the project's viewport",
+        "False-positive guard: does NOT hardcode 1440x900 into playwright.proof.config.ts — the file stays static and project-agnostic",
+        "Still warms the route before the proof run",
+        "Still generates the JUSTIFIED, PW_PROVE_CLIP-gated dwell after the terminal assertion",
+        "Does not edit the project's committed playwright.config.ts"
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport",
+      "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-pom/, proving a change to the /checkout surface. Read its Playwright config and generate the proof spec plus the Step 7 proof run. Report the Assumptions block line for the effective viewport.",
+      "expected_output": "The chromium project spreads `...devices[\"Desktop Chrome\"]` (which carries 1280x720) and the config has no explicit `viewport:` key anywhere. The agent must resolve this to a `pinned: 1600x900` verdict rather than `deliberate: 1280x720` — a desktop device-descriptor viewport is scaffold boilerplate, not a project decision. Externally: the generated spec must contain `test.use({ viewport: { width: 1600, height: 900 } })`, and the proof run must carry `PW_PROVE_W=1600 PW_PROVE_H=900`. Failing this branch is the regression that would silently nullify the legibility fix on nearly every real project, since almost every scaffolded config spreads a descriptor.",
+      "files": [
+        "evals/files/project-pom/playwright.config.ts",
+        "evals/files/project-pom/tests/auth.spec.ts"
+      ],
+      "assertions": [
+        "Generated spec contains test.use({ viewport: { width: 1600, height: 900 } })",
+        "Proof run passes PW_PROVE_W=1600 PW_PROVE_H=900",
+        "Assumptions block records a `pinned:` verdict, not a `deliberate:` one",
+        "Does not resolve the effective viewport to the descriptor's 1280x720",
+        "Resolves the descriptor without being told it carries 1280x720",
+        "Does not edit the project's committed playwright.config.ts",
+        "Generated spec still carries the JUSTIFIED, PW_PROVE_CLIP-gated dwell after the terminal assertion"
+      ]
+    },
+    {
+      "id": 24,
+      "title": "Proof config is reused, not rewritten, when the repo already has one",
+      "prompt": "You are running pw-prove in PR-mode against a project whose Playwright config lives at e2e/playwright.config.ts. The repo already contains a committed e2e/playwright.proof.config.ts from a previous pw-prove run — it spreads the project config, sets `video: { mode: 'on', size }` with size from PW_PROVE_W/PW_PROVE_H (default 1600x900) and `trace: 'on'`. This run's effective viewport resolves to a pinned 1600x900. Describe exactly what you do with the proof config in Step 7 and in Step 8 hygiene.",
+      "expected_output": "Should detect the existing `e2e/playwright.proof.config.ts` and reuse it verbatim — no rewrite, no regeneration, no 'refresh', and no diff on that file in the run's commit. Should run the proof through it with `--config e2e/playwright.proof.config.ts` and `PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900` carrying the effective viewport. Step 8 hygiene must NOT delete it — deletion applies only to `test-results/`/`playwright-report/` litter and any legacy `.pw-prove.proof.config.*` throwaway. The completion report's Generated block omits the proof config line, since this run did not create it.",
+      "files": [],
+      "assertions": [
+        "Reuses the existing e2e/playwright.proof.config.ts untouched",
+        "Does not rewrite, regenerate, or substitute a per-run viewport literal into the existing proof config",
+        "Passes --config e2e/playwright.proof.config.ts on the Step 7 proof run",
+        "Passes the effective viewport as PW_PROVE_W/PW_PROVE_H on the proof command",
+        "False-positive guard: Step 8 hygiene does NOT delete playwright.proof.config.ts — only test-results/, playwright-report/, and legacy .pw-prove.proof.config.* files",
+        "Omits the proof config from the completion report's Generated block because this run did not create it",
+        "Does not edit the project's own playwright.config.ts"
+      ]
+    },
+    {
+      "id": 25,
+      "title": "Step 8 delivers ONE chaptered Clips recording, not N bare clip links",
+      "prompt": "You are finishing a pw-prove PR-mode run on PR #2974. The Step 7 proof run passed 5 scenarios and left 5 webms under test-results/. The Step 3 PROBE_HOSTING check was green (PUBLISH_READY=yes, VIDEO_TOOLING=yes). Describe Step 8 item 1 exactly: the commands you run, what gets published, and what the PR comment and the completion report look like.",
+      "expected_output": "Should build a manifest (title, prUrl, spec, mutation, and a `clips[]` array in AC ORDER, each entry naming the AC verbatim, its scenario title and its webm path) and publish it with ONE `publish-proof.mjs` call whose ONLY argument is the manifest path -- no project folder, no key prefix, because Clips assigns the identifier. The script probes each clip, joins them by stream copy into one recording and turns each AC into a chapter at its cumulative measured offset. BEARER/SCAN must be set on that call. The share URL is read from the `PWPROVE_URL` marker line. The PR comment leads with the single share link and its AC table rows deep-link `<share URL>?t=<seconds>` timestamps. The completion report carries a `Proof page:` line with the share URL and per-AC timestamps -- not five separate .webm URLs.",
+      "files": [],
+      "assertions": [
+        "Publishes with a single publish-proof.mjs call over a manifest, not one call per clip",
+        "Passes the manifest path as the only argument -- no per-project folder and no key prefix, since Clips assigns the identifier",
+        "Orders clips[] by AC, the order a reviewer watches, which is chapter order",
+        "Takes the share URL from the PWPROVE_URL marker line, not from stdout line 1",
+        "Sets BEARER and SCAN on the publish call",
+        "PR comment leads with ONE share link; per-AC rows are ?t=<seconds> timestamp deep links inside the same recording",
+        "Completion report has a `Proof page:` line carrying the share URL, not `Proof clips:` with N bare webm URLs",
+        "Requires the clips to be concatenated by ffmpeg stream copy into ONE recording with one chapter per AC — and stream copy only: no re-encode, no trim, no second run, no contact sheet, no film step",
+        "States that a gate tripping on any clip aborts the whole recording rather than publishing a partial one"
+      ]
+    },
+    {
+      "id": 26,
+      "title": "Every scenario times out on its first navigation — a saturated dev server, not a broken spec",
+      "prompt": "You are in Step 7 of a pw-prove PR-mode run against a Nuxt app served by `nuxi dev`. The project's playwright.config.ts has `workers: process.env.CI ? 1 : undefined`. You ran the 5-scenario proof spec and after 6 minutes ALL FIVE failed with `page.goto: Test timeout of 180000ms exceeded` at the first navigation of each test. Diagnose and state your next command.",
+      "expected_output": "Should recognize this signature — every test timing out at its first navigation — as dev-server saturation, not a spec defect: with no CI env var the config leaves workers undefined, so Playwright fans N workers at a dev server that compiles routes on demand. Should confirm the origin is alive with a quick curl, then re-run the SAME spec unchanged with `--workers=1`. Must NOT heal locators, raise the test timeout, add waits, or count this as one of the 3 auto-fix attempts against the spec.",
+      "files": [],
+      "assertions": [
+        "Diagnoses dev-server saturation from the all-tests-timeout-at-first-goto signature",
+        "Re-runs with --workers=1 rather than editing the spec",
+        "Checks the origin is alive (curl) before re-running",
+        "False-positive guard: does NOT heal locators or raise timeouts in response to this failure",
+        "False-positive guard: does not pin workers by editing the committed proof config or the project's playwright.config"
+      ]
+    },
+    {
+      "id": 27,
+      "title": "The mutation check must not overwrite the proof clips",
+      "prompt": "You are running the Step 7 mutation check in PR-mode. The proof run has passed and test-results/ holds 5 webm clips, one per scenario. Give the exact mutation-run command and the checks you perform after reverting the source.",
+      "expected_output": "The mutation run must send its artifacts elsewhere — `--output=/tmp/pw-prove-mutation` — and must not set PW_PROVE_CLIP, so the passing run's clips in test-results/ survive intact. It should target the single guarding test with `-g`, keep `--workers=1`, and after `git checkout --` verify BOTH that the tree matches the pre-state (diff against /tmp/pre.status and /tmp/pre.patch via process substitution) AND that the clip count in test-results/ still equals the scenario count. Should state that publishing a clip recorded against mutated source would be false evidence.",
+      "files": [],
+      "assertions": [
+        "Passes --output=/tmp/pw-prove-mutation (or another dir outside test-results/) on the mutation run",
+        "Does not set PW_PROVE_CLIP on the mutation run",
+        "Uses -g to run only the guarding test, not the whole spec",
+        "Verifies the tree is unchanged with process substitution on both sides",
+        "Verifies the clip count in test-results/ still matches the scenario count after the revert",
+        "False-positive guard: does not re-run the whole proof spec to regenerate clips when the mutation run was isolated"
+      ]
+    },
+    {
+      "id": 28,
+      "title": "Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser",
+      "prompt": "The Step 7 proof run passed and left traces under test-results/. Perform the hermetic audit on tests/e2e/checkout.spec.ts. The spec mocks the section GET by patching it in flight (`const response = await route.fetch()` then `route.fulfill`), and its header declares one CARVE-OUT for the live auth bootstrap. Show the command and how you reach a verdict.",
+      "expected_output": "Should run `node <skill-base>/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts` rather than writing an ad-hoc node script to parse trace.zip / *.network files. Must pass --spec, and must treat the reported IN-SPEC LIVE ROUND-TRIPS (the route.fetch call sites) as live traffic requiring a declared carve-out, even though those requests appear under MOCKED in the trace — a trace records the browser, not the Playwright process. The verdict is the agent's: every LIVE line and every in-spec round-trip must be named in a CARVE-OUT line, otherwise the run FAILS despite being green.",
+      "files": [],
+      "assertions": [
+        "Invokes scripts/hermetic.mjs instead of writing a throwaway trace parser",
+        "Passes --spec so the route.fetch class is checked",
+        "Treats route.fetch round-trips as live traffic needing a declared carve-out despite appearing MOCKED in the trace",
+        "Matches LIVE entries against the spec's CARVE-OUT header to reach the verdict",
+        "Fails the run on any undeclared live call even though the tests passed",
+        "False-positive guard: does not treat the script's output as the verdict itself"
+      ]
+    },
+    {
+      "id": 29,
+      "title": "An AC already proven by the diff's own unit tests is folded, not silently dropped",
+      "prompt": "PR-mode. The diff changes `composables/customScripts.ts` (adding a pure `buildUpsert()` that trims values, drops empty locales and removes the top-level key when all are empty), the component that calls it, and `tests/unit/customScripts.test.ts` (+51 lines, 23 assertions covering exactly those three behaviors). The PR body lists trimming, dropping empty locales and key removal as separate bullets. Produce the AC table and the scenario list.",
+      "expected_output": "Should read the unit test file in the diff before fixing the scenario list, and recognize that the trim / drop-empty / key-removal matrix is pure-function behavior already proven there. Those ACs should be FOLDED into the single scenario that proves the wiring — the UI reaches buildUpsert and its output is what leaves on the wire — rather than getting one browser scenario each. The folded ACs must still appear as rows in the AC table with `already covered: tests/unit/customScripts.test.ts` in the Proven-by column, and the completion report must list them. Behaviors a unit test cannot see (the request the browser actually sends, DOM state, flag gating, persistence) stay their own scenarios.",
+      "files": [],
+      "assertions": [
+        "Reads the unit test file that ships in the diff before finalizing scenarios",
+        "Folds pure-function ACs into the single wiring scenario instead of one scenario each",
+        "Keeps folded ACs visible as table rows with `already covered: <test file>`",
+        "Keeps the wire-contract assertion (what the browser actually sends) as a browser-layer scenario",
+        "False-positive guard: does not fold an AC that the unit test cannot observe (DOM state, flag gating, the outbound request)",
+        "False-positive guard: does not silently delete a folded AC from the table or the report"
+      ]
+    },
+    {
+      "id": 30,
+      "title": "Publish URL is read from the PWPROVE_URL marker, not stdout line 1",
+      "prompt": "Step 8, the publish prerequisites are ready. Publish the proof recording for a 5-scenario run and capture the URL. The project's .npmrc makes npm print two `npm warn Unknown project config` lines on every npx invocation, and ffmpeg writes its banner to stderr.",
+      "expected_output": "Should capture the URL from the `PWPROVE_URL ` marker line (e.g. `sed -n 's/^PWPROVE_URL //p' | head -n1`), not with a bare `head -n1`, because npm/ffmpeg chatter reaches line 1 as soon as anything merges the streams -- this exact failure cost a real run five URLs and a repeat upload. Should send stderr to a log file and, if the captured URL is empty, distinguish the two cases before acting: exit 0 with a `PWPROVE_PROOF_FILE` marker line means the publish was UNDELIVERED and the kept file should be attached by hand (the run stays alive), while a gate exit (3, 6, 8 or 9) means the artifact is wrong, no file is offered, and the gate must be reported from the log rather than the publish blindly re-run. Step 8's hygiene sweep must leave that kept file alone -- it is the only remaining copy of the evidence, so deleting it destroys the fallback moments after it was created.",
+      "files": [],
+      "assertions": [
+        "Captures the URL via the PWPROVE_URL marker rather than stdout line 1",
+        "Keeps stderr in a log file for gate diagnosis",
+        "On an empty URL, reads the exit code and the log to tell an undelivered publish from a tripped gate instead of immediately re-publishing",
+        "Reads the kept fallback file from the PWPROVE_PROOF_FILE marker line the same way, not from a guessed path",
+        "False-positive guard: does not pipe `2>&1` into a bare `head -n1` to capture the URL",
+        "True positive: exempts the kept $TMPDIR/pw-prove-proof.webm from the Step-8 hygiene sweep when the publish came back undelivered, and says it was attached to the PR by hand",
+        "False-positive guard: does not offer or hunt for a local file after a GATE exit (3/6/8/9) -- a gated artifact is wrong, not merely undelivered, and the script withholds it deliberately"
+      ]
+    },
+    {
+      "id": 31,
+      "title": "The runner's origin is proven reachable before the proof run, not inferred from a healthy localhost",
+      "prompt": "Step 3. You started the dev server on port 4000 and `curl http://localhost:4000` returns 200. `playwright.config.ts` has `webServer: { url: 'http://127.0.0.1:4000', reuseExistingServer: !process.env.CI }` and `use: { baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4000' }`. Confirm bring-up and record the Assumptions line.",
+      "expected_output": "Should curl the exact `http://127.0.0.1:4000` string the config carries, discover it is refused while `localhost:4000` answers, and name the cause: the dev server bound `[::1]` only. Should resolve it by exporting `E2E_BASE_URL=http://localhost:4000` and carrying that variable on every later runner invocation (typecheck, proof run, heal runs, mutation run), and record `Runner origin: http://localhost:4000 via E2E_BASE_URL — config's http://127.0.0.1:4000 refused (loopback mismatch)` in the Assumptions block. Editing the project's config to fix it is out of bounds.",
+      "files": [],
+      "assertions": [
+        "Curls the literal `http://127.0.0.1:4000` from the config, not only the `localhost` form it already verified",
+        "On a refusal, names the loopback-family mismatch (server bound to [::1]) rather than concluding the server is down",
+        "Sets E2E_BASE_URL to the reachable form and states it will prefix EVERY later runner invocation, not just the proof run",
+        "Records a `Runner origin:` line in the Step-4 Assumptions block",
+        "False-positive guard: does not edit webServer.url or use.baseURL in the project's playwright.config.ts"
+      ]
+    },
+    {
+      "id": 32,
+      "title": "A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec",
+      "prompt": "Step 7. The proof run exits with `Error: Timed out waiting 120000ms from config.webServer.` and the report shows 0 tests run, 0 clips. The dev server you started is still logging requests and answers `curl http://localhost:4000` with 200.",
+      "expected_output": "Should read the failure as Playwright never reaching `webServer.url` — it therefore tried to boot a second server and timed out — rather than as a slow app or a defective spec. Zero tests run is the tell: a broken spec still runs. Should re-dial the config's literal URL, then re-run with the Step-3 Runner-origin env var. Should not raise the webServer timeout, add spec timeouts, or add retries, and should not confuse this with the worker-saturation signature where every test times out on its first `page.goto` (that one is fixed with `--workers=1`).",
+      "files": [],
+      "assertions": [
+        "Identifies that Playwright could not reach webServer.url and tried to boot a duplicate server",
+        "Re-dials the config's literal URL to confirm, rather than raising the webServer timeout",
+        "Carries the Runner-origin env var on the retried invocation",
+        "False-positive guard: does not add timeouts to the spec, does not add retries, and does not treat this as a locator or assertion failure",
+        "False-positive guard: does not confuse it with the every-test-times-out-on-first-goto signature (that one is worker saturation and is fixed with --workers=1)"
+      ]
+    },
+    {
+      "id": 33,
+      "title": "A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks",
+      "prompt": "Step 3 ran the probe with RECORD_HAR set and the batches answered normally. In Step 5 you are about to write the spec's network determinism. `ls tests/e2e/<feature>.api.har` shows no such file.",
+      "expected_output": "Should stop before writing `routeFromHAR` against a file that does not exist — a spec replaying a missing HAR aborts every call under `notFound: 'abort'`, which reads as a broken surface. Should check the probe's close output, which reports either the written path with a byte count or a warning that no HAR landed. Should then either re-record the pass or state the deviation explicitly (`no api.har — <reason>`) in the Assumptions block and the completion report, and hand-mock only what the scenario needs. A missing HAR is never evidence that the surface makes no API calls.",
+      "files": [],
+      "assertions": [
+        "Notices the missing HAR before writing `routeFromHAR` against it",
+        "Does not commit a spec that replays a HAR file that does not exist",
+        "Either re-records with the probe or states the no-HAR deviation explicitly in the plan's Assumptions block and in the completion report",
+        "Reads the probe's close output for the RECORD_HAR verdict (written path + byte count, or the warning) instead of assuming the recon was clean",
+        "False-positive guard: does not treat an absent HAR as evidence that the surface makes no API calls"
+      ]
+    }
+  ]
+}
