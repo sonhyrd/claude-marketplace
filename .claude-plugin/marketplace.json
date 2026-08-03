@@ -1274,11 +1274,7 @@
         "test-review",
         "verification"
       ],
-      "strict": false,
-      "skills": [
-        "./skills/pw-prove",
-        "./skills/e2e-reviewer"
-      ]
+      "strict": false
     },
     {
       "name": "sss",
