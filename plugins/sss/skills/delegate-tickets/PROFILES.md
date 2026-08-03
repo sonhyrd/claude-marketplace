@@ -111,6 +111,42 @@ Matched by `git remote get-url origin` — the profile whose **Remote** is a sub
   - Don't `pkill` on `agent-native dev` — the pattern matches the user's own long-running stack.
   - **Worker shells may have no outbound network.** A failed request to an external host proves nothing about that host. `ask` the coordinator to probe rather than concluding a service is down.
 
+## paul-agent-native (Agent Native fork for paul-dispatch-app)
+
+- **Remote**: `hyrdrocks/paul-agent-native` — a clean fork of `BuilderIO/agent-native` at core `0.133.3`, created 2026-08-03 for the vault-lease work. **Distinct from `sonhyrd/agent-native`** (28 commits of Cloudflare work, ADRs `0002`–`0005`); this fork deliberately does not build on that one, so its `docs/adr/` is empty and the next free ADR number is `0001`.
+- **Tickets live on `sonhyrd/paul-dispatch-app`, NOT on this fork and NOT on origin.** Every `gh issue` call must carry `--repo sonhyrd/paul-dispatch-app`; a bare `gh issue view 12` resolves against BuilderIO upstream and returns an unrelated issue. The tickets are deliberately not mirrored here: `paul-dispatch-app` is private, this fork is public, and the vault tickets describe unpatched weaknesses in BuilderIO's shipped product. **Do not recreate them here.**
+- **Branch prefix**: `sss/`
+- **Setup**: `pnpm install --ignore-scripts`, **not** a bare `pnpm install`. This machine has no C toolchain — `make` and `g++` are both absent (verified 2026-08-03) — so `node-pty`'s gyp build fails, aborts the whole install, leaves root bins unlinked, and every later `prepack` dies with `tsx: not found`. Nothing in a core or dispatch build needs the native binary, so `--ignore-scripts` is sufficient.
+- **Build order matters and `--ignore-scripts` breaks it.** `packages/core` imports `@agent-native/toolkit` subpaths that resolve to toolkit's `dist`, which no longer gets built for you. Build toolkit before core or you get a wall of `TS2307: Cannot find module '@agent-native/toolkit/…'` — a stale-artifact failure wearing the shape of missing code. Same trap as the `agent-native` profile's stale-`dist` note, reached by a different route.
+- **Post-merge check**: `pnpm typecheck && pnpm test:fast && pnpm guards`. **No verified baseline on this fork yet** — do not import the `agent-native` profile's known-failing list, which was measured on a different fork at a different commit. Establish and record a baseline here before treating any failure as a regression.
+- **Commit policy**: conventional commit, **no issue-closing trailers**. Origin is a fork of BuilderIO and the tickets live in a third repo, so `closes #N` would point at an unrelated upstream issue. The coordinator closes tickets explicitly. Never add `Co-Authored-By` or agent attribution.
+- **Worker constraints**:
+  - **Changeset required** for any source change under `packages/core` or `packages/dispatch` (`pnpm changeset:add`). Never hand-bump a package version. The changeset does **not** publish — the `@agent-native` npm scope is owned by `steve8708` and this fork cannot publish to it. It exists to version the fork and write its CHANGELOG.
+  - The version minted must be one **upstream will never issue** — `0.134.0-paul.N`, not a reused `0.133.3` — so a fork build identifies itself in `pnpm list` and in stack traces. See `paul-dispatch-app`'s `docs/adr/0001`.
+  - Read `CLAUDE.md` first, and the matching skill in `.agents/skills/` before changing that area; `secrets` is load-bearing for the vault work.
+  - Migrations are additive only; never drop, rename, or truncate.
+  - Never hardcode API keys, tokens, webhook URLs, or signing secrets — in source, tests, fixtures, or issue comments.
+  - **Never `git stash`** — the stash is shared across worktrees and would steal another worker's WIP.
+  - **Measure any baseline against `git merge-base main HEAD`**, never `HEAD` and never `main..HEAD`.
+  - **Stay on your own branch.** The coordinator owns merge-back.
+
+## paul-dispatch-app (Dispatch workspace app)
+
+- **Remote**: `sonhyrd/paul-dispatch-app` — **private.** Also the ticket home for work that lands in `hyrdrocks/paul-agent-native`; see that profile.
+- **Branch prefix**: `sss/`
+- **Post-merge check**: `pnpm typecheck && pnpm test`. **No verified baseline** — as of 2026-08-03 this checkout has never been installed (no `node_modules`, no `pnpm-lock.yaml`). Run `pnpm install` first and record what you find before calling any failure a regression.
+- **Commit policy**: conventional commit + `(resolves #N)` where the ticket genuinely lands here (#17, #19 only). Tickets #12–#16 and #18 are filed here but land in the fork — **never** close those from a commit in this repo.
+- **Worker constraints**:
+  - **`@agent-native/core` and `@agent-native/dispatch` are vendored tarballs (`file:vendor/*.tgz`), not registry dependencies.** Never hand-edit those specs in `package.json`; run `pnpm vendor:agent-native`, which packs the fork and bumps the specs together. Rationale in `docs/adr/0001-vendored-fork-consumption.md`.
+  - **Never add `pnpm.overrides`, patches, or resolutions for any `@agent-native/*` package** — forbidden by `.agents/skills/customizing-agent-native`. A `file:` spec is a plain dependency and is not the forbidden thing; an override is.
+  - **`vendor/*.tgz` must stay committed.** `netlify.toml` runs `pnpm build` from a fresh clone, so a gitignored `vendor/` breaks the deploy install outright.
+  - Never edit or deep-import `node_modules/@agent-native/*/src` at runtime.
+  - Store blobs in file/blob storage, never in SQL — no base64, `data:` URLs, images, PDFs, or ZIPs in app tables, `application_state`, `settings`, or `resources`.
+  - Prefer Dispatch actions over raw SQL for vault, integrations, resource grants, messaging, routing, and approvals.
+  - Never hardcode API keys, tokens, webhook URLs, or signing secrets; never expose a vault secret value.
+  - Integration webhooks use the queue-and-processor pattern — no fire-and-forget promises after a serverless response.
+  - **Never `git stash`** — shared across worktrees.
+
 ## Template
 
 - **Remote**: `<org>/<repo>` — substring of the origin URL
