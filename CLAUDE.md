@@ -45,15 +45,23 @@ These live as skills so they load only when you're doing the task:
   - The directory keeps the name `e2e-skills` because it is the subtree prefix; renaming it to
     `e2e` would break both `pull` and `push`. Plugin name ≠ directory name, same as `matt`.
   - Only two of the five on-disk skills are declared in `plugin.json`: `pw-prove` and
-    `e2e-reviewer`. `cypress-debugger`, `playwright-debugger` and `playwright-test-generator` ship
-    as files but are not skills — `e2e-reviewer/scripts/scan.mjs` best-effort-imports
-    `playwright-test-generator/scripts/ptg-run.mjs`, so do not delete them. Re-declaring one is a
-    one-line `skills` array edit in *both* `plugins/e2e-skills/.claude-plugin/plugin.json` and
+    `e2e-reviewer`. The other three — `cypress-debugger`, `playwright-debugger` and
+    `playwright-test-generator` — still load and still appear to the host as `e2e:<name>`; the
+    `skills` array shapes the published manifest, not host discovery. Do not delete them:
+    `e2e-reviewer/scripts/scan.mjs` best-effort-imports
+    `playwright-test-generator/scripts/ptg-run.mjs`. Re-declaring one is a one-line `skills` array
+    edit in *both* `plugins/e2e-skills/.claude-plugin/plugin.json` and
     `.claude-plugin/marketplace.json`.
-  - Both declared skills carry `disable-model-invocation: true` in their frontmatter. That is the
-    *only* mechanism that pins a plugin skill to user-invocable-only — `skillOverrides` in
+  - `pw-prove` carries `disable-model-invocation: true` in its frontmatter. That is the *only*
+    mechanism that pins a plugin skill to user-invocable-only — `skillOverrides` in
     `~/.claude/settings.json` is inert for skills whose source is a plugin. Do not "fix" this by
     adding settings keys.
+  - **`e2e-reviewer` must stay un-pinned.** It carried the same flag briefly and it broke the
+    Step 6 quality gate in both `pw-prove` and `playwright-test-generator`, which invoke it through
+    the Skill tool: the flag blocks *chained* launches too, so the gate died with `Skill
+    e2e:e2e-reviewer cannot be used with Skill tool due to disable-model-invocation` even inside a
+    run the user had started by name. Do not re-add it; a skill that is a handoff target cannot be
+    pinned.
   - `plugins/e2e-skills/CLAUDE.md` is an 11-byte `@AGENTS.md` include that pulls a 15.4K file into
     context for any agent working in that directory. Known and accepted; deleting it would diverge
     from the fork.
