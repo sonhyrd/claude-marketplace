@@ -1,0 +1,290 @@
+# Code Generation Rules
+
+## Hard rules (always)
+
+Non-negotiable for every generated spec, regardless of project shape:
+
+- **`await` everything** — every `expect()` on a Locator and every Playwright action (`.click()`, `.fill()`, `.type()`, `.press()`, `.check()`, `.selectOption()`, `.hover()`). A missing `await` silently skips the assertion or action.
+- **Web-first assertions only** — `toBeVisible()`, `toHaveText()`, `toHaveURL()`, etc. Never `expect(await el.isVisible()).toBe(true)` (resolves once, no retry).
+- **Hermetic by default** — every network call the spec triggers is answered by a mock; a live round-trip exists only as a declared carve-out (see Network Determinism). Step 7's hermetic audit fails the run on any undeclared live call.
+- **Stub all writes** — signup, login, payment, any mutation goes through `page.route()`. A generated test never mutates real shared backend data.
+- **Gate hydration** — on SSR/SSG apps, gate the first interaction on a hydration signal, never `waitForTimeout()` after `goto`.
+- **One hard `expect()` per test** — a test built only from `expect.soft()` never fails early.
+
+## Structure Detection
+
+**Always Page Object Model (POM) — no exceptions.** Every generated spec uses a Page Object; POM keeps selectors in one place and survives DOM churn. Flat sibling specs change nothing: even in a repo where every existing E2E spec is flat, scaffold a POM for the new coverage — do not match the flat house style, and do not offer a `structure: flat` opt-out. "Internal consistency with flat siblings" is not a reason to write flat.
+
+| What you find | What to generate |
+|---------------|-----------------|
+| POM directory exists, no POM for this page | New POM class (extends `BasePage` if present) + spec file |
+| POM directory exists, POM for this page already exists | Extend existing POM — add new locators only + new spec file |
+| No POM directory (greenfield, **or** a repo whose existing specs are all flat) | **Scaffold a POM** — `<testDir>/pages/<Feature>Page.ts` + spec. Do **not** match the flat siblings, and never rewrite them. |
+
+**Do not mistake a route folder for a POM directory.** A Nuxt/Next `pages/` (or `app/`) folder holds route components, not Page Objects — it never counts as "POM directory exists." Look for Page Object *classes* the specs import, not any directory named `pages/`.
+
+**Extending an existing POM:** read the file first; match its existing naming and structural patterns — even if they differ from the rules below. Apply the rules below only to newly added code.
+
+**Scaffolding a new POM dir:** put it at the test root — `<testDir>/pages/<Feature>Page.ts` — unless the project already uses `models/` or `page-objects/`, in which case match that name. One class per feature/page, following the POM Rules below. Never retro-refactor existing flat specs — add the POM for the *new* coverage and leave the siblings untouched.
+
+---
+
+## Selector Priority (best → worst)
+
+1. `getByRole('button', { name: 'Submit' })` — role + accessible name
+2. `getByLabel('Email')` — form label — **only when the label/aria-label actually exists**; verify in the Step 3 snapshot before using
+3. `getByPlaceholder('Email')` — for label-less inputs (placeholder/title only). Common in real-world apps; `getByLabel` on these matches nothing and the test dies in `beforeEach`
+4. `getByTestId('submit-btn')` / `[data-testid="submit-btn"]` — explicit test hook
+5. `getByText('Save')` / `.filter({ hasText: 'text' })` — visible text
+6. attribute selector `[formControlName="email"]` — stable attribute
+7. CSS class — **POM files only**, stable structural classes only (not styling classes)
+8. `.nth()` / `.first()` / `.last()` — **forbidden** without `// JUSTIFIED:` on the line above
+
+**Project-configured test ids rank with role+name.** When `playwright.config.*` sets `use: { testIdAttribute: '...' }`, or `data-testid` (or the project's equivalent) is pervasive in the components under test, treat `getByTestId` as a **tier-1 locator alongside role+name** — not #4. A deliberate, stable test hook beats brittle text/placeholder locators; keep `getByText`/`getByPlaceholder` as the fallback when no role or test id fits.
+
+**Anchored regexes are a trap in `getByText` on mixed-content elements.** `getByText` matches the element's *text content*, and an element that also holds an icon, a `<span>`, or any other child yields a string the anchor no longer fits — `getByText(/^(Vererbt|Inherited)/)` matched nothing against a badge whose span held an icon element plus the text node, while the unanchored `/(Vererbt|Inherited)/` matched immediately. Drop the anchors in `getByText` unless the element is a pure text node. Anchors stay correct in `getByRole(…, { name: /^X$/ })` — that matches the **accessible name**, which is already normalized.
+
+Never use XPath. Never use CSS class chains that couple to styling.
+
+---
+
+## POM Rules (new files only)
+
+```typescript
+import { Page, Locator } from '@playwright/test';
+
+export class LoginPage {
+  readonly form: {
+    emailInput: Locator;
+    passwordInput: Locator;
+    submitButton: Locator;
+  };
+  readonly errorMessage: Locator;
+
+  constructor(private page: Page) {
+    this.form = {
+      emailInput: page.getByLabel('Email'),
+      passwordInput: page.getByLabel('Password'),
+      submitButton: page.getByRole('button', { name: 'Sign in' }),
+    };
+    this.errorMessage = page.getByText('Invalid credentials');
+  }
+
+  async navigate() {
+    await this.page.goto('/login');
+  }
+}
+```
+
+- `readonly` locators only — no getter methods
+- Composition pattern: group related locators into named objects
+- `navigate()` uses `page.goto(path)` unless a custom navigation utility exists in the project
+
+---
+
+## Spec Rules
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { LoginPage } from '../models/login-page';
+
+test.describe('Login', () => {
+  let loginPage: LoginPage;
+
+  test.beforeEach(async ({ page }) => {
+    loginPage = new LoginPage(page);
+    await loginPage.navigate();
+  });
+
+  test('should sign in with valid credentials', async ({ page }) => {
+    // Given: user is on the login page (handled by beforeEach)
+
+    // When: user fills in valid credentials and submits
+    await loginPage.form.emailInput.fill(process.env.TEST_USER!);
+    await loginPage.form.passwordInput.fill(process.env.TEST_PASSWORD!);
+    await loginPage.form.submitButton.click();
+
+    // Then: user is redirected to the dashboard
+    await expect(page).toHaveURL('/dashboard');
+  });
+
+  test('should show error for invalid credentials', async () => {
+    // Given: user is on the login page
+
+    // When: user submits invalid credentials
+    await loginPage.form.emailInput.fill('nonexistent@test.invalid');
+    await loginPage.form.passwordInput.fill('wrongpassword');
+    await loginPage.form.submitButton.click();
+
+    // Then: error message is shown
+    await expect(loginPage.errorMessage).toBeVisible();
+  });
+});
+```
+
+- BDD comments: `// Given:`, `// When:`, `// Then:`
+- Each test fully independent — own storage, session, cookies
+- `beforeEach` for shared navigation setup only — never for shared state
+- Mock external APIs with Playwright Network API; do not call real third-party services
+- **Auto-waiting assertions only:** `toBeVisible()`, `toBeHidden()`, `toHaveText()`, `toContainText()`, `toHaveCount()`, `toHaveURL()`
+- Use `expect.soft()` for independent, non-critical checks — but at least one hard `expect()` must gate the primary condition per test (a soft-only test never fails early)
+
+**Forbidden:**
+
+> Maintenance: the rules below (and the mirrored entries elsewhere in this file) duplicate e2e-reviewer patterns for generation-time convenience. Pattern semantics — IDs, severities, false-positive exclusions — are owned by `skills/e2e-reviewer/references/pattern-reference.md`; on conflict, that file wins.
+
+| Forbidden | Use instead |
+|-----------|-------------|
+| `waitForTimeout(N)` | `await expect(el).toBeVisible({ timeout: N })` |
+| `expect(await el.isVisible()).toBe(true)` | `await expect(el).toBeVisible()` |
+| `const n = await el.count()` | `await expect(el).toHaveCount(N)` or `.first()` + `toBeVisible()` |
+| `toBeAttached()` | `toBeVisible()` — `toBeAttached` is vacuous on always-rendered elements. Negative `not.toBeAttached()` and checks on dynamically-injected elements are acceptable (matches e2e-reviewer #4b). |
+| `expect(locator).toBeTruthy()` | `await expect(locator).toBeVisible()` — Locator is always a truthy JS object |
+| `page.click(selector)` / `page.fill(selector, v)` | `page.locator(selector).click()` / `.fill(v)` — locator-first actions are easier to compose and review |
+| `{ force: true }` | Fix the root cause (element not actionable); if unavoidable, add `// JUSTIFIED:` |
+| `waitUntil: 'networkidle'` | `waitUntil: 'domcontentloaded'` or condition-based wait — unreliable on SPAs |
+| `expect(page.url()).toContain(x)` | `await expect(page).toHaveURL(x)` — one-shot, no retry |
+| Framework component selectors in spec (`app-button`, `my-component`) | POM only |
+| XPath selectors | `getByRole` / `getByLabel` / `getByTestId` |
+| `import { URL } from '@playwright/test'` | Use the global `URL` (or the `(route, request)` route-callback signature) — Playwright doesn't export `URL`; the param is the DOM global, and importing it fails typecheck |
+
+---
+
+## Network Determinism
+
+**Hermetic by default.** Every call the spec triggers is answered by a mock built from one observed run's request log; the only live traffic a spec may carry is a **declared carve-out**:
+
+| Traffic | Strategy |
+|---------|----------|
+| **Writes / credential paths** (signup, login, payment, any mutation) | **Always stub** with `page.route()`. A generated test must never create real accounts, hit real payment providers, or mutate shared backend data. |
+| First-party reads | **Mock by default** — derive the response fixtures from one observed run's real payloads (deterministic, CI-safe) |
+| Third-party services | Always stub (also covered by Spec Rules above) |
+| A real round-trip that **IS the acceptance criterion** | **Declared carve-out only** — see below |
+
+**Declared carve-out** — the one sanctioned exception, used only when the real round-trip is itself the behavior under proof (e.g. "the live rate endpoint answers"). It must be:
+
+1. **Named in the Step 4 scenario plan**, and
+2. **Declared in the spec header**, one line per live endpoint:
+   ```typescript
+   // CARVE-OUT: GET /api/v2/exchange-rates — live round-trip IS the AC — restore: read-only
+   // CARVE-OUT: POST /api/v2/drafts — draft lifecycle IS the AC — restore: DELETE /api/v2/drafts/:id in afterEach (proven below)
+   ```
+3. **Reads may run freely; writes need a proven restore** (the restore call must itself be exercised in the spec), and a carve-out **never creates data on a shared tenant**.
+
+Step 7's hermetic audit compares the run's live calls against these headers: any live call with no matching `CARVE-OUT:` line **fails the run**, green or not.
+
+**Match the URL path, query-tolerant — derive the pattern from an OBSERVED request, not source intent.** A mock end-anchoring the full href (`/\/documents$/`, or `url === '…/documents'`) silently misses a query suffix the app appends (`?lang=en`, `?v=2`): the route never intercepts, the real (often empty) response renders, and the spec fails at the ready selector instead of on the mock. Match the path with a trailing-query-tolerant glob (`page.route('**/documents*', …)`) or test `new URL(route.request().url()).pathname` — never the whole href with a `$` anchor. Get the real URL from an observed request — the Step 3 probe's `network-summary` (which prints each endpoint's observed query suffix), or the failing run's own request log — never by guessing from source, and never by writing a throwaway spec to log it (non-deliverable spec probes are forbidden, SKILL Step 3).
+
+When the app funnels API calls through a proxy endpoint (e.g. `/api/request?cmd=<path>`), write ONE shared route-mock helper that matches on the decoded routing parameter and exposes response builders — not per-test `page.route()` calls with duplicated URL parsing:
+
+```typescript
+// helpers/mockApi.ts — match on the decoded routing param; unlisted calls fall through
+await page.route('**/api/request?**', route => {
+  const cmd = decodeCmd(route.request().url());
+  const hit = map[cmd];
+  return hit
+    ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(hit) })
+    : route.continue();
+});
+```
+
+Fall-through (`route.continue()`) is how live traffic escapes a hermetic spec: **a misspelled key silently leaks a call — possibly a write — to the real backend.** Default the helper to answering every API call it sees (empty success + loud warning for unlisted cmds); reserve `route.continue()` for endpoints a declared carve-out names. Record that requirement in the project's conventions doc (Step 5b).
+
+**The mock layer is decided by where the call originates, not just the URL.** `page.route()` intercepts only requests the *browser* makes. Server-side calls — Next.js SSR/RSC, route handlers, a BFF, `getServerSideProps` — never pass through it, so a `page.route()` mock silently misses them and the test hits the real backend. Mock those at a server-side seam: an E2E-only env var flipping the server's fetch boundary to fixed responses (`process.env.E2E_MOCK` → canned payloads), or the project's existing test double. Detect the origin first: data present in the initial SSR HTML (view-source) = a server call; `page.route()` won't help.
+
+**Request-aware rules.** When the same endpoint must answer differently by method or parameters (tab filters, pagination pages, POST toggles), extend the helper with an ordered rule list instead of sprinkling conditional logic in specs:
+
+```typescript
+type MockRule = {
+  when?: { method?: string; params?: Record<string, string> };
+  response: { status?: number; body: unknown };
+};
+// map value: single response (back-compat) OR MockRule[] — first match wins.
+// params compare only the listed keys: URL query for GET/DELETE,
+// urlencoded body for POST (body value wins if a key exists in both).
+```
+
+Two hard rules learned from production use:
+
+- **A registered-but-unmatched rule array must NOT fall through to the network.** If the cmd is in the map but no rule matches, answer with an empty success + a loud warning that includes the method and params — a param typo (`liked: 'True'`) must surface as a warning, never as a real-backend write.
+- Pagination contracts become testable with a `start`/`offset` param rule per page: seed page 1 at exactly the page size (a short page often sets an internal "loaded end" flag that suppresses the next request), then assert the page-2 item appears after scroll *and* a page-1 item is still attached (append, not replace).
+- **Before narrowing a rule with `when.params`, prove the app actually sends that param at that point in time — wire evidence, not source intent.** A component reading `router.query` in a first-render `useRef`/initializer fires its initial fetch during hydration, before `router.isReady` — the param is silently dropped from the wire even though the source "passes" it, so the narrowed rule never matches, the strict fallback answers empty, and a previously-green render test fails for a contract the app never honors. If the param is best-effort in practice, keep the broad rule and comment the WHY, citing the file:line of the early read.
+
+**Prove the call, not just the pixels.** For write interactions with optimistic UI (like toggles, deletes), the UI updates before — and regardless of — the request. Pair every such assertion with request proof:
+
+```typescript
+const call = page.waitForRequest(r => r.method() === 'POST' && r.url().includes('cmd=%2Fv2%2Fuser%2Fsentence%2Flike'));
+await likeToggle.click();
+await call; // without this line the test passes even if the wiring to the API is deleted
+await expect(likeToggle).toHaveAttribute('aria-pressed', 'true');
+```
+
+**Read the payload off the awaited `Request` — never off a route-handler closure.** `waitForRequest` resolves on the request *event*, which fires **before** the matching route handler's body runs, so a variable the handler assigns may still be `undefined` at the line that asserts it. The awaited request is the only source that is guaranteed populated:
+
+```typescript
+const call = page.waitForRequest(r => r.method() === 'PATCH' && r.url().includes('/api/settings'));
+await page.route('**/api/settings', r => r.fulfill({ status: 200, body: '{}' }));  // hermetic: nothing reaches the tenant
+await saveButton.click();
+const body = (await call).postDataJSON();          // ← populated; a `let captured` set inside the handler is not
+expect(body).toMatchObject({ locale: 'de' });
+```
+
+Fulfilling locally in the route handler is also what keeps a mutation proof hermetic — no write leaves the browser, so re-running the spec (or filming it) never touches shared data.
+
+**…but prove the call HAPPENS before asserting it (the inverse trap).** "Prove the call" applies only to calls the app actually makes at runtime. Canonical counterexample: unmount-cleanup API calls — an empty-deps effect's cleanup captures its guard as a stale closure from mount time, so if the guard (e.g. a `quizSetId` arriving with the fetch response) was empty at mount, `if (id) api.cancel(id)` is a dead path forever, and a `waitForRequest` on it times out against correct test code. Before shipping a call-proof assertion on exit/unmount/cleanup paths, verify the request fires at least once (solo run, network log); if it never does, assert the user-visible outcome instead, file the stale closure as an app defect, and leave a comment with the file:line so the proof can be added when the defect is fixed.
+
+**Assert the success *signal*, not just the side effect.** The terminal assertion of a write/delete flow is what the app shows the user on success — the toast / `alert` / redirect / empty-state — not only the earlier DOM change (a row vanishing). It's what a human reads as "it worked," what a watch-link film must end on (SKILL Step 8), and asserting a row's *absence* alone passes even when the app silently failed and never confirmed. Assert the visible confirmation; the row-gone check may be a *second* assertion, never the only one.
+
+**Destructive/mutating specs must be re-runnable — WARN if they aren't.** A delete/create spec acting on a pre-existing record passes once, then fails every re-run (row gone, or a unique key collides) — and *filming re-runs the spec*, so a one-shot destructive spec green in Step 6/7 fails at Step 8 and in CI. Durable pattern: self-seeding — arrange the target inside the test (API or UI create in the test / `beforeEach`), then act on it, so verification + film + CI all pass. When a generated spec mutates data it did not itself create, **WARN the user** ("this deletes a real record — it won't survive a re-run or CI without seeding its own fixture") rather than silently shipping a spec that only passes once. Do not auto-invent the seed path unless the create route is obvious from Step 3–5 recon.
+
+---
+
+## SSR & Hydration
+
+- **Gate the first interaction on hydration for server-rendered apps** (Next.js, Nuxt, SvelteKit, Astro, Remix). SSR paints interactive-looking elements before listeners attach; Playwright's actionability checks pass against that inert DOM, so the first click "succeeds", does nothing, and the spec fails at the *next* assertion — intermittently, because hydration sometimes wins the race. Detect SSR from the framework config/`package.json` before generating.
+- Preferred gate, in order:
+  1. An app-provided hydration marker: `await expect(page.locator('html[data-hydrated]')).toBeAttached();` — if the app exposes none, propose the one-line marker upstream (set an attribute in a root `useEffect`/`onMounted`); it fixes every spec at once.
+  2. A self-verifying first action: `await expect(async () => { await button.click(); await expect(dialog).toBeVisible({ timeout: 1000 }); }).toPass();` — retries the click until it lands.
+- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI.
+- Nuance: Qwik apps are resumable, not hydrated — no page-global gate needed. Island frameworks (Astro) hydrate per-island per their `client:*` directive — gate on the specific island's readiness (its own marker or a self-verifying action on that island), not a page-global signal.
+
+---
+
+## Auth & Session
+
+- Authenticate **once**, programmatically (API-login helper or a `setup` project), persist with `storageState`, reuse it in specs that need a session. UI-driven login belongs only in specs that test the login flow itself.
+- Never hard-depend on a **manually captured** session file — a locally generated `auth/*.json` that a fresh clone or CI won't have, and that silently expires. Generated tests must be able to recreate their session from code.
+- Logged-out scenarios use a fresh context (no `storageState`) — don't "log out first" inside a test.
+- **Login-success flows: route mocks can't mint cookies.** Session cookies are usually issued server-side (the app server proxies the login call and sets cookies from the backend response); a browser-layer route mock returns the success body but no `Set-Cookie`, so post-login SSR still sees an anonymous user. Hybrid pattern: mock the login POST for the form/UX behavior, seed the session cookies through the project's sanctioned test seam (test-auth endpoint, API login helper) right before submit, then assert the full redirect chain. Comment WHY in the spec — it reads like cheating until you know cookie issuance is server-side.
+
+---
+
+## Branch State Seeding
+
+- Multi-step funnels (onboarding, checkout, multi-page applications): do **not** drive the shared prefix (consent → phone-auth → …) through the UI in every spec — re-running the common steps is slow, and one prefix change breaks every downstream test at once.
+- Seed the user to the **branch's starting state** through a test-only API/endpoint, then exercise only the branch under test — the `storageState` approach for auth, extended to application state.
+- Real UI steps for the prefix belong **only** in the one spec that specifically verifies that prefix. Everywhere else, seed and skip ahead.
+- Record which seeding endpoints/fixtures exist in the project's conventions doc (Step 5b) so later runs reuse them instead of re-driving the funnel.
+
+---
+
+## Shared Mutable State (baseline / inheritance assertions)
+
+A scenario asserting an inheritance/default **baseline** on state the whole tenant shares and can mutate (a global override, a shared setting, a default a prior run's edit can leave dirty) must not trust the state it inherits:
+
+- **Self-heal before asserting.** Reset the stored overrides, save once, reload so the assertion reads persisted state — *then* assert the default. Reading whatever the last run left behind isn't proving the default; it passes or fails on litter.
+- **Restore in `finally`/`afterEach` reloads FIRST.** A mid-test failure can leave the visible draft clean while the store still holds the override, so a guard that reads the *draft* skips cleanup and leaks the override into the next run's baseline. Reload, read persisted state, then restore. (Shape: a `clearVisibleOverrides()` that reloads before it reads.)
+
+---
+
+## Suppression Convention
+
+When a forbidden pattern is genuinely unavoidable, add `// JUSTIFIED: <reason>` on the **line immediately above**. This tells the `e2e-reviewer` to skip the hit during grep checks.
+
+Patterns that accept `// JUSTIFIED:`:
+- `.nth()` / `.first()` / `.last()` — explain why positional selection is required
+- `{ force: true }` — explain why the element is not normally actionable
+- `{ timeout: 0 }` — explain why auto-retry must be disabled
+- `evaluate()` / `waitForFunction()` with raw DOM — explain why the framework API can't express the condition
+
+**No suppression exists for:** `test.only` / `it.only` (always remove before commit).

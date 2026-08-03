@@ -1,0 +1,98 @@
+--- Tier 3: Bundled regex checks (universal fallback for grep-detectable patterns and gaps eslint/ast-grep miss) ---
+
+[P0] #3 Error swallowing via empty catch (test scope) (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:13:    await page.click('#save').catch(() => {});
+
+[P0] #7 Focused test committed (6 hits)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:10:  it.only('every cypress smell, once', () => {
+  tests/pattern-corpus/evals/files/cy-justified.cy.ts:14:  it.only('every cypress smell, suppressed', () => {
+  tests/pattern-corpus/evals/files/cypress/integration/legacy.ts:18:  it.only('suppressed twin in the classic layout', () => {
+  tests/pattern-corpus/evals/files/cypress/integration/legacy.ts:9:  it.only('committed focused test in the classic layout', () => {
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:35:test.only('focused', async ({ page }) => {
+  tests/pattern-corpus/evals/files/pw-justified.spec.ts:59:test.only('focused', async ({ page }) => {
+
+[P1] #9 Playwright hard-coded sleep (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:10:    await page.waitForTimeout(1000);
+
+[P1] #9b Cypress hard-coded sleep (2 hits)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:12:    cy.wait(500);
+  tests/pattern-corpus/evals/files/cypress/integration/legacy.ts:11:    cy.wait(750);
+
+[P1] #6 Raw DOM query inside test code (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:12:    const el = document.querySelector('#app');
+
+[P0] #4a Always-true numeric assertion (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:16:    expect(sharedCounter).toBeGreaterThanOrEqual(0);
+
+[P0?][LLM-TRIAGE] #4b Vacuous toBeAttached assertion (positive form only; Phase 2 confirms destructive-action context) (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:17:    await expect(page.locator('#row')).toBeAttached();
+
+[P0] #4c-4e One-shot Playwright state/content assertion (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:18:    expect(await page.locator('#row').count()).toBe(3);
+
+[P0] #4f Locator always-true assertion (truthy/defined/not-null) (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:19:    expect(page.locator('#row')).toBeTruthy();
+
+[P0] #4g Retry disabled with timeout zero (2 hits)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:16:    cy.get('#total').should('have.text', String(cySharedState), { timeout: 0 });
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:20:    await expect(page.locator('#row')).toBeVisible({ timeout: 0 });
+
+[P0] #4h One-shot page.url assertion (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:21:    expect(page.url()).toContain('/home');
+
+[P0] #5a Conditional assertion bypass (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:22:    if (await page.locator('#modal').isVisible()) {
+
+[P1] #5b Forced actionability bypass (2 hits)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:14:    cy.get('#save').click({ force: true });
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:14:    await page.click('#save', { force: true });
+
+[P0] #8a Dangling Playwright locator statement (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:31:    page.locator('#dangling');
+
+[P0] #8b Boolean state result discarded (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:26:    await page.locator('#row').isVisible();
+
+[P1] #10a Positional selector (2 hits)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:13:    cy.get('.row').first().click();
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:25:    await page.locator('#row').first().click();
+
+[P1] #10b Serial Playwright suite (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:7:test.describe.serial('corpus', () => {
+
+[P1] #14 Hardcoded credentials (2 hits)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:15:    cy.get('#password').type('password123');
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:15:    await page.fill('#password', 'password123');
+
+[P0] #15 Missing await on Playwright expect (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:27:    expect(page.locator('#row')).toBeVisible();
+
+[P0] #15 Missing await on Playwright expect (awaited locator) (3 hits)
+  tests/pattern-corpus/evals/files/backtracking-trap.spec.ts:14:  expect( await page.locator('#one')).toBeVisible();
+  tests/pattern-corpus/evals/files/backtracking-trap.spec.ts:15:  expect(  await page.locator('#two')).toBeVisible();
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:28:    expect(await page.locator('#row')).toBeVisible();
+
+[P0] #16 Missing await on Playwright action (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:29:    page.locator('#btn').click();
+
+[P1] #17 Direct page action API (3 hits)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:13:    await page.click('#save').catch(() => {});
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:14:    await page.click('#save', { force: true });
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:15:    await page.fill('#password', 'password123');
+
+[P1] #9c Network-idle readiness check (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:11:    await page.waitForLoadState('networkidle');
+
+[P1] #18 Soft assertion usage (1 hit)
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:30:    await expect.soft(page.locator('#row')).toBeVisible();
+
+[P0] #3b Cypress uncaught exception suppression (Phase 2 confirms blanket vs scoped) (1 hit)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:7:Cypress.on('uncaught:exception', () => false);
+
+[P1] #19 Module-level mutable state in test code (2 hits)
+  tests/pattern-corpus/evals/files/cy-hits.cy.ts:5:let cySharedState = 0;
+  tests/pattern-corpus/evals/files/pw-hits.spec.ts:5:let sharedCounter = 0;
+
+Scope filter: 0 out-of-scope file(s) skipped (pattern hits in files without Playwright/Cypress markers).
+
+Summary: 41 total hit(s), 22 P0, 18 P1/P2 heuristic, 1 LLM-triage; 0 AST hit(s).

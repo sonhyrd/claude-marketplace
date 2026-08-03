@@ -1,0 +1,28 @@
+.DS_Store
+__pycache__/
+*.pyc
+.serena
+.agents/
+.claude/
+.sisyphus/
+docs/superpowers/
+testbed/
+results/
+# Scratch dirs that other local campaigns (e.g. ui-clone) drop relative to CWD
+/tmp/
+/$PWD/
+
+# Eval fixtures are committed: assertions cite exact file:line and must be reproducible
+# from a fresh clone. The scanner excludes **/evals/files/** in all three tiers, so the
+# intentional anti-patterns inside them cannot fail the repo's own smell-scan CI gate.
+
+# Eval run results (benchmarks, grading, timing)
+*-workspace/
+.serena/
+
+# test-parity.sh transient backups (stray after an interrupted run)
+*.parity-backup
+
+# Marketing collateral (local-only, not part of the public repo)
+marketing/
+.playwright-mcp/
