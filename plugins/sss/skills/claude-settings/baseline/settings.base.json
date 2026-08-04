@@ -40,7 +40,6 @@
     "fewer-permission-prompts": "user-invocable-only",
     "security-review": "user-invocable-only",
     "init": "user-invocable-only",
-    "playwright-test-generator": "user-invocable-only",
     "computer-use": "user-invocable-only",
     "improve": "user-invocable-only",
     "improve-ui": "user-invocable-only",
