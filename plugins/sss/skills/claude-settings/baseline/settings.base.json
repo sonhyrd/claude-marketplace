@@ -5,11 +5,13 @@
     "padding": 0
   },
   "skillOverrides": {
+    "cypress-debugger": "off",
     "git-guardrails-claude-code": "off",
     "loop-me": "off",
     "migrate-to-shoehorn": "off",
     "obsidian-vault": "off",
     "playwright-cli": "off",
+    "playwright-debugger": "off",
     "scaffold-exercises": "off",
     "setup-pre-commit": "off",
     "visualize-repo": "off",
@@ -38,6 +40,7 @@
     "fewer-permission-prompts": "user-invocable-only",
     "security-review": "user-invocable-only",
     "init": "user-invocable-only",
+    "playwright-test-generator": "user-invocable-only",
     "computer-use": "user-invocable-only",
     "improve": "user-invocable-only",
     "improve-ui": "user-invocable-only",
