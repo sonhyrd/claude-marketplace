@@ -28,6 +28,9 @@ notes/
 
 ## Available Plugins
 
+### [e2e-skills](./e2e-skills/)
+Playwright/Cypress proof, debugging, and review skills — including the `pw-prove` Clips publish path.
+
 ### [git-absorb](./git-absorb/)
 Automatically fold uncommitted changes into appropriate commits on a feature branch.
 
