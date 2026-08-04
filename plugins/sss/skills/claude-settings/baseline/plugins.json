@@ -1,0 +1,37 @@
+{
+  "marketplaces": {
+    "cloudflare": {
+      "source": {
+        "source": "github",
+        "repo": "cloudflare/skills"
+      }
+    },
+    "i-have-adhd": {
+      "source": {
+        "source": "github",
+        "repo": "ayghri/i-have-adhd"
+      }
+    },
+    "effective-html": {
+      "source": {
+        "source": "github",
+        "repo": "plannotator/effective-html"
+      }
+    },
+    "claude-video": {
+      "source": {
+        "source": "github",
+        "repo": "bradautomates/claude-video"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "cloudflare@cloudflare": true,
+    "i-have-adhd@i-have-adhd": true,
+    "plannotator-effective-html@effective-html": true,
+    "watch@claude-video": true,
+    "commit-commands@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true
+  }
+}

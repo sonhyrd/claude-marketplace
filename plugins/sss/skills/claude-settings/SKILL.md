@@ -7,7 +7,9 @@ description: >-
   into the baseline. Use when setting up Claude Code on a new machine or VPS, when the user
   says their settings/statusline/skill overrides are out of sync between machines, when they
   want to save or restore their Claude Code configuration, or when adding a segment to the
-  statusline. Never touches env, hooks, or enabledPlugins — those are machine-local.
+  statusline, or when a new machine is missing plugins that another machine has. Also
+  installs the tracked plugin roster (external marketplaces and their plugins) via the
+  claude plugin CLI. Never touches env or hooks — those are machine-local.
 ---
 
 # Claude settings sync
@@ -25,15 +27,37 @@ each machine. Two directions: **apply** (baseline → machine) and **capture** (
 | `attribution`, `includeCoAuthoredBy` | Yes | Plain booleans/strings |
 | `env` | **No** | Machine-specific (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`) |
 | `hooks` | **No** | Contains absolute paths (`~/.orca/agent-hooks/`, `~/.claude/hooks/`) |
-| `enabledPlugins` | **No** | Marketplace sources differ per machine (directory vs clone) |
+| `enabledPlugins`, `extraKnownMarketplaces` | **Partly** | Non-directory sources sync via `baseline/plugins.json`; directory sources carry a per-machine path and do not |
 
 Writing `env` or `hooks` from a shared baseline would break the machine it lands on. Do not
 add them without changing the paths to be `$HOME`-relative first — that is a separate change.
 
-Because `enabledPlugins` cannot sync, plugins are installed by hand on each machine.
-`references/external-plugins.md` is the roster to work through when setting one up: which
-marketplaces to add, which plugins to enable, and which ship built-in. Read it during **apply**
-on a fresh machine — the settings merge alone does not give the user their plugins.
+## The plugin roster
+
+Plugins live in a **separate baseline file**, `baseline/plugins.json`, not in
+`settings.base.json` — because they are not applied by merging JSON. See below.
+
+The portable/local split is computed, not hand-maintained:
+
+- **Portable** — every marketplace whose `source.source` is not `directory`, plus every
+  enabled plugin belonging to one. A `github` source (`{"repo": "cloudflare/skills"}`) is
+  identical on every machine. `claude-plugins-official` ships with Claude Code and never
+  appears in `extraKnownMarketplaces` at all, so its plugins have no marketplace entry to
+  filter on and are portable by definition.
+- **Machine-local** — directory sources and their plugins. This repo is added as a directory
+  source pointing at the working tree, so its path (`/home/orca/work/claude-marketplace` on
+  one box, something else on another) is exactly what cannot be shared. `sss`, `matt` and
+  `e2e` are therefore still a manual `marketplace add` on a new machine — one command.
+
+**Apply drives the `claude plugin` CLI, it does not merge these keys into `settings.json`.**
+That distinction is the whole reason this is a second file. Hand-writing
+`extraKnownMarketplaces` leaves no clone on disk, so the marketplace is registered but
+resolves to nothing; `claude plugin marketplace add` clones it, validates the manifest, and
+writes both settings keys itself. Both CLI commands are idempotent, so apply is safe to
+re-run.
+
+`references/external-plugins.md` remains the human-readable roster — what each plugin is for,
+and the rationale for the ones whose packaging is a decision rather than an accident.
 
 ## Why the statusline script is copied, not referenced
 
@@ -69,10 +93,25 @@ The per-machine `settings.json` write is unavoidable; this skill automates it.
    Validate the result parses and still contains `env`, `hooks`, and `enabledPlugins` before
    moving it into place. `jq -s '.[0] * .[1]'` deep-merges, so unlisted regions survive.
 
-5. **Report the baseline's commit** so the user knows what they deployed:
+5. **Install the plugin roster.** Preview first — it clones third-party repos, and
+   `i-have-adhd` ships a `SessionStart` hook:
+   ```bash
+   DRY_RUN=1 "$SKILL_DIR/scripts/apply-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
+   ```
+   Show the user what is missing, confirm, then run it without `DRY_RUN`. Lines starting `=`
+   are already present and will be skipped. Then add this repo by hand — it is the one
+   marketplace the roster cannot carry:
+   ```bash
+   claude plugin marketplace add /path/to/claude-marketplace
+   claude plugin install sss@sss-marketplace matt@sss-marketplace e2e@sss-marketplace
+   ```
+
+6. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
 
-6. Tell the user the statusline refreshes on the next assistant message.
+7. Tell the user the statusline refreshes on the next assistant message, and that **plugins
+   need a Claude Code restart** — a newly installed plugin's skills do not appear in the
+   session that installed them.
 
 ## Capture — this machine to baseline
 
@@ -89,6 +128,21 @@ The `.statusLine.command` rewrite is required — the live file holds an absolut
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 `scripts/statusline.sh` too, so the repo is the source of truth again.
+
+Then capture the plugin roster, which computes the portable/local split itself:
+
+```bash
+"$SKILL_DIR/scripts/capture-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
+```
+
+It prints what it captured. Check the list for anything that was an evaluation leftover —
+capture records what is *enabled*, and an enabled-but-unwanted plugin propagates to every
+machine on the next apply. Disabling it and re-capturing is the fix, not editing the JSON.
+
+**`skillOverrides` is inert for plugin-sourced skills.** Capture takes the key verbatim from
+live settings, so an override naming a plugin skill will be picked up even though it does
+nothing. Check new entries against the plugin list before committing: pin a plugin skill with
+`disable-model-invocation: true` in its frontmatter instead.
 
 Then remind them: **the VPS only sees what is committed and pushed.** On this laptop the
 marketplace is a directory source pointed at the working tree, so uncommitted edits are live
