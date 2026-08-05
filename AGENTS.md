@@ -170,6 +170,18 @@ When you bump the bundle version, touch all three manifests in one commit. The d
 
 The install paths above cover every supported host. Use the `skills` CLI route as the default cross-agent path (Claude Code, Codex, and the broader `vercel-labs/skills` ecosystem); the Codex plugin marketplace remains a supported alternative for Codex plugin installs.
 
+## Agent skills
+
+### Delegation profile
+
+Branch prefix, post-merge check, commit policy, and worker constraints for `/delegate-tickets`.
+See `docs/agents/delegate-profile.md`.
+
+### Issue tracker
+
+Where tickets live, the triage label, and the `--repo` rule for every `gh issue` call.
+See `docs/agents/issue-tracker.md`.
+
 ## License
 
 Apache-2.0. Match the parent license in any new file you add.
