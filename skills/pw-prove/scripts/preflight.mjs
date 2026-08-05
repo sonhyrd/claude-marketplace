@@ -33,7 +33,8 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { clipsConfig, probeImportCredential } from './clips.mjs';
+import { fileURLToPath } from 'node:url';
+import { VAULT_ADD_COMMAND, clipsConfig, probeImportCredential, vaultLeaseCommand } from './clips.mjs';
 import { pwproveRun } from './pwprove-run.mjs';
 
 const out = (s) => process.stdout.write(s);
@@ -148,7 +149,14 @@ if (PROBE_HOSTING) {
   // fixes, and reporting them as one generic failure sends an operator to the wrong one.
   const config = clipsConfig();
   if (!config.ok) {
+    // Absence WARNS; it never stops — the proof is the passing test plus the mutation verdict, and
+    // delivery is downstream of both. What absence must not do is cost an operator a skill-file read
+    // to fix: the warning prints the lease they can paste, reconstructed from THIS invocation, so the
+    // pasted line re-runs this same probe rather than standing in for it.
+    const relaunch = `env PROBE_HOSTING=1 BASE_URL='${BASE_URL}' node ${fileURLToPath(import.meta.url)}`;
     warn(`preflight: WARN - publish credential not configured (${config.reason}); the proof link will be skipped.\n`);
+    warn(`preflight:   re-run under a lease: ${vaultLeaseCommand(relaunch)}\n`);
+    warn(`preflight:   never stored it on this machine: ${VAULT_ADD_COMMAND}\n`);
   } else {
     const { verdict, detail } = await probeImportCredential(config);
     if (verdict === 'usable') {
