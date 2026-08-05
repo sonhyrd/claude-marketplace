@@ -729,6 +729,30 @@ pf_says "an unconfigured credential warns without blocking" "PUBLISH_READY=no" 0
 grep -q 'publish credential not configured' "$W/pf.err" && grep -q 'CLIPS_MCP_TOKEN' "$W/pf.err" \
   && ok "the unconfigured warning names the one variable that is missing" \
   || { bad "no 'not configured' warning naming the variable"; sed 's/^/         /' "$W/pf.err" | tail -3; }
+# Naming the variable is not enough: an operator who reads "CLIPS_MCP_TOKEN is not set" still has to
+# go find which vault app holds it and how a lease is spelled. The warning must print the command
+# they can PASTE — app name, key name, and the invocation it wraps — or the fix costs a skill-file
+# read at exactly the moment the run is cheapest to restart.
+if grep -qF 'agent-native vault exec --app dispatch-paulsjob --key CLIPS_MCP_TOKEN --' "$W/pf.err"; then
+  ok "the unconfigured warning prints the literal lease command, with the vault app and key named"
+else
+  bad "the unconfigured warning makes the operator reconstruct the lease command"
+  sed 's/^/         /' "$W/pf.err" | tail -4
+fi
+# Runnable means runnable: the pasted line must re-run THIS preflight, with the probe still switched
+# on and the same origin, not a prose stand-in an operator has to finish themselves.
+if grep -F 'agent-native vault exec' "$W/pf.err" | grep -qF "PROBE_HOSTING=1" \
+   && grep -F 'agent-native vault exec' "$W/pf.err" | grep -qF "$REPO_ROOT/$S/preflight.mjs"; then
+  ok "the printed lease command re-runs this preflight verbatim"
+else
+  bad "the printed lease command is not the invocation it is standing in for"
+  sed 's/^/         /' "$W/pf.err" | tail -4
+fi
+# First machine, no stored key: `vault exec` would fail on a key that was never added, so the one
+# command that precedes it is named too.
+grep -qF 'agent-native vault add CLIPS_MCP_TOKEN' "$W/pf.err" \
+  && ok "the warning names how to store the credential the first time" \
+  || { bad "an operator with no stored key is told to lease one that does not exist"; sed 's/^/         /' "$W/pf.err" | tail -4; }
 [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ] \
   && ok "an unconfigured preflight sends nothing" \
   || bad "the preflight called out without a credential"

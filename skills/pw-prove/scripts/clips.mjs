@@ -45,6 +45,32 @@
 export const IMPORT_ACTION = 'import-recording-from-url'; // the machine-caller door for the film
 export const COMMENT_ACTION = 'add-comment'; //             the per-scenario narration lands here
 
+/** The one environment variable the publish path reads. Named once so a warning cannot misspell it. */
+export const TOKEN_VAR = 'CLIPS_MCP_TOKEN';
+/**
+ * The workspace vault app the credential is stored under. Naming it here is not a vault dependency —
+ * nothing spawns `agent-native` — it is the difference between a warning an operator can PASTE and
+ * one that sends them to read a skill file at the exact moment the run is cheapest to restart.
+ */
+export const VAULT_APP = 'dispatch-paulsjob';
+
+/**
+ * The literal, runnable lease that puts the credential in a child process's environment.
+ *
+ * `command` is the invocation to wrap, spelled exactly as it was run — a caller passes its own
+ * argv rather than a description of it, because a command an operator has to finish themselves is
+ * the reconstruction this exists to spare them.
+ */
+export function vaultLeaseCommand(command) {
+  return `agent-native vault exec --app ${VAULT_APP} --key ${TOKEN_VAR} -- ${command}`;
+}
+
+/**
+ * The one-time store that must precede the first lease. `vault exec` on a key that was never added
+ * fails, so an operator on a fresh machine needs both sentences or neither is runnable.
+ */
+export const VAULT_ADD_COMMAND = `agent-native vault add ${TOKEN_VAR} "Clips MCP bearer" --app ${VAULT_APP}`;
+
 /**
  * What a caller should do about a non-delegable action, in one sentence. Written once because both
  * the probe at minute zero and the publish at minute fifty report the same cause, and a remedy that
