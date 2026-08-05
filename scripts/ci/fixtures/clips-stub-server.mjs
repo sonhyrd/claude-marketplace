@@ -102,13 +102,33 @@ const server = http.createServer((req, res) => {
       return toolResult({ commentId: `cmt_stub_${Math.random().toString(36).slice(2, 8)}` });
     }
     const recordingId = 'rec_stub_1';
-    return toolResult({
-      recordingId,
-      title: args?.title ?? '',
-      status: 'ready',
-      visibility: args?.visibility ?? 'public',
-      shareUrl: `http://127.0.0.1:${server.address().port}/share/${recordingId}`,
-      chapters: args?.chapters ?? [],
+    const shareUrl = `http://127.0.0.1:${server.address().port}/share/${recordingId}`;
+    // THE LIVE SHAPE, and it is not the obvious one. The deployment returns NO structuredContent and
+    // NO JSON in the content block — the block is human prose, and the only machine-readable link is
+    // the `_meta` open-link hint. An earlier version of this stub answered with a top-level
+    // `recordingId`/`shareUrl`, so the test asserting "a real id is parsed out of the success
+    // envelope" passed against a fiction while the real publish reported Undelivered and posted no
+    // comments. A stub that is easier to parse than the server is a stub that hides the bug.
+    // Measured against clips.paulsjob.ai on 2026-08-06.
+    return send(200, {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        _meta: {
+          'agent-native/openLink': {
+            label: 'Open imported clip in Clips',
+            view: 'recording',
+            webUrl: shareUrl,
+          },
+        },
+        content: [
+          {
+            type: 'text',
+            text: `${args?.title ?? 'Untitled'} — imported (${(args?.chapters ?? []).length} chapters)`,
+          },
+        ],
+        isError: false,
+      },
     });
   });
 });

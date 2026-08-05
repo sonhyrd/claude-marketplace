@@ -216,7 +216,35 @@ function actionPayload(result) {
       /* a prose block is not the payload — keep looking */
     }
   }
-  return null;
+  // Last resort, and the one the LIVE deployment actually takes: it returns no structuredContent and
+  // puts PROSE in the content block, carrying the link in the `_meta` open-link hint instead. Both
+  // branches above therefore find nothing, and a publish that genuinely succeeded reads as a failure
+  // — the run tells the operator to attach a file by hand while a perfectly good recording exists.
+  // Measured against clips.paulsjob.ai on 2026-08-06; see docs/adr/0014.
+  return metaLinkPayload(result);
+}
+
+/**
+ * Reconstruct the payload from the MCP `_meta` open-link hint: `{ shareUrl, recordingId }`.
+ *
+ * The id is the last path segment of the share URL rather than a field of its own. That is a
+ * derivation, not a read, so it is deliberately strict — an id is returned only when the URL really
+ * is a `/share/<id>` on the expected origin. A looser parse would hand back a fragment of some other
+ * URL, and the per-chapter deep links built from it would open at the wrong moment, which is worse
+ * than reporting no links at all.
+ */
+function metaLinkPayload(result) {
+  const link = result?._meta?.['agent-native/openLink'];
+  const shareUrl = typeof link?.webUrl === 'string' ? link.webUrl : '';
+  if (!shareUrl) return null;
+  let recordingId = '';
+  try {
+    const segments = new URL(shareUrl).pathname.split('/').filter(Boolean);
+    if (segments.length === 2 && segments[0] === 'share') recordingId = segments[1];
+  } catch {
+    /* not a URL — report the share link we were given and no id */
+  }
+  return recordingId ? { shareUrl, recordingId } : { shareUrl };
 }
 
 /**
