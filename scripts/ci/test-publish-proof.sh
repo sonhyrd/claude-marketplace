@@ -688,7 +688,7 @@ start_stub unknown-tool
 preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT"; pfrc=$?
 pf_says "a non-delegable action warns without blocking" "PUBLISH_READY=no" 0
 if grep -q 'not-delegable:' "$W/pf.err" && grep -q 'callable catalog' "$W/pf.err" \
-   && grep -q 'Re-mint' "$W/pf.err"; then
+   && grep -q 're-mint the token' "$W/pf.err"; then
   ok "the non-delegable verdict names the cause and the fix, not a generic refusal"
 else
   bad "the non-delegable verdict is reported generically"; sed 's/^/         /' "$W/pf.err" | tail -3

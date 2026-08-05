@@ -77,6 +77,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   IMPORT_ACTION,
+  NOT_DELEGABLE_REMEDY,
   callClipsAction,
   classifyClipsResponse,
   clipsConfig,
@@ -429,18 +430,22 @@ try {
 // The outcome is READ OUT OF THE BODY, never off the status code. A refusal here is an HTTP 200
 // carrying an error, so `response.status === 200` would be a vacuous success check — and the one
 // status that does mean refusal (401) carries a body with no JSON-RPC result to parse at all.
+// Named one outcome at a time rather than as "not a success": a refused credential, an action this
+// token may not call, and an action that rejected the film are three different problems with three
+// different remedies, and one generic sentence sends an operator to the wrong one.
 const { outcome, detail, payload } = classifyClipsResponse(response.status, response.text);
-if (outcome === 'rejected') {
-  undelivered(`${CLIPS.endpoint} refused the credential — ${detail}`);
-}
-if (outcome === 'not-delegable') {
-  undelivered(
-    `${CLIPS.endpoint} does not offer ${IMPORT_ACTION} to this credential — ${detail}. The token is `
-      + 'valid; the action is absent from its callable catalog, so re-minting it is the fix.',
-  );
-}
-if (outcome !== 'ok') {
-  undelivered(`${CLIPS.endpoint} rejected the publish — ${detail}`);
+switch (outcome) {
+  case 'ok':
+    break;
+  case 'rejected':
+    undelivered(`${CLIPS.endpoint} refused the credential — ${detail}`);
+    break;
+  case 'not-delegable':
+    undelivered(`${CLIPS.endpoint} will not run ${IMPORT_ACTION} for this credential ("${detail}") — `
+      + `${NOT_DELEGABLE_REMEDY}.`);
+    break;
+  default:
+    undelivered(`${CLIPS.endpoint} rejected the publish — ${detail}`);
 }
 
 const shareUrl = typeof payload?.shareUrl === 'string' ? payload.shareUrl : '';

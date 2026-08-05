@@ -45,6 +45,16 @@
 export const IMPORT_ACTION = 'import-recording-from-url'; // the machine-caller door for the film
 export const COMMENT_ACTION = 'add-comment'; //             the per-scenario narration lands here
 
+/**
+ * What a caller should do about a non-delegable action, in one sentence. Written once because both
+ * the probe at minute zero and the publish at minute fifty report the same cause, and a remedy that
+ * drifts between them sends an operator down two different roads for one problem.
+ */
+export const NOT_DELEGABLE_REMEDY =
+  'the credential is valid and the action is absent from its callable catalog, which is a property ' +
+  'of the token, not of its validity — re-mint the token against a deployment that offers the ' +
+  'action to machine callers';
+
 /** How much of a foreign response body is worth quoting back at an operator. */
 const EXCERPT = 400;
 const excerpt = (text) => String(text ?? '').trim().slice(0, EXCERPT);
@@ -296,10 +306,7 @@ export async function probeImportCredential(config, timeoutMs = 15_000) {
     case 'not-delegable':
       return {
         verdict: 'not-delegable',
-        detail:
-          `this token's callable catalog does not include ${IMPORT_ACTION} — the credential is ` +
-          `valid, the action is not delegable to it ("${detail}"). Re-mint the token against a ` +
-          'deployment that exposes the action to machine callers.',
+        detail: `${IMPORT_ACTION} is not delegable to this token ("${detail}") — ${NOT_DELEGABLE_REMEDY}.`,
       };
     case 'rejected-args':
       // Defined by exclusion, and the accepted sentence is echoed so a wrong verdict is legible.
