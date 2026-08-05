@@ -603,6 +603,69 @@ ENDPOINT="http://127.0.0.1:1/mcp"
 alive_case "a refused connection"
 
 echo ""
+echo "-- a film over the destination's inline ceiling is refused BEFORE the request is built --"
+# The same Undelivered posture as the four cases above, reached without a destination being asked.
+# The import action caps inline video at 67108864 decoded bytes, and base64 decodes to exactly the
+# bytes on disk — so `stat` answers the question before the encode. Encoding first would spend the
+# base64 pass and the upload to learn what the filesystem already knew.
+#
+# This is emphatically NOT a gate: the film is fine, it is simply too big for this door. Withholding
+# it the way a gate does would destroy the only copy of good evidence at the moment the operator
+# needs it, so the kept file is asserted here exactly as it is for a 500.
+CEILING=67108864
+ffmpeg -y -f lavfi -i testsrc2=size=1280x720:rate=30:duration=8 -c:v libvpx-vp9 \
+  -b:v 80M -minrate 80M -maxrate 80M -cpu-used 8 -row-mt 1 -deadline realtime \
+  "$W/fat.webm" >/dev/null 2>&1
+FAT=$(wc -c < "$W/fat.webm" 2>/dev/null | tr -d ' ')
+if [ "${FAT:-0}" -lt 1048576 ]; then
+  # NOT a skip, for the reason the other fixture guards give: a suite that reports green over an
+  # unexercised refusal is the silent-always-pass this repo calls P0.
+  bad "the oversized fixture came out at ${FAT:-0}B — the ceiling refusal went unexercised"
+else
+  # The clip is listed however many times it takes to clear the ceiling, computed from the fixture's
+  # real size rather than assumed: a different ffmpeg build hits a different bitrate, and a hard-coded
+  # repeat count would quietly stop clearing the ceiling on someone else's machine.
+  COPIES=$(( CEILING / FAT + 2 ))
+  COPIES="$COPIES" node -e '
+    const n = Number(process.env.COPIES);
+    const clips = Array.from({ length: n }, (_, i) => ({
+      ac: `Criterion ${i + 1} holds`, scenario: `scenario ${i + 1}`, file: "fat.webm",
+    }));
+    process.stdout.write(JSON.stringify({ title: "oversized proof", clips }));
+  ' > "$W/fat.json"
+  start_stub ok
+  rm -f "$PROOF"
+  publish fat.json
+  rc=$?
+  [ "$rc" = 0 ] && ok "an oversized film — exit 0, the run is still passing" \
+    || { bad "an oversized film — exit $rc: a run must never fail over undelivered evidence"
+         sed 's/^/         /' "$W/err" | tail -4; }
+  [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ] \
+    && ok "an oversized film — no request was built and nothing was sent" \
+    || bad "an oversized film — a request went out over the ceiling"
+  kept=$(sed -n 's/^PWPROVE_PROOF_FILE //p' "$W/out" | head -n1)
+  [ -n "$kept" ] && [ -s "$kept" ] \
+    && ok "an oversized film — the kept film's path is on a PWPROVE_PROOF_FILE marker line ($kept)" \
+    || { bad "an oversized film — no kept film at '$kept'"; sed 's/^/         /' "$W/err" | tail -3; }
+  [ -z "$(sed -n 's/^PWPROVE_URL //p' "$W/out")" ] \
+    && ok "an oversized film — no share URL is claimed" \
+    || bad "an oversized film — a share URL was printed although nothing was delivered"
+  grep -q 'GATE' "$W/err" \
+    && bad "an oversized film — reported as a gate; the artifact is fine, it is merely undeliverable" \
+    || ok "an oversized film — no gate is named: the artifact is good, just too big for this door"
+  # Both numbers, exact: an operator who is told only "too large" cannot tell whether to trim one
+  # scenario or to stop trying. The actual size is read off the film that was actually kept.
+  ACTUAL=$(wc -c < "${kept:-/dev/null}" 2>/dev/null | tr -d ' ')
+  if grep -qF "$CEILING" "$W/err" && grep -qF "$ACTUAL" "$W/err"; then
+    ok "an oversized film — the refusal names the ceiling ($CEILING) and the actual size ($ACTUAL)"
+  else
+    bad "an oversized film — the refusal does not name both the ceiling and the actual size"
+    sed 's/^/         /' "$W/err" | tail -3
+  fi
+  rm -f "$W/fat.webm" "$PROOF"
+fi
+
+echo ""
 echo "-- the retired fifth gate leaves no object-name vocabulary behind --"
 # Clips assigns the recording identifier, so there is nothing for this script to name or to refuse.
 if grep -niE 'keyname|key-prefix|key_prefix|KEY_PREFIX|object key|degenerate|slugify|\bkeys?\b' \
