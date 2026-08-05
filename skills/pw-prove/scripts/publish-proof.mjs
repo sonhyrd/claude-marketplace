@@ -60,6 +60,12 @@
 // never fails over undelivered evidence. The concatenated video is kept at a stable path and that
 // path is printed on a PWPROVE_PROOF_FILE marker line, so the proof can be attached by hand.
 //
+// One refusal takes that path without a destination being asked. The import action carries at most
+// 67108864 decoded bytes inline, and a base64 data URL decodes to exactly the bytes on disk — so an
+// oversized film is measured by `stat` and refused before the request is built, rather than encoded
+// and uploaded to be rejected at the far end. It is Undelivered, never a gate: the film is fine, it
+// is simply too big for this door, and it is kept.
+//
 // Prints the share URL as the FIRST stdout line, then repeats it on a MARKER line (progress goes to
 // stderr; the trailing PWPROVE_RUN ledger line follows). Read the MARKER, not line 1 — a caller that
 // adds `2>&1` puts npm/ffmpeg chatter on line 1 instead:
@@ -117,8 +123,12 @@ const gate = (code, name, ...lines) => {
 
 // Delivery is the opposite posture: undelivered evidence never fails a run. The proof is the passing
 // test plus the mutation verdict, so the exit code stays 0 and the operator gets a file to attach.
-const undelivered = (message) => {
-  err(`publish-proof: publish failed — ${message}\n`);
+//
+// `headline` names WHICH kind of undelivered this is. Everything that reaches the destination and
+// comes back wrong is a publish that failed; a film refused locally for its size failed at nothing,
+// because it was never sent — and calling that a failure sends an operator looking for an outage.
+const undelivered = (message, headline = 'publish failed') => {
+  err(`publish-proof: ${headline} — ${message}\n`);
   err('publish-proof: the run STAYS ALIVE — the proof is the passing test plus the mutation verdict, '
     + 'not its delivery.\n');
   err(`publish-proof: the concatenated proof is at ${PROOF_FILE} — attach it to the PR by hand.\n`);
@@ -405,6 +415,30 @@ if (drift > tolerance) {
 // The bytes that would ACTUALLY be sent, scanned last: concatenation copies packets, and a container
 // this script did not write is not a container it gets to vouch for.
 scanBytes(PROOF_FILE, 'the concatenated proof');
+
+// ============================================================ the destination's inline ceiling
+// The import action refuses more than 64 MiB of video carried inline, and a base64 data URL decodes
+// to exactly the bytes sitting on disk — so `stat` answers the question before a single byte is
+// encoded. Encoding first would spend the base64 pass and the upload to learn what the filesystem
+// already knew.
+//
+// This is NOT a fifth gate, and the difference is the point. Every gate above says the artifact is
+// WRONG and withholds the file with it. This says the opposite: the film is fine, it is simply too
+// big for this door — so it takes the Undelivered path, keeps the file, and the run stays green.
+// Withholding it would destroy the only copy of good evidence at the moment the operator needs it.
+const INLINE_BYTE_CEILING = 67_108_864; // 64 MiB decoded — the import action's documented cap
+const mib = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+const filmBytes = fs.statSync(PROOF_FILE).size;
+if (filmBytes > INLINE_BYTE_CEILING) {
+  // Both numbers, exact: an operator told only "too large" cannot tell whether dropping one scenario
+  // would clear it or whether the run is nowhere near.
+  undelivered(
+    `the concatenated film is ${mib(filmBytes)} (${filmBytes} bytes), over the `
+      + `${mib(INLINE_BYTE_CEILING)} (${INLINE_BYTE_CEILING} bytes) the import action carries inline. `
+      + 'Nothing was encoded and nothing was sent.',
+    'not delivered',
+  );
+}
 
 // ============================================================ the one request
 const body = {
