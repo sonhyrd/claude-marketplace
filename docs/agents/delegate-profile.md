@@ -7,7 +7,9 @@ baseline, known-noise test, or environment trap.
   `git remote get-url origin` and warns on mismatch. Note this repo also carries an `upstream`
   remote (`voidmatcha/e2e-skills`); it is never a push target.
 
-- **Branch prefix**: `ticket/` — per-ticket branches are `ticket/<ticket-slug>`.
+- **Branch prefix**: `sss/` — Orca prefixes worktree branches itself, so a worktree named
+  `ticket/<slug>` produces branch `sss/ticket-<slug>`. Do not fight it; merge by the real branch
+  name that `orca worktree create` reports, not by the name you asked for.
 
 - **Post-merge check**:
 
@@ -70,12 +72,21 @@ baseline, known-noise test, or environment trap.
     chapters. Commit `ccba214` moved acceptance criteria from chapter titles into per-chapter
     comments, adding one request per chapter, and did not update the tests.
 
-### Environment trap: the publish tests can reach production
+### Environment trap: the publish tests could reach production — CLOSED
 
-Until the credential-file fallback is removed, **any worker running `ci-local.sh` on a machine with
-`~/.config/pw-prove-clips.env` present will create a real, public Clips recording.** A worker brief
-that includes the post-merge check MUST also instruct the worker to isolate `HOME` for the publish
-tests. Do not treat the 8 failures above as a regression the worker introduced.
+Until the credential-file fallback was removed, **any worker running `ci-local.sh` on a machine with
+`~/.config/pw-prove-clips.env` present created a real, public Clips recording.**
+
+**Closed by #17 (2026-08-06), two ways:** the credential-file mechanism is deleted outright, and the
+publish tests now run under an isolated `HOME`. Both belts matter — keep the isolation even though
+the fallback is gone, because it is what makes an absent-credential test mean what it says.
+
+- **Commit**: `5447df4` · **Measured**: 2026-08-06
+- `ci-local.sh` — **GREEN**, all checks passed, zero `[FAIL]`.
+- `pre-push-security.sh` — **GREEN**, 8 passed, 0 warnings, 0 blockers.
+- Verified: the full run emits **no** `clips.paulsjob.ai` URL, so no production recording is created.
+
+This green baseline supersedes the red one above. Any future failure is a real regression.
 - **Known environment note:** this checkout has **no `.claude-plugin/` or `.codex-plugin/`
   directory** — the plugin manifests live only in the marketplace subtree copy. Manifest-parity
   checks therefore do not behave as `AGENTS.md` describes here. Do not "fix" this by recreating the
