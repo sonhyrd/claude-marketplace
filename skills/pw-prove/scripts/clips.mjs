@@ -231,7 +231,12 @@ export function classifyClipsResponse(status, text) {
       : '';
   const errorText = envelopeError || (result?.isError ? contentText(result) : '');
   if (errorText) {
-    if (/^unknown tool/i.test(errorText)) {
+    // The measured sentence is a bare "Unknown tool: <name>", but the same wrapper prefixes its
+    // OTHER tool errors with "Error: " — so an anchored `^unknown tool` is one server-side wording
+    // change away from silently reclassifying a non-delegable action as a reached-and-rejected one,
+    // which the probe would then report as a green PUBLISH_READY. Tolerating the prefix cannot
+    // misfire in the other direction: nothing else this endpoint says begins "unknown tool".
+    if (/^(error:\s*)?unknown tool/i.test(errorText)) {
       return { outcome: 'not-delegable', detail: errorText.slice(0, EXCERPT) };
     }
     return { outcome: 'rejected-args', detail: errorText.slice(0, EXCERPT) };

@@ -149,8 +149,10 @@ jassert "the call names the import action and wraps the payload in params.argume
   'b.params.name === "import-recording-from-url" && b.params.arguments && typeof b.params.arguments === "object"'
 # Verified against the live deployment: a bare tools/call works and responses are plain JSON. A
 # handshake this transport does not need would be an extra round trip on every publish.
+# The length is part of the assertion, not decoration: `every` over an empty capture is true, so a
+# regression that sent nothing at all would pass this as written without it.
 jassert "no initialize handshake precedes the call" \
-  'all.every((x) => x.body?.method === "tools/call")'
+  'all.length === 3 && all.every((x) => x.body?.method === "tools/call")'
 jassert "the request declares JSON, and accepts the event-stream framing it never receives" \
   'r.headers["content-type"] === "application/json" && String(r.headers.accept).includes("application/json")'
 jassert "the video travels as a base64 data URL" \
@@ -167,7 +169,8 @@ jassert "the recording is titled from the manifest" 'args.title === "PR #2974 �
 # The acceptance criteria travel as timestamped comments, verbatim, at their chapter's offset — a
 # scrubber tooltip is label-sized and a criterion is a sentence.
 jassert "each chapter's criterion is posted verbatim as a comment at that chapter's offset" \
-  'all.slice(1).every((x) => x.body.params.name === "add-comment")
+  'all.slice(1).length === 2
+   && all.slice(1).every((x) => x.body.params.name === "add-comment")
    && all[1].body.params.arguments.content === "Per-locale EN/DE/ID authoring"
    && all[1].body.params.arguments.videoTimestampMs === 0
    && all[2].body.params.arguments.content === "Every locale empty removes the key"
@@ -178,8 +181,11 @@ echo "-- the recording identifier is PARSED out of the success envelope, not ass
 # The identifier arrives inside a JSON-RPC result, as the text of a content block. A parser that
 # reads the envelope as the action's own JSON gets `undefined` — which then reads as a plausible id
 # everywhere it is interpolated, so this asserts the real value on the wire and in the report.
+# The count is load-bearing: `every` over nothing is true, so without it a publish that parsed no id
+# and therefore posted no comment would read as a pass on the very claim being made.
 jassert "the comments are addressed to the recording id the destination actually returned" \
-  'all.slice(1).every((x) => x.body.params.arguments.recordingId === "rec_stub_1")'
+  'all.slice(1).length === 2
+   && all.slice(1).every((x) => x.body.params.arguments.recordingId === "rec_stub_1")'
 if grep -q 'publish-proof: 2 timestamped comment(s) attached' "$W/err"; then
   ok "both comments are reported as attached"
 else
@@ -693,6 +699,16 @@ if grep -q 'not-delegable:' "$W/pf.err" && grep -q 'callable catalog' "$W/pf.err
 else
   bad "the non-delegable verdict is reported generically"; sed 's/^/         /' "$W/pf.err" | tail -3
 fi
+
+# The same refusal, wearing the "Error: " prefix the wrapper puts on its other tool errors. A client
+# that recognises only the bare form falls through to the reached-and-rejected branch and reports
+# PUBLISH_READY=yes over an action it cannot call — a green preflight about nothing.
+start_stub unknown-tool-prefixed
+preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT"; pfrc=$?
+pf_says "a prefixed non-delegable refusal is still not-delegable" "PUBLISH_READY=no" 0
+grep -q 'not-delegable:' "$W/pf.err" \
+  && ok "the catalog refusal is recognised whether or not it carries the wrapper's error prefix" \
+  || { bad "a prefixed 'Unknown tool' was misread as a usable credential"; sed 's/^/         /' "$W/pf.err" | tail -3; }
 
 start_stub ok
 preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="http://127.0.0.1:1/mcp"; pfrc=$?

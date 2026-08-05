@@ -6,16 +6,18 @@
 // pointing PW_PROVE_CLIPS_ENDPOINT here. Every request is appended to $CAP/requests.jsonl as
 // {method,url,headers,body} so the test can assert on what would have been sent.
 //
-//   CAP=<dir> STUB_MODE=ok|validation|unauthorized|unknown-tool|error node clips-stub-server.mjs
+//   CAP=<dir> STUB_MODE=ok|validation|unauthorized|unknown-tool|unknown-tool-prefixed|error \
+//     node clips-stub-server.mjs
 //
-// The five modes are the five shapes the live deployment was MEASURED to produce (2026-08-05/06),
-// and the split between them is the whole point of the check:
+// The modes are the shapes the live deployment was MEASURED to produce (2026-08-05/06), and the
+// split between them is the whole point of the check:
 //
-//   ok           200, a JSON-RPC result whose single text block is the action's own JSON
-//   validation   200, `isError: true` — the action was REACHED and rejected the arguments
-//   unknown-tool 200, `isError: true`, "Unknown tool: …" — the token's callable catalog lacks it
-//   unauthorized 401, and the body is NOT JSON-RPC at all: no `result`, no `jsonrpc`
-//   error        500, a plain body — the destination fell over
+//   ok                     200, a JSON-RPC result whose text block is the action's own JSON
+//   validation             200, `isError: true` — the action was REACHED and rejected the arguments
+//   unknown-tool           200, `isError: true`, "Unknown tool: …" — the callable catalog lacks it
+//   unknown-tool-prefixed  the same refusal wearing the "Error: " prefix the wrapper uses elsewhere
+//   unauthorized           401, and the body is NOT JSON-RPC at all: no `result`, no `jsonrpc`
+//   error                  500, a plain body — the destination fell over
 //
 // Only `unauthorized` carries a non-2xx status that means "refused". Everything after auth arrives
 // at HTTP 200, so a caller keyed on the status code passes vacuously — which is what this fixture
@@ -86,6 +88,10 @@ const server = http.createServer((req, res) => {
       return send(500, { error: 'Internal server error', received: req.headers.authorization ?? '' });
     }
     if (MODE === 'unknown-tool') return toolError(`Unknown tool: ${action}`);
+    // The same refusal as `unknown-tool`, wearing the `Error: ` prefix this wrapper puts on its
+    // other tool errors. Which of the two a deployment sends is the server's to change, and a
+    // client that recognises only one reports a non-delegable action as a usable credential.
+    if (MODE === 'unknown-tool-prefixed') return toolError(`Error: Unknown tool: ${action}`);
     if (MODE === 'validation') {
       // Verbatim from the live deployment. The scripts must NOT match this sentence — they classify
       // by exclusion and echo it — so it lives here only to be echoed back at them.

@@ -97,7 +97,8 @@ fi
 if [ "${E2E_SKILLS_SKIP_PUBLISH_PROOF:-}" != "1" ]; then
   step "Publish proof (publish-proof.mjs, process boundary)"
   # ADR 0012: manifest in, ONE Clips share link out — this replaced the proof-page check when the
-  # R2 path was deleted, so there is one publish shape and one check over it. CLIPS_ORIGIN points at
+  # R2 path was deleted, so there is one publish shape and one check over it. The transport is
+  # JSON-RPC to an MCP endpoint, and PW_PROVE_CLIPS_ENDPOINT points that at
   # a throwaway local stub server that captures the request; ffmpeg/ffprobe stay REAL over real
   # synthetic clips, so the chapter offsets and the stream-copy claim are proven against actual
   # files. Skips if ffmpeg is absent; never touches the network.
