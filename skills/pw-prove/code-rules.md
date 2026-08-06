@@ -135,7 +135,7 @@ test.describe('Login', () => {
 
 | Forbidden | Use instead |
 |-----------|-------------|
-| `waitForTimeout(N)` | `await expect(el).toBeVisible({ timeout: N })` — sole exception: the env-gated payoff dwell (see [Clip Fidelity](#clip-fidelity-viewport-pin--payoff-dwell)) |
+| `waitForTimeout(N)` | `await expect(el).toBeVisible({ timeout: N })` — sole exception: the env-gated payoff dwell (see [Clip Fidelity](#clip-fidelity)) |
 | `expect(await el.isVisible()).toBe(true)` | `await expect(el).toBeVisible()` |
 | `const n = await el.count()` | `await expect(el).toHaveCount(N)` or `.first()` + `toBeVisible()` |
 | `toBeAttached()` | `toBeVisible()` — `toBeAttached` is vacuous on always-rendered elements. Negative `not.toBeAttached()` and checks on dynamically-injected elements are acceptable (matches e2e-reviewer #4b). |
@@ -150,9 +150,35 @@ test.describe('Login', () => {
 
 ---
 
-## Clip Fidelity (viewport pin + payoff dwell)
+## Clip Fidelity
 
-The Proof clip is **reviewer-facing evidence**, not a leftover (`docs/adr/0007`). Two generation-time rules make it usable. Both belong in the **committed** spec, so the Step-7 proof run and the CI run render identically by construction rather than by luck.
+The Proof clip is **reviewer-facing evidence**, not a leftover (`docs/adr/0007`, amended by `docs/adr/0015`). Everything below belongs in the **committed** spec, so the Step-7 proof run and the CI run render identically by construction rather than by luck.
+
+### The filming law
+
+Apply one principle, not a list of positions:
+
+> **`PW_PROVE_CLIP` may only ever add time. It may never change what the app is asked to do.**
+
+Two consequences, and they are the whole rule:
+
+- **Waits are the only gated operation.** A dwell — and nothing else — sits behind `if (process.env.PW_PROVE_CLIP)`.
+- **Everything else is unconditional.** Centring, scrolling, and the choice of input method are written plainly in the spec and **run in CI too**. If a legible clip needs the element centred, CI centres it as well; that is what makes the filmed rendering the same rendering CI produces.
+
+A gated dwell may sit at **any beat** — after a navigation, after a form fills, after an intermediate assertion, at the end — **except in a race window**.
+
+> A **race window** is the gap between an action and the assertion that covers it: the one place where extra time changes the verdict. A dwell there makes the filmed run more patient than CI, so the proof passes while CI flakes. That is smell #9 with a switch on it.
+
+Every dwell sits **after** its beat's own assertion, which is what puts it outside the race window. Confining the dwell to the end of the test was the crude form of this rule; the race window is the rule.
+
+**Consequently forbidden**, even though each is tempting while filming:
+
+| Forbidden | Why the filming law rejects it |
+|---|---|
+| A `PW_PROVE_CLIP`-gated `pressSequentially()` in place of `fill()` | Swaps one `input` event for N keystroke events *before* the assertion. A debounced field, a per-key validator or a typeahead is driven **differently in the film than in CI** — the filmed software is not the shipped software. |
+| An ungated `pressSequentially(value, { delay })` | The delay is a per-keystroke fixed sleep **every CI run pays forever**. That is smell #9's cost profile walking back in through the front door. |
+| A gated `test.use({ viewport })`, or any gated scroll/centring | Changes what the app is asked to render. A rendering that exists only while filming means healing, the hermetic audit and the mutation check all ran against something CI never produces. |
+| A gated `route()`, click, assertion timeout or retry count | Not a wait. Anything that alters traffic, input or tolerance changes the run, not its duration. |
 
 ### Viewport pin
 
@@ -177,26 +203,54 @@ Pin in the **spec** — never by editing the project's committed `playwright.con
 
 Report the resolved effective viewport in the run's Assumptions block. Step 7 passes it as `PW_PROVE_W`/`PW_PROVE_H` so the recording size matches and the clip is never downscaled — the proof config itself stays static and carries no per-run value.
 
+### Framing
+
+**Framing is the fourth property of the clip fidelity contract**, beside legible size, warm lead and held payoff — and it is mandatory, not a polish pass. A clip can hold the success signal for the full dwell and still be worthless, because the signal sits jammed against the screen edge — or was pushed off-frame entirely by a re-render that landed after the scroll. **Centre the element under proof, at the moment of the hold** — `await el.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }))`, immediately before the dwell it frames (see the §Payoff dwell snippet, which is the shape to copy).
+
+- **`scrollIntoViewIfNeeded()` is not framing.** It moves the *minimum* distance, so it parks the element against whichever edge it entered from. Playwright's actionability scroll does the same. Both leave a frame one re-render away from useless.
+- **At the moment of the hold, not before it.** Centre after the assertion that proves the payoff, so any re-render that assertion waited for has already happened. Centring earlier and dwelling later films whatever the re-render moved into place.
+- **Ungated.** Framing is a scroll, not a wait — the filming law puts it in the committed spec unconditionally.
+
 ### Payoff dwell
 
-The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. Hold it:
+The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. **Every generated `test()` carries at least one dwell**, framed:
 
 ```typescript
 // Then: the save is confirmed
-await expect(page.getByRole('status')).toHaveText('Saved');   // terminal assertion
+const status = page.getByRole('status');
+await expect(status).toHaveText('Saved');                     // assertion covering this beat
+await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));  // framing, ungated
 // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
-// run), after the terminal assertion, so it cannot affect pass/fail. CI never sets it.
+// run); it sits after the assertion above, outside the race window, so it adds time and nothing
+// else. CI never sets it.
 if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
 ```
 
 Every constraint here is load-bearing:
 
-- **After the terminal assertion only.** A dwell before or between assertions is the #9 band-aid papering over a race, and the reviewer is right to flag it. Placed after the last assertion it is incapable of changing the verdict, which is what makes the conditional safe — unlike the viewport, where conditionality would not be.
+- **At least one per test**, outside every race window. The last one goes at the end of the test, on the payoff. A further mid-test hold is legitimate when a beat the reviewer must see (a route transition, a filled form, an intermediate state) would otherwise flash past, and it goes **after** that beat's own assertion.
+- **Framed.** A dwell holds on something; if the reader cannot see it, the hold bought nothing. Centre first, hold second.
 - **Env-gated on `PW_PROVE_CLIP`.** Only the Step-7 proof run sets it. CI never does, so the suite does not get slower with every proof that lands.
-- **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful.
-- **One per test**, at the very end.
+- **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful. A dwell without the marker is an unexplained fixed wait and gets flagged like any other.
 
 This is the **only** sanctioned `page.waitForTimeout()` in generated output. Any other one is #9 and gets fixed, not justified.
+
+### Atomic input
+
+The evidence is the **state change**, not the keystrokes — so fill atomically and hold on the field's end state. (The exception is an acceptance criterion that is itself *about entering data*.)
+
+```typescript
+// When: the reviewer enters the new title
+await page.getByLabel('Title').fill('Q3 revenue review');
+// Then: the form accepts it
+await expect(page.getByLabel('Title')).toHaveValue('Q3 revenue review');
+await page.getByLabel('Title').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP; adds time only, and sits
+// after the assertion covering the fill above. CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1500);
+```
+
+A held filled field reads as well as keystrokes and costs CI nothing.
 
 ---
 
@@ -305,7 +359,7 @@ Fulfilling locally in the route handler is also what keeps a mutation proof herm
 - Preferred gate, in order:
   1. An app-provided hydration marker: `await expect(page.locator('html[data-hydrated]')).toBeAttached();` — if the app exposes none, propose the one-line marker upstream (set an attribute in a root `useEffect`/`onMounted`); it fixes every spec at once.
   2. A self-verifying first action: `await expect(async () => { await button.click(); await expect(dialog).toBeVisible({ timeout: 1000 }); }).toPass();` — retries the click until it lands.
-- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI. (The one sanctioned dwell is the [payoff hold](#clip-fidelity-viewport-pin--payoff-dwell): env-gated, and *after* the terminal assertion — never a wait for something to become ready.)
+- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI. (The one sanctioned dwell is the [payoff hold](#clip-fidelity): env-gated, and placed outside the race window — never a wait for something to become ready.)
 - Nuance: Qwik apps are resumable, not hydrated — no page-global gate needed. Island frameworks (Astro) hydrate per-island per their `client:*` directive — gate on the specific island's readiness (its own marker or a self-verifying action on that island), not a page-global signal.
 
 ---

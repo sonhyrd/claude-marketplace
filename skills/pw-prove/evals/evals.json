@@ -264,7 +264,7 @@
       "id": 21,
       "title": "Clip fidelity: the full bundle (size, warm lead, held payoff) on a project that declares no viewport",
       "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-flat/. The Playwright config declares no explicit `viewport:` key anywhere and there is no proof config in the repo yet. Generate the proof spec and describe the Step 7 proof run: the proof config, the commands, and anything you do before filming. State the effective viewport you resolved and where the pin lives.",
-      "expected_output": "Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should write `playwright.proof.config.ts` next to the project config as a STATIC file — `video: { mode: 'on', size }` with size read from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, no per-run literal substituted into the file — and pass `PW_PROVE_W=1600 PW_PROVE_H=900` on the proof command so the clip is never left at Playwright's 800x800-box downscale. Should warm the route under proof with a single request immediately before the proof run. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell placed AFTER the terminal assertion. Should not edit the committed playwright.config, should not pin the viewport only in the proof config, and should stage (not delete) the proof config in Step 8.",
+      "expected_output": "Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should write `playwright.proof.config.ts` next to the project config as a STATIC file — `video: { mode: 'on', size }` with size read from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, no per-run literal substituted into the file — and pass `PW_PROVE_W=1600 PW_PROVE_H=900` on the proof command so the clip is never left at Playwright's 800x800-box downscale. Should warm the route under proof with a single request immediately before the proof run. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell in every test, placed after the assertion covering the beat it holds (never between an action and that assertion), with an UNGATED `scrollIntoView({ block: 'center' })` framing the held element immediately before it. Should not edit the committed playwright.config, should not pin the viewport only in the proof config, and should stage (not delete) the proof config in Step 8.",
       "files": [
         "evals/files/project-flat/playwright.config.ts",
         "evals/files/project-flat/tests/login.spec.ts"
@@ -281,8 +281,9 @@
         "Warms the route under proof with one request before the proof run",
         "Sets PW_PROVE_CLIP=1 on the Step 7 proof run",
         "Generates a dwell gated on process.env.PW_PROVE_CLIP",
-        "Places the dwell after the terminal assertion, not before or between assertions",
+        "Places the dwell after the assertion covering the beat it holds -- never between an action and the assertion that covers it",
         "Puts a `// JUSTIFIED:` comment on the line above the dwell",
+        "Centres the held element with an UNGATED scrollIntoView({ block: 'center' }) immediately before the dwell -- framing is a scroll, not a wait, so it is not gated on PW_PROVE_CLIP",
         "Does not reintroduce a second run, a post-processing pass, or a hand-built page to make the clip usable",
         "False-positive guard: proposes no ffmpeg in Step 7 and no re-encode, trim or transcode anywhere -- the only ffmpeg on this path is Step 8's stream-copy concatenation, which decodes no frame and so cannot repair a clip recorded at the wrong viewport"
       ]
@@ -304,7 +305,7 @@
         "Passes PW_PROVE_W=1440 PW_PROVE_H=900 on the proof command, matching the project's viewport",
         "False-positive guard: does NOT hardcode 1440x900 into playwright.proof.config.ts — the file stays static and project-agnostic",
         "Still warms the route before the proof run",
-        "Still generates the JUSTIFIED, PW_PROVE_CLIP-gated dwell after the terminal assertion",
+        "Still generates the JUSTIFIED, PW_PROVE_CLIP-gated dwell, framed by an ungated centring call",
         "Does not edit the project's committed playwright.config.ts"
       ]
     },
@@ -324,7 +325,7 @@
         "Does not resolve the effective viewport to the descriptor's 1280x720",
         "Resolves the descriptor without being told it carries 1280x720",
         "Does not edit the project's committed playwright.config.ts",
-        "Generated spec still carries the JUSTIFIED, PW_PROVE_CLIP-gated dwell after the terminal assertion"
+        "Generated spec still carries the JUSTIFIED, PW_PROVE_CLIP-gated dwell, framed by an ungated centring call"
       ]
     },
     {
@@ -476,6 +477,85 @@
         "Either re-records with the probe or states the no-HAR deviation explicitly in the plan's Assumptions block and in the completion report",
         "Reads the probe's close output for the RECORD_HAR verdict (written path + byte count, or the warning) instead of assuming the recon was clean",
         "False-positive guard: does not treat an absent HAR as evidence that the surface makes no API calls"
+      ]
+    },
+    {
+      "id": 34,
+      "title": "The filming law: a legible clip is bought with time only, never with a different input path",
+      "prompt": "You are in Step 5 generating a proof spec for an AC about saving a renamed report. The flow is: fill the Title field, click Save, a toast confirms. The Title field sits below the fold on a 1600x900 viewport and the page re-renders when the toast mounts. You want the reviewer to be able to see the title being entered and the confirmation. Write the relevant part of the spec and justify each clip-fidelity decision.",
+      "expected_output": "Should apply the filming law from `code-rules.md` §Clip Fidelity: PW_PROVE_CLIP may only ever ADD TIME, never change what the app is asked to do. So the only gated construct is `page.waitForTimeout()`. Must NOT reach for a PW_PROVE_CLIP-gated `pressSequentially()` in place of `fill()` to make the typing visible — that swaps one `input` event for N keystroke events before the assertion, driving a debounced or per-key-validated field differently in the film than in CI — and must NOT use an ungated `pressSequentially(value, { delay })`, whose per-keystroke sleep every CI run pays forever. Instead should fill atomically and hold on the field's END STATE, after the assertion covering the fill. Framing must be handled by an UNGATED `scrollIntoView({ block: 'center' })` on the element under proof, taken at the moment of each hold — after the toast's assertion, not before the re-render — rather than by `scrollIntoViewIfNeeded()`, which moves the minimum distance and parks the element against the screen edge. A mid-test dwell after the fill's own assertion is allowed under the relaxed placement rule; a dwell between the Save click and the toast assertion is not, because there the filmed run would be more patient than CI and the proof would pass where CI flakes.",
+      "assertions": [
+        "Applies the filming law: the only PW_PROVE_CLIP-gated construct in the generated spec is a wait",
+        "Fills the Title field atomically with `fill()` and holds on the filled field's end state rather than filming the typing",
+        "Does NOT emit a PW_PROVE_CLIP-gated `pressSequentially()`, and names the reason: N keystroke events instead of one input event, before the assertion",
+        "Does NOT emit an ungated `pressSequentially(..., { delay })`, and names the reason: a per-keystroke fixed sleep every CI run pays forever",
+        "Centres the element under proof with an UNGATED scrollIntoView({ block: 'center' }) at the moment of each hold, not `scrollIntoViewIfNeeded()`",
+        "Places the framing call AFTER the assertion that waits out the toast re-render, so the camera cannot be left pointed at pre-render coordinates",
+        "Places a dwell after the fill's own assertion (a mid-test hold is permitted), and never between the Save click and the toast assertion",
+        "Every dwell carries its `// JUSTIFIED:` line on the preceding line and is gated on process.env.PW_PROVE_CLIP",
+        "False-positive guard: does NOT gate the centring, the scroll or the viewport pin on PW_PROVE_CLIP -- those change what the app is asked to render, so they stay unconditional and CI renders identically",
+        "False-positive guard: proposes no second run, no post-processing of the recording and no edit to the project's committed playwright.config.ts"
+      ]
+    },
+    {
+      "id": 35,
+      "title": "Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader",
+      "prompt": "You are at Step 6. Step 4's Assumptions block recorded `Effective viewport: pinned: 1600x900`. The generated `e2e/reports.spec.ts` opens with `test.use({ viewport: { width: 1600, height: 900 } })`, every test() carries its `// PROVES:` header, the YAGNI audit is clean and e2e-reviewer reports no P0. Nothing in the spec mentions `PW_PROVE_CLIP`. Run the Step-6 audits and say what happens next.",
+      "expected_output": "Should run the clip-fidelity audit — `node <skill>/scripts/clip-fidelity.mjs spec e2e/reports.spec.ts --config <configPath> --verdict \"pinned:1600x900\"` — and read its exit code, not just the passing YAGNI/PROVES/e2e-reviewer results. The script exits 2: no test() carries a PW_PROVE_CLIP-gated wait. That BLOCKS Step 7 exactly as a missing PROVES header does — this is the originating regression, where the proof run passed PW_PROVE_CLIP=1 into a spec with no reader, so the flag was inert, the dwell never happened, and every gate stayed green over a recording that showed nothing. The fix is to add the framed, `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell from code-rules.md §Payoff dwell to each test(), then re-run the audit until it exits 0. Must not proceed to the proof run and must not treat the clean PROVES/YAGNI/e2e-reviewer results as sufficient.",
+      "files": [],
+      "assertions": [
+        "Runs clip-fidelity.mjs spec as part of Step 6, passing both --config and the Assumptions block's verdict verbatim",
+        "Treats exit 2 as BLOCKING Step 7, the same way a missing PROVES header does",
+        "Names the cause: no test() carries a PW_PROVE_CLIP-gated wait, so Step 7's PW_PROVE_CLIP=1 would be inert",
+        "Adds a framed, PW_PROVE_CLIP-gated dwell with its `// JUSTIFIED:` line to each test(), then re-runs the audit",
+        "Does not start the Step-7 proof run while the audit is non-zero",
+        "False-positive guard: does not conclude the spec is fine because the YAGNI audit, the PROVES-header audit and e2e-reviewer are all clean"
+      ]
+    },
+    {
+      "id": 36,
+      "title": "A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin",
+      "prompt": "You are at Step 6. The project's `playwright.config.ts` contains `use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 810 } }`. Step 4's Assumptions block recorded `Effective viewport: deliberate: 1440x810`. The generated spec has no `test.use({ viewport })` and every test() carries a framed, `// JUSTIFIED:`, PW_PROVE_CLIP-gated dwell. Run the clip-fidelity audit and say what happens next.",
+      "expected_output": "Should run `clip-fidelity.mjs spec <spec> --config playwright.config.ts --verdict \"deliberate:1440x810\"`. The script re-derives `deliberate` from the config text — an explicit `viewport:` key is a project decision, and it outranks the `...devices['Desktop Chrome']` spread sitting beside it — agrees with the declared verdict, and exits 0. The absent `test.use({ viewport })` is CORRECT here: code-rules.md §Viewport pin says a deliberate viewport is respected and never pinned over, so adding a 1600x900 pin would make the proof run and the mutation check render at a size the project never uses. Should proceed to Step 7 and size the recording (PW_PROVE_W/PW_PROVE_H) to 1440x810, the effective viewport, not to the 1600x900 pin default.",
+      "files": [],
+      "assertions": [
+        "Derives `deliberate` because of the explicit viewport: key, not the Desktop Chrome spread",
+        "Reports the audit as passing (exit 0) with no viewport pin in the spec",
+        "Does NOT add `test.use({ viewport: { width: 1600, height: 900 } })` to the spec",
+        "Names the rule: a deliberate project viewport is respected, never pinned over",
+        "Carries 1440x810 into Step 7 as PW_PROVE_W/PW_PROVE_H so the recording is not downscaled",
+        "False-positive guard: does not read the `...devices['Desktop Chrome']` spread as scaffold default when an explicit viewport: key sits in the same use block",
+        "False-positive guard: does not edit the project's committed playwright.config.ts"
+      ]
+    },
+    {
+      "id": 37,
+      "title": "Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film",
+      "prompt": "You are at Step 7. The proof run passed, three webms are under test-results/, and you ran `node <skill>/scripts/clip-fidelity.mjs frames test-results/*/video.webm` — it exited 0 and wrote one PNG beside each clip. You open them: clips 1 and 2 show the saved banner centred and settled; clip 3 shows the record list with the success toast cut off against the right edge of the frame. Say what you do next.",
+      "expected_output": "Should state in the report what each frame shows, clip by clip — that is the inspection. Clip 3 is illegible and must be DIAGNOSED before anything is re-filmed: the subject sits against the frame edge, so the diagnosis is element-off-frame and the fix is the ungated `scrollIntoView({ block: 'center', inline: 'center' })` at the moment of the hold, in the COMMITTED spec (never in the proof config, never behind PW_PROVE_CLIP — the filming law says the variable may only add time). After the fix, the Step-6 clip-fidelity audit re-runs on the edited spec and must exit 0 BEFORE re-filming, because moving the dwell can drop its `// JUSTIFIED:` marker. Then `rm -rf test-results` and re-film ONCE, and re-extract the frames. If the second frame is still illegible the run PUBLISHES it with an explicit warning — `Clip 3 — illegible (element off-frame), published with warning` — rather than stopping: a bad clip is not a failed test. Must not re-film without a preceding fix (deterministic — it reproduces the same frame), must not re-film a second time, and must not fail the run over the clip.",
+      "files": [],
+      "assertions": [
+        "States what each extracted frame shows, per clip, in the report",
+        "Diagnoses clip 3 as element-off-frame rather than re-filming blind",
+        "Applies the ungated scrollIntoView({ block: 'center' }) fix to the COMMITTED spec, not the proof config and not behind PW_PROVE_CLIP",
+        "Re-runs `clip-fidelity.mjs spec` on the edited spec and requires exit 0 before re-filming",
+        "Re-films exactly once",
+        "A still-illegible second frame publishes with an explicit warning instead of failing the run",
+        "False-positive guard: does not re-film without a preceding fix, since a re-film with no fix is deterministic and reproduces the same frame"
+      ]
+    },
+    {
+      "id": 38,
+      "title": "Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip",
+      "prompt": "You are at Step 7 on a machine with no ffmpeg. The proof run passed and two webms are under test-results/. `node <skill>/scripts/clip-fidelity.mjs frames test-results/*/video.webm` exits 6 and prints that ffprobe is not runnable. Say what you do next and what the completion report says.",
+      "expected_output": "Should treat exit 6 as a SKIP and carry on to the hermetic audit and the mutation check — the frame extract is an inspection, not a gate, and a missing tool is not a failed test. The report must say the clips are `uninspected — no video tooling`, never describe frames that were never opened and never imply the clips are fine. Delivery is unaffected: publishing has its own tooling check and its own skip. Must not fail the run, must not retry the extract, must not install anything into the user's project, and must not fabricate a description of a frame.",
+      "files": [],
+      "assertions": [
+        "Treats exit 6 as a skip and continues Step 7",
+        "Reports the clips as uninspected rather than as good",
+        "Does not fail the run over absent video tooling",
+        "Does not install ffmpeg or any dependency into the user's project",
+        "False-positive guard: does not describe what the frames show, having never opened one"
       ]
     }
   ]

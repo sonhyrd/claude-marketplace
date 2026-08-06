@@ -65,12 +65,44 @@ running as the operator can read the same secret. The shipped scripts are lease-
 runtime dependency. See `docs/adr/0014`.
 
 ## Clip fidelity contract
-The three properties a Proof clip must have to be usable as evidence: recorded at the **effective
+The four properties a Proof clip must have to be usable as evidence: recorded at the **effective
 viewport** (never Playwright's 800×800-box downscale), opening on a **warmed** route rather than a
-cold compile, and ending on the success signal **held** on screen. Held at authoring time — a
-committed viewport pin plus a `PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell — never by
-a second run, a measurement gate, or editing the recording. A clip that fails the contract is a
-defect, not a trade-off. See `docs/adr/0007`.
+cold compile, ending on the success signal **held** on screen, and holding it in
+[frame](#framing). Held at authoring time — a committed viewport pin, ungated centering, and a
+`PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell — never by a second run, a measurement
+gate, or editing the recording. Authoring-time compliance is *checked*, not assumed: `clip-fidelity
+spec` blocks Step 7 on a spec that carries neither. A clip that fails the contract is a defect, not
+a trade-off. What the contract cannot check from the source is caught by the
+[clip inspection](#clip-inspection) instead. See `docs/adr/0007` and `docs/adr/0015`.
+
+## Clip inspection
+The Step-7 beat where the AGENT looks at the [proof clip](#proof-clip) before anyone publishes it:
+`clip-fidelity frames` extracts one frame per clip at `duration − 0.5s` (inside the payoff hold) and
+the agent states in the report what each one shows. **Not a gate, and the distinction is the
+design** — it informs the agent, it never vetoes the artifact, so absent video tooling skips and an
+illegible frame that survives one diagnosed fix and one re-film publishes with a warning. The
+counterpart it is defined against is a legibility gate in the publish path, which was rejected
+because its failure mode is dropping a good proof and a gate that trips aborts the whole recording.
+An illegible frame is *diagnosed* — payoff not held, [element off-frame](#framing), still booting —
+before anything is re-filmed: a re-film with no preceding fix is deterministic. See `docs/adr/0015`.
+
+## Framing
+The fourth property of the [clip fidelity contract](#clip-fidelity-contract): the element under
+proof is on screen, and near the centre of it, at the moment of the payoff hold. Distinct from the
+hold itself — a clip can hold the success signal for the full dwell and still be worthless because
+the signal sits against the screen edge, or was pushed off-frame by a re-render after the scroll.
+`scrollIntoViewIfNeeded()` moves the minimum distance and is therefore the usual cause; centring is
+the fix, and it is **ungated** so CI renders identically. Named because it went unnamed: "held
+payoff" was already in this glossary and was read as a duration. See `docs/adr/0015`.
+
+## Filming law
+The one rule governing `PW_PROVE_CLIP`: it may only ever **add time**, never change what the app is
+asked to do. Waits are gated; everything else — centring, scroll, choice of input method — is
+unconditional and runs in CI too. A gated dwell may sit at any beat except between an action and the
+assertion that covers it, because there the filmed run is more patient than CI and a proof passes
+where CI flakes. Generalises the argument in `docs/adr/0007` (which permitted the dwell only because,
+sitting after the terminal assertion, it could not move the verdict) from one position to one class
+of operation. See `docs/adr/0015`.
 
 ## Effective viewport
 The viewport a generated spec actually renders at, and the size its clip is recorded at. Resolved

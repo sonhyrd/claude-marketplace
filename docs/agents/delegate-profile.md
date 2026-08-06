@@ -91,3 +91,32 @@ This green baseline supersedes the red one above. Any future failure is a real r
   directory** — the plugin manifests live only in the marketplace subtree copy. Manifest-parity
   checks therefore do not behave as `AGENTS.md` describes here. Do not "fix" this by recreating the
   manifests.
+
+### Environment trap: `implement` is not at `~/.claude/skills/implement`
+
+On this machine the Matt Pocock skills ship as a marketplace plugin, not as `~/.claude/skills`
+entries. A worker brief that names `~/.claude/skills/implement/SKILL.md` sends the worker to a path
+that does not exist, and it silently falls back to improvising a process. The real path is:
+
+```
+/Users/sondh0127/SonDev/claude-marketplace/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md
+```
+
+Every worker brief must name **that** path. (`/implement` itself is `disable-model-invocation:
+true`, so no dispatched worker can Skill-invoke it — path-reading is the only route.)
+
+### Baseline correction: `pre-push-security.sh` reports 7, not 8
+
+Commit `9eb094e` collapsed two manifest checks into one `[OK]` line when it deleted the manifest
+machinery. The green figure is **7 passed, 0 warnings, 0 blockers**. A brief quoting 8 makes a
+worker hunt a regression that is not there.
+
+### Trap: `orca worktree create` does not branch from the coordinator's HEAD
+
+The worktree for #27 was cut at `294b24e` while `main` was at `03d2ae0` — one commit behind. Orca
+branches from its own recorded base, not from where the coordinator is standing. **After creating
+each worktree, `git -C <worktree> reset --hard <integration-branch-HEAD>` before dispatching**, or
+the worker builds on a base that is missing its blockers' merged work.
+
+- **Commit**: `f0e5cc9` · **Measured**: 2026-08-06 (after #27 merge-back)
+- `ci-local.sh` — **GREEN**, all checks passed. · `pre-push-security.sh` — **GREEN**, 7 passed.
