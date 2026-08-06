@@ -46,42 +46,35 @@ These live as skills so they load only when you're doing the task:
     `e2e` would break both `pull` and `push`. Plugin name ≠ directory name, same as `matt`.
   - **After any pull, run `make check-e2e-subtree`.** A pull is a merge, and a merge can silently
     revert a marketplace-only decision. The prefix is expected to differ from the fork by exactly
-    four things and nothing else: the two plugin manifests `.claude-plugin/plugin.json` and
-    `.codex-plugin/plugin.json` (the fork ships none), the rename
-    `skills/playwright-test-generator/SKILL.md` →
-    `skills/playwright-test-generator/SKILL.md.disabled`, and exactly one added line in
+    three things and nothing else: the two plugin manifests `.claude-plugin/plugin.json` and
+    `.codex-plugin/plugin.json` (the fork ships none), and exactly one added line in
     `skills/pw-prove/SKILL.md`. `scripts/check-e2e-subtree.sh` is the single owner of that set and
     the only thing that asserts it — this list is orientation, the exit code is the verdict, and
     `./scripts/check-e2e-subtree.sh --explain` prints the set with each entry's reason straight from
     the script. A test asserts this paragraph names every path the script expects, so the two cannot
     silently disagree. The check fetches the fork, so it is deliberately not part of `make validate`,
     which is static and offline. Its own tests are `make test-e2e-subtree-check`.
-  - Only two of the five on-disk skills are declared in `plugin.json`: `pw-prove` and
-    `e2e-reviewer`. The other two live ones — `cypress-debugger` and `playwright-debugger` — still
-    load and still appear to the host as `e2e:<name>`; the `skills` array shapes the published
-    manifest, not host discovery. Do not delete the `playwright-test-generator` directory:
-    `e2e-reviewer/scripts/scan.mjs` best-effort-imports
-    `playwright-test-generator/scripts/ptg-run.mjs`. Re-declaring one is a one-line `skills` array
-    edit in *both* `plugins/e2e-skills/.claude-plugin/plugin.json` and
-    `.claude-plugin/marketplace.json`.
-  - **`playwright-test-generator` is fully off.** Since the `skills` array does not gate discovery,
-    the only thing that does is the entry file: its `SKILL.md` is renamed `SKILL.md.disabled`
-    (`claude plugin details e2e` → `Skills (4)`). Renaming the entry file rather than moving or
-    deleting the directory is deliberate — it keeps `scripts/ptg-run.mjs` at the relative path
-    `scan.mjs` imports, and keeps the rest as reference until it is removed outright. To revive it,
-    rename the file back.
+  - Only two of the three on-disk skills are declared in `plugin.json`: `pw-prove` and
+    `e2e-reviewer`. The third — `playwright-debugger` — still loads and still appears to the host as
+    `e2e:playwright-debugger`; the `skills` array shapes the published manifest, not host discovery.
+    Re-declaring one is a one-line `skills` array edit in *both*
+    `plugins/e2e-skills/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
+  - `playwright-test-generator` and `cypress-debugger` are **gone**, retired by the fork itself
+    (`652c696 retire(playwright-test-generator)`), not disabled here. This repo used to disable the
+    former by renaming its `SKILL.md` to `SKILL.md.disabled` — that rename was a marketplace-only
+    deviation tracked by `check-e2e-subtree.sh`, and it was dropped when the directory it renamed
+    stopped existing. Do not re-add it.
   - `disable-model-invocation: true` also removes a skill from the model-facing skill listing
     entirely, so a hidden skill can be *shadowed*: if the user's `/e2e:pw-prove` fails to parse as a
     command (e.g. a leading U+00A0 from a paste), the model sees no `pw-prove` and falls through to
     whatever listed skill advertises the same job. `playwright-test-generator` was that skill — its
-    description claimed "or prove a PR/branch/ticket/diff with one". The rename removes the shadow
-    at the source.
+    retirement removes the shadow at the source.
   - `pw-prove` carries `disable-model-invocation: true` in its frontmatter. That is the *only*
     mechanism that pins a plugin skill to user-invocable-only — `skillOverrides` in
     `~/.claude/settings.json` is inert for skills whose source is a plugin. Do not "fix" this by
     adding settings keys.
   - **`e2e-reviewer` must stay un-pinned.** It carried the same flag briefly and it broke the
-    Step 6 quality gate in both `pw-prove` and `playwright-test-generator`, which invoke it through
+    Step 6 quality gate in `pw-prove`, which invokes it through
     the Skill tool: the flag blocks *chained* launches too, so the gate died with `Skill
     e2e:e2e-reviewer cannot be used with Skill tool due to disable-model-invocation` even inside a
     run the user had started by name. Do not re-add it; a skill that is a handoff target cannot be

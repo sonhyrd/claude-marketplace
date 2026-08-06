@@ -176,18 +176,6 @@ See `docs/agents/delegate-profile.md`.
 Where tickets live, the triage label, and the `--repo` rule for every `gh issue` call.
 See `docs/agents/issue-tracker.md`.
 
-## Agent skills
-
-### Delegation profile
-
-Branch prefix, post-merge check, commit policy, and worker constraints for `/delegate-tickets`.
-See `docs/agents/delegate-profile.md`.
-
-### Issue tracker
-
-Where tickets live, the triage label, and the `--repo` rule for every `gh issue` call.
-See `docs/agents/issue-tracker.md`.
-
 ## License
 
 Apache-2.0, inherited from `voidmatcha/e2e-skills`. Match the parent license in any new file you add,

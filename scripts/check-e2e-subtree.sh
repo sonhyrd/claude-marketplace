@@ -81,7 +81,6 @@ setup_error() {
 EXPECTED_WITH_REASON=(
     $'A\t.claude-plugin/plugin.json|The fork ships no plugin manifests at all; this exists only here.'
     $'A\t.codex-plugin/plugin.json|Same -- generated Codex manifest, marketplace-only.'
-    $'R\tskills/playwright-test-generator/SKILL.md\tskills/playwright-test-generator/SKILL.md.disabled|Renaming the entry file is what disables the skill: the `skills` array in plugin.json does not gate discovery. It was shadowing /e2e:pw-prove.'
     $'M\tskills/pw-prove/SKILL.md|Exactly one added line, `disable-model-invocation: true` -- the only mechanism that pins a plugin skill to user-invocable-only.'
 )
 
