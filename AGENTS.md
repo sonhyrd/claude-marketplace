@@ -45,7 +45,7 @@ never open an issue or PR against it.
 `ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity,
 security, evals, public skill surface, framework scope, link integrity, docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
-**probe HAR and warm contracts**, publish-proof,
+**probe HAR and warm contracts**, publish-proof, **clip-fidelity audit**,
 **run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
@@ -63,7 +63,7 @@ security, evals, public skill surface, framework scope, link integrity, docs orp
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
 │   │   ├── evals/evals.json
-│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/hermetic/publish-proof/clips/pwprove-run .mjs
+│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/hermetic/clip-fidelity/publish-proof/clips/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   └── playwright-debugger/
@@ -130,6 +130,7 @@ bash scripts/ci/test-hermetic.sh    # hermetic.mjs: LIVE/MOCKED classification +
 bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clips share link out (four gates, kept-file fallback)
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so
 bash scripts/ci/test-probe-warm.sh  # probe.mjs warm: the Step-7 warm lead's exit codes
+bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs spec: the Step-6 dwell/pin/verdict exit-code surface
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
 bash scripts/validate-evals.sh      # eval JSON schema
 bash scripts/ci/pre-push-security.sh

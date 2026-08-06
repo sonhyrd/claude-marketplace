@@ -69,6 +69,17 @@ export default defineConfig({
   ],
 });
 CFG
+# A commented-out descriptor must not decide the verdict — the live block is desktop-only.
+cat > "$W/commented.config.ts" <<'CFG'
+import { defineConfig, devices } from '@playwright/test';
+export default defineConfig({
+  use: {
+    // legacy, kept for reference: ...devices['iPhone 15'],
+    // viewport: { width: 375, height: 812 },
+    ...devices['Desktop Chrome'],
+  },
+});
+CFG
 cat > "$W/multi-agree.config.ts" <<'CFG'
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
@@ -148,6 +159,42 @@ test('saves the renamed report', async ({ page }) => {
 });
 SPEC
 
+# The braced gate: the same construct as the one-liner, in another brace style.
+cat > "$W/braced.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+test('saves the renamed report', async ({ page }) => {
+  await expect(page.getByRole('status')).toHaveText('Saved');
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP. CI never sets it.
+  if (process.env.PW_PROVE_CLIP) {
+    await page.waitForTimeout(2500);
+  }
+});
+SPEC
+
+# A justified dwell with an unmarked twin: the twin is still an unexplained fixed wait.
+cat > "$W/unmarked-twin.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+test('saves the renamed report', async ({ page }) => {
+  await expect(page.getByText('Editing')).toBeVisible();
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP. CI never sets it.
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1500);
+  await expect(page.getByRole('status')).toHaveText('Saved');
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(9000);
+});
+SPEC
+
+# A PW_PROVE_CLIP gate on something that is not a wait is not a dwell.
+cat > "$W/gated-non-wait.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+test('saves the renamed report', async ({ page }) => {
+  if (process.env.PW_PROVE_CLIP) await page.screenshot({ path: 'x.png' });
+  await expect(page.getByRole('status')).toHaveText('Saved');
+});
+SPEC
+
 # The masking trap: braces, a `test(` and a PW_PROVE_CLIP mention that live inside strings, a
 # template literal, a regex and a comment. None of them may be read as code.
 cat > "$W/tricky.spec.ts" <<'SPEC'
@@ -182,6 +229,13 @@ saw "names the unjustified dwell's line" "has no // JUSTIFIED: line above it"
 expect 2 "one silent test among two FAILS (the check is per-test, not per-file)" \
   spec one-of-two.spec.ts --config desktop.config.ts --verdict pinned:1600x900
 saw "counts the compliant tests too" "1/2 test() block(s)"
+expect 2 "an unmarked dwell beside a justified one still FAILS" \
+  spec unmarked-twin.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+saw "names the UNMARKED dwell's line, not the justified one" "unmarked-twin.spec.ts:8 has no // JUSTIFIED:"
+expect 2 "a PW_PROVE_CLIP gate on something that is not a wait is not a dwell" \
+  spec gated-non-wait.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+expect 0 "FALSE-POSITIVE GUARD: a braced gate is the same construct as the one-liner" \
+  spec braced.spec.ts --config desktop.config.ts --verdict pinned:1600x900
 
 echo ""
 echo "-- the pin --"
@@ -207,6 +261,17 @@ expect 0 "nothing at all -> pinned (Playwright's 1280x720 default)" \
 saw "says the config carried nothing" "nothing at all"
 expect 0 "multi-project agreeing on desktop -> pinned, not ambiguous" \
   spec good.spec.ts --config multi-agree.config.ts --verdict pinned:1600x900
+expect 0 "FALSE-POSITIVE GUARD: a commented-out descriptor does not decide the verdict" \
+  spec good.spec.ts --config commented.config.ts --verdict pinned:1600x900
+saw "the live desktop spread is what was read" "only a desktop device-descriptor spread (Desktop Chrome)"
+
+echo ""
+echo "-- the size is checked where the config states it, and only there --"
+expect 4 "an explicit 1440x810 config against a declared 1280x720 FAILS" \
+  spec no-pin.spec.ts --config explicit.config.ts --verdict deliberate:1280x720
+saw "the STOP names what Step 7 would record at" "PW_PROVE_W/PW_PROVE_H"
+expect 0 "a device descriptor states no size, so no size is compared" \
+  spec no-pin.spec.ts --config mobile.config.ts --verdict deliberate:999x999
 
 echo ""
 echo "-- disagreement is itself a failure, in both directions --"

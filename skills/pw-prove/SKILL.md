@@ -348,7 +348,7 @@ The Step-4 `Effective viewport` line and the Step-5 dwell are **claims**; this c
 node <skill>/scripts/clip-fidelity.mjs spec <spec files…> --config <configPath> --verdict "<pinned:1600x900 | deliberate:WxH>"
 ```
 
-**Exit 0 is the only way to Step 7** — a non-zero exit blocks it exactly as a missing PROVES header does. Fix and re-run; never proceed on a warning:
+**Exit 0 is the only way to Step 7** — a non-zero exit blocks it exactly as a missing PROVES header does. Fix and re-run:
 
 | Exit | What failed | What to do |
 |---|---|---|
@@ -357,6 +357,8 @@ node <skill>/scripts/clip-fidelity.mjs spec <spec files…> --config <configPath
 | `4` | The derived verdict disagrees with the declared one | One of the two is wrong. Re-read `code-rules.md` §Viewport pin, then fix the Assumptions line **and** the spec together. |
 | `5` | Config ambiguity — a function-export config, or projects whose `use` blocks resolve differently | It refuses rather than guessing. Resolve by hand: read the config, decide the effective viewport, and state the branch and why in the Assumptions block. |
 | `1` | Usage error | `--config` and `--verdict` are both required — the verdict is re-derived, never trusted. |
+
+An exit-0 run may still print `WARNING` lines (a gated pin, or a pin over a `deliberate:` viewport). Those are advisory and do not block Step 7 — but each one names a filming-law violation in the committed spec, so fix them before delivering rather than after.
 
 ### e2e-reviewer skill
 
