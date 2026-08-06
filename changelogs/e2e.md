@@ -40,7 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   its presence in the callable catalog, so a findable-but-uncallable action returning HTTP 200 no
   longer reads as working. The fork's transport spec, ADR-0014, delegation profile and
   issue-tracker doc arrive under the prefix so the rationale sits beside the code.
-  `make check-e2e-subtree` guards the four marketplace-only divergences this sync had to preserve.
+  `make check-e2e-subtree` guards the three marketplace-only divergences this sync had to preserve.
 
 ### Fixed
 
@@ -64,39 +64,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Removed
 
-- `playwright-test-generator` is disabled. Its `SKILL.md` is renamed `SKILL.md.disabled`, which is
-  what actually stops Claude Code's auto-discovery — `claude plugin details e2e` now reports
-  `Skills (4)` and ~100 fewer always-on tokens. It is unused in practice and `pw-prove` covers the
-  proving path; the directory stays as reference pending outright removal. The entry file is
-  renamed rather than the directory moved or deleted so `scripts/ptg-run.mjs` keeps the relative
-  path `e2e-reviewer/scripts/scan.mjs` imports for run-ledger telemetry. Its frontmatter also gains
-  `disable-model-invocation: true` and drops the "or prove a PR/branch/ticket/diff with one" claim,
-  so a revival by rename comes back inert instead of re-shadowing `pw-prove`. Upstream
-  `voidmatcha` actively edits this file, so a `git subtree pull` will conflict here, and the fork's
-  own `scripts/ci/review.sh` public-skill-surface check expects five `SKILL.md` files — both
-  expected, both resolved in favour of the rename. This also retires the Step 6 handoff *out of*
-  `playwright-test-generator` noted in the fix above — `pw-prove` is now the only skill that reaches
-  `e2e-reviewer`.
+- `playwright-test-generator` and `cypress-debugger` are **gone from the bundle**, deleted by the
+  fork itself (`652c696 retire(playwright-test-generator): delete the fork, repoint the run ledger
+  at pw-prove`) and carried in by the subtree pull. This repo had disabled the former by renaming
+  its `SKILL.md` to `SKILL.md.disabled` — a marketplace-only deviation tracked by
+  `check-e2e-subtree.sh`. Upstream removing the directory outright supersedes that rename, so the
+  deviation is dropped from the expected set and the check is back to three entries. The run
+  ledger's dynamic import of `playwright-test-generator/scripts/ptg-run.mjs` went with it, so
+  keeping the directory is no longer load-bearing anywhere. Three skills remain on disk:
+  `pw-prove`, `e2e-reviewer`, `playwright-debugger`.
 
 ### Notes
 
 - **Never pin a handoff target.** A SKILL.md line saying "invoke `<x>` (Skill tool)" is only valid
   when `<x>` carries no `disable-model-invocation`. That now holds for both handoff targets in this
   bundle: `e2e-reviewer` (Step 6) and `playwright-debugger` (Step 7, never pinned).
-- **Declaring a skill in `plugin.json` is not what makes it load.** All five on-disk skills appear
-  to the host as `e2e:<name>`, including the three the manifest omits — verified against the
+- **Declaring a skill in `plugin.json` is not what makes it load.** All on-disk skills appear
+  to the host as `e2e:<name>`, including the one the manifest omits — verified against the
   installed cache at `~/.claude/plugins/cache/sss-marketplace/e2e/1.0.0/skills/`, with no
   leftover `~/.claude/skills` symlinks in play. So `pw-prove`'s `playwright-debugger` handoff is
   not the dangling reference the note below assumed; the `skills` array affects the published
   manifest, not host discovery.
-- **Two of the four live skills are declared.** `cypress-debugger` and `playwright-debugger` ship
-  inside the subtree and load, but are not registered in the manifest;
-  `playwright-test-generator` is off entirely (see Removed). Keeping its files is load-bearing in
-  one place: `e2e-reviewer/scripts/scan.mjs` dynamically imports
-  `../../playwright-test-generator/scripts/ptg-run.mjs` for run-ledger telemetry. The import is
-  already wrapped in `try`/`catch`, but the file being present keeps it working. Re-declaring one
-  is a one-line edit to the `skills` array in `.claude-plugin/plugin.json` and
-  `.claude-plugin/marketplace.json`.
+- **Two of the three live skills are declared.** `playwright-debugger` ships inside the subtree
+  and loads, but is not registered in the manifest. Re-declaring it is a one-line edit to the
+  `skills` array in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
 - **`pw-prove` is user-invocable only**, via `disable-model-invocation: true` in its frontmatter.
   That field is the only mechanism that pins a plugin-sourced skill — `skillOverrides` in
   `~/.claude/settings.json` does not apply to plugin skills. `e2e-reviewer` deliberately carries

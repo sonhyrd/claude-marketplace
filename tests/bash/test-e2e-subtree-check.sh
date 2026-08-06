@@ -126,13 +126,7 @@ fi
 
 echo -e "${YELLOW}Each reverted decision is caught and named${NC}"
 
-# 1. playwright-test-generator re-enabled: the rename undone.
-expect_drift \
-    "git mv '${PREFIX}/skills/playwright-test-generator/SKILL.md.disabled' '${PREFIX}/skills/playwright-test-generator/SKILL.md'" \
-    "playwright-test-generator/SKILL.md.disabled" \
-    "re-enabling playwright-test-generator fails and names the rename"
-
-# 2. pw-prove un-pinned: the disable-model-invocation line removed. The command
+# 1. pw-prove un-pinned: the disable-model-invocation line removed. The command
 #    substitution reads the whole file before the redirect truncates it, so this
 #    needs no temp file inside the worktree (where `git add -A` would sweep one
 #    up into the mutation commit).
@@ -141,19 +135,19 @@ expect_drift \
     "skills/pw-prove/SKILL.md" \
     "un-pinning pw-prove fails and names the SKILL.md"
 
-# 3. The Claude plugin manifest deleted.
+# 2. The Claude plugin manifest deleted.
 expect_drift \
     "rm '${PREFIX}/.claude-plugin/plugin.json'" \
     "\.claude-plugin/plugin\.json" \
     "deleting .claude-plugin/plugin.json fails and names it"
 
-# 4. The Codex plugin manifest deleted.
+# 3. The Codex plugin manifest deleted.
 expect_drift \
     "rm '${PREFIX}/.codex-plugin/plugin.json'" \
     "\.codex-plugin/plugin\.json" \
     "deleting .codex-plugin/plugin.json fails and names it"
 
-# 5. pw-prove pinned but otherwise overwritten: the entry set still matches, so
+# 4. pw-prove pinned but otherwise overwritten: the entry set still matches, so
 #    only the one-added-line assertion can catch this.
 expect_drift \
     "printf '\n<!-- overwritten -->\n' >> '${PREFIX}/skills/pw-prove/SKILL.md'" \
