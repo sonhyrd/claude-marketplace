@@ -25,3 +25,20 @@ A gate trip publishes nothing, names itself, **and withholds the local file** �
 Trade-offs weighed. A long-lived issued token was rejected: with no token-id denylist on the receiving side, revocation costs a secret rotation either way, so a five-minute token minted per publish is strictly better than a bearer sitting on disk. A bespoke shared-secret header was rejected: it would invent auth beside a working scheme and give the receiving adapter no verified identity to scope by. Re-encoding, trimming or any transcode is rejected and stays rejected — that would genuinely reintroduce what 0006 removed. Keeping the R2 path as a fallback was rejected for 0009's own reason: two shapes means the weaker one keeps getting emitted.
 
 `playwright-test-generator` is deliberately unmoved. It keeps its watch page and its bucket, so `wrangler` remains a bundle dependency for that skill; its port also means finding homes for the contact sheet and Film QA gate vocabulary, which is a separate conversation. One skill is proven on this path first.
+
+---
+
+**Superseded in part, 2026-08-06 — the carve-out only.** The paragraph above holding
+`playwright-test-generator` "deliberately unmoved" no longer applies: that skill is retired
+(`docs/adr/0005`). Everything else in this record — the stream-copy concatenation, the four gates,
+the delivery-failure posture, the one-link goal it preserves from `0009` — is unaffected.
+
+Two consequences follow, and both are the point of amending rather than deleting:
+
+- **`wrangler` is no longer a dependency of anything here.** This record kept it alive solely for
+  the retired skill's R2 bucket. With that skill gone, no shipped script, no CI check and no
+  documented path invokes `wrangler`; the bundle's subprocess set is `rg`, `eslint`, `ast-grep`,
+  `ffmpeg`/`ffprobe`, `git`, `gh`, `curl` and `npx playwright`.
+- **The contact sheet and Film QA gate vocabulary needed no home after all.** The "separate
+  conversation" this record deferred was closed by retirement: the terms retire with the skill that
+  defined them, and `CONTEXT.md` collapsed to a single-skill vocabulary.

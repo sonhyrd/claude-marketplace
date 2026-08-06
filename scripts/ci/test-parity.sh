@@ -130,12 +130,13 @@ mutate "$file" "| 1 | Name-Assertion | P0 | LLM | Noun in name with no matching 
 assert_fails "Check 3c — QR row count drift" "expected 24 rows"
 restore "$file"
 
-# Case 7: docs orphan — strip README reference so a docs file is no longer linked
+# Case 7: docs orphan — strip README reference so a docs file is no longer linked.
+# Targets an ADR: it is a docs/*.md the README is the sole reference for, where the surviving
+# taxonomy and framework-scope docs are also named inside CI scripts and so never read as orphans.
 file="README.md"
 backup "$file"
-mutate "$file" "](docs/roadmap.md)" ""
-mutate "$file" "](docs/roadmap.md)" ""
-assert_fails "Check 7 — docs orphan detection" "docs/roadmap.md: orphan"
+mutate "$file" "](docs/adr/0002-merge-main-before-proof.md)" ""
+assert_fails "Check 7 — docs orphan detection" "docs/adr/0002-merge-main-before-proof.md: orphan"
 restore "$file"
 
 # Case 11: SKILL.md frontmatter description unquoted with colon-space — YAML parse regression of v0.7.3

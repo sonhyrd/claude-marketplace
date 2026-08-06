@@ -15,3 +15,29 @@ What is preserved unchanged, because it is what the skill stands for: the requir
 There is deliberately no internal simple/complex fast-path fork inside pw-prove — an intra-skill mode branch reintroduces the deliberation cost it would try to save. The two tiers are the two skills.
 
 Alternatives rejected: replacing the old skill outright (loses the hosted-film variant with no proven substitute yet); a codegen-assisted recon default per the source handoff (codegen needs a human at the browser, so it cannot run the autonomous PR-proof that dominates usage, and it reintroduces the throwaway-spec REPL ADR 0004 just closed — "codegen-assisted" survives only as the draft-then-refine authoring *style*).
+
+---
+
+**Superseded in part, 2026-08-06 — the coexistence half only.** `playwright-test-generator` is
+retired; `pw-prove` is the only proof skill. Everything above about *what pw-prove is and why it is
+lean* stands unchanged; what no longer holds is the "two tiers are the two skills" arrangement and
+the disjoint-trigger-description rule that supported it.
+
+Three things decided it, none of them preference:
+
+1. The marketplace that owns distribution had already disabled the generator for **shadowing**
+   `pw-prove` — the very trigger collision this record set out to prevent, arriving anyway.
+2. The generator's differentiator, the hosted chaptered film, is recorded as superseded by
+   `docs/adr/0012`. "Loses the hosted-film variant with no proven substitute yet" — the reason this
+   ADR gave for not replacing the old skill outright — stopped being true once the Clips proof page
+   shipped and was measured.
+3. The unfinished fork was corrupting evidence: 14 of `pw-prove`'s 33 evals (42%) graded film
+   mechanics `pw-prove` does not implement. A suite where two in five tests grade a different skill
+   is not a stable arrangement, and it went unnoticed precisely because nothing forced the two
+   skills to disagree out loud.
+
+Verified before deleting, not assumed: two of the generator's five supporting documents were
+byte-identical to `pw-prove`'s and the other three strictly older; its `code-rules` had eleven
+sections and `pw-prove` carried all eleven in the same order plus a twelfth, with the shared Network
+Determinism section in a richer HAR-first form. The retirement was a deletion of duplication. The
+film loop's measured, budgeted work remains in git history; it is no longer maintained code.
