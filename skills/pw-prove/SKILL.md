@@ -29,7 +29,7 @@ Step 1  Dispatch + Environment      (change to prove → PR-mode · route → ta
 Step 2  Diff → AC                    (PR-mode: PR state read + diff→AC · target: skip · coverage-gap: gap analysis)
 Step 3  Bring-up + Probe            (ONE live pass: merge base, serve the branch, app-native auth, probe recon, record api.har, save storageState)
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
-Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + payoff dwell — see code-rules.md)
+Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + framing + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + e2e-reviewer skill quality gate)
 Step 7  Verify                       (tsc → warm route → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → hermetic audit → mutation check)
 Step 8  Deliver                      (PR-mode: publish ONE chaptered recording → Clips · commit spec+POM+api.har · push · PR comment · report)
@@ -309,7 +309,7 @@ Follow `code-rules.md`: structure detection (always POM), selector priority, POM
 
 **Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion word-for-word — Step 6 audits it before Step 7.
 
-**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Close each test with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell **after** the terminal assertion. Both are committed, so the proof run and CI render identically by construction.
+**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Then obey the **filming law**: `PW_PROVE_CLIP` may only add time. Centre the element under proof at the moment of the hold (**ungated**), and hold it with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell — at the end of the test, or at any beat except between an action and the assertion that covers it. All of it is committed, so the proof run and CI render identically by construction.
 
 ### Step 5b: Conventions & Seed (first run on a project)
 
@@ -384,13 +384,14 @@ export default defineConfig({
 
 The **only** legitimate reason to edit an existing proof config is a structural mismatch with the project's own config (below) — a one-time, committed fix, never a per-run edit.
 
-**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`). Three things make it usable; none of them re-runs the spec or post-processes the recording:
+**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`, amended by `docs/adr/0015`). Four properties make it usable; none of them re-runs the spec or post-processes the recording:
 
 | | What | Why |
 |---|---|---|
 | **Size** | `PW_PROVE_W`/`PW_PROVE_H` = the effective viewport, from `code-rules.md` → Clip Fidelity | `video.size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. That is why size arrives by env and the config stays static: it is the one per-run value, and it belongs on the command line, not in a file diff. Deliberately **do not** set `viewport` in the proof config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
 | **Warm lead** | One **browser** load of the route under proof, just before filming — `probe.mjs warm`, with `curl` as the browserless fallback | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. A curl alone is not enough: it never executes JS, so on a Vite-family dev server the client module graph and the dep pre-bundle stay cold and get paid *inside* the recording. |
-| **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` post-assertion dwell. It sits *after* the terminal assertion, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
+| **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` dwell. Under the **filming law** the variable may only add time — never place a dwell between an action and the assertion covering it — so it cannot move pass/fail; CI never sets the variable and pays nothing. |
+| **Framing** | Ungated `scrollIntoView({ block: 'center' })` in the committed spec, at the moment of the hold | A held payoff jammed against the screen edge, or pushed off-frame by a later re-render, is an unwatchable clip that passes every gate. Centring is a scroll, not a wait, so it is unconditional and CI renders identically. |
 
 ```bash
 # Warm the route so the clip opens on a compiled app, not a cold build. Never fails the run —
