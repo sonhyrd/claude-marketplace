@@ -1,5 +1,14 @@
 # Handoff — pw-prove clips publishing: cut the config surface
 
+> **SUPERSEDED — kept as the record of how the problem was framed, not as a description of the
+> code.** The config surface described below was cut in the fork (PR #24) and synced into
+> `plugins/e2e-skills/` on 2026-08-06. The five variables this note attacks
+> (`CLIPS_ORIGIN`, `CLIPS_A2A_SECRET`, `CLIPS_ORG_ID`, `CLIPS_ORG_DOMAIN`, `CLIPS_SUBJECT`) no
+> longer exist; publish is one `CLIPS_MCP_TOKEN` lease over JSON-RPC. For the shipped design read
+> `plugins/e2e-skills/docs/specs/0001-clips-mcp-publish.md` and
+> `plugins/e2e-skills/docs/adr/0014-one-vaulted-bearer-over-json-rpc.md`. Still live below: the
+> Step-9 hygiene sweep deleting `test-results/` after an early skip, which remains unfixed.
+
 **Date:** 2026-08-04
 **Next session focus:** make the pw-prove → Clips publish path work with *less configuration*, so a run
 stops silently ending at `Proof page: skipped`.

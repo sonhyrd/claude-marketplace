@@ -1,4 +1,4 @@
-.PHONY: help sync sync-codex-plugins check-codex-plugins validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-tmux-build test-tmux test-tmux-local test-tmux-shell test-session-registry test-session-registry-local test-registry test-create-session test-list-sessions test-cleanup-sessions test-session-integration test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
+.PHONY: help sync sync-codex-plugins check-codex-plugins check-e2e-subtree test-e2e-subtree-check validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-tmux-build test-tmux test-tmux-local test-tmux-shell test-session-registry test-session-registry-local test-registry test-create-session test-list-sessions test-cleanup-sessions test-session-integration test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
 
 # Default target
 .DEFAULT_GOAL := help
@@ -21,7 +21,7 @@ help: ## Show this help message
 	@grep -E '^(sync|sync-codex-plugins|check-codex-plugins|init|manage-codex-skills):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-30s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Validation:$(NC)"
-	@grep -E '^validate.*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-30s$(NC) %s\n", $$1, $$2}'
+	@grep -E '^(validate|check-e2e-subtree).*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-30s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Testing:$(NC)"
 	@grep -E '^test.*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-30s$(NC) %s\n", $$1, $$2}'
@@ -72,6 +72,12 @@ validate-structure: ## Validate file structure and naming conventions
 validate-structure-strict: ## Validate file structure (strict mode)
 	@echo "$(CYAN)Validating file structure (strict mode)...$(NC)"
 	@$(UV_RUN) scripts/validators/validate_structure.py --strict
+
+# Deliberately NOT wired into `validate`: that suite is static and offline, and
+# this check fetches the fork remote.
+check-e2e-subtree: ## Check plugins/e2e-skills/ diverges from the fork by exactly the expected set
+	@echo "$(CYAN)Checking e2e subtree divergence...$(NC)"
+	@./scripts/check-e2e-subtree.sh
 
 test: ## Run all tests (pytest + vitest)
 	@echo "$(CYAN)Running tests...$(NC)"
@@ -386,6 +392,11 @@ typecheck-react-bp: ## Run ty type check on React Best Practices scripts
 	@echo "$(CYAN)Type checking React Best Practices scripts...$(NC)"
 	@$(UV_RUN) ty check $(REACT_BP_SCRIPTS)/
 	@echo "$(GREEN)✓ React Best Practices type check passed$(NC)"
+
+test-e2e-subtree-check: ## Run tests for the e2e subtree divergence check
+	@echo "$(CYAN)Running e2e subtree check tests...$(NC)"
+	@./tests/bash/test-e2e-subtree-check.sh
+	@echo "$(GREEN)✓ e2e subtree check tests passed$(NC)"
 
 SEQ_THINKING_DIR := plugins/sequential-thinking
 

@@ -5,6 +5,9 @@ Cypress debuggers, and `e2e-reviewer`.
 
 ## Contents
 
-- [pw-prove-clips-config-handoff.md](./pw-prove-clips-config-handoff.md) — why a green `pw-prove` run
-  can still end at `Proof page: skipped`, the five-variable Clips credential surface and the
-  remote-401 rationale behind it, and candidate directions for cutting that surface down.
+- [pw-prove-clips-config-handoff.md](./pw-prove-clips-config-handoff.md) — **superseded.** Why a
+  green `pw-prove` run can still end at `Proof page: skipped`, the five-variable Clips credential
+  surface and the remote-401 rationale behind it, and candidate directions for cutting that surface
+  down. The cut landed (one `CLIPS_MCP_TOKEN` lease over JSON-RPC); read
+  `plugins/e2e-skills/docs/specs/0001-clips-mcp-publish.md` for the shipped design and this note only
+  for how the problem was framed.

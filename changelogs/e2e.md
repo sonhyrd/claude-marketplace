@@ -26,6 +26,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `e2e-reviewer` — static review of Playwright/Cypress specs and Page Object Models, flagging 24
   anti-patterns grouped P0 (silently always-pass) / P1 (poor diagnostics) / P2 (maintenance).
 
+- **`pw-prove` Step 8 publishes the Proof page over JSON-RPC under one vaulted bearer.** Synced
+  from the fork's merged PR #24 (15 commits), which the original graft predated — so the skill an
+  agent loaded was not the skill that was built. Five environment variables (`CLIPS_ORIGIN`,
+  `CLIPS_A2A_SECRET`, `CLIPS_ORG_ID`, `CLIPS_ORG_DOMAIN`, `CLIPS_SUBJECT`) collapse to a single
+  `CLIPS_MCP_TOKEN` lease. The bearer is leased into the process environment and never echoed, so
+  neither it nor its `sub` claim reaches a transcript or a CI log. An absent credential remains a
+  named WARN that skips the Proof page link and never a stop — the proof is the passing test plus
+  the mutation verdict — and the warning prints the literal `agent-native vault exec …` lease
+  command with the app and key names filled in, plus the one-time `vault add` for a machine that
+  never stored the key. A non-delegable action is reported identically by the minute-zero probe and
+  the minute-fifty publish, and an action's presence in the searchable index is distinguished from
+  its presence in the callable catalog, so a findable-but-uncallable action returning HTTP 200 no
+  longer reads as working. The fork's transport spec, ADR-0014, delegation profile and
+  issue-tracker doc arrive under the prefix so the rationale sits beside the code.
+  `make check-e2e-subtree` guards the four marketplace-only divergences this sync had to preserve.
+
 ### Fixed
 
 - **The Step 6 quality gate could not run.** `pw-prove` and `playwright-test-generator` both

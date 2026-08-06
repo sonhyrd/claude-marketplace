@@ -44,6 +44,15 @@ These live as skills so they load only when you're doing the task:
     workbench only — never the source of truth, never a place to author skill changes.
   - The directory keeps the name `e2e-skills` because it is the subtree prefix; renaming it to
     `e2e` would break both `pull` and `push`. Plugin name ≠ directory name, same as `matt`.
+  - **After any pull, run `make check-e2e-subtree`.** A pull is a merge, and a merge can silently
+    revert a marketplace-only decision. The prefix is expected to differ from the fork by exactly
+    four things and nothing else: the two plugin manifests `.claude-plugin/plugin.json` and
+    `.codex-plugin/plugin.json` (the fork ships none), the rename
+    `skills/playwright-test-generator/SKILL.md` → `SKILL.md.disabled`, and exactly one added line in
+    `skills/pw-prove/SKILL.md`. `scripts/check-e2e-subtree.sh` is the single owner of that set and
+    the only thing that asserts it — this list is orientation, the exit code is the verdict. It
+    fetches the fork, so it is deliberately not part of `make validate`, which is static and
+    offline. Its own tests are `make test-e2e-subtree-check`.
   - Only two of the five on-disk skills are declared in `plugin.json`: `pw-prove` and
     `e2e-reviewer`. The other two live ones — `cypress-debugger` and `playwright-debugger` — still
     load and still appear to the host as `e2e:<name>`; the `skills` array shapes the published
