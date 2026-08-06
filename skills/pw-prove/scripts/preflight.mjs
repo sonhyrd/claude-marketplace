@@ -21,16 +21,20 @@
 //                  without moving HOSTING_READY. A rotated secret or a missing ffmpeg surfaces at
 //                  minute zero rather than after a fifty-minute run, and none of it ever blocks: a
 //                  run must still be able to prove a change and skip delivery.
-//   CLIPS_ORIGIN / CLIPS_A2A_SECRET / CLIPS_ORG_ID / CLIPS_ORG_DOMAIN / CLIPS_SUBJECT
-//                  optional as a set — publish-proof.mjs's configuration, described in clips.mjs.
-//                  When PROBE_HOSTING=1 and all five are set, the credential is round-tripped against
-//                  the real import action; any one of them missing is a named WARN, never a block.
+//   CLIPS_MCP_TOKEN
+//                  optional — publish-proof.mjs's one credential, described in clips.mjs. When
+//                  PROBE_HOSTING=1 and it is set, it is round-tripped against the real import
+//                  action; absent, that is a named WARN, never a block.
+//   PW_PROVE_CLIPS_ENDPOINT
+//                  optional — the MCP endpoint, for testing and self-hosted deployments. Absent,
+//                  the endpoint is the token's own `aud` claim.
 //
 //   exit 3 = not ready
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { clipsConfig, probeImportCredential } from './clips.mjs';
+import { fileURLToPath } from 'node:url';
+import { VAULT_ADD_COMMAND, clipsConfig, probeImportCredential, vaultLeaseCommand } from './clips.mjs';
 import { pwproveRun } from './pwprove-run.mjs';
 
 const out = (s) => process.stdout.write(s);
@@ -134,14 +138,25 @@ let publishReady = 'no';
 let videoTooling = 'no';
 if (PROBE_HOSTING) {
   // The credential is round-tripped by RUNNING the real call, per this repo's probe doctrine —
-  // probe by running the tool, never by presence-checking: POST the import action a body its schema
-  // must reject, so the whole path is exercised while nothing is created. A schema-validation
-  // failure is the PASS — it means the request got past auth, so reachability, secret currency,
-  // adapter wiring, scope and org resolution all hold. A bare GET would prove none of that: the
-  // route answers it with its method check before auth is ever consulted.
+  // probe by running the tool, never by presence-checking: call the import action with arguments
+  // its schema must reject, so the whole path is exercised while nothing is created. A rejection of
+  // the ARGUMENTS is the PASS — it means the call got past auth AND past catalog gating, so
+  // reachability, credential currency, organization resolution and delegability all hold. A
+  // presence check on the variable would prove none of that.
+  //
+  // The verdicts are NOT interchangeable: a refused credential (an honest 401) and an action this
+  // token may not call (an HTTP 200 saying "Unknown tool") are different problems with different
+  // fixes, and reporting them as one generic failure sends an operator to the wrong one.
   const config = clipsConfig();
   if (!config.ok) {
+    // Absence WARNS; it never stops — the proof is the passing test plus the mutation verdict, and
+    // delivery is downstream of both. What absence must not do is cost an operator a skill-file read
+    // to fix: the warning prints the lease they can paste, reconstructed from THIS invocation, so the
+    // pasted line re-runs this same probe rather than standing in for it.
+    const relaunch = `env PROBE_HOSTING=1 BASE_URL='${BASE_URL}' node ${fileURLToPath(import.meta.url)}`;
     warn(`preflight: WARN - publish credential not configured (${config.reason}); the proof link will be skipped.\n`);
+    warn(`preflight:   re-run under a lease: ${vaultLeaseCommand(relaunch)}\n`);
+    warn(`preflight:   never stored it on this machine: ${VAULT_ADD_COMMAND}\n`);
   } else {
     const { verdict, detail } = await probeImportCredential(config);
     if (verdict === 'usable') {

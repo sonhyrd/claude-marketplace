@@ -3,11 +3,17 @@
 # Same shape as the proof-page check it replaced: spawn the real script, assert its exit code, its
 # marker line and the bytes it sent — never an internal call.
 #
-# ONE seam, and it is configuration the design already required: CLIPS_ORIGIN points at a throwaway
-# local HTTP server (scripts/ci/fixtures/clips-stub-server.mjs) that captures the request. Everything
-# else is real — real ffmpeg/ffprobe over real synthetic videos, so the measured durations,
-# dimensions and the stream-copy claim are proven against actual files rather than fabricated probe
-# output. No network leaves the machine.
+# ONE seam, and it is configuration the design already required: PW_PROVE_CLIPS_ENDPOINT points at a
+# throwaway local HTTP server (scripts/ci/fixtures/clips-stub-server.mjs) that captures the request.
+# Everything else is real — real ffmpeg/ffprobe over real synthetic videos, so the measured
+# durations, dimensions and the stream-copy claim are proven against actual files rather than
+# fabricated probe output. No network leaves the machine.
+#
+# HOME IS ISOLATED IN EVERY CASE. An earlier version of this file unset the credential variables and
+# assumed the scripts were then unconfigured; they were not — a credential file under $HOME resolved
+# a real configuration, and one refusal case published to production Clips and created a public
+# recording. The file mechanism is deleted, so nothing reads $HOME any more; the isolation stays
+# because "the test believes it is unconfigured" must be a fact, not a hope.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
@@ -15,13 +21,11 @@ cd "$REPO_ROOT" || exit 1
 S="skills/pw-prove/scripts"
 STUB="scripts/ci/fixtures/clips-stub-server.mjs"
 
-# The organization's id and its domain are DELIBERATELY different strings here, and nothing in the
-# fixtures lets one stand in for the other. A deployment looks its signing key up by the domain and
-# then checks that the domain owns the id, so a caller that collapses the two into one value mints a
-# token that 401s with nothing in the response to say why. Keeping them distinct in the fixture is
-# what makes that collapse a test failure rather than a live-run surprise.
-STUB_ORG_ID="0000acme0000000000000000000000ff"
-STUB_ORG_DOMAIN="acme.test"
+# Nothing in this file may reach a real deployment. Every case sets the credential and the endpoint
+# explicitly, so an operator's own exported values could only ever leak in through a case that
+# forgot to — and one that forgot to is exactly how a refusal case published a public recording to
+# production. Clearing them here makes that class of mistake impossible rather than unlikely.
+unset CLIPS_MCP_TOKEN PW_PROVE_CLIPS_ENDPOINT
 
 pass=0; fail=0
 ok()  { echo "  [PASS] $1"; pass=$((pass + 1)); }
@@ -43,7 +47,19 @@ stop_stub() {
 cleanup() { stop_stub; rm -rf "$W"; }
 trap cleanup EXIT
 
-mkdir -p "$W/cap"
+mkdir -p "$W/cap" "$W/isolated-home"
+
+# A stand-in bearer. Unsigned on purpose: this client never verifies a token and holds no material
+# to verify one with — it reads `aud` for ROUTING and forwards the rest opaquely. Building the
+# fixture the same way is what proves the client is not secretly doing cryptography.
+fake_token() { # usage: fake_token [audience]
+  AUD="${1-}" node -e '
+    const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const claims = { iss: "clips-stub", sub: "proof@acme.test", org_id: "0000acme", jti: "stub-jti" };
+    if (process.env.AUD) claims.aud = process.env.AUD;
+    process.stdout.write(`${b64({ alg: "HS256", typ: "JWT" })}.${b64(claims)}.c3R1Yg`);
+  '
+}
 
 # --- fixtures: two homogeneous clips, 2s and 3s, silent -----------------------------------------
 ffmpeg -y -f lavfi -i testsrc=size=320x180:rate=10:duration=2 -c:v libvpx-vp9 -b:v 200k \
@@ -69,15 +85,17 @@ start_stub() { # usage: start_stub <mode>
   done
   [ -n "$PORT" ] || { echo "  [FAIL] stub server never reported a port"; cat "$W/stub.err"; exit 1; }
   ORIGIN="http://127.0.0.1:$PORT"
+  ENDPOINT="$ORIGIN/mcp"
+  TOKEN=$(fake_token "$ENDPOINT")
 }
 
 # The concatenated proof lands in the OS temp dir; pointing TMPDIR at the workspace both isolates the
-# run from a developer's real temp dir and tells the test exactly where to look.
+# run from a developer's real temp dir and tells the test exactly where to look. HOME is isolated
+# too — see the header.
 publish() { # usage: publish <manifest> [extra env...]
   local manifest="$1"; shift
-  ( cd "$W" && env TMPDIR="$W" CLIPS_ORIGIN="$ORIGIN" CLIPS_A2A_SECRET="stub-signing-secret" \
-      CLIPS_ORG_ID="$STUB_ORG_ID" CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN" \
-      CLIPS_SUBJECT="proof@acme.test" PWPROVE_LEDGER="$W/ledger.jsonl" "$@" \
+  ( cd "$W" && env TMPDIR="$W" HOME="$W/isolated-home" CLIPS_MCP_TOKEN="$TOKEN" \
+      PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT" PWPROVE_LEDGER="$W/ledger.jsonl" "$@" \
       node "$REPO_ROOT/$S/publish-proof.mjs" "$manifest" >"$W/out" 2>"$W/err" )
 }
 
@@ -94,45 +112,87 @@ cat > "$W/m.json" <<'JSON'
 }
 JSON
 
-echo "-- happy path: N clips in, ONE request out --"
+echo "-- happy path: N clips in, ONE import call plus one comment per chapter --"
 start_stub ok
 publish m.json
 rc=$?
 [ "$rc" = 0 ] && ok "exit 0" || { bad "exit $rc, wanted 0"; sed 's/^/         /' "$W/err" | tail -5; }
 
 reqs=$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')
-[ "$reqs" = 1 ] && ok "exactly one outbound request" || bad "expected 1 request, got $reqs"
+[ "$reqs" = 3 ] && ok "one import call plus one comment per chapter (3 calls for 2 chapters)" \
+  || bad "expected 3 requests (1 import + 2 comments), got $reqs"
 
 SHARE="$ORIGIN/share/rec_stub_1"
 marker=$(sed -n 's/^PWPROVE_URL //p' "$W/out" | head -n1)
 [ "$marker" = "$SHARE" ] && ok "the share URL is on the PWPROVE_URL marker line" \
   || bad "marker line: '$marker' != '$SHARE'"
 
-# The request as the destination saw it — every assertion below reads this file.
+# The requests as the destination saw them — every assertion below reads this file.
 REQ="$W/cap/requests.jsonl"
-# usage: jassert <name> <JS expression over `r` (the captured request) and `b` (its body)>
+# usage: jassert <name> <JS expression over `r` (the first captured request), `b` (its body),
+#                        `args` (its tool arguments) and `all` (every captured request)>
 jassert() {
   if EXPR="$2" node -e '
     const fs = require("fs");
-    const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)[0]);
+    const all = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean).map(JSON.parse);
+    const r = all[0];
     const b = r.body;
+    const args = b?.params?.arguments ?? {};
     const held = eval(process.env.EXPR);
     if (!held) { console.error("expression is false: " + process.env.EXPR); process.exit(1); }
   ' "$REQ" 2>"$W/jerr"; then ok "$1"; else bad "$1"; sed 's/^/         /' "$W/jerr" | head -2; fi
 }
 
-jassert "the request is a POST to the import action" \
-  'r.method === "POST" && r.url === "/_agent-native/actions/import-recording-from-url"'
+jassert "the publish is a JSON-RPC tools/call POSTed to the MCP endpoint" \
+  'r.method === "POST" && r.url === "/mcp" && b.jsonrpc === "2.0" && b.method === "tools/call" && typeof b.id !== "undefined"'
+jassert "the call names the import action and wraps the payload in params.arguments" \
+  'b.params.name === "import-recording-from-url" && b.params.arguments && typeof b.params.arguments === "object"'
+# Verified against the live deployment: a bare tools/call works and responses are plain JSON. A
+# handshake this transport does not need would be an extra round trip on every publish.
+# The length is part of the assertion, not decoration: `every` over an empty capture is true, so a
+# regression that sent nothing at all would pass this as written without it.
+jassert "no initialize handshake precedes the call" \
+  'all.length === 3 && all.every((x) => x.body?.method === "tools/call")'
+jassert "the request declares JSON, and accepts the event-stream framing it never receives" \
+  'r.headers["content-type"] === "application/json" && String(r.headers.accept).includes("application/json")'
 jassert "the video travels as a base64 data URL" \
-  'typeof b.data === "string" && b.data.startsWith("data:video/webm;base64,") && b.data.length > 1000'
-jassert "chapters are in manifest order, each titled with its AC verbatim" \
-  'b.chapters.length === 2 && b.chapters[0].title === "Per-locale EN/DE/ID authoring" && b.chapters[1].title === "Every locale empty removes the key"'
+  'typeof args.data === "string" && args.data.startsWith("data:video/webm;base64,") && args.data.length > 1000'
+jassert "chapters are in manifest order, each labelled with its scenario" \
+  'args.chapters.length === 2 && args.chapters[0].title === "each tab holds its own text" && args.chapters[1].title === "clearing removes the key"'
 jassert "the first chapter starts at zero and the second after the first clip" \
-  'b.chapters[0].startMs === 0 && b.chapters[1].startMs >= 1900 && b.chapters[1].startMs <= 2100'
-jassert "the description carries the PR URL" 'b.description.includes("https://github.com/org/repo/pull/2974")'
-jassert "the description carries the spec path" 'b.description.includes("tests/e2e/cookie-consent.spec.ts")'
-jassert "the description carries the mutation verdict" 'b.description.includes("RED — dropping the .trim()")'
-jassert "the recording is titled from the manifest" 'b.title === "PR #2974 — cookie consent text authoring"'
+  'args.chapters[0].startMs === 0 && args.chapters[1].startMs >= 1900 && args.chapters[1].startMs <= 2100'
+jassert "the description carries the PR URL" 'args.description.includes("https://github.com/org/repo/pull/2974")'
+jassert "the description carries the spec path" 'args.description.includes("tests/e2e/cookie-consent.spec.ts")'
+jassert "the description carries the mutation verdict" 'args.description.includes("RED — dropping the .trim()")'
+jassert "the recording is titled from the manifest" 'args.title === "PR #2974 — cookie consent text authoring"'
+
+# The acceptance criteria travel as timestamped comments, verbatim, at their chapter's offset — a
+# scrubber tooltip is label-sized and a criterion is a sentence.
+jassert "each chapter's criterion is posted verbatim as a comment at that chapter's offset" \
+  'all.slice(1).length === 2
+   && all.slice(1).every((x) => x.body.params.name === "add-comment")
+   && all[1].body.params.arguments.content === "Per-locale EN/DE/ID authoring"
+   && all[1].body.params.arguments.videoTimestampMs === 0
+   && all[2].body.params.arguments.content === "Every locale empty removes the key"
+   && all[2].body.params.arguments.videoTimestampMs >= 1900'
+
+echo ""
+echo "-- the recording identifier is PARSED out of the success envelope, not assumed --"
+# The identifier arrives inside a JSON-RPC result, as the text of a content block. A parser that
+# reads the envelope as the action's own JSON gets `undefined` — which then reads as a plausible id
+# everywhere it is interpolated, so this asserts the real value on the wire and in the report.
+# The count is load-bearing: `every` over nothing is true, so without it a publish that parsed no id
+# and therefore posted no comment would read as a pass on the very claim being made.
+jassert "the comments are addressed to the recording id the destination actually returned" \
+  'all.slice(1).length === 2
+   && all.slice(1).every((x) => x.body.params.arguments.recordingId === "rec_stub_1")'
+if grep -q 'publish-proof: 2 timestamped comment(s) attached' "$W/err"; then
+  ok "both comments are reported as attached"
+else
+  bad "the comment outcome was not reported"; sed 's/^/         /' "$W/err" | tail -3
+fi
+grep -q 'undefined' "$W/out" && bad "an undefined leaked into the printed output" \
+  || ok "nothing in the printed output reads as an undefined identifier"
 
 echo ""
 echo "-- reported metadata matches the file that was actually sent --"
@@ -150,10 +210,11 @@ A_DUR=$(probe_dur "$W/a.webm"); B_DUR=$(probe_dur "$W/b.webm")
 if node -e '
   const fs = require("fs");
   const b = JSON.parse(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)[0]).body;
+  const a = b.params.arguments;
   const dur = Number(process.argv[2]) * 1000;
-  if (Math.abs(b.durationMs - dur) > 150) { console.error(`durationMs ${b.durationMs} vs file ${dur}`); process.exit(1); }
-  if (b.width !== 320 || b.height !== 180) { console.error(`dimensions ${b.width}x${b.height}`); process.exit(1); }
-  if (b.hasAudio !== false) { console.error("hasAudio should be false for a silent proof"); process.exit(1); }
+  if (Math.abs(a.durationMs - dur) > 150) { console.error(`durationMs ${a.durationMs} vs file ${dur}`); process.exit(1); }
+  if (a.width !== 320 || a.height !== 180) { console.error(`dimensions ${a.width}x${a.height}`); process.exit(1); }
+  if (a.hasAudio !== false) { console.error("hasAudio should be false for a silent proof"); process.exit(1); }
 ' "$REQ" "$CONCAT_DUR" 2>"$W/jerr"; then
   ok "reported duration, dimensions and the silent-audio declaration match the concatenated file"
 else
@@ -176,47 +237,41 @@ else
 fi
 
 echo ""
-echo "-- the bearer: short-lived, scoped to the import, minted with the Node standard library --"
-if node -e '
-  const crypto = require("crypto");
+echo "-- the bearer travels OPAQUELY: forwarded verbatim, never signed and never re-shaped --"
+# The client performs no cryptography at all now. Every call in the run must carry the exact bytes
+# it was handed — a token this script rebuilt would be a token it could get wrong, and a second
+# credential shape reachable from here is the fallback this cutover deleted.
+if TOKEN="$TOKEN" node -e '
   const fs = require("fs");
-  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)[0]);
-  const [origin, secret] = process.argv.slice(2);
-  const auth = r.headers.authorization || "";
-  if (!auth.startsWith("Bearer ")) throw new Error("no bearer header");
-  const [h, p, s] = auth.slice(7).split(".");
-  const expect = crypto.createHmac("sha256", secret).update(`${h}.${p}`).digest("base64url");
-  if (s !== expect) throw new Error("signature does not verify against the configured secret");
-  if (JSON.parse(Buffer.from(h, "base64url")).alg !== "HS256") throw new Error("not HS256");
-  const c = JSON.parse(Buffer.from(p, "base64url"));
-  if (c.scope !== "recordings:import") throw new Error(`scope ${c.scope}`);
-  if (c.aud !== origin) throw new Error(`aud ${c.aud}`);
-  if (!c.jti) throw new Error("no jti");
-  const life = c.exp - c.iat;
-  if (!(life > 0 && life <= 900)) throw new Error(`lifetime ${life}s is not short-lived`);
-' "$REQ" "$ORIGIN" "stub-signing-secret" 2>"$W/jerr"; then
-  ok "an HS256 bearer verifies against the secret and carries scope, audience and a short life"
+  const all = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean).map(JSON.parse);
+  const want = `Bearer ${process.env.TOKEN}`;
+  for (const [i, r] of all.entries()) {
+    const auth = r.headers.authorization || "";
+    if (auth !== want) throw new Error(`request ${i + 1} carries a different bearer than it was given`);
+  }
+' "$REQ" 2>"$W/jerr"; then
+  ok "every call forwards the configured bearer verbatim"
 else
-  bad "bearer claims violate the contract"; sed 's/^/         /' "$W/jerr" | tail -2
+  bad "the bearer was re-shaped in flight"; sed 's/^/         /' "$W/jerr" | tail -2
 fi
 
-# The identity claims, asserted separately because they are the ones a collapse silently corrupts.
-# `org_id` and `org_domain` are two different lookups on the receiving side — the domain selects the
-# signing key, the id is the organization the import runs under — and `sub` must be a member of it.
-if ORG_ID="$STUB_ORG_ID" ORG_DOMAIN="$STUB_ORG_DOMAIN" node -e '
-  const fs = require("fs");
-  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)[0]);
-  const c = JSON.parse(Buffer.from(r.headers.authorization.slice(7).split(".")[1], "base64url"));
-  const { ORG_ID, ORG_DOMAIN } = process.env;
-  if (c.org_id !== ORG_ID) throw new Error(`org_id is ${c.org_id}, wanted ${ORG_ID}`);
-  if (c.org_domain !== ORG_DOMAIN) throw new Error(`org_domain is ${c.org_domain}, wanted ${ORG_DOMAIN}`);
-  if (c.org_id === c.org_domain) throw new Error("org_id and org_domain carry the same value");
-  if (c.sub !== "proof@acme.test") throw new Error(`sub is ${c.sub}`);
-' "$REQ" 2>"$W/jerr"; then
-  ok "org_id, org_domain and sub each carry their own configured value"
+echo ""
+echo "-- the endpoint comes from the token itself when nothing overrides it --"
+# The token carries its own destination, which is why one variable replaced five. The override
+# exists for testing and self-hosting; without it the audience claim must be what is dialled.
+start_stub ok
+( cd "$W" && env TMPDIR="$W" HOME="$W/isolated-home" CLIPS_MCP_TOKEN="$TOKEN" PWPROVE_LEDGER="$W/ledger.jsonl" \
+    node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/aud.out" 2>"$W/aud.err" )
+audrc=$?
+audmarker=$(sed -n 's/^PWPROVE_URL //p' "$W/aud.out" | head -n1)
+if [ "$audrc" = 0 ] && [ "$audmarker" = "$ORIGIN/share/rec_stub_1" ]; then
+  ok "with no endpoint override, the publish dials the token's own audience"
 else
-  bad "the token's identity claims are wrong"; sed 's/^/         /' "$W/jerr" | tail -2
+  bad "audience-derived endpoint: exit $audrc, marker '$audmarker'"; sed 's/^/         /' "$W/aud.err" | tail -3
 fi
+[ "$(sed -n '1p' "$W/cap/requests.jsonl" | grep -c '"url":"/mcp"')" = 1 ] \
+  && ok "the audience-derived endpoint is the MCP path, not the retired action route" \
+  || bad "the audience-derived call did not land on /mcp"
 
 echo ""
 echo "-- per-chapter deep links point at the route whose ?t= is a timestamp --"
@@ -224,7 +279,7 @@ echo "-- per-chapter deep links point at the route whose ?t= is a timestamp --"
 # there opens the recording from the top and silently drops the offset, so a reviewer sent to a
 # criterion watches the run from the beginning and reads it as the wrong evidence. /embed/<id>
 # is the route that parses `t` as seconds.
-deep=$(sed -n 's/^publish-proof: chapter 2 .* -> //p' "$W/err" | head -n1)
+deep=$(sed -n 's/^publish-proof: chapter 2 .* -> //p' "$W/aud.err" | head -n1)
 case "$deep" in
   */embed/rec_stub_1\?t=*) ok "chapter deep links use /embed/<id>?t=<seconds> ($deep)" ;;
   */share/*) bad "chapter deep link uses /share/<id>?t=, where t is the access token: '$deep'" ;;
@@ -233,9 +288,16 @@ esac
 # The offset is the chapter's own start, in seconds — clip a.webm is 2s, so chapter 2 opens at 2.
 [ "${deep##*t=}" = 2 ] && ok "the offset is the chapter's measured start in seconds" \
   || bad "chapter 2 should open at t=2, got t=${deep##*t=}"
+# The deep link is built on the deployment ORIGIN, not on the MCP endpoint the call was posted to.
+case "$deep" in
+  "$ORIGIN"/embed/*) ok "the deep link is built on the deployment origin, not on the /mcp endpoint" ;;
+  *) bad "the deep link is not on the deployment origin: '$deep'" ;;
+esac
 
 echo ""
 echo "-- run ledger --"
+start_stub ok
+publish m.json
 if grep -q '^PWPROVE_RUN ' "$W/out" && node -e '
   const fs = require("fs");
   const line = fs.readFileSync(process.argv[1], "utf8").split("\n").find(l => l.startsWith("PWPROVE_RUN "));
@@ -255,9 +317,8 @@ grep -q '"script":"publish-proof.mjs"' "$W/ledger.jsonl" 2>/dev/null \
 echo ""
 echo "-- marker survives merged streams (a caller's \`2>&1\` reflex) --"
 start_stub ok
-( cd "$W" && env TMPDIR="$W" CLIPS_ORIGIN="$ORIGIN" CLIPS_A2A_SECRET="stub-signing-secret" \
-    CLIPS_ORG_ID="$STUB_ORG_ID" CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN" CLIPS_SUBJECT="proof@acme.test" \
-    PWPROVE_LEDGER="$W/ledger.jsonl" \
+( cd "$W" && env TMPDIR="$W" HOME="$W/isolated-home" CLIPS_MCP_TOKEN="$TOKEN" \
+    PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT" PWPROVE_LEDGER="$W/ledger.jsonl" \
     node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/merged" 2>&1 )
 merged=$(sed -n 's/^PWPROVE_URL //p' "$W/merged" | head -n1)
 [ "$merged" = "$ORIGIN/share/rec_stub_1" ] \
@@ -266,41 +327,56 @@ merged=$(sed -n 's/^PWPROVE_URL //p' "$W/merged" | head -n1)
 
 echo ""
 echo "-- configuration and manifest refusals --"
+# Every case below runs with an isolated HOME. The scripts read the credential from their own
+# environment and from nowhere else — no file, no dotfile, no opt-in fallback — and this is where
+# that is proven rather than assumed.
 start_stub ok
-( cd "$W" && env -u CLIPS_ORIGIN -u CLIPS_A2A_SECRET TMPDIR="$W" PWPROVE_LEDGER="$W/ledger.jsonl" \
+( cd "$W" && env -u CLIPS_MCP_TOKEN TMPDIR="$W" HOME="$W/isolated-home" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT" \
+    PWPROVE_LEDGER="$W/ledger.jsonl" \
     node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/out" 2>"$W/err" )
 rc=$?
-[ "$rc" = 1 ] && ok "unconfigured origin/secret refuses to publish (exit 1)" \
-  || { bad "missing config: exit $rc, wanted 1"; sed 's/^/         /' "$W/err" | tail -2; }
+if [ "$rc" = 1 ] && grep -q 'CLIPS_MCP_TOKEN' "$W/err"; then
+  ok "a missing CLIPS_MCP_TOKEN refuses to publish (exit 1) and names the variable"
+else
+  bad "missing credential: exit $rc, wanted 1 with the name in the report"
+  sed 's/^/         /' "$W/err" | tail -2
+fi
 [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ] \
-  && ok "nothing is sent when the configuration is missing" \
-  || bad "a request went out without configuration"
+  && ok "nothing is sent when the credential is missing" \
+  || bad "a request went out without a credential"
 
-# The three identity variables are REQUIRED, not defaulted. A default that guesses is worse than a
-# refusal here: an id derived from the origin's hostname, or a subject like pw-prove@<hostname>, mints
-# a token that reaches the deployment and is refused there — a 401 or a 403 an operator then has to
-# diagnose against someone else's server, when this script already knew the value was never supplied.
-for missing in CLIPS_ORG_ID CLIPS_ORG_DOMAIN CLIPS_SUBJECT; do
-  start_stub ok
-  # Built by omission rather than `env -u`: env applies its unsets BEFORE its assignments, so
-  # `env -u CLIPS_ORG_ID CLIPS_ORG_ID=…` would hand the variable straight back and the case would
-  # prove nothing.
-  set -- TMPDIR="$W" CLIPS_ORIGIN="$ORIGIN" CLIPS_A2A_SECRET="stub-signing-secret" \
-    PWPROVE_LEDGER="$W/ledger.jsonl"
-  [ "$missing" = CLIPS_ORG_ID ]     || set -- "$@" CLIPS_ORG_ID="$STUB_ORG_ID"
-  [ "$missing" = CLIPS_ORG_DOMAIN ] || set -- "$@" CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN"
-  [ "$missing" = CLIPS_SUBJECT ]    || set -- "$@" CLIPS_SUBJECT="proof@acme.test"
-  ( cd "$W" && env -u CLIPS_ORG_ID -u CLIPS_ORG_DOMAIN -u CLIPS_SUBJECT "$@" \
-      node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/out" 2>"$W/err" )
-  rc=$?
-  if [ "$rc" = 1 ] && grep -q "$missing" "$W/err" \
-     && [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ]; then
-    ok "a missing $missing refuses to publish and names the variable"
-  else
-    bad "missing $missing: exit $rc, wanted 1 with the name in the report"
-    sed 's/^/         /' "$W/err" | tail -2
-  fi
-done
+# The credential FILE is gone, and this is the case that proves it: a file at the retired path,
+# holding a complete configuration, must change nothing. The refusal that used to be silently
+# overturned here published a public recording to a real account.
+start_stub ok
+mkdir -p "$W/isolated-home/.config"
+{ echo "CLIPS_MCP_TOKEN=$TOKEN"; echo "CLIPS_ORIGIN=$ORIGIN"; echo "CLIPS_A2A_SECRET=stub-signing-secret"; } \
+  > "$W/isolated-home/.config/pw-prove-clips.env"
+( cd "$W" && env -u CLIPS_MCP_TOKEN TMPDIR="$W" HOME="$W/isolated-home" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT" \
+    PWPROVE_LEDGER="$W/ledger.jsonl" \
+    node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/out" 2>"$W/err" )
+rc=$?
+if [ "$rc" = 1 ] && [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ]; then
+  ok "a credential file at the retired path is not read: the refusal stands and nothing is sent"
+else
+  bad "the retired credential file still resolves a configuration: exit $rc"
+  sed 's/^/         /' "$W/err" | tail -2
+fi
+rm -f "$W/isolated-home/.config/pw-prove-clips.env"
+
+# A token that addresses nothing, with no override to supply the endpoint: there is no destination
+# to guess at. Guessing one sends a real credential to a host nobody chose.
+start_stub ok
+NOAUD=$(fake_token)
+( cd "$W" && env TMPDIR="$W" HOME="$W/isolated-home" CLIPS_MCP_TOKEN="$NOAUD" PWPROVE_LEDGER="$W/ledger.jsonl" \
+    node "$REPO_ROOT/$S/publish-proof.mjs" m.json >"$W/out" 2>"$W/err" )
+rc=$?
+if [ "$rc" = 1 ] && grep -q 'aud' "$W/err"; then
+  ok "a token carrying no audience refuses to publish and says the endpoint is underivable"
+else
+  bad "no-audience token: exit $rc, wanted 1 naming the missing audience"
+  sed 's/^/         /' "$W/err" | tail -2
+fi
 
 cat > "$W/empty.json" <<'JSON'
 { "title": "nothing to see", "clips": [] }
@@ -415,8 +491,8 @@ cat > "$W/leakac.json" <<'JSON'
 }
 JSON
 gate_case "token in an AC title" 6 TOKEN-LEAK leakac.json BEARER="$LEAK_TOKEN"
-grep -q "chapter 1's title" "$W/err" \
-  && ok "the AC leak report names which chapter title carries the token" \
+grep -q "chapter 1's criterion" "$W/err" \
+  && ok "the AC leak report names which chapter's criterion carries the token" \
   || { bad "the AC leak report does not say where the token is"; sed 's/^/         /' "$W/err" | tail -3; }
 
 # HOMOGENEITY: a real 640x360 clip beside the 320x180 pair. Nothing is fabricated — ffmpeg would
@@ -464,9 +540,11 @@ else
 fi
 
 echo ""
-echo "-- transport failure keeps the run ALIVE and hands back the file --"
+echo "-- a refusal keeps the run ALIVE and hands back the file, WHATEVER status it arrives at --"
 # The opposite posture to a gate: undelivered evidence never fails a run, because the proof is the
-# passing test plus the mutation verdict. Exit 0, the path on a marker line, and the file really there.
+# passing test plus the mutation verdict. Exit 0, the path on a marker line, and the file really
+# there. The four cases below are the four ways delivery fails, and three of them are HTTP 200 or a
+# 401 whose body is not JSON-RPC — so a caller reading the status code alone gets two of them wrong.
 alive_case() { # usage: alive_case <name> [extra env...]
   local name="$1"; shift
   publish m.json "$@"
@@ -485,11 +563,107 @@ alive_case() { # usage: alive_case <name> [extra env...]
     || bad "$name — a share URL was printed although nothing was delivered"
 }
 start_stub error
-name="a 500 from the destination"; alive_case "$name"
+alive_case "a 500 from the destination"
+# This stub echoes the bearer back in its error body, which real deployments do. The failure report
+# quotes that body, so a client that repeats it verbatim writes the credential into a run log.
+if grep -qF "$TOKEN" "$W/err" "$W/out"; then
+  bad "the bearer was echoed into the failure report"
+else
+  ok "a destination that echoes the bearer back does not get it repeated into the report"
+fi
+grep -q '<redacted bearer>' "$W/err" \
+  && ok "the redaction is visible in the report, so nothing looks silently dropped" \
+  || { bad "the echoed bearer was neither printed nor visibly redacted"; sed 's/^/         /' "$W/err" | tail -3; }
+
+# A refused credential: HTTP 401, and the body is NOT JSON-RPC. A parser that reaches for
+# `result.content[0].text` throws here, and the run dies over a credential problem.
+start_stub unauthorized
+alive_case "a 401 whose body is not JSON-RPC"
+grep -q 'refused the credential' "$W/err" \
+  && ok "a 401 is reported as a refused credential, not as a generic transport failure" \
+  || { bad "the 401 was not named as a credential refusal"; sed 's/^/         /' "$W/err" | tail -3; }
+
+# The trap this transport is built around: an HTTP 200 that is a flat refusal. `res.ok` is true, the
+# status is 200, and nothing was published.
+start_stub unknown-tool
+alive_case "an HTTP 200 saying the action is not in this token's catalog"
+grep -q 'callable catalog' "$W/err" \
+  && ok "a non-delegable action names the catalog as the cause, not the credential" \
+  || { bad "the not-delegable refusal was not named"; sed 's/^/         /' "$W/err" | tail -3; }
+
+start_stub validation
+alive_case "an HTTP 200 rejecting the arguments"
+grep -q 'rejected the publish' "$W/err" \
+  && ok "an HTTP 200 carrying an error is a failed publish, not a success" \
+  || { bad "an HTTP 200 error was not reported as a failure"; sed 's/^/         /' "$W/err" | tail -3; }
+
 # A refused connection, not a slow one: port 1 on loopback answers with ECONNREFUSED immediately.
-name="a refused connection"; ORIGIN_OK="$ORIGIN"; ORIGIN="http://127.0.0.1:1"
-alive_case "$name"
-ORIGIN="$ORIGIN_OK"
+start_stub ok
+ENDPOINT="http://127.0.0.1:1/mcp"
+alive_case "a refused connection"
+
+echo ""
+echo "-- a film over the destination's inline ceiling is refused BEFORE the request is built --"
+# The same Undelivered posture as the four cases above, reached without a destination being asked.
+# The import action caps inline video at 67108864 decoded bytes, and base64 decodes to exactly the
+# bytes on disk — so `stat` answers the question before the encode. Encoding first would spend the
+# base64 pass and the upload to learn what the filesystem already knew.
+#
+# This is emphatically NOT a gate: the film is fine, it is simply too big for this door. Withholding
+# it the way a gate does would destroy the only copy of good evidence at the moment the operator
+# needs it, so the kept file is asserted here exactly as it is for a 500.
+CEILING=67108864
+ffmpeg -y -f lavfi -i testsrc2=size=1280x720:rate=30:duration=8 -c:v libvpx-vp9 \
+  -b:v 80M -minrate 80M -maxrate 80M -cpu-used 8 -row-mt 1 -deadline realtime \
+  "$W/fat.webm" >/dev/null 2>&1
+FAT=$(wc -c < "$W/fat.webm" 2>/dev/null | tr -d ' ')
+if [ "${FAT:-0}" -lt 1048576 ]; then
+  # NOT a skip, for the reason the other fixture guards give: a suite that reports green over an
+  # unexercised refusal is the silent-always-pass this repo calls P0.
+  bad "the oversized fixture came out at ${FAT:-0}B — the ceiling refusal went unexercised"
+else
+  # The clip is listed however many times it takes to clear the ceiling, computed from the fixture's
+  # real size rather than assumed: a different ffmpeg build hits a different bitrate, and a hard-coded
+  # repeat count would quietly stop clearing the ceiling on someone else's machine.
+  COPIES=$(( CEILING / FAT + 2 ))
+  COPIES="$COPIES" node -e '
+    const n = Number(process.env.COPIES);
+    const clips = Array.from({ length: n }, (_, i) => ({
+      ac: `Criterion ${i + 1} holds`, scenario: `scenario ${i + 1}`, file: "fat.webm",
+    }));
+    process.stdout.write(JSON.stringify({ title: "oversized proof", clips }));
+  ' > "$W/fat.json"
+  start_stub ok
+  rm -f "$PROOF"
+  publish fat.json
+  rc=$?
+  [ "$rc" = 0 ] && ok "an oversized film — exit 0, the run is still passing" \
+    || { bad "an oversized film — exit $rc: a run must never fail over undelivered evidence"
+         sed 's/^/         /' "$W/err" | tail -4; }
+  [ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ] \
+    && ok "an oversized film — no request was built and nothing was sent" \
+    || bad "an oversized film — a request went out over the ceiling"
+  kept=$(sed -n 's/^PWPROVE_PROOF_FILE //p' "$W/out" | head -n1)
+  [ -n "$kept" ] && [ -s "$kept" ] \
+    && ok "an oversized film — the kept film's path is on a PWPROVE_PROOF_FILE marker line ($kept)" \
+    || { bad "an oversized film — no kept film at '$kept'"; sed 's/^/         /' "$W/err" | tail -3; }
+  [ -z "$(sed -n 's/^PWPROVE_URL //p' "$W/out")" ] \
+    && ok "an oversized film — no share URL is claimed" \
+    || bad "an oversized film — a share URL was printed although nothing was delivered"
+  grep -q 'GATE' "$W/err" \
+    && bad "an oversized film — reported as a gate; the artifact is fine, it is merely undeliverable" \
+    || ok "an oversized film — no gate is named: the artifact is good, just too big for this door"
+  # Both numbers, exact: an operator who is told only "too large" cannot tell whether to trim one
+  # scenario or to stop trying. The actual size is read off the film that was actually kept.
+  ACTUAL=$(wc -c < "${kept:-/dev/null}" 2>/dev/null | tr -d ' ')
+  if grep -qF "$CEILING" "$W/err" && grep -qF "$ACTUAL" "$W/err"; then
+    ok "an oversized film — the refusal names the ceiling ($CEILING) and the actual size ($ACTUAL)"
+  else
+    bad "an oversized film — the refusal does not name both the ceiling and the actual size"
+    sed 's/^/         /' "$W/err" | tail -3
+  fi
+  rm -f "$W/fat.webm" "$PROOF"
+fi
 
 echo ""
 echo "-- the retired fifth gate leaves no object-name vocabulary behind --"
@@ -505,17 +679,27 @@ fi
   || bad "publish-proof.mjs can still exit 2"
 
 echo ""
+echo "-- the HMAC path is DELETED, not dormant: an unrevocable credential cannot come back --"
+# A fallback is worse than an absence here. The organization signing secret cannot be revoked
+# without rotating it under every other caller in the org, so a code path that still accepts one is
+# a path that can quietly become the one that runs.
+if grep -nE 'CLIPS_A2A_SECRET|CLIPS_ORG_ID|CLIPS_ORG_DOMAIN|CLIPS_SUBJECT|CLIPS_ORIGIN|PW_PROVE_CLIPS_ENV|createHmac|mintToken|mintImportToken|mintCommentToken|_agent-native/actions|pw-prove-clips\.env' \
+     "$S"/*.mjs > "$W/hmachits" 2>&1; then
+  bad "the retired credential path survives in the shipped scripts"; sed 's/^/         /' "$W/hmachits" | head -6
+else
+  ok "no signing secret, no identity triple, no credential file and no HMAC remain in the scripts"
+fi
+grep -q 'node:crypto' "$S/clips.mjs" \
+  && bad "clips.mjs still imports node:crypto — the client should sign nothing" \
+  || ok "clips.mjs performs no cryptography: the bearer is opaque to it"
+
+echo ""
 echo "-- preflight: the credential round-trip, warn-only in every outcome --"
 # BASE_URL points at the stub too: readiness only asks whether SOMETHING answers, and any code that
 # is not 000/502/503/504 is a live server.
-#
-# Nothing on this path is shimmed any more: PROBE_HOSTING used to shell out to `npx wrangler whoami`,
-# which reached the network and had to be intercepted on PATH. That probe is gone with the bucket, so
-# the only outbound call preflight makes is the credential round-trip against the stub.
 preflight() { # usage: preflight <extra env...>
-  ( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 PWPROVE_LEDGER="$W/ledger.jsonl" \
-      CLIPS_A2A_SECRET="stub-signing-secret" CLIPS_ORG_ID="$STUB_ORG_ID" \
-      CLIPS_ORG_DOMAIN="$STUB_ORG_DOMAIN" CLIPS_SUBJECT="proof@acme.test" "$@" \
+  ( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 HOME="$W/isolated-home" \
+      PWPROVE_LEDGER="$W/ledger.jsonl" "$@" \
       node "$REPO_ROOT/$S/preflight.mjs" >"$W/pf.out" 2>"$W/pf.err" )
 }
 pf_says() { # usage: pf_says <name> <expected summary line> <expected rc>
@@ -524,34 +708,117 @@ pf_says() { # usage: pf_says <name> <expected summary line> <expected rc>
 }
 
 start_stub validation
-preflight CLIPS_ORIGIN="$ORIGIN"; pfrc=$?
-pf_says "a schema-validation rejection reports the credential as usable" "PUBLISH_READY=yes" 0
+preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT"; pfrc=$?
+pf_says "an argument rejection reports the credential as usable" "PUBLISH_READY=yes" 0
 pf_says "delivery-readiness is the conjunction of the credential and the tooling" "HOSTING_READY=yes" 0
+# The pass is defined BY EXCLUSION — the scripts must not match the server's wording, because the
+# wording is the server's to change. Echoing the accepted sentence is what keeps a wrong verdict
+# legible in the log instead of hidden behind a boolean.
+grep -q 'Supply exactly one of' "$W/pf.err" \
+  && ok "the usable verdict echoes the rejection sentence it accepted" \
+  || { bad "the accepted sentence is not echoed"; sed 's/^/         /' "$W/pf.err" | tail -3; }
+if grep -rnF 'Supply exactly one of' "$S"/*.mjs > "$W/pinned" 2>&1; then
+  bad "a script matches the server's rejection wording — the pass must be by exclusion"
+  sed 's/^/         /' "$W/pinned" | head -3
+else
+  ok "no script pins its pass condition to the server's wording"
+fi
 grep -qi 'wrangler' "$W/pf.out" "$W/pf.err" \
   && { bad "preflight still speaks of wrangler — the bucket left this path"; } \
   || ok "preflight never mentions wrangler: no bucket session is probed for"
-grep -q '"url":"/_agent-native/actions/import-recording-from-url"' "$W/cap/requests.jsonl" \
-  && ok "the probe POSTs the import action itself (a bare GET would answer before auth)" \
-  || bad "the probe did not POST the import action: $(head -c 200 "$W/cap/requests.jsonl")"
+if node -e '
+  const fs = require("fs");
+  const all = fs.readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean).map(JSON.parse);
+  if (all.length !== 1) throw new Error(`the probe made ${all.length} calls, wanted exactly 1`);
+  const b = all[0].body;
+  if (all[0].url !== "/mcp") throw new Error(`probe url ${all[0].url}`);
+  if (b.method !== "tools/call") throw new Error(`probe method ${b.method} — no handshake is needed`);
+  if (b.params.name !== "import-recording-from-url") throw new Error(`probe action ${b.params.name}`);
+  if (Object.keys(b.params.arguments ?? {}).length !== 0) throw new Error("the probe sent arguments — it must create nothing");
+' "$W/cap/requests.jsonl" 2>"$W/jerr"; then
+  ok "the probe RUNS the real import action with arguments it must reject, and creates nothing"
+else
+  bad "the probe is not the real call"; sed 's/^/         /' "$W/jerr" | tail -2
+fi
 pf_says "the video tooling probe reports what it found" "VIDEO_TOOLING=yes" 0
 
 start_stub unauthorized
-preflight CLIPS_ORIGIN="$ORIGIN"; pfrc=$?
-pf_says "a 401 warns without blocking" "PUBLISH_READY=no" 0
+preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT"; pfrc=$?
+pf_says "a refused credential warns without blocking" "PUBLISH_READY=no" 0
 pf_says "a refused credential makes the run's delivery not ready" "HOSTING_READY=no" 0
-grep -q 'WARN - publish credential unusable' "$W/pf.err" \
-  && ok "the 401 warning pastes the probe output" \
-  || bad "no credential warning on 401"
+grep -q 'rejected:' "$W/pf.err" \
+  && ok "the 401 is reported as a rejected credential" \
+  || { bad "no rejected-credential warning on 401"; sed 's/^/         /' "$W/pf.err" | tail -3; }
+
+# The verdict that a status-code check cannot see: HTTP 200, and the action is simply not in this
+# token's callable catalog. The credential is fine; re-minting it is the fix, and saying "refused"
+# would send an operator to rotate a credential that was never the problem.
+start_stub unknown-tool
+preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT"; pfrc=$?
+pf_says "a non-delegable action warns without blocking" "PUBLISH_READY=no" 0
+if grep -q 'not-delegable:' "$W/pf.err" && grep -q 'callable catalog' "$W/pf.err" \
+   && grep -q 're-mint the token' "$W/pf.err"; then
+  ok "the non-delegable verdict names the cause and the fix, not a generic refusal"
+else
+  bad "the non-delegable verdict is reported generically"; sed 's/^/         /' "$W/pf.err" | tail -3
+fi
+
+# The same refusal, wearing the "Error: " prefix the wrapper puts on its other tool errors. A client
+# that recognises only the bare form falls through to the reached-and-rejected branch and reports
+# PUBLISH_READY=yes over an action it cannot call — a green preflight about nothing.
+start_stub unknown-tool-prefixed
+preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT"; pfrc=$?
+pf_says "a prefixed non-delegable refusal is still not-delegable" "PUBLISH_READY=no" 0
+grep -q 'not-delegable:' "$W/pf.err" \
+  && ok "the catalog refusal is recognised whether or not it carries the wrapper's error prefix" \
+  || { bad "a prefixed 'Unknown tool' was misread as a usable credential"; sed 's/^/         /' "$W/pf.err" | tail -3; }
 
 start_stub ok
-preflight CLIPS_ORIGIN="http://127.0.0.1:1"; pfrc=$?
-pf_says "an unreachable origin warns without blocking" "PUBLISH_READY=no" 0
+preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="http://127.0.0.1:1/mcp"; pfrc=$?
+pf_says "an unreachable endpoint warns without blocking" "PUBLISH_READY=no" 0
 
+# An empty-argument probe that SUCCEEDS is not good news: the import action must reject it, so
+# either something other than that action answered, or the probe just created a recording.
+start_stub ok
+preflight CLIPS_MCP_TOKEN="$TOKEN" PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT"; pfrc=$?
+pf_says "an empty-argument probe that succeeds is NOT reported as ready" "PUBLISH_READY=no" 0
+grep -q 'unexpected:' "$W/pf.err" \
+  && ok "a probe that should have been rejected and was not is shouted about" \
+  || { bad "an unexpected probe success was not reported"; sed 's/^/         /' "$W/pf.err" | tail -3; }
+
+start_stub ok
 preflight; pfrc=$?
 pf_says "an unconfigured credential warns without blocking" "PUBLISH_READY=no" 0
-grep -q 'publish credential not configured' "$W/pf.err" \
-  && ok "the unconfigured warning names what is missing" \
-  || bad "no 'not configured' warning"
+grep -q 'publish credential not configured' "$W/pf.err" && grep -q 'CLIPS_MCP_TOKEN' "$W/pf.err" \
+  && ok "the unconfigured warning names the one variable that is missing" \
+  || { bad "no 'not configured' warning naming the variable"; sed 's/^/         /' "$W/pf.err" | tail -3; }
+# Naming the variable is not enough: an operator who reads "CLIPS_MCP_TOKEN is not set" still has to
+# go find which vault app holds it and how a lease is spelled. The warning must print the command
+# they can PASTE — app name, key name, and the invocation it wraps — or the fix costs a skill-file
+# read at exactly the moment the run is cheapest to restart.
+if grep -qF 'agent-native vault exec --app dispatch-paulsjob --key CLIPS_MCP_TOKEN --' "$W/pf.err"; then
+  ok "the unconfigured warning prints the literal lease command, with the vault app and key named"
+else
+  bad "the unconfigured warning makes the operator reconstruct the lease command"
+  sed 's/^/         /' "$W/pf.err" | tail -4
+fi
+# Runnable means runnable: the pasted line must re-run THIS preflight, with the probe still switched
+# on and the same origin, not a prose stand-in an operator has to finish themselves.
+if grep -F 'agent-native vault exec' "$W/pf.err" | grep -qF "PROBE_HOSTING=1" \
+   && grep -F 'agent-native vault exec' "$W/pf.err" | grep -qF "$REPO_ROOT/$S/preflight.mjs"; then
+  ok "the printed lease command re-runs this preflight verbatim"
+else
+  bad "the printed lease command is not the invocation it is standing in for"
+  sed 's/^/         /' "$W/pf.err" | tail -4
+fi
+# First machine, no stored key: `vault exec` would fail on a key that was never added, so the one
+# command that precedes it is named too.
+grep -qF 'agent-native vault add CLIPS_MCP_TOKEN' "$W/pf.err" \
+  && ok "the warning names how to store the credential the first time" \
+  || { bad "an operator with no stored key is told to lease one that does not exist"; sed 's/^/         /' "$W/pf.err" | tail -4; }
+[ "$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')" = 0 ] \
+  && ok "an unconfigured preflight sends nothing" \
+  || bad "the preflight called out without a credential"
 
 # Missing video tooling: a PATH carrying only what readiness itself needs, so no ffmpeg on this
 # machine can satisfy the probe. node is invoked by absolute path because env would otherwise have to
@@ -559,8 +826,9 @@ grep -q 'publish credential not configured' "$W/pf.err" \
 mkdir -p "$W/nofffbin"
 ln -sf "$(command -v curl)" "$W/nofffbin/curl"
 NODE_BIN=$(command -v node)
-( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 PWPROVE_LEDGER="$W/ledger.jsonl" \
-    PATH="$W/nofffbin" CLIPS_ORIGIN="$ORIGIN" CLIPS_A2A_SECRET="stub-signing-secret" \
+( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 HOME="$W/isolated-home" \
+    PWPROVE_LEDGER="$W/ledger.jsonl" PATH="$W/nofffbin" CLIPS_MCP_TOKEN="$TOKEN" \
+    PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT" \
     "$NODE_BIN" "$REPO_ROOT/$S/preflight.mjs" >"$W/pf.out" 2>"$W/pf.err" )
 pfrc=$?
 pf_says "missing video tooling warns without blocking" "VIDEO_TOOLING=no" 0
@@ -582,10 +850,6 @@ if grep -rlE 'host-proof|host-video|wrangler' skills/pw-prove > "$W/stale" 2>/de
 else
   ok "nothing under skills/pw-prove names host-proof, host-video or wrangler"
 fi
-# playwright-test-generator keeps its watch page and its bucket — this cutover moved ONE skill.
-[ -f "skills/playwright-test-generator/scripts/host-on-r2.mjs" ] \
-  && ok "playwright-test-generator's bucket path is untouched" \
-  || bad "playwright-test-generator lost host-on-r2.mjs — it was explicitly out of scope"
 
 echo ""
 echo "  publish-proof: $pass passed, $fail failed"

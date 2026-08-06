@@ -84,60 +84,15 @@ else
   printf '%s\n' "$backdoor_hits" | head -5 | sed 's/^/      /' >&2
 fi
 
-section "Manifest validity"
+section "Skill frontmatter"
 if command -v python3 >/dev/null 2>&1; then
-  # Private-fork policy: manifests removed (commit 6c9d4ac). Manifest JSON/parity checks
-  # skip when absent; the SKILL.md/openai.yaml convention checks below still run.
-  if [ -f .claude-plugin/plugin.json ]; then
-    python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))" 2>/dev/null && \
-      ok ".claude-plugin/plugin.json valid JSON" || err ".claude-plugin/plugin.json invalid JSON"
-    python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))" 2>/dev/null && \
-      ok ".claude-plugin/marketplace.json valid JSON" || err ".claude-plugin/marketplace.json invalid JSON"
-    python3 -c "import json; json.load(open('.codex-plugin/plugin.json'))" 2>/dev/null && \
-      ok ".codex-plugin/plugin.json valid JSON" || err ".codex-plugin/plugin.json invalid JSON"
-  else
-    ok "plugin manifests absent (private fork) - manifest JSON validity skipped"
-  fi
-
   if python3 - <<'PY'
-import json
 import pathlib
 import re
 import sys
 
-sys.path.insert(0, 'scripts/ci/lib')
-from validate_codex import collect_codex_errors
-
 errors = []
 skill_dirs = sorted(path for path in pathlib.Path('skills').iterdir() if path.is_dir())
-expected = {path.name for path in skill_dirs}
-
-# Private-fork policy: manifest parity checks skip when the manifests are absent.
-manifest_path = pathlib.Path('.claude-plugin/plugin.json')
-if manifest_path.exists():
-    plugin = json.loads(manifest_path.read_text())
-    marketplace = json.loads(pathlib.Path('.claude-plugin/marketplace.json').read_text())
-    codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text())
-
-    plugin_version = plugin.get('version')
-    market_versions = [entry.get('version') for entry in marketplace.get('plugins', [])]
-    codex_version = codex_plugin.get('version')
-    if not plugin_version or market_versions != [plugin_version] or codex_version != plugin_version:
-        errors.append(
-            f"version mismatch: plugin={plugin_version!r}, marketplace={market_versions!r}, codex={codex_version!r}"
-        )
-
-    expected_paths = {f'./skills/{skill}' for skill in expected}
-    plugin_paths = plugin.get('skills')
-    if (
-        not isinstance(plugin_paths, list)
-        or not all(isinstance(path, str) for path in plugin_paths)
-        or set(plugin_paths) != expected_paths
-        or len(plugin_paths) != len(expected_paths)
-    ):
-        errors.append(f"plugin skills must be exactly these paths: {sorted(expected_paths)!r}")
-
-    errors.extend(collect_codex_errors(codex_plugin, expected, pathlib.Path('.')))
 
 for skill_dir in skill_dirs:
     skill_file = skill_dir / 'SKILL.md'
@@ -161,39 +116,6 @@ for skill_dir in skill_dirs:
                     f"({len(desc_value)})"
                 )
 
-    manifest = skill_dir / 'agents' / 'openai.yaml'
-    if not manifest.exists():
-        # Private-fork policy: openai.yaml is opt-out (PTG's removed in e45e68a).
-        continue
-    text = manifest.read_text(encoding='utf-8')
-    if '\t' in text:
-        errors.append(f"{manifest}: tabs are not allowed")
-
-    top = {}
-    metadata = {}
-    current = None
-    for line in text.splitlines():
-        if not line.strip() or line.lstrip().startswith('#'):
-            continue
-        if not line.startswith(' '):
-            key, _, value = line.partition(':')
-            current = key.strip()
-            top[current] = value.strip()
-            continue
-        if current == 'metadata':
-            match = re.match(r"^  ([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$", line)
-            if match:
-                metadata[match.group(1)] = match.group(2).strip()
-
-    if top.get('name') != skill_dir.name:
-        errors.append(f"{manifest}: name must match directory {skill_dir.name}")
-    for key in ('description', 'metadata', 'allow_implicit_invocation'):
-        if key not in top:
-            errors.append(f"{manifest}: missing {key}")
-    if not metadata.get('short-description'):
-        errors.append(f"{manifest}: missing metadata.short-description")
-    if top.get('allow_implicit_invocation') not in {'true', 'false'}:
-        errors.append(f"{manifest}: allow_implicit_invocation must be true or false")
 
 if errors:
     for error in errors:
@@ -201,12 +123,12 @@ if errors:
     sys.exit(1)
 PY
   then
-    ok "plugin versions, skill list, SKILL.md descriptions, and OpenAI manifests match repo conventions"
+    ok "SKILL.md frontmatter descriptions match repo conventions"
   else
-    err "plugin/OpenAI manifest convention check failed"
+    err "skill frontmatter convention check failed"
   fi
 else
-  warn "python3 not available; skipped manifest checks"
+  warn "python3 not available; skipped skill frontmatter checks"
 fi
 
 section "Shell syntax"
@@ -221,20 +143,19 @@ done < <(find scripts -name '*.sh' -type f 2>/dev/null)
 [ "$syntax_fail" -eq 0 ] && ok "all shell scripts parse"
 
 section "Hardcoded paths"
-# Scope: scripts/, skills/, and the plugin manifests. README/CHANGELOG/docs are
-# allowed to use example paths freely (the previous `grep -vE '…|example|~/'`
-# exclusion was too loose to catch a real leak in those files anyway), but the
-# manifest JSON files MUST be scanned — a leaked `/Users/...` path there would
-# ship directly to every plugin user.
+# Scope: scripts/ and skills/. README/docs are allowed to use example paths freely
+# (the previous `grep -vE '…|example|~/'` exclusion was too loose to catch a real
+# leak in those files anyway); skills/ MUST be scanned — a leaked `/Users/...` path
+# there rides the subtree straight into the marketplace and every install.
 hardcoded_paths=$(grep -rEn \
   --include='*.sh' --include='*.md' --include='*.json' --include='*.yaml' --include='*.yml' --include='*.py' \
   --exclude="$SELF" --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=testbed --exclude-dir='*-workspace' \
-  '/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/' scripts skills .claude-plugin .codex-plugin 2>/dev/null | \
+  '/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/' scripts skills 2>/dev/null | \
   grep -vE 'example|placeholder|~/' || true)
 if [ -z "$hardcoded_paths" ]; then
-  ok "no hardcoded absolute user-home paths in scripts/, skills/, or plugin manifests"
+  ok "no hardcoded absolute user-home paths in scripts/ or skills/"
 else
-  err "hardcoded absolute user-home paths found in scripts/, skills/, or plugin manifests"
+  err "hardcoded absolute user-home paths found in scripts/ or skills/"
   printf '%s\n' "$hardcoded_paths" | head -5 | sed 's/^/      /' >&2
 fi
 
