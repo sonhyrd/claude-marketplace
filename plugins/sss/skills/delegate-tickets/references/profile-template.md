@@ -37,7 +37,24 @@ baseline, known-noise test, or environment trap.
   baseline with the commit and date it was measured at, and any known-noise failures — a check
   with no recorded baseline makes every pre-existing failure read as a regression.
 - **Commit policy**: what commit messages must and must not contain
-- **Worker constraints**: repo rules every worker prompt carries verbatim. Prohibitions belong
-  here — a worker's brief injects these rather than pointing at this file, because a prohibition
-  that was not read is not in force.
+- **Prohibitions**: the rules every worker prompt carries **verbatim**. A brief injects these
+  rather than pointing at this file, because a prohibition that was not read is not in force.
+  **Cap: ten.** Each one must be something a competent worker would otherwise plausibly do, and
+  doing it costs a rerun or corrupts a sibling worktree — `never git stash` (shared across
+  worktrees), `never run bare pnpm here` (symlinked node_modules), `never push to main`. Thirty
+  bullets is not thirty prohibitions in force; it is ten prohibitions and twenty pieces of cover.
+- **Conventions**: a **pointer**, not a list. The repo's own agent guide (`AGENTS.md` / `CLAUDE.md`)
+  owns how code is written here — component libraries, i18n key ordering, state management, test
+  style — and every worker loads it. Restating it in the profile creates a second copy that drifts,
+  and dilutes the Prohibitions it is injected alongside. Name the file and stop.
 ````
+
+## Field discipline
+
+Two rules, both learned from a profile that violated them:
+
+1. **A fact goes in exactly one field.** A dispatch-time trap is not a post-merge check; a commit
+   rule is not a prohibition. Nesting a trap under the check that happened to reveal it is how the
+   check grows to forty lines and nobody finds the trap.
+2. **A fact goes in exactly one file.** If the true home is the repo's agent guide, fix the agent
+   guide — do not record in the profile that the agent guide is wrong. See step 6.
