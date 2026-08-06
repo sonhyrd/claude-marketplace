@@ -37,7 +37,16 @@ baseline, known-noise test, or environment trap.
   baseline with the commit and date it was measured at, and any known-noise failures — a check
   with no recorded baseline makes every pre-existing failure read as a regression.
 - **Commit policy**: what commit messages must and must not contain
-- **Worker constraints**: repo rules every worker prompt carries verbatim. Prohibitions belong
-  here — a worker's brief injects these rather than pointing at this file, because a prohibition
-  that was not read is not in force.
+- **Prohibitions**: the rules every worker brief carries **verbatim**, because a prohibition that
+  was not read is not in force. **Cap: ten.** Each earns its slot by being something a competent
+  worker would plausibly do, at the cost of a rerun or a corrupted sibling worktree — a shared
+  stash, a shared lockfile, a shared dev-server port. The test is delegation: a rule that holds for
+  someone working alone in one checkout is a Convention, not a Prohibition. Thirty bullets is not
+  thirty prohibitions in force; it is ten prohibitions and twenty pieces of cover.
+- **Conventions**: a **pointer**. The repo's agent guide (`AGENTS.md` / `CLAUDE.md`) owns how code
+  is written here, and every worker loads it. Name that file and stop — a second copy drifts, and
+  dilutes the Prohibitions it rides alongside.
 ````
+
+Each fact belongs to exactly one field, and the profile is a **snapshot**: step 6 has the rule for
+amending it.

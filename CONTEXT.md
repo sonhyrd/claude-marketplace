@@ -1,0 +1,51 @@
+# Claude Marketplace
+
+A marketplace of Claude Code plugins — skills, MCP servers, and the vendored subtrees they build on.
+A glossary and nothing else: rules live in `CLAUDE.md`, decisions in [`docs/adr/`](./docs/adr/).
+
+## Delegation
+
+**Coordinator**:
+The invoking Claude Code session in a delegated run. Owns the DAG, dispatch, merge-back, and every
+write to the delegation profile.
+_Avoid_: orchestrator, parent agent
+
+**Worker**:
+One agent in one child worktree, implementing exactly one ticket.
+_Avoid_: subagent, child agent
+
+**Frontier**:
+The tickets whose blockers have all merged back, and which can therefore dispatch now.
+_Avoid_: ready queue, next batch
+
+**Integration branch**:
+The branch a run merges every worker's slice back into, and the base its worktrees are cut from.
+Distinct from the repo's default base, which is what a worktree gets when nobody names one.
+_Avoid_: target branch, parent branch, base branch (which names a flag, not this)
+
+**Delegation profile**:
+A repo's `docs/agents/delegate-profile.md` — the facts a delegated run needs about that repo. A
+**snapshot** of what is true now, not a ledger of what was.
+_Avoid_: repo profile, worker config
+
+**Baseline**:
+A recorded measurement of a check on a known-good tree: the counts, the commit, the date. Names the
+measurement, never the tree it was measured on.
+_Avoid_: clean run, reference run
+
+**Known noise**:
+A check failure that reproduces on the integration branch independent of any worker's changes. A
+failure becomes known noise by being named in the baseline; until then it is a regression.
+_Avoid_: flaky, pre-existing failure, expected failure
+
+**Prohibition**:
+A repo rule injected verbatim into every worker brief, true only because the work is delegated.
+Its counterpart is a **Convention**, which the repo's own agent guide owns.
+_Avoid_: worker constraint, guardrail
+
+## Plugins
+
+**Subtree**:
+A vendored upstream repo under `plugins/`, synced with `git subtree`. Each is either **verbatim** or
+**editable** — the distinction is per-subtree and load-bearing.
+_Avoid_: vendored dir, fork

@@ -16,7 +16,7 @@ The tickets' **blocking edges ARE the dependency DAG** — use them as-is, never
 
 ## 1. Resolve the repo profile
 
-Read the target repo's `docs/agents/delegate-profile.md`. It supplies every repo-specific value the steps below reference: branch prefix, post-merge check, commit policy, worker constraints. Ticket location is **not** a profile field — that comes from `issue-tracker.md` in step 2.
+Read the target repo's `docs/agents/delegate-profile.md`. It supplies every repo-specific value the steps below reference: branch prefix, post-merge check, commit policy, prohibitions, conventions. Ticket location is **not** a profile field — that comes from `issue-tracker.md` in step 2.
 
 Discovery is presence-based, not a lookup: the profile is in this repo or it isn't.
 
@@ -52,9 +52,14 @@ This step is cheap and it is the whole point of doing it first: a run that disco
 
 Coordinate through the `/orchestration` skill — real Orca task/dispatch state, not generic subagents.
 
-- One Orca **child worktree** per ticket, branched off the current branch as `<branch-prefix><ticket-slug>`.
+- One Orca **child worktree** per ticket, cut from the integration branch as
+  `<branch-prefix><ticket-slug>`. **Pass `--base-branch <integration-branch>`** — `orca worktree
+  create` defaults to the repo's default base, so an omitted flag cuts every worker from `main`.
+  Then **verify it took**: `git merge-base <integration-branch> HEAD` in the new worktree must equal
+  the integration branch head. An ignored flag and an absent flag fail identically, and both stay
+  invisible until merge-back hands you a branch carrying commits its worker never wrote.
 - Dispatch the unblocked frontier in parallel, but **cap concurrency at 2 workers** unless the user raises it. Each worktree creation fires the repo's setup hook (`pnpm install` and friends); a wider fan-out puts those in contention and `orca terminal create` blocks past the Bash timeout, leaving half-built workers. It also keeps the merge-back review surface small enough to actually check. A blocked ticket dispatches only after ALL its blockers have merged back.
-- Each worker gets a fresh session in its worktree. Its prompt must tell it to **read and follow `~/.claude/skills/implement/SKILL.md` by absolute path**, then name its ticket ref, then carry the profile's worker constraints verbatim. Path-reading rather than `/implement` is deliberate: `implement` is user-only (`disable-model-invocation: true`), so no dispatched worker of any engine can Skill-invoke it. `implement` drives TDD and `code-review` itself — don't re-specify them, and never hand-write a substitute process into the brief. Definition of done: `implement` closes clean, plus the profile's post-merge check passes.
+- Each worker gets a fresh session in its worktree. Its prompt must tell it to **read and follow `~/.claude/skills/implement/SKILL.md` by absolute path**, then name its ticket ref, then carry the profile's **Prohibitions** verbatim. Leave its **Conventions** field where it is — a pointer to the repo's agent guide, which the worker loads on its own; injecting those too buries the ten rules that cost a rerun under thirty that don't. Path-reading rather than `/implement` is deliberate: `implement` is user-only (`disable-model-invocation: true`), so no dispatched worker of any engine can Skill-invoke it. `implement` drives TDD and `code-review` itself — don't re-specify them, and never hand-write a substitute process into the brief. Definition of done: `implement` closes clean, plus the profile's post-merge check passes.
 - Where a brief is too long to inject as one message, write it to a file (`/tmp/<slug>/<ticket>.md`) and send a one-liner pointing at the file — but the brief still *points at* `implement`'s SKILL.md rather than restating it.
 - Launch every worker with the run's engine argv (below), via orca-cli's custom-argv path — `terminal create --command '<engine argv>'` — not the bare default launcher.
 - **Confirm each worker actually started before dispatching.** `terminal wait --for tui-idle` is satisfied by the bare shell that exists before a TUI mounts, and by the shell an agent leaves behind when it dies on startup — so follow it with `terminal read` and require a rendered agent frame, re-reading up to 5 times. A pane showing only a shell prompt is a dead worker: close it, create a fresh terminal, never dispatch into it.
@@ -84,6 +89,16 @@ Review each worker's branch against `git merge-base <integration-branch> HEAD`, 
 Commits follow the profile's commit policy. Never bare `git stash` in shared worktrees.
 
 When a merge-back reveals a baseline, known-noise test, or environment trap the profile doesn't record, **amend `docs/agents/delegate-profile.md` before dispatching the next frontier** — and commit it with the work that discovered it. The profile lives in the tree you are merging into, so this is one edit, and the next worker's brief carries it.
+
+**The profile is a snapshot, not a ledger.** It states what is true now; `git log` keeps what was
+true before. So amending means rewriting the superseded line: one baseline per check, and each fact
+in the field that owns it — a dispatch trap is a dispatch trap, not a post-merge check. Stack a
+correction beneath a stale line and the stale one wins, because it comes first and a worker reading
+top-down stops there.
+
+**The owning file gets the fix.** When a merge-back disproves a line in the repo's `AGENTS.md`,
+edit `AGENTS.md` — same tree, same commit — and leave the profile alone. Keep another file's
+correction here only while that file is outside your write access.
 
 ## 7. Run to completion
 
