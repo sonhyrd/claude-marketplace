@@ -93,37 +93,15 @@ fi
 section "Public skill surface"
 if command -v python3 >/dev/null 2>&1; then
   if python3 - <<'PY'
-import json
 import pathlib
 import re
 import sys
 
-sys.path.insert(0, 'scripts/ci/lib')
-from validate_codex import collect_codex_errors
-
+# The marketplace owns distribution: this repo carries no plugin manifest and no host adapter, so
+# the skill surface is exactly `skills/<name>/SKILL.md` and its frontmatter.
 errors = []
 skill_dirs = sorted(path for path in pathlib.Path('skills').iterdir() if path.is_dir())
 expected = {path.name for path in skill_dirs}
-
-# Private-fork policy: the plugin manifests were deliberately removed (commit 6c9d4ac).
-# Manifest-dependent checks skip when they are absent; the skill-surface checks below still run.
-plugin_version = None
-manifest_path = pathlib.Path('.claude-plugin/plugin.json')
-if manifest_path.exists():
-    plugin = json.loads(manifest_path.read_text())
-    codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text())
-    expected_paths = {f'./skills/{skill}' for skill in expected}
-    plugin_paths = plugin.get('skills')
-    if (
-        not isinstance(plugin_paths, list)
-        or not all(isinstance(path, str) for path in plugin_paths)
-        or set(plugin_paths) != expected_paths
-        or len(plugin_paths) != len(expected_paths)
-    ):
-        errors.append(f"Claude plugin skills must be exactly these paths: {sorted(expected_paths)!r}")
-
-    errors.extend(collect_codex_errors(codex_plugin, expected, pathlib.Path('.')))
-    plugin_version = plugin.get('version')
 
 frontmatter_names = set()
 for skill_dir in skill_dirs:
@@ -157,29 +135,9 @@ for skill_dir in skill_dirs:
                 "wrap the description in single quotes; YAML parsers (gray-matter / js-yaml) reject this and the "
                 "skills CLI will silently skip the skill (regression of bug fixed in v0.7.3)"
             )
-    # SKILL.md metadata.version is OPTIONAL (a skill may opt out of frontmatter
-    # metadata entirely — private-fork policy). When present it must match the
-    # plugin manifest version, so a SKILL.md left behind during a lock-step bump
-    # is still caught (see v1.3.1 changelog); when absent, the file is opted out.
-    version_match = re.search(r"^  version:\s*['\"]?([^'\"\n]+)['\"]?\s*$", match.group(1), re.M)
-    if version_match and plugin_version and version_match.group(1).strip() != plugin_version:
-        errors.append(
-            f"{skill_file}: metadata.version {version_match.group(1).strip()!r} "
-            f"does not match plugin version {plugin_version!r}"
-        )
 
 if frontmatter_names != expected:
     errors.append(f"skills/*/SKILL.md names mismatch: {sorted(frontmatter_names)} != {sorted(expected)}")
-
-for skill_dir in skill_dirs:
-    manifest = skill_dir / 'agents' / 'openai.yaml'
-    if not manifest.exists():
-        # Private-fork policy: openai.yaml is opt-out (PTG's removed in e45e68a).
-        # A present manifest is still validated below.
-        continue
-    text = manifest.read_text(encoding='utf-8')
-    if not re.search(rf"^name:\s*{re.escape(skill_dir.name)}\s*$", text, re.M):
-        errors.append(f"{manifest}: name must match {skill_dir.name}")
 
 if errors:
     for error in errors:
@@ -187,7 +145,7 @@ if errors:
     sys.exit(1)
 PY
   then
-    ok "Claude, Codex, and OpenAI skill surfaces match"
+    ok "skill directories and SKILL.md frontmatter match"
   else
     err "public skill surface parity failed"
   fi
@@ -211,13 +169,6 @@ patref_text = pathlib.Path('skills/e2e-reviewer/references/pattern-reference.md'
 scan_text = pathlib.Path('skills/e2e-reviewer/scripts/scan.mjs').read_text(encoding='utf-8')
 docs_text = pathlib.Path('docs/e2e-test-smells.md').read_text(encoding='utf-8')
 readme_text = pathlib.Path('README.md').read_text(encoding='utf-8')
-# Private-fork policy: manifests removed (commit 6c9d4ac) — Checks 5 and 6 skip when absent.
-manifest_path = pathlib.Path('.claude-plugin/plugin.json')
-MANIFESTS = manifest_path.exists()
-if MANIFESTS:
-    plugin = json.loads(manifest_path.read_text(encoding='utf-8'))
-    market = json.loads(pathlib.Path('.claude-plugin/marketplace.json').read_text(encoding='utf-8'))
-    codex_plugin = json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text(encoding='utf-8'))
 
 qr_match = re.search(r'## Quick Reference\s*\n(?:.*\n)*?((?:\|.*\n)+)', skill_text)
 if not qr_match:
@@ -330,98 +281,26 @@ if section_only:
         f"e2e-reviewer/references/pattern-reference.md sections have IDs missing from Quick Reference: {sorted(section_only)}"
     )
 
-# Check 4: debugger evals.json may only reference F-codes from SKILL.md F-table
-for skill in ('playwright-debugger', 'cypress-debugger'):
-    md_path = pathlib.Path('skills') / skill / 'SKILL.md'
-    evals_path = pathlib.Path('skills') / skill / 'evals' / 'evals.json'
-    md_text = md_path.read_text(encoding='utf-8')
-    evals = json.loads(evals_path.read_text(encoding='utf-8'))
-    skill_codes = set(re.findall(r'\|\s*(F\d+)\s*\|', md_text))
-    seen = set()
+# Check 4: playwright-debugger's evals.json may only reference F-codes from its SKILL.md F-table
+md_text = pathlib.Path('skills/playwright-debugger/SKILL.md').read_text(encoding='utf-8')
+evals_path = pathlib.Path('skills/playwright-debugger/evals/evals.json')
+skill_codes = set(re.findall(r'\|\s*(F\d+)\s*\|', md_text))
+seen = set()
 
-    def scan(obj):
-        if isinstance(obj, str):
-            seen.update(re.findall(r'\bF\d+\b', obj))
-        elif isinstance(obj, list):
-            for v in obj:
-                scan(v)
-        elif isinstance(obj, dict):
-            for v in obj.values():
-                scan(v)
+def collect_f_codes(obj):
+    if isinstance(obj, str):
+        seen.update(re.findall(r'\bF\d+\b', obj))
+    elif isinstance(obj, list):
+        for v in obj:
+            collect_f_codes(v)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            collect_f_codes(v)
 
-    scan(evals)
-    missing = seen - skill_codes
-    if missing:
-        errors.append(f"{evals_path}: F-codes not in SKILL.md taxonomy: {sorted(missing)}")
-
-# Check 5: severity-grouped pattern phrase parity (canonical source: .claude-plugin/plugin.json
-# description -> marketplace.json / .codex-plugin. The e2e-reviewer SKILL.md uses a lean trigger
-# description by design, so the 24-phrase catalog lives in the manifests, not the skill frontmatter.)
-sev_groups = {}
-if MANIFESTS:
-    phrase_source = plugin.get('description', '')
-    for m in re.finditer(r"P([012])\s+[a-z\-]+\s*\(([^)]*)\)", phrase_source):
-        sev_groups[m.group(1)] = m.group(2)
-
-if MANIFESTS and set(sev_groups) != {'0', '1', '2'}:
-    errors.append('.claude-plugin/plugin.json description: could not extract P0/P1/P2 pattern groups')
-elif MANIFESTS:
-    def normalize(s):
-        s = s.lower()
-        s = re.sub(r'[^a-z0-9+]+', ' ', s)
-        return re.sub(r'\s+', ' ', s).strip()
-
-    ordered_phrases = []
-    for sev in ('0', '1', '2'):
-        clean = re.sub(r'\([^)]*\)', '', sev_groups[sev])
-        for phrase in clean.split(','):
-            phrase = phrase.strip()
-            if phrase:
-                ordered_phrases.append(normalize(phrase))
-
-    if len(ordered_phrases) != 24:
-        errors.append(
-            f".claude-plugin/plugin.json description: expected 24 patterns across P0/P1/P2, got {len(ordered_phrases)}"
-        )
-
-    plugin_desc_norm = normalize(plugin.get('description', ''))
-    market_desc_norm = ''
-    for entry in market.get('plugins', []):
-        if entry.get('name') == 'e2e-skills':
-            market_desc_norm = normalize(entry.get('description', ''))
-            break
-    codex_desc_norm = normalize(codex_plugin.get('description', ''))
-
-    for label, desc in (
-        ('.claude-plugin/plugin.json', plugin_desc_norm),
-        ('.claude-plugin/marketplace.json', market_desc_norm),
-        ('.codex-plugin/plugin.json', codex_desc_norm),
-    ):
-        pos = 0
-        for phrase in ordered_phrases:
-            idx = desc.find(phrase, pos)
-            if idx < 0:
-                errors.append(f"{label}: missing or out-of-order pattern '{phrase}'")
-                break
-            pos = idx + len(phrase)
-
-# Check 6: version parity across all three manifest files
-if MANIFESTS:
-    plugin_version = plugin.get('version')
-    market_version = None
-    for entry in market.get('plugins', []):
-        if entry.get('name') == 'e2e-skills':
-            market_version = entry.get('version')
-            break
-    codex_version = codex_plugin.get('version')
-    versions = {
-        '.claude-plugin/plugin.json': plugin_version,
-        '.claude-plugin/marketplace.json (plugins[e2e-skills])': market_version,
-        '.codex-plugin/plugin.json': codex_version,
-    }
-    distinct = {v for v in versions.values() if v is not None}
-    if None in versions.values() or len(distinct) > 1:
-        errors.append(f"manifest version mismatch: {versions}")
+collect_f_codes(json.loads(evals_path.read_text(encoding='utf-8')))
+missing = seen - skill_codes
+if missing:
+    errors.append(f"{evals_path}: F-codes not in SKILL.md taxonomy: {sorted(missing)}")
 
 if errors:
     for err in errors:
@@ -429,7 +308,7 @@ if errors:
     sys.exit(1)
 PY
   then
-    ok "pattern IDs, severities, F-codes, and P0/P1/P2 pattern descriptions consistent"
+    ok "pattern IDs, severities, and F-codes consistent"
   else
     err "pattern/severity/description parity check failed"
   fi
@@ -442,7 +321,7 @@ unsupported=$(
   while IFS= read -r path; do
     [ -f "$path" ] || continue
     grep -En 'Puppeteer|puppeteer' "$path" 2>/dev/null | sed "s|^|$path:|" || true
-  done < <(repo_files README.md skills docs .claude-plugin .codex-plugin scripts) | \
+  done < <(repo_files README.md skills docs scripts) | \
     grep -vE '^docs/framework-scope\.md:|^scripts/ci/review\.sh:' || true
 )
 if [ -z "$unsupported" ]; then
@@ -459,10 +338,9 @@ import re
 import sys
 
 required = {
-    'playwright-test-generator': ('Playwright',),
+    'pw-prove': ('Playwright',),
     'e2e-reviewer': ('Playwright', 'Cypress'),
     'playwright-debugger': ('Playwright',),
-    'cypress-debugger': ('Cypress',),
 }
 errors = []
 for skill, words in required.items():

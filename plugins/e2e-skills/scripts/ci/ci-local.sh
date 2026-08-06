@@ -22,7 +22,7 @@ fi
 
 # CI fixture invocations of the shipped scripts must not pollute the operator's real run ledger
 # (~/.ptg/ledger.jsonl). /dev/null is a silent sink; test-run-ledger.sh overrides this per case.
-export PTG_LEDGER=/dev/null
+export PWPROVE_LEDGER=/dev/null
 
 step() { [ "$QUIET" = "1" ] || echo "-- $* --"; }
 fail() { echo "ci-local: $1 failed" >&2; exit 1; }
@@ -36,7 +36,7 @@ done < <(find scripts -name '*.sh' -type f 2>/dev/null)
 [ "$QUIET" = "1" ] || echo "  all shell scripts parse"
 
 step "Node syntax"
-# The five SHIPPED scripts are Node. `node --check` is the safety net the shell versions never had:
+# The SHIPPED scripts are Node. `node --check` is the safety net the shell versions never had:
 # under `set -eu` a typo'd variable name exits 0 having done nothing, where this fails at parse time.
 while IFS= read -r file; do
   [ -z "$file" ] && continue
@@ -72,14 +72,14 @@ if [ "${E2E_SKILLS_SKIP_CORPUS:-}" != "1" ]; then
   fi
 fi
 
-if [ "${E2E_SKILLS_SKIP_GENERATOR_TESTS:-}" != "1" ]; then
-  step "Generator scripts (process boundary)"
-  # preflight / host-on-r2 / record: exit codes and emitted bytes. Skips the record cases if ffmpeg
-  # is absent; never touches the network.
+if [ "${E2E_SKILLS_SKIP_PW_PROVE_SCRIPTS:-}" != "1" ]; then
+  step "pw-prove scripts (process boundary)"
+  # preflight readiness gate + probe argument/socket contract: exit codes and emitted bytes.
+  # Binds one loopback server for the ready-origin branch; never touches the network.
   if [ "$QUIET" = "1" ]; then
-    bash scripts/ci/test-generator-scripts.sh >/dev/null 2>&1 || fail "test-generator-scripts.sh"
+    bash scripts/ci/test-pw-prove-scripts.sh >/dev/null 2>&1 || fail "test-pw-prove-scripts.sh"
   else
-    bash scripts/ci/test-generator-scripts.sh || fail "test-generator-scripts.sh"
+    bash scripts/ci/test-pw-prove-scripts.sh || fail "test-pw-prove-scripts.sh"
   fi
 fi
 
@@ -134,8 +134,8 @@ if [ "${E2E_SKILLS_SKIP_PROBE_WARM:-}" != "1" ]; then
 fi
 
 if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
-  step "Run-ledger smoke (PTG_RUN contract)"
-  # Issue #5: every shipped-script invocation leaves one PTG_RUN {json} record — stdout line plus
+  step "Run-ledger smoke (PWPROVE_RUN contract)"
+  # Issue #5: every shipped-script invocation leaves one PWPROVE_RUN {json} record — stdout line plus
   # home-ledger append (env-overridable, write-failure tolerated) — and preflight banners its
   # skill version first.
   if [ "$QUIET" = "1" ]; then

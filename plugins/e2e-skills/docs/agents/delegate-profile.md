@@ -35,7 +35,7 @@ baseline, known-noise test, or environment trap.
   2. **Never make a private CLI a runtime dependency of a shipped script.** Scripts read
      environment variables; they never spawn `agent-native` or any other ecosystem-specific tool.
      Permitted subprocesses are the ones already assumed present: `rg`, `eslint`, `ast-grep`,
-     `ffmpeg`, `ffprobe`, `git`, `gh`, `curl`, `npx playwright`, `wrangler`.
+     `ffmpeg`, `ffprobe`, `git`, `gh`, `curl`, `npx playwright`.
   3. **Never print a credential.** Do not echo a bearer, do not write one to a log, and never paste
      a decoded token payload containing `sub`. Individual routing claims (`aud`, `iss`, `jti`) may
      be printed when diagnosing.

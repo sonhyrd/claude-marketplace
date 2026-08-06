@@ -1,6 +1,6 @@
 ---
 name: e2e-reviewer
-description: 'Static review of Playwright/Cypress E2E specs and Page Objects (POM) — catch tests that pass CI but prove nothing. Triggers: review tests, audit test quality, find weak/flaky/silently-passing tests, missing awaits, anti-patterns, coverage gaps, tests pass but miss bugs. Not for runtime failure debugging (use playwright-debugger / cypress-debugger). Flags 24 anti-patterns grouped P0 (must-fix, silent always-pass), P1 (poor diagnostics), P2 (maintenance).'
+description: 'Static review of Playwright/Cypress E2E specs and Page Objects (POM) — catch tests that pass CI but prove nothing. Triggers: review tests, audit test quality, find weak/flaky/silently-passing tests, missing awaits, anti-patterns, coverage gaps, tests pass but miss bugs. Not for runtime failure debugging (use playwright-debugger). Flags 24 anti-patterns grouped P0 (must-fix, silent always-pass), P1 (poor diagnostics), P2 (maintenance).'
 license: Apache-2.0
 metadata:
   author: voidmatcha
