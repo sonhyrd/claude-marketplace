@@ -133,6 +133,19 @@ if [ "${E2E_SKILLS_SKIP_PROBE_WARM:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_CLIP_FIDELITY:-}" != "1" ]; then
+  step "Clip-fidelity audit (clip-fidelity.mjs spec, exit codes)"
+  # ADR 0015: the Step-6 gate that the generated spec actually carries the contract — a JUSTIFIED,
+  # PW_PROVE_CLIP-gated dwell per test(), and a committed pin whenever the re-derived viewport
+  # verdict is `pinned`. SKILL.md Step 6 branches on the exit codes, so those are what is frozen.
+  # Text fixtures only; never touches the network.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-clip-fidelity.sh >/dev/null 2>&1 || fail "test-clip-fidelity.sh"
+  else
+    bash scripts/ci/test-clip-fidelity.sh || fail "test-clip-fidelity.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
   step "Run-ledger smoke (PWPROVE_RUN contract)"
   # Issue #5: every shipped-script invocation leaves one PWPROVE_RUN {json} record — stdout line plus

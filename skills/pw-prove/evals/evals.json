@@ -496,6 +496,37 @@
         "False-positive guard: does NOT gate the centring, the scroll or the viewport pin on PW_PROVE_CLIP -- those change what the app is asked to render, so they stay unconditional and CI renders identically",
         "False-positive guard: proposes no second run, no post-processing of the recording and no edit to the project's committed playwright.config.ts"
       ]
+    },
+    {
+      "id": 35,
+      "title": "Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader",
+      "prompt": "You are at Step 6. Step 4's Assumptions block recorded `Effective viewport: pinned: 1600x900`. The generated `e2e/reports.spec.ts` opens with `test.use({ viewport: { width: 1600, height: 900 } })`, every test() carries its `// PROVES:` header, the YAGNI audit is clean and e2e-reviewer reports no P0. Nothing in the spec mentions `PW_PROVE_CLIP`. Run the Step-6 audits and say what happens next.",
+      "expected_output": "Should run the clip-fidelity audit — `node <skill>/scripts/clip-fidelity.mjs spec e2e/reports.spec.ts --config <configPath> --verdict \"pinned:1600x900\"` — and read its exit code, not just the passing YAGNI/PROVES/e2e-reviewer results. The script exits 2: no test() carries a PW_PROVE_CLIP-gated wait. That BLOCKS Step 7 exactly as a missing PROVES header does — this is the originating regression, where the proof run passed PW_PROVE_CLIP=1 into a spec with no reader, so the flag was inert, the dwell never happened, and every gate stayed green over a recording that showed nothing. The fix is to add the framed, `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell from code-rules.md §Payoff dwell to each test(), then re-run the audit until it exits 0. Must not proceed to the proof run and must not treat the clean PROVES/YAGNI/e2e-reviewer results as sufficient.",
+      "files": [],
+      "assertions": [
+        "Runs clip-fidelity.mjs spec as part of Step 6, passing both --config and the Assumptions block's verdict verbatim",
+        "Treats exit 2 as BLOCKING Step 7, the same way a missing PROVES header does",
+        "Names the cause: no test() carries a PW_PROVE_CLIP-gated wait, so Step 7's PW_PROVE_CLIP=1 would be inert",
+        "Adds a framed, PW_PROVE_CLIP-gated dwell with its `// JUSTIFIED:` line to each test(), then re-runs the audit",
+        "Does not start the Step-7 proof run while the audit is non-zero",
+        "False-positive guard: does not conclude the spec is fine because the YAGNI audit, the PROVES-header audit and e2e-reviewer are all clean"
+      ]
+    },
+    {
+      "id": 36,
+      "title": "A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin",
+      "prompt": "You are at Step 6. The project's `playwright.config.ts` contains `use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 810 } }`. Step 4's Assumptions block recorded `Effective viewport: deliberate: 1440x810`. The generated spec has no `test.use({ viewport })` and every test() carries a framed, `// JUSTIFIED:`, PW_PROVE_CLIP-gated dwell. Run the clip-fidelity audit and say what happens next.",
+      "expected_output": "Should run `clip-fidelity.mjs spec <spec> --config playwright.config.ts --verdict \"deliberate:1440x810\"`. The script re-derives `deliberate` from the config text — an explicit `viewport:` key is a project decision, and it outranks the `...devices['Desktop Chrome']` spread sitting beside it — agrees with the declared verdict, and exits 0. The absent `test.use({ viewport })` is CORRECT here: code-rules.md §Viewport pin says a deliberate viewport is respected and never pinned over, so adding a 1600x900 pin would make the proof run and the mutation check render at a size the project never uses. Should proceed to Step 7 and size the recording (PW_PROVE_W/PW_PROVE_H) to 1440x810, the effective viewport, not to the 1600x900 pin default.",
+      "files": [],
+      "assertions": [
+        "Derives `deliberate` because of the explicit viewport: key, not the Desktop Chrome spread",
+        "Reports the audit as passing (exit 0) with no viewport pin in the spec",
+        "Does NOT add `test.use({ viewport: { width: 1600, height: 900 } })` to the spec",
+        "Names the rule: a deliberate project viewport is respected, never pinned over",
+        "Carries 1440x810 into Step 7 as PW_PROVE_W/PW_PROVE_H so the recording is not downscaled",
+        "False-positive guard: does not read the `...devices['Desktop Chrome']` spread as scaffold default when an explicit viewport: key sits in the same use block",
+        "False-positive guard: does not edit the project's committed playwright.config.ts"
+      ]
     }
   ]
 }
