@@ -281,29 +281,26 @@ if section_only:
         f"e2e-reviewer/references/pattern-reference.md sections have IDs missing from Quick Reference: {sorted(section_only)}"
     )
 
-# Check 4: debugger evals.json may only reference F-codes from SKILL.md F-table
-for skill in ('playwright-debugger',):
-    md_path = pathlib.Path('skills') / skill / 'SKILL.md'
-    evals_path = pathlib.Path('skills') / skill / 'evals' / 'evals.json'
-    md_text = md_path.read_text(encoding='utf-8')
-    evals = json.loads(evals_path.read_text(encoding='utf-8'))
-    skill_codes = set(re.findall(r'\|\s*(F\d+)\s*\|', md_text))
-    seen = set()
+# Check 4: playwright-debugger's evals.json may only reference F-codes from its SKILL.md F-table
+md_text = pathlib.Path('skills/playwright-debugger/SKILL.md').read_text(encoding='utf-8')
+evals_path = pathlib.Path('skills/playwright-debugger/evals/evals.json')
+skill_codes = set(re.findall(r'\|\s*(F\d+)\s*\|', md_text))
+seen = set()
 
-    def scan(obj):
-        if isinstance(obj, str):
-            seen.update(re.findall(r'\bF\d+\b', obj))
-        elif isinstance(obj, list):
-            for v in obj:
-                scan(v)
-        elif isinstance(obj, dict):
-            for v in obj.values():
-                scan(v)
+def collect_f_codes(obj):
+    if isinstance(obj, str):
+        seen.update(re.findall(r'\bF\d+\b', obj))
+    elif isinstance(obj, list):
+        for v in obj:
+            collect_f_codes(v)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            collect_f_codes(v)
 
-    scan(evals)
-    missing = seen - skill_codes
-    if missing:
-        errors.append(f"{evals_path}: F-codes not in SKILL.md taxonomy: {sorted(missing)}")
+collect_f_codes(json.loads(evals_path.read_text(encoding='utf-8')))
+missing = seen - skill_codes
+if missing:
+    errors.append(f"{evals_path}: F-codes not in SKILL.md taxonomy: {sorted(missing)}")
 
 if errors:
     for err in errors:

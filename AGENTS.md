@@ -44,7 +44,8 @@ never open an issue or PR against it.
 
 `ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity,
 security, evals, public skill surface, framework scope, link integrity, docs orphan check, language,
-**scanner pattern corpus**, hermetic audit, **probe HAR and warm contracts**, publish-proof,
+**scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
+**probe HAR and warm contracts**, publish-proof,
 **run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
@@ -124,6 +125,7 @@ bash scripts/ci/ci-local.sh
 bash scripts/ci/review.sh           # parity, language, links, framework scope, orphans
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
 bash scripts/ci/test-corpus.sh      # scanner golden: 25/25 checks fire, suppression holds
+bash scripts/ci/test-pw-prove-scripts.sh # preflight readiness gate + probe argument/socket contract
 bash scripts/ci/test-hermetic.sh    # hermetic.mjs: LIVE/MOCKED classification + route.fetch blind spot
 bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clips share link out (four gates, kept-file fallback)
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so
@@ -147,7 +149,8 @@ node skills/e2e-reviewer/scripts/scan.mjs testbed/cal.diy
 2b. **Give the new pattern a corpus fixture and refresh the golden.** `tests/pattern-corpus/` holds one deliberate hit and one `// JUSTIFIED:` twin per check; `scripts/ci/test-corpus.sh` freezes the scanner's output over it. Add both fixtures, run `bash scripts/ci/test-corpus.sh --update`, and **read the diff before committing it** — the golden only protects you if a moved line makes you stop and look. A pattern with no fixture is a pattern nothing is testing. Never run `--update` to clear a red run you did not intend to cause.
 3. **Add or update evals when behavior changes.** Each skill has an `evals/evals.json`. Eval IDs must follow the skill's naming convention (CI validates). Each new smell or behavior change should add at least two assertions: one true positive that must be flagged, and one false-positive guard that names the exact line and why it must not be flagged.
 4. **Respect severity contracts.** P0 entries should be silent-always-pass smells; don't downgrade. P1/P2 should not creep into P0 just because they're easier to grep.
-5. **Keep subagent wiring delegation-aware.** The `agents/` subagents (`e2e-finding-verifier`, `e2e-failure-classifier`) are discovered only on a Claude Code plugin install — a plain skill copy never sees them. So any skill that delegates to a subagent MUST also carry an inline fallback that reaches an **identical** verdict from the same source of truth (`skills/e2e-reviewer/references/pattern-reference.md` for reviewer findings; `skills/playwright-debugger/SKILL.md`'s F1–F15 tables for failures). Never make a subagent the only path to a verdict.
+5. **Keep subagent wiring delegation-aware.** The `agents/` subagents (`e2e-finding-verifier`, `e2e-failure-classifier`) are discovered only when the bundle is installed as a Claude Code plugin (i.e. through the
+marketplace subtree) — a plain skill copy never sees them. So any skill that delegates to a subagent MUST also carry an inline fallback that reaches an **identical** verdict from the same source of truth (`skills/e2e-reviewer/references/pattern-reference.md` for reviewer findings; `skills/playwright-debugger/SKILL.md`'s F1–F15 tables for failures). Never make a subagent the only path to a verdict.
 
 ## What Not to Do
 

@@ -271,7 +271,7 @@ token's `aud` would make the stub unreachable and the seam unbuildable.
   (`PUBLISH_READY=no` plus the runnable command in the warning), **revoked token** (`rejected` via
   401), **non-delegable tool** (`not-delegable` naming the cause). Plus the `usable`-by-exclusion
   branch, asserting the accepted sentence is echoed.
-- **`test-run-ledger.sh`** — the `PTG_RUN` ledger contract must stay green across the rewrite.
+- **`test-run-ledger.sh`** — the run-ledger contract (`PWPROVE_RUN`) must stay green across the rewrite.
 
 **Gate:** `bash scripts/ci/ci-local.sh` and `bash scripts/ci/pre-push-security.sh` must pass before
 commit. Current greenness is **not** assumed — this checkout has no `.claude-plugin/`, so the

@@ -42,8 +42,9 @@ bash scripts/ci/pre-push-security.sh # secrets and credential-leak guard (manual
 
 `ci-local.sh` runs shell/Node syntax sweeps, the review checks (eval schema, skill surface, framework
 scope, link integrity, docs orphan, language, pattern parity), the parity drift smoke test, the
-scanner pattern corpus against its frozen golden, the hermetic / probe-HAR / probe-warm /
-publish-proof / run-ledger suites over the shipped `pw-prove` scripts, and the repo's own smell scan.
+scanner pattern corpus against its frozen golden, the process-boundary suites over the shipped
+`pw-prove` scripts (preflight, probe, hermetic, probe-HAR, probe-warm, publish-proof, run-ledger),
+and the repo's own smell scan.
 
 **The pattern-corpus golden is a hard invariant.** Never run `test-corpus.sh --update` to make a red
 run green — a golden diff means something moved, and moving it silently is the exact failure this

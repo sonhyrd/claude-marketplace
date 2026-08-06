@@ -36,7 +36,7 @@ done < <(find scripts -name '*.sh' -type f 2>/dev/null)
 [ "$QUIET" = "1" ] || echo "  all shell scripts parse"
 
 step "Node syntax"
-# The five SHIPPED scripts are Node. `node --check` is the safety net the shell versions never had:
+# The SHIPPED scripts are Node. `node --check` is the safety net the shell versions never had:
 # under `set -eu` a typo'd variable name exits 0 having done nothing, where this fails at parse time.
 while IFS= read -r file; do
   [ -z "$file" ] && continue
@@ -69,6 +69,17 @@ if [ "${E2E_SKILLS_SKIP_CORPUS:-}" != "1" ]; then
     bash scripts/ci/test-corpus.sh >/dev/null 2>&1 || fail "test-corpus.sh"
   else
     bash scripts/ci/test-corpus.sh || fail "test-corpus.sh"
+  fi
+fi
+
+if [ "${E2E_SKILLS_SKIP_PW_PROVE_SCRIPTS:-}" != "1" ]; then
+  step "pw-prove scripts (process boundary)"
+  # preflight readiness gate + probe argument/socket contract: exit codes and emitted bytes.
+  # Binds one loopback server for the ready-origin branch; never touches the network.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-pw-prove-scripts.sh >/dev/null 2>&1 || fail "test-pw-prove-scripts.sh"
+  else
+    bash scripts/ci/test-pw-prove-scripts.sh || fail "test-pw-prove-scripts.sh"
   fi
 fi
 

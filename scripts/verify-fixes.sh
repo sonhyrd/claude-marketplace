@@ -9,8 +9,8 @@
 # Usage: bash scripts/verify-fixes.sh <repo-path> [-- <file>...]
 #   <file> paths are relative to <repo-path>; when given, the AST rules run
 #   only on those files (whole-repo scan remains the no-args default).
-# Env: VERIFY_FIXES_SKIP_TSC=1 skips the tsc step (callers that own typechecking,
-#   e.g. scripts/pr-preflight.sh with nearest-tsconfig logic).
+# Env: VERIFY_FIXES_SKIP_TSC=1 skips the tsc step (for callers that own typechecking
+#   themselves, e.g. one running tsc against a nearest-tsconfig of its own).
 # Exits 0 on clean, non-zero on issues found.
 
 set -uo pipefail
