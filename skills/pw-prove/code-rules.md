@@ -205,15 +205,7 @@ Report the resolved effective viewport in the run's Assumptions block. Step 7 pa
 
 ### Framing
 
-A clip can hold the success signal for the full dwell and still be worthless, because the signal sits jammed against the screen edge — or was pushed off-frame entirely by a re-render that landed after the scroll. **Centre the element under proof, at the moment of the hold**:
-
-```typescript
-// Then: the save is confirmed
-const status = page.getByRole('status');
-await expect(status).toHaveText('Saved');                     // terminal assertion
-// Framing: centre the payoff. Ungated — CI renders identically.
-await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));
-```
+**Framing is the fourth property of the clip fidelity contract**, beside legible size, warm lead and held payoff — and it is mandatory, not a polish pass. A clip can hold the success signal for the full dwell and still be worthless, because the signal sits jammed against the screen edge — or was pushed off-frame entirely by a re-render that landed after the scroll. **Centre the element under proof, at the moment of the hold** — `await el.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }))`, immediately before the dwell it frames (see the §Payoff dwell snippet, which is the shape to copy).
 
 - **`scrollIntoViewIfNeeded()` is not framing.** It moves the *minimum* distance, so it parks the element against whichever edge it entered from. Playwright's actionability scroll does the same. Both leave a frame one re-render away from useless.
 - **At the moment of the hold, not before it.** Centre after the assertion that proves the payoff, so any re-render that assertion waited for has already happened. Centring earlier and dwelling later films whatever the re-render moved into place.
@@ -221,18 +213,23 @@ await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'cent
 
 ### Payoff dwell
 
-The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. Hold it:
+The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. **Every generated `test()` carries at least one dwell**, framed:
 
 ```typescript
+// Then: the save is confirmed
+const status = page.getByRole('status');
+await expect(status).toHaveText('Saved');                     // assertion covering this beat
+await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));  // framing, ungated
 // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
-// run); it adds time and nothing else, and no assertion of the action above it follows. CI
-// never sets it.
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
 if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
 ```
 
 Every constraint here is load-bearing:
 
-- **At a beat the filming law permits** — anywhere except between an action and the assertion that covers it. Prefer the end of the test; a mid-test hold is legitimate when a beat the reviewer must see (a route transition, a filled form, an intermediate state) would otherwise flash past, and it goes **after** that beat's own assertion.
+- **At least one per test**, at a beat the filming law permits — anywhere except between an action and the assertion that covers it. The last one goes at the end of the test, on the payoff. A further mid-test hold is legitimate when a beat the reviewer must see (a route transition, a filled form, an intermediate state) would otherwise flash past, and it goes **after** that beat's own assertion.
+- **Framed.** A dwell holds on something; if the reader cannot see it, the hold bought nothing. Centre first, hold second.
 - **Env-gated on `PW_PROVE_CLIP`.** Only the Step-7 proof run sets it. CI never does, so the suite does not get slower with every proof that lands.
 - **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful. A dwell without the marker is an unexplained fixed wait and gets flagged like any other.
 
@@ -362,7 +359,7 @@ Fulfilling locally in the route handler is also what keeps a mutation proof herm
 - Preferred gate, in order:
   1. An app-provided hydration marker: `await expect(page.locator('html[data-hydrated]')).toBeAttached();` — if the app exposes none, propose the one-line marker upstream (set an attribute in a root `useEffect`/`onMounted`); it fixes every spec at once.
   2. A self-verifying first action: `await expect(async () => { await button.click(); await expect(dialog).toBeVisible({ timeout: 1000 }); }).toPass();` — retries the click until it lands.
-- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI. (The one sanctioned dwell is the [payoff hold](#clip-fidelity-viewport-pin--payoff-dwell): env-gated, and *after* the terminal assertion — never a wait for something to become ready.)
+- Never `page.waitForTimeout()` after `goto` as a hydration guard — the #9 band-aid the reviewer flags, and it still races on slow CI. (The one sanctioned dwell is the [payoff hold](#clip-fidelity-the-filming-law-viewport-pin-framing-payoff-dwell): env-gated, and placed after the assertion that covers the beat it holds — never a wait for something to become ready.)
 - Nuance: Qwik apps are resumable, not hydrated — no page-global gate needed. Island frameworks (Astro) hydrate per-island per their `client:*` directive — gate on the specific island's readiness (its own marker or a self-verifying action on that island), not a page-global signal.
 
 ---
