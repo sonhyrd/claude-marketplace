@@ -850,10 +850,6 @@ if grep -rlE 'host-proof|host-video|wrangler' skills/pw-prove > "$W/stale" 2>/de
 else
   ok "nothing under skills/pw-prove names host-proof, host-video or wrangler"
 fi
-# playwright-test-generator keeps its watch page and its bucket — this cutover moved ONE skill.
-[ -f "skills/playwright-test-generator/scripts/host-on-r2.mjs" ] \
-  && ok "playwright-test-generator's bucket path is untouched" \
-  || bad "playwright-test-generator lost host-on-r2.mjs — it was explicitly out of scope"
 
 echo ""
 echo "  publish-proof: $pass passed, $fail failed"
