@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
 # Process-boundary tests for clip-fidelity.mjs — the Step-6 gate that a generated spec actually
-# carries the Clip Fidelity contract (ADR 0015).
+# carries the Clip Fidelity contract, and the Step-7 frame the agent looks at (ADR 0015).
 #
-# What is frozen here is the EXIT-CODE SURFACE, because SKILL.md Step 6 branches on it:
-#   0 satisfied · 1 usage · 2 dwell missing · 3 pin missing on 'pinned' · 4 disagreement · 5 ambiguity
+# What is frozen here is the EXIT-CODE SURFACE, because SKILL.md Steps 6 and 7 branch on it:
+#   spec    0 satisfied · 1 usage · 2 dwell missing · 3 pin missing on 'pinned' · 4 disagreement
+#           · 5 ambiguity                                                — non-zero BLOCKS Step 7
+#   frames  0 a frame per clip · 6 no video tooling · 7 a clip yielded no frame
+#                                          — 6 and 7 never fail the run; this is not a gate
 #
 # The originating regression gets its own case: a spec with no PW_PROVE_CLIP reader must FAIL. That
 # run passed every gate the pipeline owned and produced a recording that showed nothing, which is
 # precisely what a green exit here would mean again.
 #
-# Text fixtures only — no browser, no network, no Playwright install.
+# The `spec` half is text fixtures only — no browser, no network, no Playwright install. The
+# `frames` half is REAL synthetic video through REAL ffmpeg/ffprobe, nothing stubbed, because the
+# properties under test (a frame from near the END, and a duration the container never declared) are
+# properties of actual video and a fake would assert only that the fake was built to pass. It skips
+# cleanly where the tooling is absent or the local build cannot write the codec — the publish-path
+# suite's pattern.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
@@ -300,7 +308,7 @@ saw "the commented-out draft is not counted as a test" "1/1 test() block(s)"
 echo ""
 echo "-- usage errors --"
 expect 1 "no subcommand"
-expect 1 "unknown subcommand" frames
+expect 1 "unknown subcommand" film
 expect 1 "no spec file" spec --config desktop.config.ts --verdict pinned:1600x900
 expect 1 "missing --config (the verdict is re-derived, never trusted)" \
   spec good.spec.ts --verdict pinned:1600x900
@@ -312,6 +320,130 @@ expect 1 "unreadable --config" \
 expect 1 "unreadable spec" \
   spec nope.spec.ts --config desktop.config.ts --verdict pinned:1600x900
 saw "the usage line names the open subcommand surface" "clip-fidelity.mjs spec <spec-file...>"
+expect 1 "frames with no clip file" frames
+expect 1 "frames with an unknown flag" frames "$W/nope.webm" --sharpen
+# The offset and the output directory are FIXED, not flags: both would be knobs on the two things
+# the design pins (the frame comes from inside the hold; the image lands where Step 8 sweeps it).
+expect 1 "frames takes no --offset — the frame's position is not tunable" \
+  frames "$W/nope.webm" --offset 4
+expect 1 "frames takes no --out — where the image lands is not tunable" \
+  frames "$W/nope.webm" --out /tmp
+
+echo ""
+echo "-- frames: the tooling is absent (the one case that needs no video at all) --"
+# The publish-skip precedent, transplanted: a machine without ffmpeg can still prove a change, so
+# this SKIPS with a stated line. An empty PATH is how the tooling is made absent — nothing is
+# stubbed, and `node` is reached by its absolute path because it is no longer on the PATH either.
+mkdir -p "$W/emptybin"
+NODE_BIN=$(command -v node)
+( cd "$W" && PATH="$W/emptybin" PWPROVE_LEDGER="$W/ledger.jsonl" \
+  "$NODE_BIN" "$REPO_ROOT/$S" frames test-results/held/video.webm >"$W/out" 2>"$W/err" )
+rc=$?
+if [ "$rc" = "6" ]; then ok "absent video tooling exits 6 (its own code, not a spec exit)"; else
+  bad "absent video tooling — exit $rc, wanted 6"; sed 's/^/         /' "$W/err" | head -4; fi
+saw "the skip states which tool is missing" "is not runnable"
+saw "the skip says the run carries on" "THE RUN CONTINUES"
+saw "the skip refuses to let an uninspected clip read as a good one" "uninspected rather than as good"
+
+echo ""
+echo "-- frames: one frame per clip, from the hold (real synthetic video, real tooling) --"
+if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+  echo "  [SKIP] ffmpeg/ffprobe not on PATH — the frame extract cannot be exercised against real video"
+else
+  # The fixture is the assertion. Two seconds of BLACK followed by one second of WHITE: a frame from
+  # the start is unambiguously dark and a frame from the hold is unambiguously bright, so "near the
+  # end rather than the start" is measured off the pixels rather than trusted from a log line.
+  mkdir -p "$W/test-results/held" "$W/test-results/live" "$W/test-results/broken" "$W/elsewhere"
+  ffmpeg -y -f lavfi -i "color=c=black:s=320x180:r=10:d=2" -f lavfi -i "color=c=white:s=320x180:r=10:d=1" \
+    -filter_complex "[0:v][1:v]concat=n=2:v=1[v]" -map "[v]" -c:v libvpx-vp9 -b:v 200k \
+    "$W/test-results/held/video.webm" >/dev/null 2>&1
+  # THE CONTAINER LIES. `-live 1` muxes the same footage the way a live screen recording is written:
+  # no duration in the container, which is what a real Playwright webm frequently looks like.
+  ffmpeg -y -i "$W/test-results/held/video.webm" -c copy -f webm -live 1 \
+    "$W/test-results/live/video.webm" >/dev/null 2>&1
+  DECLARED=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$W/test-results/live/video.webm" 2>/dev/null)
+
+  if [ ! -s "$W/test-results/held/video.webm" ] || [ ! -s "$W/test-results/live/video.webm" ]; then
+    echo "  [SKIP] this ffmpeg build cannot write libvpx-vp9 webm — no clip to extract a frame from"
+  elif [ "$DECLARED" != "N/A" ] && [ -n "$DECLARED" ]; then
+    # NOT a skip: the container-lies case is the reason the decode fallback exists, and a fixture
+    # that quietly declares a duration would test the easy path twice while reporting both green.
+    bad "the live-muxed fixture still declares a duration ($DECLARED) — the decode fallback is untested"
+  else
+    # The average luminance of a frame, 0-255, by scaling it to a single grey pixel and reading that
+    # byte. One ffmpeg call, no image library, and it answers the only question asked of the frame.
+    lum() { ffmpeg -v error -i "$1" -vf scale=1:1 -pix_fmt gray -f rawvideo - 2>/dev/null | od -An -tu1 | tr -d ' \n'; }
+
+    expect 0 "two clips, one frame each" \
+      frames test-results/held/video.webm test-results/live/video.webm
+    saw "the verdict tells the agent to look" "NOW LOOK AT EACH ONE"
+    saw "it names all three diagnoses" "element off-frame"
+    saw "it bounds the re-film to one attempt" "re-film ONCE"
+    saw "it says a second bad frame publishes anyway" "PUBLISHES with an"
+
+    HELD="$W/test-results/held/video.frame.png"
+    LIVE="$W/test-results/live/video.frame.png"
+    [ -s "$HELD" ] && ok "a non-empty image beside the clip: test-results/held/video.frame.png" \
+      || bad "no frame was written for the held clip"
+    [ -s "$LIVE" ] && ok "a non-empty image for the no-duration clip too (the decode fallback)" \
+      || bad "no frame was written for the live-muxed clip"
+    saw "the no-duration clip's line says the duration was DECODED, not read" "by decode fallback"
+    saw "the held clip's line says its duration came from the container" "from the container"
+
+    # Both frames must come from the WHITE tail, not the black head. The start-frame reading is
+    # taken here too: without it a suite that reported 'bright' would not have shown the fixture
+    # was ever dark, and the assertion would prove nothing about WHERE the frame came from.
+    ffmpeg -y -ss 0 -i "$W/test-results/held/video.webm" -frames:v 1 -update 1 "$W/start.png" >/dev/null 2>&1
+    START=$(lum "$W/start.png"); GOT=$(lum "$HELD"); GOT_LIVE=$(lum "$LIVE")
+    if [ "${START:-999}" -lt 40 ] 2>/dev/null; then
+      ok "the fixture's opening second is dark (luminance $START) — the contrast is real"
+    else bad "the fixture's first frame is not dark (luminance $START) — the end-vs-start test is vacuous"; fi
+    if [ "${GOT:-0}" -gt 200 ] 2>/dev/null; then
+      ok "the extracted frame is from the payoff hold, not the boot (luminance $GOT vs $START at 0s)"
+    else bad "the extracted frame has luminance $GOT — it did not come from near the end"; fi
+    if [ "${GOT_LIVE:-0}" -gt 200 ] 2>/dev/null; then
+      ok "the no-duration clip's frame is from near its end too (luminance $GOT_LIVE)"
+    else bad "the no-duration clip's frame has luminance $GOT_LIVE — the decode fallback mis-placed it"; fi
+
+    # A clip nothing can read is one missing frame, not a failed run — and the OTHER clip still
+    # gets its frame, because an inspection that gives up on the first bad file inspects nothing.
+    printf 'this is not a video' > "$W/test-results/broken/video.webm"
+    # Delete the earlier run's frame FIRST. Asserting on a file the previous case wrote would pass
+    # off a stale image, and the case could then never fail — which is the shape of always-pass this
+    # whole repository exists to catch.
+    rm -f "$HELD"
+    expect 7 "an unreadable clip exits 7 rather than failing the run" \
+      frames test-results/broken/video.webm test-results/held/video.webm
+    saw "it names the clip that yielded nothing" "NO FRAME"
+    saw "the run carries on past a clip it could not read" "THE RUN CONTINUES"
+    [ -s "$HELD" ] && ok "the readable clip beside it still produced its frame" \
+      || bad "one unreadable clip suppressed the other clip's frame"
+
+    echo ""
+    echo "-- frames: the image lands where Step 8 will sweep it --"
+    rm -f "$HELD"
+    expect 0 "the frame is written into the clip's own directory (under test-results/)" \
+      frames test-results/held/video.webm
+    [ -s "$HELD" ] && ok "written to test-results/held/, so no image lands in the repository" \
+      || bad "the frame was not written beside the clip"
+    if grep -q "WARNING" "$W/out"; then bad "a path Step 8 already sweeps warned about itself"; else
+      ok "no warning for a path Step 8 already sweeps"; fi
+    # The one case that escapes the sweep: a clip that was never under test-results/ to begin with.
+    cp "$W/test-results/held/video.webm" "$W/elsewhere/video.webm"
+    expect 0 "a clip outside test-results/ still yields its frame" frames elsewhere/video.webm
+    [ -s "$W/elsewhere/video.frame.png" ] && ok "the frame lands beside that clip too" \
+      || bad "no frame was written beside the clip outside test-results/"
+    saw "a frame outside test-results/ is warned about, since nothing will sweep it" \
+      "Step 8's hygiene sweep will not remove it"
+
+    echo ""
+    echo "-- frames: telemetry --"
+    run frames test-results/held/video.webm
+    if [ "$(grep -c '^PWPROVE_RUN ' "$W/out")" = "1" ]; then
+      ok "exactly one PWPROVE_RUN line on a frames run"
+    else bad "expected exactly one PWPROVE_RUN line, got $(grep -c '^PWPROVE_RUN ' "$W/out")"; fi
+  fi
+fi
 
 echo ""
 echo "-- telemetry never fails a run --"

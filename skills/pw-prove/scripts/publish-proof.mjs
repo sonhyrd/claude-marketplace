@@ -77,7 +77,6 @@
 //             3/6/8/9 the four gates above, in the order they run.
 // (Exit 2 is retired along with the fifth gate that used it: Clips assigns the recording identifier,
 // so this script builds no object name and there is nothing left for that gate to refuse.)
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -90,6 +89,7 @@ import {
   postChapterComments,
 } from './clips.mjs';
 import { pwproveRun } from './pwprove-run.mjs';
+import { probeVideo, run, videoTooling } from './video.mjs';
 
 pwproveRun(import.meta.url, 'publish'); // run ledger — registered before any validation
 
@@ -174,67 +174,20 @@ const CLIPS = clipsConfig();
 if (!CLIPS.ok) stop(1, `${CLIPS.reason}.`);
 
 // ============================================================ video tooling
-const run = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-
-// Probe by RUNNING the tool: a `command -v` hit says a name resolves, not that it executes.
-for (const tool of ['ffprobe', 'ffmpeg']) {
-  const r = run(tool, ['-version']);
-  if (r.error || r.status !== 0) {
-    stop(4, `${tool} is not runnable — install ffmpeg, then retry. (${r.error?.message ?? `exit ${r.status}`})`);
-  }
+// Probe by RUNNING the tool: a `command -v` hit says a name resolves, not that it executes. The
+// measurement itself lives in `video.mjs`, shared with `clip-fidelity.mjs frames` — one copy of the
+// container-lies fallback, because a second copy would be the one that trusts `format=duration`.
+const tooling = videoTooling();
+if (!tooling.ok) {
+  stop(4, `${tooling.tool} is not runnable — install ffmpeg, then retry. (${tooling.reason})`);
 }
 
-// One probe per file answers everything downstream needs: chapter offsets, the reported dimensions,
-// and whether the recording carries audio at all.
-//
 // `unreadable` decides what an unprobeable file MEANS, which differs by caller and is not ffprobe's
 // call to make: a source clip ffprobe cannot open is a broken recording (a gate, named as such), while
 // the concatenated output failing to probe is this machine's tooling misbehaving (exit 4). Without the
 // hook every corrupt clip would exit 4 and no gate would be named for a defect that is squarely a
 // recording defect.
-function probe(file, unreadable = (why) => stop(4, why)) {
-  const r = run('ffprobe', [
-    '-v', 'error',
-    '-show_entries', 'stream=codec_type,codec_name,width,height',
-    '-show_entries', 'format=duration',
-    '-of', 'json',
-    file,
-  ]);
-  if (r.status !== 0) {
-    return unreadable(`ffprobe cannot read '${file}': ${(r.stderr ?? '').trim() || `exit ${r.status}`}`);
-  }
-  let json;
-  try {
-    json = JSON.parse(r.stdout ?? '{}');
-  } catch (e) {
-    return unreadable(`ffprobe returned unparseable output for '${file}': ${e.message}`);
-  }
-  const streams = Array.isArray(json.streams) ? json.streams : [];
-  const video = streams.find((s) => s.codec_type === 'video') ?? {};
-  const raw = json.format?.duration;
-  const parsed = raw === undefined || raw === 'N/A' ? NaN : Number(raw);
-  return {
-    file,
-    seconds: Number.isFinite(parsed) && parsed > 0 ? parsed : decodedSeconds(file),
-    codec: video.codec_name ?? '',
-    width: Number(video.width ?? 0),
-    height: Number(video.height ?? 0),
-    hasAudio: streams.some((s) => s.codec_type === 'audio'),
-  };
-}
-
-// A live-recorded webm often carries NO duration in its container metadata. Decoding it to /dev/null
-// and reading ffmpeg's last `time=` stamp is the fallback the film path already uses — visibly a
-// fallback, one return type.
-function decodedSeconds(file) {
-  const decode = run('ffmpeg', ['-nostats', '-i', file, '-f', 'null', '-']);
-  const stamps = [...`${decode.stdout ?? ''}${decode.stderr ?? ''}`.matchAll(/time=([0-9:][0-9:.]*)/g)];
-  if (!stamps.length) return 0;
-  const parts = stamps[stamps.length - 1][1].split(':').map(Number);
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  return parts[0];
-}
+const probe = (file, unreadable = (why) => stop(4, why)) => probeVideo(file, unreadable);
 
 // ============================================================ GATE: token leak (the text half)
 // Runs first of all the gates, because it needs no probe and no concatenation: if a credential is

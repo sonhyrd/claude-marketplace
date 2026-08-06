@@ -63,13 +63,14 @@ Step 3  Bring-up + Probe         one live pass: base merge, dev server, auth, re
 Step 4  Plan                     PR-mode notify-and-continue · coverage-gap approval gate
 Step 5  Generate                 POM always, HAR-first mocks, PROVES headers, clip fidelity
 Step 6  e2e-reviewer             YAGNI audit + PROVES audit + the reviewer skill as a gate
-Step 7  Verify                   tsc, warm, proof run, hermetic audit, mutation check
+Step 7  Verify                   tsc, warm, proof run, a frame per clip the agent reads, hermetic audit, mutation check
 Step 8  Deliver                  publish, commit, push, PR comment, completion report
 ```
 
 Invoke it with a PR number/URL, a ticket key, a branch, a route, or nothing at all. Shipped scripts
 (`skills/pw-prove/scripts/`, Node stdlib only, nothing installed into the target project):
-`preflight.mjs`, `probe.mjs`, `hermetic.mjs`, `publish-proof.mjs`, `clips.mjs`, `pwprove-run.mjs`.
+`preflight.mjs`, `probe.mjs`, `hermetic.mjs`, `clip-fidelity.mjs`, `publish-proof.mjs`, `clips.mjs`,
+`video.mjs`, `pwprove-run.mjs`.
 
 ## `e2e-reviewer` — static review
 

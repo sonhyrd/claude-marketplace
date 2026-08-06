@@ -527,6 +527,36 @@
         "False-positive guard: does not read the `...devices['Desktop Chrome']` spread as scaffold default when an explicit viewport: key sits in the same use block",
         "False-positive guard: does not edit the project's committed playwright.config.ts"
       ]
+    },
+    {
+      "id": 37,
+      "title": "Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film",
+      "prompt": "You are at Step 7. The proof run passed, three webms are under test-results/, and you ran `node <skill>/scripts/clip-fidelity.mjs frames test-results/*/video.webm` — it exited 0 and wrote one PNG beside each clip. You open them: clips 1 and 2 show the saved banner centred and settled; clip 3 shows the record list with the success toast cut off against the right edge of the frame. Say what you do next.",
+      "expected_output": "Should state in the report what each frame shows, clip by clip — that is the inspection. Clip 3 is illegible and must be DIAGNOSED before anything is re-filmed: the subject sits against the frame edge, so the diagnosis is element-off-frame and the fix is the ungated `scrollIntoView({ block: 'center', inline: 'center' })` at the moment of the hold, in the COMMITTED spec (never in the proof config, never behind PW_PROVE_CLIP — the filming law says the variable may only add time). After the fix, the Step-6 clip-fidelity audit re-runs on the edited spec and must exit 0 BEFORE re-filming, because moving the dwell can drop its `// JUSTIFIED:` marker. Then `rm -rf test-results` and re-film ONCE, and re-extract the frames. If the second frame is still illegible the run PUBLISHES it with an explicit warning — `Clip 3 — illegible (element off-frame), published with warning` — rather than stopping: a bad clip is not a failed test. Must not re-film without a preceding fix (deterministic — it reproduces the same frame), must not re-film a second time, and must not fail the run over the clip.",
+      "files": [],
+      "assertions": [
+        "States what each extracted frame shows, per clip, in the report",
+        "Diagnoses clip 3 as element-off-frame rather than re-filming blind",
+        "Applies the ungated scrollIntoView({ block: 'center' }) fix to the COMMITTED spec, not the proof config and not behind PW_PROVE_CLIP",
+        "Re-runs `clip-fidelity.mjs spec` on the edited spec and requires exit 0 before re-filming",
+        "Re-films exactly once",
+        "A still-illegible second frame publishes with an explicit warning instead of failing the run",
+        "False-positive guard: does not re-film without a preceding fix, since a re-film with no fix is deterministic and reproduces the same frame"
+      ]
+    },
+    {
+      "id": 38,
+      "title": "Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip",
+      "prompt": "You are at Step 7 on a machine with no ffmpeg. The proof run passed and two webms are under test-results/. `node <skill>/scripts/clip-fidelity.mjs frames test-results/*/video.webm` exits 6 and prints that ffprobe is not runnable. Say what you do next and what the completion report says.",
+      "expected_output": "Should treat exit 6 as a SKIP and carry on to the hermetic audit and the mutation check — the frame extract is an inspection, not a gate, and a missing tool is not a failed test. The report must say the clips are `uninspected — no video tooling`, never describe frames that were never opened and never imply the clips are fine. Delivery is unaffected: publishing has its own tooling check and its own skip. Must not fail the run, must not retry the extract, must not install anything into the user's project, and must not fabricate a description of a frame.",
+      "files": [],
+      "assertions": [
+        "Treats exit 6 as a skip and continues Step 7",
+        "Reports the clips as uninspected rather than as good",
+        "Does not fail the run over absent video tooling",
+        "Does not install ffmpeg or any dependency into the user's project",
+        "False-positive guard: does not describe what the frames show, having never opened one"
+      ]
     }
   ]
 }
