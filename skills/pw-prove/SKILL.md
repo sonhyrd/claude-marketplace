@@ -175,8 +175,8 @@ Prove the change, not the whole app.
    ```bash
    PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs
    ```
-   The publish credential comes from the environment (`CLIPS_ORIGIN` + `CLIPS_A2A_SECRET`, the same two Step 8 uses), or — when those are unset — from `~/.config/pw-prove-clips.env` (override the path with `PW_PROVE_CLIPS_ENV`). An explicitly-set variable always beats the file. Neither source means `PUBLISH_READY=no`, which is a WARN, never a stop; the reason names the file path it looked at, so an unread credential file is visible rather than silent.
-   Probes the publish credential by **running** the real call — a POST to the Clips import action with a body its schema must reject, where a schema-validation failure is the PASS (it proves the request got past auth, so reachability, secret currency, scope and org resolution all hold; a bare `GET` is answered by the route's method check before auth is ever consulted). Also probes `ffmpeg`/`ffprobe`, and Chrome for clip fidelity. Reports `PUBLISH_READY`, `VIDEO_TOOLING`, and `HOSTING_READY` as their conjunction. WARN-only: `HOSTING_READY=no` never stops generation — its printed output is the evidence a later `Proof page: skipped — publish prerequisites not ready` line must paste (Step 8).
+   The publish credential is one environment variable, `CLIPS_MCP_TOKEN` — an opaque bearer that carries its own destination, so nothing else needs configuring. It is leased into the run from the workspace vault, never exported into a shell. There is no file fallback: unset means `PUBLISH_READY=no`, which is a WARN, never a stop, and the warning prints the literal `agent-native vault exec …` command to re-run under — app name, key name and this invocation — so the fix is a paste rather than a skill-file read.
+   Probes the credential by **running** the real call — a JSON-RPC `tools/call` to the Clips import action with arguments its schema must reject, so nothing is created. The rejection is the PASS, defined **by exclusion** rather than by matching a sentence, and the accepted sentence is echoed into the output so a wrong verdict is legible in the log. Four verdicts are kept apart, because their fixes differ: `rejected` (HTTP 401 — the credential itself), `not-delegable` (HTTP 200, the action is absent from this token's callable catalog — re-mint, do not rotate), `usable`, and `unexpected` (an empty-argument probe that *succeeded*). Also probes `ffmpeg`/`ffprobe`, and Chrome for clip fidelity. Reports `PUBLISH_READY`, `VIDEO_TOOLING`, and `HOSTING_READY` as their conjunction. WARN-only: `HOSTING_READY=no` never stops generation — its printed output is the evidence a later `Proof page: skipped — publish prerequisites not ready` line must paste (Step 8).
 
 **Autonomy line:** start/stop the dev server · mint a token via the project's own login · **read-only** data discovery (query list/read endpoints to find a valid entity — sample a handful, never enumerate the tenant). **Never** seed or create backend data on a shared/staging tenant, register accounts, or invent credentials. Required sub-resource absent in the sample → go straight to a `page.route` mock; only if a real record is truly unavoidable, stop and ask.
 
@@ -496,7 +496,7 @@ Getting this wrong costs a full extra proof run to regenerate clips — and only
 
 PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips is not delivered. Coverage/target mode: skip to item 5 (report only). Run in order:
 
-1. **Publish ONE chaptered recording for the run.** Find the per-test webms under `test-results/**/*.webm` (one per scenario) and map each to the AC it proves. Write a manifest, then hand the whole run to `publish-proof.mjs`: it probes and gates every clip, joins them by **stream copy** into one video, mints a short-lived scoped token and POSTs the whole thing to Paul Clips in one request, returning one `https://clips.paulsjob.ai/share/<id>` link (`docs/adr/0012`). Each AC becomes a **chapter** on the scrubber. **N clips, one link** — a reviewer opens one URL and watches the whole proof as one pass.
+1. **Publish ONE chaptered recording for the run.** Find the per-test webms under `test-results/**/*.webm` (one per scenario) and map each to the AC it proves. Write a manifest, then hand the whole run to `publish-proof.mjs`: it probes and gates every clip, joins them by **stream copy** into one video, and POSTs the whole thing to Paul Clips in one authenticated JSON-RPC call, returning one `https://clips.paulsjob.ai/share/<id>` link (`docs/adr/0012`). Each clip becomes a **chapter** on the scrubber: the scenario name is the marker label, because a label renders as a tooltip-sized space, and the AC verbatim lands as a timestamped comment beneath it, where a sentence has room to wrap. **N clips, one link** — a reviewer opens one URL and watches the whole proof as one pass.
    ```bash
    cat > /tmp/pw-prove-manifest.json <<'JSON'
    {
@@ -510,22 +510,35 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    }
    JSON
    # The manifest path is the ONLY argument — Clips assigns the identifier, so there is no project
-   # folder and no key prefix to pass. Configuration is FIVE variables, all required, all described
-   # in scripts/clips.mjs: CLIPS_ORIGIN (= the deployment's own APP_URL), CLIPS_A2A_SECRET, and the
-   # three identity values CLIPS_ORG_ID, CLIPS_ORG_DOMAIN and CLIPS_SUBJECT. The token is minted per
-   # publish, five-minute life, import scope only.
-   # All five are read from the environment, falling back to ~/.config/pw-prove-clips.env
-   # (PW_PROVE_CLIPS_ENV overrides the path). You do NOT need to export or `source` anything — a run
-   # starts in a fresh environment every time, which is exactly why the file exists.
-   # CLIPS_ORG_ID and CLIPS_ORG_DOMAIN are DIFFERENT values — the domain selects which organization's
-   # secret the deployment tries, the id is the organization the import runs under — and CLIPS_SUBJECT
-   # must be an email that is ALREADY A MEMBER of it. None is defaulted: a guessed value mints a token
-   # that is refused at the far end with a bare 401 or 403, hours from where the mistake was made.
+   # folder and no key prefix to pass. Configuration is ONE environment variable, CLIPS_MCP_TOKEN:
+   # an opaque bearer the Clips deployment minted, carrying its own destination (`aud`), subject and
+   # organization, so nothing else is configured. It is long-lived and individually revocable — it is
+   # NOT minted per publish and it is not scoped to this one action — so a machine connects ONCE and
+   # every later run leases the same credential.
+   # Lease it into the child process for the call. Never export it into a shell, and never write it
+   # where the scripts could find it on their own: the scripts read the variable out of their own
+   # environment and spawn nothing, so the lease is the only way in.
+   #   agent-native vault exec --app <the workspace vault app> --key CLIPS_MCP_TOKEN -- node …
+   # Unset on this machine? Do not guess the app name — Step 3's PROBE_HOSTING warning already
+   # printed the exact command for this workspace, and pasting it is the whole fix.
+   # (PW_PROVE_CLIPS_ENDPOINT overrides the endpoint for a self-hosted deployment. It is a test knob,
+   # not a second credential.)
    # BEARER + SCAN protect the PUBLIC recording — the gate greps the webm bytes AND the chapter
    # titles / description for the token. Prefer programmatic auth (Step 3) so no credential ever
    # enters the frame; a recorded UI login would trip it.
    # Read the PWPROVE_URL MARKER, never `head -n1`: npm/ffmpeg chatter lands on line 1 the moment
    # anything merges the streams, and a run has already lost five URLs to exactly that.
+   # Read the BODY, never the status: A REFUSAL ARRIVES AS HTTP 200. Once authentication resolves,
+   # every failure — an action absent from this token's callable catalog, rejected arguments, an
+   # import the far end declined — comes back 200 with the failure written in the body, so a check
+   # keyed on the status code passes vacuously and the run reports a proof it never published.
+   # Authentication is the ONE exception: a refused credential is a genuine 401 whose body is not
+   # JSON-RPC at all, with no `result` to reach for. Two shapes, and code that handles only one is
+   # broken in a way that looks fine. `clips.mjs` classifies by parsing; do not re-derive an outcome
+   # from `res.ok` here, and do not read $RC below as though it were an HTTP status.
+   # Run the invocation below UNDER THE LEASE — prefix it with the `agent-native vault exec … --`
+   # line above. Unwrapped, CLIPS_MCP_TOKEN is absent and the publish stops at exit 1 (configuration)
+   # before a byte moves, which the case statement below reports on the `*)` branch.
    BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file>" \
      node <skill-base>/scripts/publish-proof.mjs /tmp/pw-prove-manifest.json \
      >/tmp/pw-prove-publish.out 2>/tmp/pw-prove-publish.log
