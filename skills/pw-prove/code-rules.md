@@ -135,7 +135,7 @@ test.describe('Login', () => {
 
 | Forbidden | Use instead |
 |-----------|-------------|
-| `waitForTimeout(N)` | `await expect(el).toBeVisible({ timeout: N })` — sole exception: the env-gated payoff dwell (see [Clip Fidelity](#clip-fidelity-viewport-pin--payoff-dwell)) |
+| `waitForTimeout(N)` | `await expect(el).toBeVisible({ timeout: N })` — sole exception: the env-gated payoff dwell (see [Clip Fidelity](#clip-fidelity-the-filming-law-viewport-pin-framing-payoff-dwell)) |
 | `expect(await el.isVisible()).toBe(true)` | `await expect(el).toBeVisible()` |
 | `const n = await el.count()` | `await expect(el).toHaveCount(N)` or `.first()` + `toBeVisible()` |
 | `toBeAttached()` | `toBeVisible()` — `toBeAttached` is vacuous on always-rendered elements. Negative `not.toBeAttached()` and checks on dynamically-injected elements are acceptable (matches e2e-reviewer #4b). |
@@ -150,9 +150,35 @@ test.describe('Login', () => {
 
 ---
 
-## Clip Fidelity (viewport pin + payoff dwell)
+## Clip Fidelity (the filming law: viewport pin, framing, payoff dwell)
 
-The Proof clip is **reviewer-facing evidence**, not a leftover (`docs/adr/0007`). Two generation-time rules make it usable. Both belong in the **committed** spec, so the Step-7 proof run and the CI run render identically by construction rather than by luck.
+The Proof clip is **reviewer-facing evidence**, not a leftover (`docs/adr/0007`, amended by `docs/adr/0015`). Everything below belongs in the **committed** spec, so the Step-7 proof run and the CI run render identically by construction rather than by luck.
+
+### The filming law
+
+Apply one principle, not a list of positions:
+
+> **`PW_PROVE_CLIP` may only ever add time. It may never change what the app is asked to do.**
+
+Two consequences, and they are the whole rule:
+
+- **Waits are the only gated operation.** A dwell — and nothing else — sits behind `if (process.env.PW_PROVE_CLIP)`.
+- **Everything else is unconditional.** Centring, scrolling, and the choice of input method are written plainly in the spec and **run in CI too**. If a legible clip needs the element centred, CI centres it as well; that is what makes the filmed rendering the same rendering CI produces.
+
+A gated dwell may sit at **any beat** — after a navigation, after a form fills, after an intermediate assertion, at the end — with **one exception**:
+
+> **Never place a dwell between an action and the assertion that covers it.**
+
+There, and only there, the gate changes the verdict: the filmed run gets extra time the CI run does not, so the proof passes while CI flakes. That is smell #9 with a switch on it, and it is the reason the dwell was originally confined to the end of the test. The confinement was the crude form of the law; the law is the rule.
+
+**Consequently forbidden**, even though each is tempting while filming:
+
+| Forbidden | Why the filming law rejects it |
+|---|---|
+| A `PW_PROVE_CLIP`-gated `pressSequentially()` in place of `fill()` | Swaps one `input` event for N keystroke events *before* the assertion. A debounced field, a per-key validator or a typeahead is driven **differently in the film than in CI** — the filmed software is not the shipped software. |
+| An ungated `pressSequentially(value, { delay })` | The delay is a per-keystroke fixed sleep **every CI run pays forever**. That is smell #9's cost profile walking back in through the front door. |
+| A gated `test.use({ viewport })`, or any gated scroll/centring | Changes what the app is asked to render. A rendering that exists only while filming means healing, the hermetic audit and the mutation check all ran against something CI never produces. |
+| A gated `route()`, click, assertion timeout or retry count | Not a wait. Anything that alters traffic, input or tolerance changes the run, not its duration. |
 
 ### Viewport pin
 
@@ -177,26 +203,57 @@ Pin in the **spec** — never by editing the project's committed `playwright.con
 
 Report the resolved effective viewport in the run's Assumptions block. Step 7 passes it as `PW_PROVE_W`/`PW_PROVE_H` so the recording size matches and the clip is never downscaled — the proof config itself stays static and carries no per-run value.
 
+### Framing
+
+A clip can hold the success signal for the full dwell and still be worthless, because the signal sits jammed against the screen edge — or was pushed off-frame entirely by a re-render that landed after the scroll. **Centre the element under proof, at the moment of the hold**:
+
+```typescript
+// Then: the save is confirmed
+const status = page.getByRole('status');
+await expect(status).toHaveText('Saved');                     // terminal assertion
+// Framing: centre the payoff. Ungated — CI renders identically.
+await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));
+```
+
+- **`scrollIntoViewIfNeeded()` is not framing.** It moves the *minimum* distance, so it parks the element against whichever edge it entered from. Playwright's actionability scroll does the same. Both leave a frame one re-render away from useless.
+- **At the moment of the hold, not before it.** Centre after the assertion that proves the payoff, so any re-render that assertion waited for has already happened. Centring earlier and dwelling later films whatever the re-render moved into place.
+- **Ungated.** Framing is a scroll, not a wait — the filming law puts it in the committed spec unconditionally.
+
 ### Payoff dwell
 
 The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. Hold it:
 
 ```typescript
-// Then: the save is confirmed
-await expect(page.getByRole('status')).toHaveText('Saved');   // terminal assertion
 // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
-// run), after the terminal assertion, so it cannot affect pass/fail. CI never sets it.
+// run); it adds time and nothing else, and no assertion of the action above it follows. CI
+// never sets it.
 if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
 ```
 
 Every constraint here is load-bearing:
 
-- **After the terminal assertion only.** A dwell before or between assertions is the #9 band-aid papering over a race, and the reviewer is right to flag it. Placed after the last assertion it is incapable of changing the verdict, which is what makes the conditional safe — unlike the viewport, where conditionality would not be.
+- **At a beat the filming law permits** — anywhere except between an action and the assertion that covers it. Prefer the end of the test; a mid-test hold is legitimate when a beat the reviewer must see (a route transition, a filled form, an intermediate state) would otherwise flash past, and it goes **after** that beat's own assertion.
 - **Env-gated on `PW_PROVE_CLIP`.** Only the Step-7 proof run sets it. CI never does, so the suite does not get slower with every proof that lands.
-- **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful.
-- **One per test**, at the very end.
+- **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful. A dwell without the marker is an unexplained fixed wait and gets flagged like any other.
 
 This is the **only** sanctioned `page.waitForTimeout()` in generated output. Any other one is #9 and gets fixed, not justified.
+
+### Atomic input
+
+Do not film the typing. Unless the acceptance criterion is *about entering data*, the evidence is the **state change**, so fill atomically and hold on the field's end state:
+
+```typescript
+// When: the reviewer enters the new title
+await page.getByLabel('Title').fill('Q3 revenue review');
+// Then: the form accepts it
+await expect(page.getByLabel('Title')).toHaveValue('Q3 revenue review');
+await page.getByLabel('Title').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP; adds time only, and sits
+// after the assertion covering the fill above. CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1500);
+```
+
+A held filled field reads as well as keystrokes and costs CI nothing. Reaching for `pressSequentially` to make the typing visible is the trade the filming law exists to refuse — see the forbidden table above for both its gated and its ungated form.
 
 ---
 

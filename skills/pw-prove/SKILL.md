@@ -309,7 +309,7 @@ Follow `code-rules.md`: structure detection (always POM), selector priority, POM
 
 **Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion word-for-word — Step 6 audits it before Step 7.
 
-**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Close each test with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell **after** the terminal assertion. Both are committed, so the proof run and CI render identically by construction.
+**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Then obey the **filming law**: `PW_PROVE_CLIP` may only add time. Centre the element under proof at the moment of the hold (**ungated**), and hold it with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell — at the end of the test, or at any beat except between an action and the assertion that covers it. All of it is committed, so the proof run and CI render identically by construction.
 
 ### Step 5b: Conventions & Seed (first run on a project)
 
