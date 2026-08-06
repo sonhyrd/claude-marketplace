@@ -309,7 +309,7 @@ Follow `code-rules.md`: structure detection (always POM), selector priority, POM
 
 **Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion word-for-word — Step 6 audits it before Step 7.
 
-**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Then obey the **filming law**: `PW_PROVE_CLIP` may only add time. Centre the element under proof at the moment of the hold (**ungated**), and hold it with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell — at the end of the test, or at any beat except between an action and the assertion that covers it. All of it is committed, so the proof run and CI render identically by construction.
+**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Then obey the **filming law**: `PW_PROVE_CLIP` may only add time. Centre the element under proof at the moment of the hold (**ungated**), and hold it with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell — at the end of the test, or at any beat outside a **race window** (`code-rules.md` → The filming law). All of it is committed, so the proof run and CI render identically by construction.
 
 ### Step 5b: Conventions & Seed (first run on a project)
 
@@ -410,7 +410,7 @@ The **only** legitimate reason to edit an existing proof config is a structural 
 |---|---|---|
 | **Size** | `PW_PROVE_W`/`PW_PROVE_H` = the effective viewport, from `code-rules.md` → Clip Fidelity | `video.size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. That is why size arrives by env and the config stays static: it is the one per-run value, and it belongs on the command line, not in a file diff. Deliberately **do not** set `viewport` in the proof config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
 | **Warm lead** | One **browser** load of the route under proof, just before filming — `probe.mjs warm`, with `curl` as the browserless fallback | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. A curl alone is not enough: it never executes JS, so on a Vite-family dev server the client module graph and the dep pre-bundle stay cold and get paid *inside* the recording. |
-| **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` dwell. Under the **filming law** the variable may only add time — never place a dwell between an action and the assertion covering it — so it cannot move pass/fail; CI never sets the variable and pays nothing. |
+| **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` dwell. Under the **filming law** the variable may only add time, and the dwell sits outside every race window, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
 | **Framing** | Ungated `scrollIntoView({ block: 'center' })` in the committed spec, at the moment of the hold | A held payoff jammed against the screen edge, or pushed off-frame by a later re-render, is an unwatchable clip that passes every gate. Centring is a scroll, not a wait, so it is unconditional and CI renders identically. |
 
 ```bash
@@ -442,7 +442,11 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
-No *gate* measures the finished webm — there is no dimension gate and no legibility heuristic, by design (`docs/adr/0007` rules out a post-processing pass; `docs/adr/0015` rejected a frame-difference gate because its failure mode is dropping a good proof, and a gate that trips aborts the whole recording). **The agent looks instead** — see *Clip inspection* below. That is not a contradiction of 0007 but the narrowing 0015 states: nothing is measured, nothing is edited, no post-processing pass returns; one frame is extracted and read, and its verdict informs the agent rather than vetoing the artifact. Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` must carry the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config. A non-2xx warm (or a `warm-failed:` line) is reported as `Proof page: <url> — warm miss, clips are boot-heavy`. A browserless fallback to `curl` is reported the same way, for the same reason: the document is warm but the client module graph is not, so the boot still lands in the recording.
+**No *gate* measures the finished webm — the agent looks instead** (*Clip inspection* below). There is no dimension gate and no legibility heuristic by design: `docs/adr/0007` rules out a post-processing pass, and `docs/adr/0015` rejected a frame-difference gate because its failure mode is dropping a good proof, and a gate that trips aborts the whole recording. One frame is extracted and read; its verdict informs the agent rather than vetoing the artifact. That is 0015's narrowing of 0007, not a contradiction of it.
+
+Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` carry the Step-4 effective viewport, and a `pinned:` verdict has already produced a `test.use({ viewport })` line in the committed spec. A letterboxed clip means that pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config.
+
+A non-2xx warm, a `warm-failed:` line, or a browserless fallback to `curl` is all reported the same way — `Proof page: <url> — warm miss, clips are boot-heavy`. The reason is one reason: `curl` warms the document but not the client module graph, so the boot still lands in the recording.
 
 ### Failure handling (max 3 auto-fix attempts)
 
@@ -478,17 +482,17 @@ node <skill-base>/scripts/clip-fidelity.mjs frames test-results/*/video.webm
 
 | Exit | Meaning | What to do |
 |---|---|---|
-| `0` | A frame per clip | **Read every frame** (image tool) and state what each one shows in the report. |
-| `6` | `ffmpeg`/`ffprobe` absent | **Skip and carry on** — never fail the run over it. Report the clips as `uninspected — no video tooling`, not as good. |
-| `7` | A clip yielded no frame | Same posture: the named clips are `uninspected`, the rest were read. Carry on. |
+| `0` | A frame per clip | **Read every frame** (image tool) and give each one a line in the report — `Clip 1 — the saved banner reads "Saved", centred, page settled`. |
+| `6` | `ffmpeg`/`ffprobe` absent | **Carry on** — this never fails the run. Every clip is reported `uninspected — no video tooling`. |
+| `7` | A clip yielded no frame | Carry on. The named clips are `uninspected`; the rest get their line. |
 
-**Then say what you see** — one line per clip in the report, e.g. `Clip 1 — the saved banner reads "Saved", centred, page settled`. A clip you did not look at is reported as uninspected; never as fine.
+A clip you did not look at is reported as **uninspected**, which is the honest verdict — an unread clip is not a good one.
 
 **An illegible frame is diagnosed, then fixed, then re-filmed — in that order.** A re-film with no preceding fix is deterministic and reproduces the same frame, so the diagnosis is the only thing that makes the retry worth having:
 
 | What the frame shows | Diagnosis | The fix |
 |---|---|---|
-| Mid-transition, a spinner, the state not yet reached | **payoff not held** | The dwell is in the wrong place. Move it after the assertion covering the beat (still `PW_PROVE_CLIP`-gated, still `// JUSTIFIED:`). |
+| Mid-transition, a spinner, the state not yet reached | **payoff not held** | The dwell is in the wrong place. Move it after that beat's own assertion — outside the race window, still `PW_PROVE_CLIP`-gated, still `// JUSTIFIED:`. |
 | The subject at the edge, cropped, or absent | **element off-frame** | The ungated `scrollIntoView({ block: 'center', inline: 'center' })` is missing, or it runs *before* a re-render that pushes the subject away — centre **at** the moment of the hold. |
 | A skeleton, a blank page, a loader | **still booting** | The warm lead missed. Re-warm the route (`probe.mjs warm`, `curl` fallback) and confirm a 2xx before filming again. |
 
