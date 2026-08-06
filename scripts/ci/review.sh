@@ -331,7 +331,7 @@ if section_only:
     )
 
 # Check 4: debugger evals.json may only reference F-codes from SKILL.md F-table
-for skill in ('playwright-debugger', 'cypress-debugger'):
+for skill in ('playwright-debugger',):
     md_path = pathlib.Path('skills') / skill / 'SKILL.md'
     evals_path = pathlib.Path('skills') / skill / 'evals' / 'evals.json'
     md_text = md_path.read_text(encoding='utf-8')
@@ -459,10 +459,9 @@ import re
 import sys
 
 required = {
-    'playwright-test-generator': ('Playwright',),
+    'pw-prove': ('Playwright',),
     'e2e-reviewer': ('Playwright', 'Cypress'),
     'playwright-debugger': ('Playwright',),
-    'cypress-debugger': ('Cypress',),
 }
 errors = []
 for skill, words in required.items():
