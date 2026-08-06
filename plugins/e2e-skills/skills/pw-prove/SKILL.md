@@ -30,9 +30,9 @@ Step 1  Dispatch + Environment      (change to prove → PR-mode · route → ta
 Step 2  Diff → AC                    (PR-mode: PR state read + diff→AC · target: skip · coverage-gap: gap analysis)
 Step 3  Bring-up + Probe            (ONE live pass: merge base, serve the branch, app-native auth, probe recon, record api.har, save storageState)
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
-Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + payoff dwell — see code-rules.md)
-Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + e2e-reviewer skill quality gate)
-Step 7  Verify                       (tsc → warm route → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → hermetic audit → mutation check)
+Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + framing + payoff dwell — see code-rules.md)
+Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + clip-fidelity audit + e2e-reviewer skill quality gate)
+Step 7  Verify                       (tsc → warm route → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → look at one frame per clip → hermetic audit → mutation check)
 Step 8  Deliver                      (PR-mode: publish ONE chaptered recording → Clips · commit spec+POM+api.har · push · PR comment · report)
 ```
 
@@ -310,7 +310,7 @@ Follow `code-rules.md`: structure detection (always POM), selector priority, POM
 
 **Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion word-for-word — Step 6 audits it before Step 7.
 
-**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Close each test with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell **after** the terminal assertion. Both are committed, so the proof run and CI render identically by construction.
+**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Then obey the **filming law**: `PW_PROVE_CLIP` may only add time. Centre the element under proof at the moment of the hold (**ungated**), and hold it with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell — at the end of the test, or at any beat outside a **race window** (`code-rules.md` → The filming law). All of it is committed, so the proof run and CI render identically by construction.
 
 ### Step 5b: Conventions & Seed (first run on a project)
 
@@ -340,6 +340,26 @@ List every locator in the generated/modified POM, grep each name across specs, d
 ### PROVES-header audit
 
 Every `test(...)` opens with `// PROVES: <AC verbatim>` from the Step 2 AC table (PR-mode) or the approved scenario's **Then**. A missing or paraphrased header blocks Step 7: add it, then proceed. **Exempt:** POM files.
+
+### Clip-fidelity audit
+
+The Step-4 `Effective viewport` line and the Step-5 dwell are **claims**; this checks them. Run it on every generated spec, with the `configPath` from Step 1 and the Assumptions block's viewport line verbatim:
+
+```bash
+node <skill>/scripts/clip-fidelity.mjs spec <spec files…> --config <configPath> --verdict "<pinned:1600x900 | deliberate:WxH>"
+```
+
+**Exit 0 is the only way to Step 7** — a non-zero exit blocks it exactly as a missing PROVES header does. Fix and re-run:
+
+| Exit | What failed | What to do |
+|---|---|---|
+| `2` | A `test()` has no `PW_PROVE_CLIP`-gated wait, or its dwell has no `// JUSTIFIED:` line above it | Add the framed, justified dwell from `code-rules.md` §Payoff dwell. This is the originating regression: without a reader, Step 7's `PW_PROVE_CLIP=1` is **inert** and the clip shows nothing. |
+| `3` | The verdict is `pinned:` but the spec carries no `test.use({ viewport })` | Add the pin to the **spec** — never to the project config, never only to the proof config. |
+| `4` | The derived verdict disagrees with the declared one | One of the two is wrong. Re-read `code-rules.md` §Viewport pin, then fix the Assumptions line **and** the spec together. |
+| `5` | Config ambiguity — a function-export config, or projects whose `use` blocks resolve differently | It refuses rather than guessing. Resolve by hand: read the config, decide the effective viewport, and state the branch and why in the Assumptions block. |
+| `1` | Usage error | `--config` and `--verdict` are both required — the verdict is re-derived, never trusted. |
+
+An exit-0 run may still print `WARNING` lines (a gated pin, or a pin over a `deliberate:` viewport). Those are advisory and do not block Step 7 — but each one names a filming-law violation in the committed spec, so fix them before delivering rather than after.
 
 ### e2e-reviewer skill
 
@@ -385,13 +405,14 @@ export default defineConfig({
 
 The **only** legitimate reason to edit an existing proof config is a structural mismatch with the project's own config (below) — a one-time, committed fix, never a per-run edit.
 
-**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`). Three things make it usable; none of them re-runs the spec or post-processes the recording:
+**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`, amended by `docs/adr/0015`). Four properties make it usable; none of them re-runs the spec or post-processes the recording:
 
 | | What | Why |
 |---|---|---|
 | **Size** | `PW_PROVE_W`/`PW_PROVE_H` = the effective viewport, from `code-rules.md` → Clip Fidelity | `video.size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. That is why size arrives by env and the config stays static: it is the one per-run value, and it belongs on the command line, not in a file diff. Deliberately **do not** set `viewport` in the proof config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
 | **Warm lead** | One **browser** load of the route under proof, just before filming — `probe.mjs warm`, with `curl` as the browserless fallback | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. A curl alone is not enough: it never executes JS, so on a Vite-family dev server the client module graph and the dep pre-bundle stay cold and get paid *inside* the recording. |
-| **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` post-assertion dwell. It sits *after* the terminal assertion, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
+| **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` dwell. Under the **filming law** the variable may only add time, and the dwell sits outside every race window, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
+| **Framing** | Ungated `scrollIntoView({ block: 'center' })` in the committed spec, at the moment of the hold | A held payoff jammed against the screen edge, or pushed off-frame by a later re-render, is an unwatchable clip that passes every gate. Centring is a scroll, not a wait, so it is unconditional and CI renders identically. |
 
 ```bash
 # Warm the route so the clip opens on a compiled app, not a cold build. Never fails the run —
@@ -422,7 +443,11 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
-Nothing measures the finished webm — there is no dimension gate, by design (`docs/adr/0007` rules out a post-processing pass). Fidelity is held at authoring time instead: `PW_PROVE_W`/`PW_PROVE_H` must carry the Step-4 effective viewport, and a `pinned:` verdict must have produced a `test.use({ viewport })` line in the committed spec. If the clip comes back letterboxed, the pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config. A non-2xx warm (or a `warm-failed:` line) is reported as `Proof page: <url> — warm miss, clips are boot-heavy`. A browserless fallback to `curl` is reported the same way, for the same reason: the document is warm but the client module graph is not, so the boot still lands in the recording.
+**No *gate* measures the finished webm — the agent looks instead** (*Clip inspection* below). There is no dimension gate and no legibility heuristic by design: `docs/adr/0007` rules out a post-processing pass, and `docs/adr/0015` rejected a frame-difference gate because its failure mode is dropping a good proof, and a gate that trips aborts the whole recording. One frame is extracted and read; its verdict informs the agent rather than vetoing the artifact. That is 0015's narrowing of 0007, not a contradiction of it.
+
+Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` carry the Step-4 effective viewport, and a `pinned:` verdict has already produced a `test.use({ viewport })` line in the committed spec. A letterboxed clip means that pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config.
+
+A non-2xx warm, a `warm-failed:` line, or a browserless fallback to `curl` is all reported the same way — `Proof page: <url> — warm miss, clips are boot-heavy`. The reason is one reason: `curl` warms the document but not the client module graph, so the boot still lands in the recording.
 
 ### Failure handling (max 3 auto-fix attempts)
 
@@ -444,6 +469,41 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 After 3 failed attempts: **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces). Do not attempt a 4th fix.
 
 A **flaky verdict** (passed only on retry) is not clean — diagnose once. If the nondeterminism is app-inherent (the app races its own state), remove the scenario on this evidence and report its AC as `unproven — gated: nondeterministic (<cause>)`.
+
+### Clip inspection — look at the frame before anyone else does
+
+The run that motivated this shipped a correctly sized, warm, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So before the hermetic audit, extract one frame per clip at the moment of the hold and **read it** (`docs/adr/0015`):
+
+```bash
+# One frame per clip, at duration − 0.5s — inside the payoff hold. Duration is probed with the
+# decode fallback: a live-recorded webm often declares none in its container. Frames land beside
+# their clip under test-results/, so Step 8's sweep removes them and no image reaches the repo.
+node <skill-base>/scripts/clip-fidelity.mjs frames test-results/*/video.webm
+```
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| `0` | A frame per clip | **Read every frame** (image tool) and give each one a line in the report — `Clip 1 — the saved banner reads "Saved", centred, page settled`. |
+| `6` | `ffmpeg`/`ffprobe` absent | **Carry on** — this never fails the run. Every clip is reported `uninspected — no video tooling`. |
+| `7` | A clip yielded no frame | Carry on. The named clips are `uninspected`; the rest get their line. |
+
+A clip you did not look at is reported as **uninspected**, which is the honest verdict — an unread clip is not a good one.
+
+**An illegible frame is diagnosed, then fixed, then re-filmed — in that order.** A re-film with no preceding fix is deterministic and reproduces the same frame, so the diagnosis is the only thing that makes the retry worth having:
+
+| What the frame shows | Diagnosis | The fix |
+|---|---|---|
+| Mid-transition, a spinner, the state not yet reached | **payoff not held** | The dwell is in the wrong place. Move it after that beat's own assertion — outside the race window, still `PW_PROVE_CLIP`-gated, still `// JUSTIFIED:`. |
+| The subject at the edge, cropped, or absent | **element off-frame** | The ungated `scrollIntoView({ block: 'center', inline: 'center' })` is missing, or it runs *before* a re-render that pushes the subject away — centre **at** the moment of the hold. |
+| A skeleton, a blank page, a loader | **still booting** | The warm lead missed. Re-warm the route (`probe.mjs warm`, `curl` fallback) and confirm a 2xx before filming again. |
+
+The fix goes into the **committed spec** or the warm lead — never into the proof config, and never into a filming-only branch (the filming law: `PW_PROVE_CLIP` may only add time).
+
+1. Apply the matching fix.
+2. **Re-run the Step-6 clip-fidelity audit on the edited spec** (`clip-fidelity.mjs spec … --config … --verdict …`) — exit 0 before filming, exactly as the first time. An edit that moved the dwell can have dropped its marker.
+3. **Re-film once** — the same proof-run command, `rm -rf test-results` first — and re-extract the frames.
+
+**Exactly one re-film.** A second illegible frame **publishes anyway**, with an explicit warning: `Clip N — illegible (<diagnosis>), published with warning`, in both the completion report and the PR comment. A bad clip is not a failed test; the proof is the passing test plus the mutation verdict.
 
 ### Hermetic audit (after the passing run)
 
@@ -593,6 +653,7 @@ Dev server: stopped (port <N>) | left running (pre-existing)
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed · hermetic (carve-outs: none | <declared list>)
 Mutation: RED (spec guards the change) | unguardable at <layer>
+Clips: N inspected — <clip 1: what its frame shows> · <clip 2: …>   # or `illegible (<diagnosis>), published with warning` / `uninspected — no video tooling`
 Proof page: https://clips.paulsjob.ai/share/<id> (N chapters)
 - <AC1> -> https://clips.paulsjob.ai/embed/<id>?t=<seconds>
 - <AC2> -> https://clips.paulsjob.ai/embed/<id>?t=<seconds>
@@ -606,6 +667,7 @@ PR comment: <url>
 - `Proof page:` is either ONE share URL followed by its per-AC timestamp links, or `skipped — <the gate, the transport failure, or the unmet prerequisite>` **with the failing probe's or the publish log's output pasted directly beneath** (never from memory). A skip line with no output is a silent drop. N bare clip URLs and no recording is the pre-`0009` shape and is not a valid report.
 - A skip caused by **undelivered** transport (exit 0 with a kept file) carries a `Kept locally: <path>` line beneath it and says the file was attached by hand; a skip caused by a **gate** never names a local file, because none is offered.
 - `Mutation:` is `RED` or `unguardable at <layer>` — never absent in PR-mode.
+- `Clips:` states what each extracted frame SHOWED, in your own words — that is the whole point of looking. A clip that was re-filmed says so; a clip still illegible after the one re-film says `illegible (<diagnosis>), published with warning`; a clip nothing could extract says `uninspected`. Never write a description of a frame you did not open.
 - `Committed / Pushed / PR comment` have **no skip form**: if the tail cannot complete (push rejected, `gh` unauthenticated), report the blocking error and the exact failing command output *instead of* a Complete report.
 
 In coverage-gap mode (and target mode without a requested clip) the report is the first block (`Generated` through `Mutation`), plus `Proof page` only if a page was requested or produced.
@@ -620,6 +682,7 @@ All paths are in this directory.
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
 - Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` round-trips the publish credential and probes ffmpeg/Chrome): `scripts/preflight.mjs`
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2) **and the Step-7 warm lead** (`probe.mjs warm <url>` — one-shot unfilmed browser load): `scripts/probe.mjs`
+- Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`
