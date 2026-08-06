@@ -1236,9 +1236,9 @@
     },
     {
       "name": "matt",
-      "version": "1.2.0",
+      "version": "1.2.2",
       "source": "./plugins/mattpocock-skills",
-      "description": "Matt Pocock's agent skills for real engineering — grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 22 skills upstream's plugin.json declares.",
+      "description": "Matt Pocock's agent skills for real engineering — grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 25 skills upstream's plugin.json declares.",
       "author": {
         "name": "Matt Pocock",
         "url": "https://www.aihero.dev"

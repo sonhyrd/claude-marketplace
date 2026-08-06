@@ -1,7 +1,7 @@
 {
   "name": "matt",
-  "version": "1.2.0+codex.287dd7f7e4a8",
-  "description": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 22 skills upstream's plugin.json declares.",
+  "version": "1.2.2+codex.53e367c91a78",
+  "description": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 25 skills upstream's plugin.json declares.",
   "author": {
     "name": "Matt Pocock"
   },
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "Matt",
     "shortDescription": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git...",
-    "longDescription": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 22 skills upstream's plugin.json declares.",
+    "longDescription": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 25 skills upstream's plugin.json declares.",
     "developerName": "Matt Pocock",
     "category": "Productivity",
     "capabilities": [

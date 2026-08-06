@@ -1,24 +1,27 @@
 {
   "name": "sss",
-  "version": "1.4.0+codex.ad38ca059779",
-  "description": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the matt plugin and an Orca install.",
+  "version": "1.4.0+codex.df302b62f71e",
+  "description": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a config schema with devDefault, a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable \u2014 ports owned by portless, a refusing preflight, and a Liveness Proof. autoship, delegate-tickets and setup-cursor-worker drive autonomous implementation via Orca workers.",
   "author": {
     "name": "sonhyrd"
   },
   "license": "MIT",
   "keywords": [
-    "jira",
-    "tickets",
     "acceptance-criteria",
-    "release",
-    "personal",
+    "autonomous",
+    "config",
+    "env",
+    "jira",
     "orca",
-    "autonomous"
+    "personal",
+    "portless",
+    "release",
+    "tickets"
   ],
   "interface": {
     "displayName": "Sss",
-    "shortDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going...",
-    "longDescription": "Personal skill bundle. jira-ticket: write and create Story / Task / Bug / Sub-task tickets in the hyrd Jira, project MAMAS. release-readiness: read-only report on what is going into the next release \u2014 commits since the last release, the tickets they bundle, statuses, blockers, and a suggested next version. autoship, delegate-tickets and setup-cursor-worker drive autonomous and parallel implementation via Orca workers; they require the matt plugin and an Orca install.",
+    "shortDescription": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's...",
+    "longDescription": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a config schema with devDefault, a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable \u2014 ports owned by portless, a refusing preflight, and a Liveness Proof. autoship, delegate-tickets and setup-cursor-worker drive autonomous implementation via Orca workers.",
     "developerName": "sonhyrd",
     "category": "Productivity",
     "capabilities": [
