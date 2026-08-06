@@ -14,21 +14,6 @@ cd "$REPO_ROOT" || {
   exit 1
 }
 
-# Private-fork policy: manifests removed (commit 6c9d4ac) — manifest mutation cases skip.
-MANIFESTS=1
-[ -f .claude-plugin/plugin.json ] || MANIFESTS=0
-
-if [ "$MANIFESTS" = "1" ]; then
-  PLUGIN_VERSION=$(python3 - <<'PY'
-import json
-import pathlib
-
-print(json.loads(pathlib.Path('.claude-plugin/plugin.json').read_text(encoding='utf-8'))['version'])
-PY
-)
-else
-  PLUGIN_VERSION=""
-fi
 PASS=0
 FAIL=0
 BACKUPS=()
@@ -145,17 +130,6 @@ mutate "$file" "| 1 | Name-Assertion | P0 | LLM | Noun in name with no matching 
 assert_fails "Check 3c — QR row count drift" "expected 24 rows"
 restore "$file"
 
-# Case 6: out-of-order plugin.json description (Check 5)
-if [ "$MANIFESTS" = "1" ]; then
-  file=".claude-plugin/plugin.json"
-  backup "$file"
-  mutate "$file" "name-assertion mismatch, missing Then" "missing Then, name-assertion mismatch"
-  assert_fails "Check 5 — plugin.json out-of-order pattern phrase" "missing or out-of-order pattern"
-  restore "$file"
-else
-  echo "  [SKIP] Check 5 — plugin.json out-of-order pattern phrase (manifests absent)"
-fi
-
 # Case 7: docs orphan — strip README reference so a docs file is no longer linked
 file="README.md"
 backup "$file"
@@ -164,59 +138,12 @@ mutate "$file" "](docs/roadmap.md)" ""
 assert_fails "Check 7 — docs orphan detection" "docs/roadmap.md: orphan"
 restore "$file"
 
-# Case 8: manifest version drift — bump .codex-plugin/plugin.json out of sync with the others
-if [ "$MANIFESTS" = "1" ]; then
-  file=".codex-plugin/plugin.json"
-  backup "$file"
-  mutate "$file" "\"version\": \"$PLUGIN_VERSION\"" "\"version\": \"9.9.9\""
-  assert_fails "Check 6 — manifest version drift" "manifest version mismatch"
-  restore "$file"
-else
-  echo "  [SKIP] Check 6 — manifest version drift (manifests absent)"
-fi
-
-# Case 9: codex-plugin description out of order — same parity contract as plugin.json
-if [ "$MANIFESTS" = "1" ]; then
-  file=".codex-plugin/plugin.json"
-  backup "$file"
-  mutate "$file" "name-assertion mismatch, missing Then" "missing Then, name-assertion mismatch"
-  assert_fails "Check 5 — codex-plugin out-of-order pattern phrase" "missing or out-of-order pattern"
-  restore "$file"
-else
-  echo "  [SKIP] Check 5 — codex-plugin out-of-order pattern phrase (manifests absent)"
-fi
-
-# Case 10: Codex plugin interface prompt limit — Codex displays at most 3 prompts
-if [ "$MANIFESTS" = "1" ]; then
-  file=".codex-plugin/plugin.json"
-  backup "$file"
-  mutate "$file" "\"Diagnose failed Playwright/Cypress tests with root-cause classification.\"" "\"Diagnose failed Playwright/Cypress tests with root-cause classification.\", \"Extra prompt that should fail\""
-  assert_fails "Codex plugin guard — too many default prompts" "interface.defaultPrompt must contain 1-3 prompts"
-  restore "$file"
-else
-  echo "  [SKIP] Codex plugin guard — too many default prompts (manifests absent)"
-fi
-
 # Case 11: SKILL.md frontmatter description unquoted with colon-space — YAML parse regression of v0.7.3
 file="skills/e2e-reviewer/SKILL.md"
 backup "$file"
 mutate "$file" "description: 'Static review" "description: Static review"
 assert_fails "Frontmatter YAML guard — unquoted description with ': '" "colon-space"
 restore "$file"
-
-# Case 12: SKILL.md metadata.version drift vs plugin manifest version — guards against
-# the v1.3.1 hole where one of four SKILL.md files got left behind during a lock-step bump.
-# (Uses e2e-reviewer: playwright-test-generator opted out of frontmatter metadata, so it
-# carries no version line to mutate — absence is a sanctioned opt-out, presence must match.)
-if [ "$MANIFESTS" = "1" ]; then
-  file="skills/e2e-reviewer/SKILL.md"
-  backup "$file"
-  mutate "$file" "version: \"$PLUGIN_VERSION\"" "version: \"9.9.9\""
-  assert_fails "SKILL.md version drift vs manifest" "does not match plugin version"
-  restore "$file"
-else
-  echo "  [SKIP] SKILL.md version drift vs manifest (manifests absent)"
-fi
 
 # Case 13: SKILL.md description length — skills hosts reject descriptions over 1024 characters
 file="skills/e2e-reviewer/SKILL.md"
