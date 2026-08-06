@@ -34,6 +34,7 @@ COMMIT="${E2E_SUBTREE_COMMIT:-HEAD}"
 FORK_URL="git@github.com:sonhyrd/e2e-skills.git"
 
 DO_FETCH=1
+EXPLAIN=0
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -42,26 +43,28 @@ NC='\033[0m'
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--no-fetch]
+Usage: $(basename "$0") [--no-fetch] [--explain]
 
 Assert that ${PREFIX} diverges from ${REMOTE}/${REF} by exactly the
 marketplace-only decisions listed in this script, and by nothing else.
 
   --no-fetch   Use the already-fetched ${REMOTE}/${REF} instead of fetching.
+  --explain    Print the expected divergence set and exit, without checking.
 EOF
 }
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --no-fetch) DO_FETCH=0 ;;
+        --explain) EXPLAIN=1 ;;
         -h|--help) usage; exit 0 ;;
-        *) printf "${RED}error:${NC} unknown argument: %s\n" "$1" >&2; usage >&2; exit 2 ;;
+        *) echo -e "${RED}error:${NC} unknown argument: $1" >&2; usage >&2; exit 2 ;;
     esac
     shift
 done
 
 setup_error() {
-    printf "${RED}✗ setup error:${NC} %s\n" "$1" >&2
+    echo -e "${RED}✗ setup error:${NC} $1" >&2
     exit 2
 }
 
@@ -72,19 +75,32 @@ setup_error() {
 # "exists only in the marketplace".
 #
 # This list, and the one-added-line assertion below it, are the whole contract.
-EXPECTED=(
-    # The fork ships no plugin manifests at all; both exist only here.
-    $'A\t.claude-plugin/plugin.json'
-    $'A\t.codex-plugin/plugin.json'
-    # Renaming the entry file is what disables the skill -- the `skills` array
-    # in plugin.json does not gate discovery. It was shadowing /e2e:pw-prove.
-    $'R\tskills/playwright-test-generator/SKILL.md\tskills/playwright-test-generator/SKILL.md.disabled'
-    # Exactly one added line: `disable-model-invocation: true`, the only
-    # mechanism that pins a plugin skill to user-invocable-only.
-    $'M\tskills/pw-prove/SKILL.md'
+# Each element is "<name-status line>|<why it is expected>". The two halves live
+# together so a new divergence cannot be added without a stated reason, and so
+# `--explain` and the comparison read from one list rather than two.
+EXPECTED_WITH_REASON=(
+    $'A\t.claude-plugin/plugin.json|The fork ships no plugin manifests at all; this exists only here.'
+    $'A\t.codex-plugin/plugin.json|Same -- generated Codex manifest, marketplace-only.'
+    $'R\tskills/playwright-test-generator/SKILL.md\tskills/playwright-test-generator/SKILL.md.disabled|Renaming the entry file is what disables the skill: the `skills` array in plugin.json does not gate discovery. It was shadowing /e2e:pw-prove.'
+    $'M\tskills/pw-prove/SKILL.md|Exactly one added line, `disable-model-invocation: true` -- the only mechanism that pins a plugin skill to user-invocable-only.'
 )
+
+EXPECTED=()
+for entry in "${EXPECTED_WITH_REASON[@]}"; do
+    EXPECTED+=("${entry%%|*}")
+done
+
 PIN_FILE="skills/pw-prove/SKILL.md"
 PIN_LINE="disable-model-invocation: true"
+
+if [ "$EXPLAIN" -eq 1 ]; then
+    echo -e "${YELLOW}${PREFIX} is expected to differ from the fork by exactly these ${#EXPECTED_WITH_REASON[@]} entries:${NC}\n"
+    for entry in "${EXPECTED_WITH_REASON[@]}"; do
+        printf "  %s\n      %s\n\n" "${entry%%|*}" "${entry#*|}"
+    done
+    printf "Run without --explain to assert it.\n"
+    exit 0
+fi
 
 # --- Preconditions ------------------------------------------------------------
 
@@ -95,7 +111,7 @@ if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
 fi
 
 if [ "$DO_FETCH" -eq 1 ]; then
-    printf "${YELLOW}Fetching %s...${NC}\n" "$REMOTE"
+    echo -e "${YELLOW}Fetching ${REMOTE}...${NC}"
     git fetch --quiet "$REMOTE" "$REF" \
         || setup_error "could not fetch ${REMOTE}/${REF}"
 fi
@@ -110,20 +126,27 @@ git rev-parse --verify --quiet "${COMMIT}:${PREFIX}" >/dev/null \
 # --- The comparison -----------------------------------------------------------
 
 # Rename similarity scores (R099) vary with unrelated edits; the contract is
-# "it is a rename", not "it is 99% similar".
-ACTUAL="$(git diff --name-status --find-renames "$FORK_REF" "${COMMIT}:${PREFIX}" \
+# "it is a rename", not "it is 99% similar". `-l0` lifts diff.renameLimit: a big
+# incoming pull can otherwise exhaust the rename budget and degrade the rename
+# to an add+delete, which would read as drift.
+#
+# `git diff` failing here aborts the script under `set -e` with git's own exit
+# code rather than 0/1/2 -- that is a broken invocation, not a verdict.
+ACTUAL="$(git diff --name-status --find-renames -l0 "$FORK_REF" "${COMMIT}:${PREFIX}" \
     | sed -E 's/^R[0-9]+/R/; s/^C[0-9]+/C/' | LC_ALL=C sort)"
 
 EXPECTED_SORTED="$(printf '%s\n' "${EXPECTED[@]}" | LC_ALL=C sort)"
 
-APPEARED="$(comm -13 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL"))"
-VANISHED="$(comm -23 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL"))"
+# comm must collate the same way sort did, or it mis-pairs lines it considers
+# out of order. GNU comm is locale-sensitive here even though BSD comm is not.
+APPEARED="$(LC_ALL=C comm -13 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL"))"
+VANISHED="$(LC_ALL=C comm -23 <(printf '%s\n' "$EXPECTED_SORTED") <(printf '%s\n' "$ACTUAL"))"
 
 STATUS=0
 
 if [ -n "$VANISHED" ]; then
     STATUS=1
-    printf "${RED}✗ a marketplace-only decision was reverted${NC}\n"
+    echo -e "${RED}✗ a marketplace-only decision was reverted${NC}"
     printf "  These entries are expected but no longer present. Each one is a\n"
     printf "  decision this repo made that the prefix no longer carries:\n\n"
     printf '%s\n' "$VANISHED" | sed 's/^/      - /'
@@ -132,7 +155,7 @@ fi
 
 if [ -n "$APPEARED" ]; then
     STATUS=1
-    printf "${RED}✗ unexpected divergence${NC}\n"
+    echo -e "${RED}✗ unexpected divergence${NC}"
     printf "  These entries differ from the fork but are not in the expected set.\n"
     printf "  Either push them back to the fork, or add them to EXPECTED in\n"
     printf "  %s with a reason:\n\n" "$(basename "$0")"
@@ -148,7 +171,7 @@ if grep -qx "M	${PIN_FILE}" <<<"$ACTUAL"; then
         | sed -n 's/^+\([^+].*\)$/\1/p')"
     if [ "$NUMSTAT" != "$(printf '1\t0')" ] || [ "$ADDED_LINE" != "$PIN_LINE" ]; then
         STATUS=1
-        printf "${RED}✗ %s is not exactly one added line${NC}\n" "$PIN_FILE"
+        echo -e "${RED}✗ ${PIN_FILE} is not exactly one added line${NC}"
         printf "  Expected one added line and no deletions:\n\n"
         printf "      %s\n\n" "$PIN_LINE"
         printf "  Got %s added/deleted. Anything else means the pull overwrote\n" "${NUMSTAT//$'\t'/ added, }"
@@ -157,8 +180,7 @@ if grep -qx "M	${PIN_FILE}" <<<"$ACTUAL"; then
 fi
 
 if [ "$STATUS" -eq 0 ]; then
-    printf "${GREEN}✓${NC} %s diverges from %s by exactly the expected %d entries\n" \
-        "$PREFIX" "$FORK_REF" "${#EXPECTED[@]}"
+    echo -e "${GREEN}✓${NC} ${PREFIX} diverges from ${FORK_REF} by exactly the expected ${#EXPECTED[@]} entries"
 fi
 
 exit "$STATUS"

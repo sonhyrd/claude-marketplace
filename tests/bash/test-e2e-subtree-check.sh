@@ -40,12 +40,12 @@ trap cleanup EXIT
 
 ok() {
     PASS=$((PASS + 1))
-    printf "  ${GREEN}✓${NC} %s\n" "$1"
+    echo -e "  ${GREEN}✓${NC} $1"
 }
 
 nope() {
     FAIL=$((FAIL + 1))
-    printf "  ${RED}✗${NC} %s\n" "$1"
+    echo -e "  ${RED}✗${NC} $1"
     if [ -n "${2:-}" ]; then
         printf "      %s\n" "$2"
     fi
@@ -79,25 +79,42 @@ run_check() {
     E2E_SUBTREE_COMMIT="$commit" "$CHECK" --no-fetch "$@" 2>&1
 }
 
+# Assert that a mutation is reported as drift (exit 1) and that the report names
+# the decision that was undone -- a check that only says "drift" does not tell an
+# operator which one.
+# $1 = mutation snippet, $2 = pattern the output must contain, $3 = label.
+expect_drift() {
+    local snippet="$1" pattern="$2" label="$3"
+    local sha out rc
+
+    sha="$(mutate_and_commit "$snippet")"
+    out="$(run_check "$sha")" && rc=0 || rc=$?
+    if [ "$rc" -eq 1 ] && grep -qi -- "$pattern" <<<"$out"; then
+        ok "$label"
+    else
+        nope "$label" "rc=$rc: $out"
+    fi
+}
+
 echo ""
-printf "${YELLOW}Running check-e2e-subtree.sh tests...${NC}\n"
+echo -e "${YELLOW}Running check-e2e-subtree.sh tests...${NC}"
 echo ""
 
 # --- Preconditions ------------------------------------------------------------
 
 if [ ! -x "$CHECK" ]; then
-    printf "${RED}FATAL:${NC} %s is missing or not executable\n" "$CHECK"
+    echo -e "${RED}FATAL:${NC} $CHECK is missing or not executable"
     exit 1
 fi
 
 if ! git -C "$REPO_ROOT" rev-parse --verify --quiet e2e-fork/main >/dev/null; then
-    printf "${RED}FATAL:${NC} e2e-fork/main is not fetched; run 'git fetch e2e-fork' first\n"
+    echo -e "${RED}FATAL:${NC} e2e-fork/main is not fetched; run 'git fetch e2e-fork' first"
     exit 1
 fi
 
 # --- The pass case ------------------------------------------------------------
 
-printf "${YELLOW}The correct sync passes${NC}\n"
+echo -e "${YELLOW}The correct sync passes${NC}"
 
 if out="$(run_check HEAD)"; then
     ok "a correctly synced prefix exits 0"
@@ -107,57 +124,45 @@ fi
 
 # --- Each divergence reverted individually ------------------------------------
 
-printf "${YELLOW}Each reverted decision is caught and named${NC}\n"
+echo -e "${YELLOW}Each reverted decision is caught and named${NC}"
 
 # 1. playwright-test-generator re-enabled: the rename undone.
-sha="$(mutate_and_commit "git mv '${PREFIX}/skills/playwright-test-generator/SKILL.md.disabled' '${PREFIX}/skills/playwright-test-generator/SKILL.md'")"
-out="$(run_check "$sha")" && rc=0 || rc=$?
-if [ "$rc" -eq 1 ] && grep -q "playwright-test-generator/SKILL.md.disabled" <<<"$out"; then
-    ok "re-enabling playwright-test-generator fails and names the rename"
-else
-    nope "re-enabling playwright-test-generator fails and names the rename" "rc=$rc: $out"
-fi
+expect_drift \
+    "git mv '${PREFIX}/skills/playwright-test-generator/SKILL.md.disabled' '${PREFIX}/skills/playwright-test-generator/SKILL.md'" \
+    "playwright-test-generator/SKILL.md.disabled" \
+    "re-enabling playwright-test-generator fails and names the rename"
 
-# 2. pw-prove un-pinned: the disable-model-invocation line removed.
-sha="$(mutate_and_commit "grep -v '^disable-model-invocation: true$' '${PREFIX}/skills/pw-prove/SKILL.md' > /tmp/pwprove.\$\$ && mv /tmp/pwprove.\$\$ '${PREFIX}/skills/pw-prove/SKILL.md'")"
-out="$(run_check "$sha")" && rc=0 || rc=$?
-if [ "$rc" -eq 1 ] && grep -q "skills/pw-prove/SKILL.md" <<<"$out"; then
-    ok "un-pinning pw-prove fails and names the SKILL.md"
-else
-    nope "un-pinning pw-prove fails and names the SKILL.md" "rc=$rc: $out"
-fi
+# 2. pw-prove un-pinned: the disable-model-invocation line removed. The command
+#    substitution reads the whole file before the redirect truncates it, so this
+#    needs no temp file inside the worktree (where `git add -A` would sweep one
+#    up into the mutation commit).
+expect_drift \
+    "pin_stripped=\"\$(grep -v '^disable-model-invocation: true\$' '${PREFIX}/skills/pw-prove/SKILL.md')\"; printf '%s\n' \"\$pin_stripped\" > '${PREFIX}/skills/pw-prove/SKILL.md'" \
+    "skills/pw-prove/SKILL.md" \
+    "un-pinning pw-prove fails and names the SKILL.md"
 
 # 3. The Claude plugin manifest deleted.
-sha="$(mutate_and_commit "rm '${PREFIX}/.claude-plugin/plugin.json'")"
-out="$(run_check "$sha")" && rc=0 || rc=$?
-if [ "$rc" -eq 1 ] && grep -q "\.claude-plugin/plugin\.json" <<<"$out"; then
-    ok "deleting .claude-plugin/plugin.json fails and names it"
-else
-    nope "deleting .claude-plugin/plugin.json fails and names it" "rc=$rc: $out"
-fi
+expect_drift \
+    "rm '${PREFIX}/.claude-plugin/plugin.json'" \
+    "\.claude-plugin/plugin\.json" \
+    "deleting .claude-plugin/plugin.json fails and names it"
 
 # 4. The Codex plugin manifest deleted.
-sha="$(mutate_and_commit "rm '${PREFIX}/.codex-plugin/plugin.json'")"
-out="$(run_check "$sha")" && rc=0 || rc=$?
-if [ "$rc" -eq 1 ] && grep -q "\.codex-plugin/plugin\.json" <<<"$out"; then
-    ok "deleting .codex-plugin/plugin.json fails and names it"
-else
-    nope "deleting .codex-plugin/plugin.json fails and names it" "rc=$rc: $out"
-fi
+expect_drift \
+    "rm '${PREFIX}/.codex-plugin/plugin.json'" \
+    "\.codex-plugin/plugin\.json" \
+    "deleting .codex-plugin/plugin.json fails and names it"
 
 # 5. pw-prove pinned but otherwise overwritten: the entry set still matches, so
 #    only the one-added-line assertion can catch this.
-sha="$(mutate_and_commit "printf '\n<!-- overwritten -->\n' >> '${PREFIX}/skills/pw-prove/SKILL.md'")"
-out="$(run_check "$sha")" && rc=0 || rc=$?
-if [ "$rc" -eq 1 ] && grep -qi "one added line" <<<"$out"; then
-    ok "a pw-prove edit beyond the pin fails the one-added-line assertion"
-else
-    nope "a pw-prove edit beyond the pin fails the one-added-line assertion" "rc=$rc: $out"
-fi
+expect_drift \
+    "printf '\n<!-- overwritten -->\n' >> '${PREFIX}/skills/pw-prove/SKILL.md'" \
+    "one added line" \
+    "a pw-prove edit beyond the pin fails the one-added-line assertion"
 
 # --- Ordinary incoming work must not trip the guard ---------------------------
 
-printf "${YELLOW}Ordinary incoming work does not trip the guard${NC}\n"
+echo -e "${YELLOW}Ordinary incoming work does not trip the guard${NC}"
 
 # The case that matters: the fork lands a change, the pull brings it in, and
 # both sides now carry it. The guard must stay quiet, or it fires on every
@@ -184,13 +189,10 @@ fi
 
 # The same file changed on the marketplace side only -- i.e. work authored here
 # and never pushed back -- is drift, and must be named.
-sha="$(mutate_and_commit "printf '\n<!-- authored here, never pushed -->\n' >> '${PREFIX}/README.md'")"
-out="$(run_check "$sha")" && rc=0 || rc=$?
-if [ "$rc" -eq 1 ] && grep -q "README.md" <<<"$out"; then
-    ok "a prefix-only edit to a fork-owned file is reported as drift"
-else
-    nope "a prefix-only edit to a fork-owned file is reported as drift" "rc=$rc: $out"
-fi
+expect_drift \
+    "printf '\n<!-- authored here, never pushed -->\n' >> '${PREFIX}/README.md'" \
+    "README.md" \
+    "a prefix-only edit to a fork-owned file is reported as drift"
 
 # A change outside the prefix is invisible to the check.
 sha="$(mutate_and_commit "printf '\n<!-- unrelated -->\n' >> README.md")"
@@ -200,9 +202,31 @@ else
     nope "a change outside the prefix does not fail the check" "$out"
 fi
 
+# --- The prose cannot quietly disagree with the script ------------------------
+
+echo -e "${YELLOW}CLAUDE.md matches the script's expected set${NC}"
+
+# CLAUDE.md records the residual set for a human, and the script asserts it.
+# Two statements of one contract is the disease this whole check exists to
+# cure, so the duplication is only tolerable if drift between them fails here.
+# `--explain` is the script's own rendering of the set, so this compares against
+# the single owner rather than against a second hardcoded list.
+explained="$("$CHECK" --explain)"
+missing=""
+while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    grep -qF -- "$path" "${REPO_ROOT}/CLAUDE.md" || missing="${missing} ${path}"
+done <<<"$(grep -oE '(\.[a-z-]+-plugin/plugin\.json|skills/[A-Za-z0-9./-]+)' <<<"$explained" | sort -u)"
+
+if [ -z "$missing" ]; then
+    ok "every path in the expected set is named in CLAUDE.md"
+else
+    nope "every path in the expected set is named in CLAUDE.md" "not mentioned:${missing}"
+fi
+
 # --- Setup errors are distinct from drift -------------------------------------
 
-printf "${YELLOW}A missing fork remote is a setup error, not drift${NC}\n"
+echo -e "${YELLOW}A missing fork remote is a setup error, not drift${NC}"
 
 out="$(E2E_SUBTREE_REMOTE=definitely-not-a-remote "$CHECK" --no-fetch 2>&1)" && rc=0 || rc=$?
 if [ "$rc" -eq 2 ] && grep -q "definitely-not-a-remote" <<<"$out" && grep -q "git remote add" <<<"$out"; then
@@ -214,7 +238,7 @@ fi
 # --- Summary ------------------------------------------------------------------
 
 echo ""
-printf "${YELLOW}Results:${NC} ${GREEN}%d passed${NC}, ${RED}%d failed${NC}\n" "$PASS" "$FAIL"
+echo -e "${YELLOW}Results:${NC} ${GREEN}${PASS} passed${NC}, ${RED}${FAIL} failed${NC}"
 echo ""
 
 [ "$FAIL" -eq 0 ]
