@@ -72,7 +72,19 @@ cold compile, ending on the success signal **held** on screen, and holding it in
 `PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell — never by a second run, a measurement
 gate, or editing the recording. Authoring-time compliance is *checked*, not assumed: `clip-fidelity
 spec` blocks Step 7 on a spec that carries neither. A clip that fails the contract is a defect, not
-a trade-off. See `docs/adr/0007` and `docs/adr/0015`.
+a trade-off. What the contract cannot check from the source is caught by the
+[clip inspection](#clip-inspection) instead. See `docs/adr/0007` and `docs/adr/0015`.
+
+## Clip inspection
+The Step-7 beat where the AGENT looks at the [proof clip](#proof-clip) before anyone publishes it:
+`clip-fidelity frames` extracts one frame per clip at `duration − 0.5s` (inside the payoff hold) and
+the agent states in the report what each one shows. **Not a gate, and the distinction is the
+design** — it informs the agent, it never vetoes the artifact, so absent video tooling skips and an
+illegible frame that survives one diagnosed fix and one re-film publishes with a warning. The
+counterpart it is defined against is a legibility gate in the publish path, which was rejected
+because its failure mode is dropping a good proof and a gate that trips aborts the whole recording.
+An illegible frame is *diagnosed* — payoff not held, [element off-frame](#framing), still booting —
+before anything is re-filmed: a re-film with no preceding fix is deterministic. See `docs/adr/0015`.
 
 ## Framing
 The fourth property of the [clip fidelity contract](#clip-fidelity-contract): the element under

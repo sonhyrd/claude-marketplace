@@ -11,6 +11,10 @@
 //                        where the config states it as a literal `viewport:` key, which is the one
 //                        case where the derived side knows it.
 //
+//   node clip-fidelity.mjs frames <clip.webm...>
+//     The Step-7 half of the same ADR, and deliberately NOT a gate: one frame per clip at
+//     `duration − 0.5s` for the AGENT to look at. See the `frames` section near the bottom.
+//
 // This exists because both halves of the contract were invisible by construction. A real PR-mode run
 // passed `PW_PROVE_CLIP=1` at Step 7 while the generated spec contained no reader for the variable:
 // the flag was inert, the dwell never happened, and every gate the pipeline owns stayed green over a
@@ -49,30 +53,38 @@
 // exit 5 — neither a pass nor a failure. A guess here would either pin over a deliberate viewport or
 // skip a pin the clip needs, and both failures are silent.
 //
-// Exit codes are the contract Step 6 branches on; they are stable:
-//   0  contract satisfied
+// Exit codes are the contract the SKILL branches on; they are stable, and they are disjoint across
+// the two subcommands so a caller never has to ask which one it ran:
+//   0  contract satisfied / a frame per clip
 //   1  usage error
-//   2  payoff dwell missing (or present without its `// JUSTIFIED:` line)
-//   3  viewport pin missing on a `pinned:` verdict
-//   4  derived verdict disagrees with the declared one
-//   5  config ambiguity — refused rather than guessed
+//   2  payoff dwell missing (or present without its `// JUSTIFIED:` line)      } spec — a GATE:
+//   3  viewport pin missing on a `pinned:` verdict                             } non-zero blocks
+//   4  derived verdict disagrees with the declared one                         } Step 7
+//   5  config ambiguity — refused rather than guessed                          }
+//   6  frames: video tooling absent — skipped, stated, NEVER fails the run     } frames — an
+//   7  frames: a clip yielded no frame — stated, NEVER fails the run           } INSPECTION
 //
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention: nothing is installed into
 // a user's project and the config is never executed.
 import fs from 'node:fs';
+import path from 'node:path';
 import { pwproveRun } from './pwprove-run.mjs';
+import { probeVideo, run, videoTooling } from './video.mjs';
 
-// Run ledger — registered before validation, so even a usage-error exit leaves a record.
-pwproveRun(import.meta.url, 'audit');
+// Run ledger — registered before validation, so even a usage-error exit leaves a record. The phase
+// follows the subcommand: `spec` is the Step-6 audit, `frames` is the Step-7 inspection, and a
+// ledger that called both 'audit' would erase the distinction the whole design rests on.
+pwproveRun(import.meta.url, process.argv[2] === 'frames' ? 'inspect' : 'audit');
 
 const out = (s) => process.stdout.write(s);
 const err = (s) => process.stderr.write(s);
 
-const EXIT = { OK: 0, USAGE: 1, DWELL: 2, PIN: 3, DISAGREE: 4, AMBIGUOUS: 5 };
+const EXIT = { OK: 0, USAGE: 1, DWELL: 2, PIN: 3, DISAGREE: 4, AMBIGUOUS: 5, NO_TOOLING: 6, NO_FRAME: 7 };
 
 const USAGE =
   'clip-fidelity.mjs: usage: node clip-fidelity.mjs spec <spec-file...> --config <playwright.config> ' +
-  '--verdict <pinned:WxH|deliberate:WxH>\n';
+  '--verdict <pinned:WxH|deliberate:WxH>\n' +
+  '                          node clip-fidelity.mjs frames <clip.webm...>\n';
 
 const usage = (why) => {
   err(`clip-fidelity: ${why}\n${USAGE}`);
@@ -450,11 +462,137 @@ function viewportPins(masked, original) {
   return pins;
 }
 
+// ============================================================ frames — the Step-7 inspection
+// `spec` above is a GATE: it blocks Step 7. This is not one, and the difference is the whole design
+// (`docs/adr/0015`). It extracts one frame per clip at `duration − 0.5s` — inside the payoff hold —
+// and the AGENT looks at it. Nothing here judges legibility: the rejected alternative was a
+// frame-difference heuristic in the publish path, whose failure mode is dropping a good proof, and a
+// gate that trips aborts the whole recording. Inspection that informs the agent is strictly safer
+// than a gate that vetoes the artifact, so every outcome below leaves the run alive.
+//
+// Exit codes, disjoint from `spec`'s, and NEITHER of the non-zero ones fails the run:
+//   0  a frame per clip — look at each one
+//   6  video tooling absent — skipped with a stated line, matching the publish-skip precedent
+//   7  at least one clip yielded no frame — stated per clip; the others still produced theirs
+//
+// There is no `--offset` and no `--out`. Both would be knobs on the two things the design fixes:
+// WHERE in the clip the frame comes from (inside the hold — a configurable offset is a way to slide
+// the frame back toward the boot screen this exists to catch) and WHERE the image lands (beside its
+// clip, under test-results/, so Step 8 sweeps it and no image reaches the user's repository).
+const OFFSET_SECONDS = 0.5;
+
+function framesCommand(rest) {
+  const clips = [];
+  for (const a of rest) {
+    if (a.startsWith('-')) usage(`unknown flag '${a}'`);
+    clips.push(a);
+  }
+  if (clips.length === 0) usage("no clip file given — frames takes the run's test-results webms");
+
+  out(`--- clip-fidelity: frames --- ${clips.length} clip(s)\n`);
+
+  // The tooling is what publish already requires and preflight already probes as VIDEO_TOOLING.
+  // Absent, this SKIPS: a machine without ffmpeg can still prove a change, and a run that died over
+  // an un-inspectable clip would be the gate this deliberately is not.
+  const tooling = videoTooling();
+  if (!tooling.ok) {
+    out('frames: SKIPPED — no frame was extracted and nothing was inspected.\n');
+    err(
+      `clip-fidelity: frames SKIPPED — ${tooling.tool} is not runnable (${tooling.reason}).\n` +
+        '       Install ffmpeg to get the Step-7 frame back. THE RUN CONTINUES: this is an\n' +
+        '       inspection, not a gate, and a missing tool is not a failed test. Report the clip as\n' +
+        '       uninspected rather than as good. (exit 6)\n',
+    );
+    return EXIT.NO_TOOLING;
+  }
+
+  let missed = 0;
+  const written = [];
+  for (const [i, clip] of clips.entries()) {
+    const label = `clip ${i + 1}/${clips.length}`;
+    if (!fs.existsSync(clip)) {
+      out(`${label}: NO FRAME — '${clip}' does not exist\n`);
+      missed++;
+      continue;
+    }
+    const probed = probeVideo(clip, (why) => ({ unreadable: why }));
+    if (probed.unreadable || !(probed.seconds > 0)) {
+      out(
+        `${label}: NO FRAME — '${clip}' carries no readable video ` +
+          `(${probed.unreadable ?? `${probed.seconds.toFixed(3)}s`})\n`,
+      );
+      missed++;
+      continue;
+    }
+    // `duration − 0.5s` is inside the payoff hold, which is where the evidence is. The start of a
+    // Proof clip is the app booting, and a frame from there is the one failure mode this inspection
+    // exists to catch. A clip shorter than the offset gets its last instant instead of nothing.
+    const at = Math.max(0, probed.seconds - OFFSET_SECONDS);
+    // Frames land beside their clip — i.e. UNDER test-results/ — so Step 8's hygiene sweep removes
+    // them with the rest of the run's litter and no image is ever left in the user's repository to
+    // be committed by accident. The warning below covers the one case that escapes it: a clip that
+    // was not under test-results/ to begin with.
+    const base = path.basename(clip).replace(/\.[^.]+$/, '');
+    const target = path.join(path.dirname(clip), `${base}.frame.png`);
+    const grab = (args) => run('ffmpeg', ['-y', '-nostdin', '-loglevel', 'error', ...args]);
+    // Input seeking first (it jumps rather than decodes), then output seeking as the fallback: on a
+    // live-muxed webm with no cues, a seek past the last keyframe can yield no frame at all, and
+    // decoding forward always lands.
+    let r = grab(['-ss', String(at), '-i', clip, '-frames:v', '1', '-update', '1', target]);
+    let bytes = fs.existsSync(target) ? fs.statSync(target).size : 0;
+    if (r.status !== 0 || bytes === 0) {
+      r = grab(['-i', clip, '-ss', String(at), '-frames:v', '1', '-update', '1', target]);
+      bytes = fs.existsSync(target) ? fs.statSync(target).size : 0;
+    }
+    if (bytes === 0) {
+      out(`${label}: NO FRAME — ffmpeg wrote no image from '${clip}': ${(r.stderr ?? '').trim() || `exit ${r.status}`}\n`);
+      missed++;
+      continue;
+    }
+    out(
+      `${label}: ${target} — from ${at.toFixed(2)}s of ${probed.seconds.toFixed(2)}s ` +
+        `(duration ${probed.durationSource === 'decoded' ? 'by decode fallback — the container declared none' : 'from the container'})\n`,
+    );
+    if (!/(^|[\\/])test-results([\\/]|$)/.test(path.resolve(target).split(path.sep).join('/')))
+      out(
+        `           WARNING ${target} is not under test-results/ — Step 8's hygiene sweep will not ` +
+          'remove it, and an image left in the repository can be committed by accident\n',
+      );
+    written.push(target);
+  }
+
+  if (written.length) {
+    out(`verdict: ${written.length}/${clips.length} frame(s) extracted at duration − ${OFFSET_SECONDS}s — NOW LOOK AT EACH ONE.\n`);
+    out('         Read every frame and state in the report what it shows. An ILLEGIBLE frame is\n');
+    out('         diagnosed, never re-filmed blind — a re-film with no preceding fix is deterministic:\n');
+    out('           payoff not held  the frame is mid-transition or shows a spinner  -> the dwell sits\n');
+    out('                            in the wrong place; move it after the assertion covering the beat.\n');
+    out('           element off-frame the subject is at the edge or absent -> the ungated\n');
+    out("                            scrollIntoView({ block: 'center' }) is missing, or it runs before a\n");
+    out('                            re-render that pushes the subject away; centre AT the hold.\n');
+    out('           still booting    the frame is a skeleton, a blank page or a loader -> the warm lead\n');
+    out('                            missed; re-warm the route (probe.mjs warm) before filming again.\n');
+    out('         Apply the fix to the COMMITTED spec or the warm lead, re-run `clip-fidelity.mjs spec`\n');
+    out('         over the edited spec, then re-film ONCE. A second illegible frame PUBLISHES with an\n');
+    out('         explicit warning in the report: a bad clip is not a failed test.\n');
+  }
+  if (missed) {
+    err(
+      `clip-fidelity: ${missed} clip(s) yielded NO frame (named above). THE RUN CONTINUES — this is\n` +
+        '       an inspection, not a gate. Report those clips as uninspected rather than as good.\n' +
+        '       (exit 7)\n',
+    );
+    return EXIT.NO_FRAME;
+  }
+  return EXIT.OK;
+}
+
 // ============================================================ cli
 const argv = process.argv.slice(2);
 const SUB = argv[0];
-// The subcommand surface stays open: `frames` (issue #30) lands beside `spec` on this same script.
-if (SUB !== 'spec') usage(SUB === undefined ? 'no subcommand' : `unknown subcommand '${SUB}'`);
+if (SUB !== 'spec' && SUB !== 'frames')
+  usage(SUB === undefined ? 'no subcommand' : `unknown subcommand '${SUB}'`);
+if (SUB === 'frames') process.exit(framesCommand(argv.slice(1)));
 
 const specs = [];
 let CONFIG = null;
