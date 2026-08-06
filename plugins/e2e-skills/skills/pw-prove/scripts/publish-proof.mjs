@@ -19,21 +19,22 @@
 // an offset that is the cumulative MEASURED duration of the clips before it — probed, never assumed,
 // because a chapter marker computed from a guess points at the wrong footage.
 //
-// The pipeline is: probe each clip -> concatenate by STREAM COPY -> probe the result -> mint a
-// short-lived scoped token -> ONE POST carrying the video as a base64 data URL -> print the share
-// URL the destination returns. Stream copy re-encodes nothing, so the Clip fidelity contract
-// (docs/adr/0007) survives bit-for-bit and the cost is a byte copy rather than a transcode.
+// The pipeline is: probe each clip -> concatenate by STREAM COPY -> probe the result -> ONE
+// JSON-RPC call carrying the video as a base64 data URL -> print the share URL the destination
+// returns. Stream copy re-encodes nothing, so the Clip fidelity contract (docs/adr/0007) survives
+// bit-for-bit and the cost is a byte copy rather than a transcode.
 //
-// Configuration is five environment variables, all REQUIRED (see clips.mjs for why none is defaulted):
-//   CLIPS_ORIGIN      the Clips deployment, e.g. https://clips.paulsjob.ai — and equal to its APP_URL
-//   CLIPS_A2A_SECRET  the organization's signing secret. Minting is HMAC-SHA256 via node:crypto
-//                     alone, so no dependency lands in a user's repository.
-//   CLIPS_ORG_ID      the organization the import runs under (its `id`)
-//   CLIPS_ORG_DOMAIN  the organization's `allowed_domain` — a DIFFERENT value from the id, and the
-//                     one that selects which organization's secret the receiver tries
-//   CLIPS_SUBJECT     an email already a member of that organization; the import runs as that person
-// The token is minted PER PUBLISH with a five-minute life and a single import scope, so nothing
-// long-lived sits on disk and a captured bearer authorises only this one action.
+// Configuration is ONE environment variable (see clips.mjs):
+//   CLIPS_MCP_TOKEN   an opaque bearer minted by the Clips deployment. It carries its own
+//                     destination, subject and organization, so nothing else needs configuring.
+// Optional, for testing and self-hosted deployments only:
+//   PW_PROVE_CLIPS_ENDPOINT  the MCP endpoint, when the token's own `aud` should not be used.
+// This script is vault-ignorant: it reads the variable out of its environment and spawns nothing.
+//
+// DELIVERY FAILURES DO NOT ARRIVE AS A STATUS CODE. Only a refused credential is an honest HTTP
+// 401, and its body is not JSON-RPC at all. Everything after authentication — including a flat
+// refusal — arrives at HTTP 200 with the failure written in the body. `res.ok` is therefore no
+// evidence of anything, and clips.mjs classifies by parsing.
 //
 // FOUR gates run before anything leaves the machine, and a gate trip publishes NOTHING and names
 // itself. They also WITHHOLD the local file — a gate means the artifact is *wrong*, not merely
@@ -59,6 +60,12 @@
 // never fails over undelivered evidence. The concatenated video is kept at a stable path and that
 // path is printed on a PWPROVE_PROOF_FILE marker line, so the proof can be attached by hand.
 //
+// One refusal takes that path without a destination being asked. The import action carries at most
+// 67108864 decoded bytes inline, and a base64 data URL decodes to exactly the bytes on disk — so an
+// oversized film is measured by `stat` and refused before the request is built, rather than encoded
+// and uploaded to be rejected at the far end. It is Undelivered, never a gate: the film is fine, it
+// is simply too big for this door, and it is kept.
+//
 // Prints the share URL as the FIRST stdout line, then repeats it on a MARKER line (progress goes to
 // stderr; the trailing PWPROVE_RUN ledger line follows). Read the MARKER, not line 1 — a caller that
 // adds `2>&1` puts npm/ffmpeg chatter on line 1 instead:
@@ -74,7 +81,14 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { clipsConfig, mintImportToken, postChapterComments } from './clips.mjs';
+import {
+  IMPORT_ACTION,
+  NOT_DELEGABLE_REMEDY,
+  callClipsAction,
+  classifyClipsResponse,
+  clipsConfig,
+  postChapterComments,
+} from './clips.mjs';
 import { pwproveRun } from './pwprove-run.mjs';
 
 pwproveRun(import.meta.url, 'publish'); // run ledger — registered before any validation
@@ -109,8 +123,12 @@ const gate = (code, name, ...lines) => {
 
 // Delivery is the opposite posture: undelivered evidence never fails a run. The proof is the passing
 // test plus the mutation verdict, so the exit code stays 0 and the operator gets a file to attach.
-const undelivered = (message) => {
-  err(`publish-proof: publish failed — ${message}\n`);
+//
+// `headline` names WHICH kind of undelivered this is. Everything that reaches the destination and
+// comes back wrong is a publish that failed; a film refused locally for its size failed at nothing,
+// because it was never sent — and calling that a failure sends an operator looking for an outage.
+const undelivered = (message, headline = 'publish failed') => {
+  err(`publish-proof: ${headline} — ${message}\n`);
   err('publish-proof: the run STAYS ALIVE — the proof is the passing test plus the mutation verdict, '
     + 'not its delivery.\n');
   err(`publish-proof: the concatenated proof is at ${PROOF_FILE} — attach it to the PR by hand.\n`);
@@ -153,7 +171,7 @@ const title = manifest.title || 'E2E proof';
 
 // ============================================================ configuration
 const CLIPS = clipsConfig();
-if (!CLIPS.ok) stop(1, `${CLIPS.reason} — publishing needs both.`);
+if (!CLIPS.ok) stop(1, `${CLIPS.reason}.`);
 
 // ============================================================ video tooling
 const run = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -398,6 +416,30 @@ if (drift > tolerance) {
 // this script did not write is not a container it gets to vouch for.
 scanBytes(PROOF_FILE, 'the concatenated proof');
 
+// ============================================================ the destination's inline ceiling
+// The import action refuses more than 64 MiB of video carried inline, and a base64 data URL decodes
+// to exactly the bytes sitting on disk — so `stat` answers the question before a single byte is
+// encoded. Encoding first would spend the base64 pass and the upload to learn what the filesystem
+// already knew.
+//
+// This is NOT a fifth gate, and the difference is the point. Every gate above says the artifact is
+// WRONG and withholds the file with it. This says the opposite: the film is fine, it is simply too
+// big for this door — so it takes the Undelivered path, keeps the file, and the run stays green.
+// Withholding it would destroy the only copy of good evidence at the moment the operator needs it.
+const INLINE_BYTE_CEILING = 67_108_864; // 64 MiB decoded — the import action's documented cap
+const mib = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+const filmBytes = fs.statSync(PROOF_FILE).size;
+if (filmBytes > INLINE_BYTE_CEILING) {
+  // Both numbers, exact: an operator told only "too large" cannot tell whether dropping one scenario
+  // would clear it or whether the run is nowhere near.
+  undelivered(
+    `the concatenated film is ${mib(filmBytes)} (${filmBytes} bytes), over the `
+      + `${mib(INLINE_BYTE_CEILING)} (${INLINE_BYTE_CEILING} bytes) the import action carries inline. `
+      + 'Nothing was encoded and nothing was sent.',
+    'not delivered',
+  );
+}
+
 // ============================================================ the one request
 const body = {
   data: `data:video/webm;base64,${fs.readFileSync(PROOF_FILE).toString('base64')}`,
@@ -412,36 +454,37 @@ const body = {
   visibility: 'public',
 };
 
-let res;
-let text = '';
+let response;
 try {
-  res = await fetch(CLIPS.actionUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${mintImportToken(CLIPS)}`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(180_000),
-  });
-  text = await res.text();
+  response = await callClipsAction(CLIPS, IMPORT_ACTION, body, 180_000);
 } catch (e) {
-  undelivered(`${CLIPS.origin} unreachable (${e.message})`);
+  undelivered(`${CLIPS.endpoint} unreachable (${e.message})`);
 }
 
-if (!res.ok) {
-  undelivered(`HTTP ${res.status} from ${CLIPS.origin}: ${text.slice(0, 400)}`);
+// The outcome is READ OUT OF THE BODY, never off the status code. A refusal here is an HTTP 200
+// carrying an error, so `response.status === 200` would be a vacuous success check — and the one
+// status that does mean refusal (401) carries a body with no JSON-RPC result to parse at all.
+// Named one outcome at a time rather than as "not a success": a refused credential, an action this
+// token may not call, and an action that rejected the film are three different problems with three
+// different remedies, and one generic sentence sends an operator to the wrong one.
+const { outcome, detail, payload } = classifyClipsResponse(response.status, response.text);
+switch (outcome) {
+  case 'ok':
+    break;
+  case 'rejected':
+    undelivered(`${CLIPS.endpoint} refused the credential — ${detail}`);
+    break;
+  case 'not-delegable':
+    undelivered(`${CLIPS.endpoint} will not run ${IMPORT_ACTION} for this credential ("${detail}") — `
+      + `${NOT_DELEGABLE_REMEDY}.`);
+    break;
+  default:
+    undelivered(`${CLIPS.endpoint} rejected the publish — ${detail}`);
 }
 
-let result;
-try {
-  result = JSON.parse(text);
-} catch {
-  result = null;
-}
-const shareUrl = typeof result?.shareUrl === 'string' ? result.shareUrl : '';
+const shareUrl = typeof payload?.shareUrl === 'string' ? payload.shareUrl : '';
 if (!shareUrl) {
-  undelivered(`the destination returned no shareUrl: ${text.slice(0, 400)}`);
+  undelivered(`the destination returned no shareUrl: ${response.text.slice(0, 400)}`);
 }
 
 // The share URL is what a reviewer opens; the per-chapter deep links are NOT built on it. On
@@ -452,7 +495,7 @@ if (!shareUrl) {
 //
 // When the destination returns no usable id there is nothing honest to build, and a link that opens
 // at the wrong moment is worse than no link — so the offsets are reported without one.
-const recordingId = typeof result?.recordingId === 'string' ? result.recordingId : '';
+const recordingId = typeof payload?.recordingId === 'string' ? payload.recordingId : '';
 const deepLink = recordingId
   ? (seconds) => `${CLIPS.origin}/embed/${recordingId}?t=${seconds}`
   : null;
@@ -467,8 +510,8 @@ if (recordingId) {
     err(
       `publish-proof: ${failed} of ${narration.length} comment(s) could not be attached (${firstError}). `
         + 'The film and its chapter markers are published and correct; the per-scenario text is what is '
-        + 'missing, so the criteria are in the chapter labels only. A 401 here usually means the '
-        + 'deployment predates the recordings:comment scope.\n',
+        + 'missing, so the criteria are in the chapter labels only. A not-delegable failure here '
+        + "means the comment action is absent from this credential's callable catalog.\n",
     );
   }
 } else {
