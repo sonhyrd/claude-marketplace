@@ -1,64 +1,51 @@
 # Claude Marketplace
 
 A marketplace of Claude Code plugins — skills, MCP servers, and the vendored subtrees they build on.
-This glossary pins the terms the skills use about *themselves* and about the delegated runs they
-coordinate. It is a glossary, not a spec: no implementation details, no decisions (those are
-[ADRs](./docs/adr/)).
+A glossary and nothing else: rules live in `CLAUDE.md`, decisions in [`docs/adr/`](./docs/adr/).
 
 ## Delegation
 
-**Delegation profile**:
-The repo-specific facts `/delegate-tickets` needs to run against a given repo, living in that repo
-as `docs/agents/delegate-profile.md`. Records what is true *now*, never what was true before
-([ADR 0004](./docs/adr/0004-delegate-profile-amendments-replace-rather-than-stack.md)).
-_Avoid_: repo profile, PROFILES.md entry, worker config
+**Coordinator**:
+The invoking Claude Code session in a delegated run. Owns the DAG, dispatch, merge-back, and every
+write to the delegation profile.
+_Avoid_: orchestrator, parent agent
+
+**Worker**:
+One agent in one child worktree, implementing exactly one ticket.
+_Avoid_: subagent, child agent
+
+**Frontier**:
+The tickets whose blockers have all merged back, and which can therefore dispatch now.
+_Avoid_: ready queue, next batch
 
 **Integration branch**:
-The branch a delegation run merges every worker's slice back into — the coordinator's own branch,
-and the base every worker worktree is cut from. Distinct from the repo default base (`main`), which
-is what `orca worktree create` uses when nobody says otherwise.
-_Avoid_: target branch, parent branch, base branch (which names the *flag*, not the concept)
+The branch a run merges every worker's slice back into, and the base its worktrees are cut from.
+Distinct from the repo's default base, which is what a worktree gets when nobody names one.
+_Avoid_: target branch, parent branch, base branch (which names a flag, not this)
+
+**Delegation profile**:
+A repo's `docs/agents/delegate-profile.md` — the facts a delegated run needs about that repo. A
+**snapshot** of what is true now, not a ledger of what was.
+_Avoid_: repo profile, worker config
 
 **Baseline**:
-A recorded measurement of a check's result on a known-good tree — the counts, the commit, the date.
-Names the *measurement*, never the tree it was measured on. A profile carries exactly one per check.
+A recorded measurement of a check on a known-good tree: the counts, the commit, the date. Names the
+measurement, never the tree it was measured on.
 _Avoid_: clean run, reference run
 
 **Known noise**:
-A check failure that reproduces on the integration branch independent of any worker's changes, and
-so must not block a merge-back. A failure is known noise only once it is named in the baseline;
-until then it is a regression.
+A check failure that reproduces on the integration branch independent of any worker's changes. A
+failure becomes known noise by being named in the baseline; until then it is a regression.
 _Avoid_: flaky, pre-existing failure, expected failure
 
 **Prohibition**:
-A repo rule injected **verbatim** into every worker brief, because a worker that has not read it
-will plausibly break it and cost a rerun. Capped at ten. Distinct from a **Convention**, which the
-repo's agent guide owns and the profile only points at.
-_Avoid_: worker constraint, guardrail, rule
-
-**Frontier**:
-The set of tickets whose blockers have all merged back, and which can therefore dispatch now. It
-advances as merge-backs land.
-_Avoid_: ready queue, next batch
-
-**Worker**:
-One agent in one Orca child worktree, implementing exactly one ticket. Runs on the run's engine
-(`claude` or `cursor-agent`), never coordinates, never owns merge-back.
-_Avoid_: subagent, child agent
-
-**Coordinator**:
-The invoking Claude Code session. Owns the DAG, dispatch, merge-back, and every write to the
-delegation profile. Always Claude Code, whatever engine the workers run.
-_Avoid_: orchestrator, parent agent
+A repo rule injected verbatim into every worker brief, true only because the work is delegated.
+Its counterpart is a **Convention**, which the repo's own agent guide owns.
+_Avoid_: worker constraint, guardrail
 
 ## Plugins
 
 **Subtree**:
-A vendored upstream repo living under `plugins/`, synced with `git subtree`. Either **verbatim**
-(`mattpocock-skills` — never edit) or **editable and bidirectional** (`e2e-skills` — edit in place
-and push back). The distinction is per-subtree and load-bearing; see `CLAUDE.md`.
+A vendored upstream repo under `plugins/`, synced with `git subtree`. Each is either **verbatim** or
+**editable** — the distinction is per-subtree and load-bearing.
 _Avoid_: vendored dir, fork
-
-**Plugin name vs directory name**:
-The name a host invokes a skill by (`matt`, `e2e`) is set in `plugin.json` and need not match the
-directory, which is fixed by the subtree prefix. `/e2e:pw-prove` lives in `plugins/e2e-skills/`.

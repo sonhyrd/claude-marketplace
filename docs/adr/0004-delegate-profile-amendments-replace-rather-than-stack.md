@@ -30,16 +30,12 @@ discovered rather than where it belongs.
 
 ## Decision
 
-**Amend means replace.** A profile records what is true now; git holds the history.
+**A delegation profile is a snapshot, not a ledger.** It states what is true now; `git log` keeps
+what was true before. Amending it means rewriting the superseded line — one baseline per check, each
+fact in the field that owns it — and when the stale line lives in another doc, that doc gets the
+fix.
 
-1. Rewrite the superseded fact in place. Never leave a stale line standing with a correction
-   underneath it.
-2. **Exactly one baseline per check.** Two baselines is not a richer record, it is an unresolved
-   question shipped to a worker who cannot resolve it.
-3. A fact goes in the field that owns it. A dispatch trap is not a post-merge check.
-4. **If the stale claim lives in another doc, fix that doc.** The profile is not an errata sheet for
-   the rest of the repo. Record another file's error here only when that file is outside your write
-   access.
+`/delegate-tickets` step 6 carries the operative wording. This ADR records why, not how.
 
 ## Consequences
 
@@ -49,10 +45,10 @@ profile's readers are workers acting on it, not historians. `git log docs/agents
 recovers everything replacement discards, and it recovers it with dates and the commits that
 measured it, which the stacked version only approximated in prose.
 
-Rule 4 shifts work outward: a merge-back that finds `AGENTS.md` wrong now edits `AGENTS.md`, a file
-the delegation run does not otherwise touch. That is deliberate. The alternative concentrates every
-repo's accumulated errata in one file that only `/delegate-tickets` reads, so the wrong doc stays
-wrong for everyone who isn't running a delegation.
+The owning-file rule shifts work outward: a merge-back that finds `AGENTS.md` wrong now edits
+`AGENTS.md`, a file the delegation run does not otherwise touch. That is deliberate. The alternative
+concentrates every repo's accumulated errata in one file that only `/delegate-tickets` reads, so the
+wrong doc stays wrong for everyone who isn't running a delegation.
 
 This is hard to reverse. Eight repos carry profiles, and once they have accreted in one style,
 switching means hand-editing all of them — which is the "measured facts, versioned elsewhere"

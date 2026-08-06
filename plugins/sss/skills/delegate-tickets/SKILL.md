@@ -52,16 +52,14 @@ This step is cheap and it is the whole point of doing it first: a run that disco
 
 Coordinate through the `/orchestration` skill — real Orca task/dispatch state, not generic subagents.
 
-- One Orca **child worktree** per ticket, branched off the integration branch as
-  `<branch-prefix><ticket-slug>`. **Pass `--base-branch <integration-branch>` explicitly** —
-  `orca worktree create` bases a new worktree on the *repo's default base*, not on your current
-  branch, so an omitted flag silently cuts every worker from `origin/main`. Then **verify it took**:
-  `git merge-base <integration-branch> HEAD` in the new worktree must equal the integration branch's
-  head. A flag an older runtime ignores fails exactly like no flag at all, and the failure is
-  invisible until merge-back, where the worker's branch drags in unrelated commits and the PR claims
-  work it did not do.
+- One Orca **child worktree** per ticket, cut from the integration branch as
+  `<branch-prefix><ticket-slug>`. **Pass `--base-branch <integration-branch>`** — `orca worktree
+  create` defaults to the repo's default base, so an omitted flag cuts every worker from `main`.
+  Then **verify it took**: `git merge-base <integration-branch> HEAD` in the new worktree must equal
+  the integration branch head. An ignored flag and an absent flag fail identically, and both stay
+  invisible until merge-back hands you a branch carrying commits its worker never wrote.
 - Dispatch the unblocked frontier in parallel, but **cap concurrency at 2 workers** unless the user raises it. Each worktree creation fires the repo's setup hook (`pnpm install` and friends); a wider fan-out puts those in contention and `orca terminal create` blocks past the Bash timeout, leaving half-built workers. It also keeps the merge-back review surface small enough to actually check. A blocked ticket dispatches only after ALL its blockers have merged back.
-- Each worker gets a fresh session in its worktree. Its prompt must tell it to **read and follow `~/.claude/skills/implement/SKILL.md` by absolute path**, then name its ticket ref, then carry the profile's **Prohibitions** verbatim — and only those. The profile's **Conventions** are a pointer to the repo's own agent guide, which the worker loads anyway; injecting them too buries ten things that cost a rerun under thirty that don't. Path-reading rather than `/implement` is deliberate: `implement` is user-only (`disable-model-invocation: true`), so no dispatched worker of any engine can Skill-invoke it. `implement` drives TDD and `code-review` itself — don't re-specify them, and never hand-write a substitute process into the brief. Definition of done: `implement` closes clean, plus the profile's post-merge check passes.
+- Each worker gets a fresh session in its worktree. Its prompt must tell it to **read and follow `~/.claude/skills/implement/SKILL.md` by absolute path**, then name its ticket ref, then carry the profile's **Prohibitions** verbatim. Leave its **Conventions** field where it is — a pointer to the repo's agent guide, which the worker loads on its own; injecting those too buries the ten rules that cost a rerun under thirty that don't. Path-reading rather than `/implement` is deliberate: `implement` is user-only (`disable-model-invocation: true`), so no dispatched worker of any engine can Skill-invoke it. `implement` drives TDD and `code-review` itself — don't re-specify them, and never hand-write a substitute process into the brief. Definition of done: `implement` closes clean, plus the profile's post-merge check passes.
 - Where a brief is too long to inject as one message, write it to a file (`/tmp/<slug>/<ticket>.md`) and send a one-liner pointing at the file — but the brief still *points at* `implement`'s SKILL.md rather than restating it.
 - Launch every worker with the run's engine argv (below), via orca-cli's custom-argv path — `terminal create --command '<engine argv>'` — not the bare default launcher.
 - **Confirm each worker actually started before dispatching.** `terminal wait --for tui-idle` is satisfied by the bare shell that exists before a TUI mounts, and by the shell an agent leaves behind when it dies on startup — so follow it with `terminal read` and require a rendered agent frame, re-reading up to 5 times. A pane showing only a shell prompt is a dead worker: close it, create a fresh terminal, never dispatch into it.
@@ -92,18 +90,15 @@ Commits follow the profile's commit policy. Never bare `git stash` in shared wor
 
 When a merge-back reveals a baseline, known-noise test, or environment trap the profile doesn't record, **amend `docs/agents/delegate-profile.md` before dispatching the next frontier** — and commit it with the work that discovered it. The profile lives in the tree you are merging into, so this is one edit, and the next worker's brief carries it.
 
-**Amend means replace, never stack.** A profile records what is true *now*. Rewrite the superseded
-fact in place and let git hold the history — never leave a stale line standing with a correction
-underneath it. **Exactly one baseline per check**: a profile carrying "CLEAN baseline, any failure
-is a regression" followed by "the baseline above is stale, one known failure" states both answers
-and emphasises the wrong one, because a worker reads top-down and the superseded claim comes first.
-Put the fact in the field that owns it, too — a dispatch trap is not a post-merge check.
+**The profile is a snapshot, not a ledger.** It states what is true now; `git log` keeps what was
+true before. So amending means rewriting the superseded line: one baseline per check, and each fact
+in the field that owns it — a dispatch trap is a dispatch trap, not a post-merge check. Stack a
+correction beneath a stale line and the stale one wins, because it comes first and a worker reading
+top-down stops there.
 
-**If the stale claim lives in another doc, fix that doc.** `AGENTS.md` says something the merge-back
-just disproved? Correct `AGENTS.md` — it is the same tree and the same commit — and record nothing
-in the profile. The profile is not an errata sheet for the rest of the repo; every fact it holds
-about another file is a fact with two homes and one of them will rot. Record it here only when the
-doc is genuinely outside your write access.
+**The owning file gets the fix.** When a merge-back disproves a line in the repo's `AGENTS.md`,
+edit `AGENTS.md` — same tree, same commit — and leave the profile alone. Keep another file's
+correction here only while that file is outside your write access.
 
 ## 7. Run to completion
 
