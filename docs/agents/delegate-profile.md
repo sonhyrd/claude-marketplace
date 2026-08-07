@@ -21,8 +21,10 @@ baseline, known-noise test, or environment trap.
   1. Never run bare `git stash` — the stash is shared across all worktrees of this repo, and popping
      it in the wrong one silently moves another worker's uncommitted work.
   2. Never `git push`, open a PR, or push tags. The coordinator merges back and owns all pushing.
-     The one exception is `git subtree push --prefix=plugins/e2e-skills e2e-fork main`, which ticket
-     #9 explicitly requires — do that one, and nothing else.
+     Pushing to the `e2e-fork` remote requires the coordinator's approval per push; when granted, it
+     is a **targeted push** (`git push e2e-fork <sha>:main` from a commit carrying only the paths the
+     fork owns), never `git subtree push`, which lands the two plugin manifests on a fork that
+     deliberately ships none. `docs/adr/0005` records the measurement.
   3. Never edit anything under `plugins/mattpocock-skills/`. It is a vendored copy of an upstream
      repo; edits there are destroyed by the next subtree pull.
   4. Never run `pnpm -r run test`, `turbo run test`, or any recursive sweep without capping **both**
