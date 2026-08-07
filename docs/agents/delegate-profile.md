@@ -41,11 +41,15 @@ baseline, known-noise test, or environment trap.
   8. Never bump the version in `.claude-plugin/marketplace.json` or any `plugin.json`, and never add
      a `## [x.y.z]` heading to `CHANGELOG.md`. Releases are cut separately; five workers each
      claiming the next version is five conflicts.
-  9. Never reformat, re-indent, or lint-fix a file you did not otherwise change — especially
-     anything under `plugins/*/scripts/`, which the lint targets deliberately exclude. Whitespace
-     churn makes the merge-back review surface unreadable.
+  9. `make sync-codex-plugins` regenerates **all 59 generated files, for every plugin**, not just
+     yours. Stage only the manifests your own skill owns and `git checkout` the rest. Committing a
+     sibling plugin's regenerated manifest conflicts on merge-back and carries a description
+     generated from a tree that is already stale — exactly what happened between #9 and #10 in this
+     run.
   10. Never mark your own ticket closed on GitHub. Report completion; the coordinator closes it
       after the merge-back check passes.
-- **Conventions**: `CLAUDE.md` at the repo root. Read it in full before your first edit — it owns
+- **Conventions**: `CLAUDE.md` at the repo root — and do not reformat, re-indent, or lint-fix a file
+  you did not otherwise change, especially under `plugins/*/scripts/`, which the lint targets
+  deliberately exclude. Read `CLAUDE.md` in full before your first edit — it owns
   the subtree rules, the plugin-vs-directory naming distinction, the MCP tool-namespacing rule, and
   the pointers to `docs/agents/`.
