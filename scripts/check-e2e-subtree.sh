@@ -81,7 +81,6 @@ setup_error() {
 EXPECTED_WITH_REASON=(
     $'A\t.claude-plugin/plugin.json|The fork ships no plugin manifests at all; this exists only here.'
     $'A\t.codex-plugin/plugin.json|Same -- generated Codex manifest, marketplace-only.'
-    $'M\tskills/pw-prove/SKILL.md|Exactly one added line, `disable-model-invocation: true` -- the only mechanism that pins a plugin skill to user-invocable-only.'
 )
 
 EXPECTED=()
@@ -89,6 +88,12 @@ for entry in "${EXPECTED_WITH_REASON[@]}"; do
     EXPECTED+=("${entry%%|*}")
 done
 
+# skills/pw-prove/SKILL.md used to be the third entry: this repo added
+# `disable-model-invocation: true` to it and the fork did not. The pin was
+# removed and pushed back (docs/adr/0005), so that file is now identical on both
+# sides and the expected set is the two plugin manifests. The alarm did not go
+# away, it inverted: a pull that restores the pin makes the file diverge again
+# and it is now reported as an UNEXPECTED divergence rather than a missing one.
 PIN_FILE="skills/pw-prove/SKILL.md"
 PIN_LINE="disable-model-invocation: true"
 
@@ -162,19 +167,21 @@ if [ -n "$APPEARED" ]; then
     printf "\n"
 fi
 
-# The pin must be exactly one added line. If it is anything more, the pull
-# overwrote something -- and the entry set alone cannot see that.
+# The generic "unexpected divergence" report names the file but not the reason,
+# and for this one file the most likely reason has a name and a decision behind
+# it. Say so rather than making the reader diff it.
 if grep -qx "M	${PIN_FILE}" <<<"$ACTUAL"; then
-    NUMSTAT="$(git diff --numstat "${FORK_REF}:${PIN_FILE}" "${COMMIT}:${PREFIX}/${PIN_FILE}" | cut -f1,2)"
-    ADDED_LINE="$(git diff "${FORK_REF}:${PIN_FILE}" "${COMMIT}:${PREFIX}/${PIN_FILE}" \
-        | sed -n 's/^+\([^+].*\)$/\1/p')"
-    if [ "$NUMSTAT" != "$(printf '1\t0')" ] || [ "$ADDED_LINE" != "$PIN_LINE" ]; then
-        STATUS=1
-        echo -e "${RED}✗ ${PIN_FILE} is not exactly one added line${NC}"
-        printf "  Expected one added line and no deletions:\n\n"
+    # Materialize the diff before grepping it: under `pipefail`, `grep -q`
+    # exiting on the first match can SIGPIPE the git process and turn a match
+    # into a non-zero pipeline -- i.e. silently skip the note when the pin IS
+    # back, which is the one case this exists for.
+    PIN_DIFF="$(git diff "${FORK_REF}:${PIN_FILE}" "${COMMIT}:${PREFIX}/${PIN_FILE}")"
+    if grep -qxF -- "+${PIN_LINE}" <<<"$PIN_DIFF"; then
+        printf "  Note: the added lines include\n\n"
         printf "      %s\n\n" "$PIN_LINE"
-        printf "  Got %s added/deleted. Anything else means the pull overwrote\n" "${NUMSTAT//$'\t'/ added, }"
-        printf "  something in this file.\n\n"
+        printf "  The pin was deliberately removed and pushed to the fork; see\n"
+        printf "  docs/adr/0005. Restoring it breaks every skill that chains into\n"
+        printf "  pw-prove. Drop the line rather than adding it to EXPECTED.\n\n"
     fi
 fi
 
