@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Review a PR or branch on three tracks at once — Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate — over one resolved diff, reported side by side with the agreements called out. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
+description: Review a PR or branch on three tracks at once — Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate — over one resolved diff, reported side by side with the agreements called out, then apply the Critical and High findings and commit them. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
   Requires the `matt` and `sss` plugins from this marketplace, the `gh` CLI for
@@ -13,7 +13,7 @@ metadata:
 
 # PR Review
 
-Three **tracks** over one diff, each in its own context, each scored on its own:
+Two **stages** over one diff — a read stage that reports, then a write stage that fixes. The first runs three **tracks**, each in its own context, each scored on its own:
 
 | Track | Source | Asks |
 |-------|--------|------|
@@ -21,7 +21,9 @@ Three **tracks** over one diff, each in its own context, each scored on its own:
 | Spec | `matt:code-review` | Does the code do what the issue or PR body asked for? |
 | OCR | `sss:ocr-delegate` | File by file, against resolved rules, with mandatory coverage — what's wrong here? |
 
-A track that never sees another track's findings cannot be talked out of its own. Where two land on the same defect, that agreement is the strongest signal in the report.
+A track that never sees another track's findings cannot be talked out of its own. Where two land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
+
+Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage, Step 4 the write stage. See `CONTEXT.md`.
 
 ## Step 1 — Prep
 
@@ -69,7 +71,73 @@ Compare the full text here in the parent: this is the one judgement in the skill
 
 Close with one line per track — finding count, worst issue within that track. Each track is scored on its own; a cross-track ranking is the merge the separation exists to prevent.
 
-Report in chat. Posting to GitHub is a separate ask, and so is fixing anything — "review" means these four sections and a clean tree.
+Report in chat. Posting to GitHub is a separate ask.
+
+Done when all four sections are on screen and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of three unmerged tracks is output nobody got to soften.
+
+## Step 4 — Fix
+
+The stage that writes. Findings become edits, the edits get committed, and nothing is pushed.
+
+### 4a. Assign a severity
+
+Only the OCR track ships one — `critical`, `high`, `medium`, `low`, per finding. Take it as given. The two `matt:code-review` axes ship none, so assign here, in the parent:
+
+| Finding | Severity |
+|---------|----------|
+| Any track calling it a bug, a security hole, or a data-loss risk | Critical |
+| Standards: a hard violation of a documented repo standard | High |
+| Spec: a requirement missing, partial, or implemented wrongly | High |
+| Standards: a baseline smell — always a judgement call | Medium |
+| Spec: scope creep, behaviour nobody asked for | Medium |
+
+This grades findings, never tracks. Each track's report stays verbatim above and scored only against itself; ranking the tracks against each other is the merge the separation exists to prevent. The fix stage still has to know what to touch first.
+
+### 4b. Order the work
+
+Critical and High only, overlap-confirmed first:
+
+1. Critical, two or more tracks
+2. Critical, one track
+3. High, two or more tracks
+4. High, one track
+
+**Overlap orders the work; it does not filter it.** A Critical only the OCR track caught is applied like any other Critical. Agreement buys confidence, and confidence buys position in the queue — not admission to it.
+
+### 4c. Apply
+
+Every Critical and High finding is **applied or explained**. There is no third outcome and silence is not one of them.
+
+Apply it in the working tree. Where you cannot — the fix reaches outside the diff, the finding rests on a misreading, two findings contradict each other — that is a reason, and the reason goes in `## Fixes` under *Described*. "Ran out of turns" is not a reason.
+
+Medium and Low are **described, never applied**. They are judgement calls by construction, and a review that quietly rewrote them is a refactor with a review stapled to it.
+
+Then re-run whatever the repo documents as its own gate — its validation target, typecheck, or test command. A fix that breaks the build is a finding of its own: fix it, or revert that one fix and describe it instead.
+
+### 4d. Report the boundary
+
+A fifth section, underneath the four:
+
+```markdown
+## Fixes
+
+### Applied
+- <severity> · <tracks that found it> · <file:line> — what changed
+
+### Described, not applied
+- <severity> · <tracks> · <file:line> — the finding, and why it was not applied
+
+### Medium and Low — described only
+- <severity> · <tracks> · <file:line> — the finding
+```
+
+### 4e. Commit
+
+Commit the applied fixes to the current branch in the repo's own subject-line style, naming the PR. **Never push.** Later stages own the pushing, and a third pusher makes the PR history unreadable.
+
+A run that applied nothing commits nothing and says so — an empty commit claims work that did not happen.
+
+Done when every Critical and High finding appears in `## Fixes` as Applied or Described, the tree is clean, and the branch is one commit ahead of where Step 3 left it.
 
 ## Why inline
 
@@ -81,4 +149,6 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 
 - **Coverage is the OCR track's contract.** A report without `coverage_rate` and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on.
 - **Overlap is additive.** It names the agreements underneath three intact verbatim sections.
-- **`track` and `axis` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it.
+- **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
+- **Report before you write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence.
+- **Do not use OCR's fix mode for this.** `sss:ocr-delegate` has its own Step 7; the OCR track finishes at Step 6 and reports. Fixes are applied here, in the parent, from all three tracks at once — one agent fixing what only it found is how the overlap ordering gets bypassed.
