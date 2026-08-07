@@ -44,11 +44,29 @@ No LLM configuration is needed for delegation mode.
 ocr delegate preview [--from <ref> --to <ref>] [--commit <hash>] [--exclude <patterns>]
 ```
 
-This outputs:
-- **mode** (workspace / range / commit)
-- **from / to / commit / merge_base** — ref metadata for constructing git commands
-- **Reviewable file list** — paths, status, insertions/deletions
-- **Excluded files** — with exclusion reason
+There is no `--format` flag on `ocr delegate` — passing one exits non-zero with
+`unknown flag: --format`. The output is Markdown, and it is parseable as-is:
+
+```
+# Files (12 reviewable / 26 total)
+
+- mode: range
+- from: origin/main
+- to: feature
+- merge_base: 47fcf0f…
+- total_insertions: 2851
+- total_deletions: 81
+
+  - `path/reviewable.ts` [modified] +6/-1
+~~- `path/skipped.md` [modified] +9/-0 (excluded: unsupported_ext)~~
+```
+
+Read it as:
+- **mode** (workspace / range / commit) and the **from / to / commit / merge_base**
+  ref metadata, from the bullet list — this is what Step 3 builds git commands from
+- **Reviewable files** — the plain ` - ` bullets: path, status, insertions/deletions
+- **Excluded files** — the `~~`-struck bullets, each with its exclusion reason in
+  parentheses. These are out of scope; only the reviewable ones need accounting for.
 
 **Common invocations:**
 
@@ -90,11 +108,17 @@ cat <path>
 
 ### Step 4: Review Each File
 
-For each reviewable file:
+Create a checklist containing every reviewable file from Step 1 — the plain bullets,
+not the `~~`-struck excluded ones. For each:
+
+Use `(path, status)` as the checklist identity. Workspace mode can report the same path twice when a staged deletion is followed by an untracked recreation.
 
 1. Get its diff (Step 3)
 2. Consult its Rule Group (from Step 2) for the review checklist
 3. Conduct a thorough review, using appropriate context tools as needed
+4. Mark the file `reviewed`, or `skipped` with a concrete reason
+
+For large changes, review in bounded batches grouped by shared rules and diff size. Do not stop after finding the first high-severity issue.
 
 ### Step 5: Format Output
 
@@ -110,6 +134,12 @@ Each comment must follow this structure:
 | severity | enum | no | critical, high, medium, low |
 
 ### Step 6: Classify and Report
+
+Before reporting, verify that every reviewable file from Step 1 is accounted for. Open
+the report with a coverage summary naming, in these words, **total files**, **reviewable
+files**, **reviewed files**, **skipped files** and **coverage rate** — the rate is over
+the reviewable set, not the total, since the excluded files were never in scope. A
+skipped file must include its reason.
 
 Group findings by severity:
 
@@ -145,6 +175,7 @@ If the user requested "review and fix":
 | `--exclude <patterns>` | Comma-separated exclude patterns |
 | `-b, --background <text>` | Business context |
 | `-B, --background-file <path>` | Business context from Markdown file |
+| `--max-git-procs <n>` | Max concurrent git subprocesses (default 16) |
 
 ## Gotchas
 
@@ -153,3 +184,5 @@ If the user requested "review and fix":
 - **Working directory matters** — `ocr delegate` operates on the Git repo at the current directory. Use `--repo /path` to override.
 - **Untracked files in workspace mode** — `preview` includes untracked files. For these, read the file directly instead of using `git diff`.
 - **Background context** — pass `--background` to `preview` when you have requirement context; it appears in the output for your reference during review.
+- **Coverage is mandatory** — every reviewable file must end as reviewed or explicitly skipped; do not silently omit files.
+- **Markdown-only repos get an empty review** — OCR excludes `.md` as `unsupported_ext`, so a docs or skills repo can preview 26 files and offer 2. That is a real limit of the tool, not a clean bill of health: say so in the report rather than letting a high coverage rate over a tiny reviewable set imply the diff was covered.

@@ -1,6 +1,9 @@
 # 1. e2e-skills as an editable, bidirectional git subtree
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by
+  [ADR-0005](./0005-pw-prove-unpinned-behind-a-confirmation-gate.md) — decision 5 (`pw-prove` is no
+  longer pinned) and decision 3's outbound half (`git subtree push` carries the two plugin
+  manifests onto a fork that ships none; outbound is a targeted push).
 - **Date:** 2026-08-03
 - **Issue:** [#1](https://github.com/sonhyrd/claude-marketplace/issues/1)
 

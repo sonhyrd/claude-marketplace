@@ -43,6 +43,26 @@ A repo rule injected verbatim into every worker brief, true only because the wor
 Its counterpart is a **Convention**, which the repo's own agent guide owns.
 _Avoid_: worker constraint, guardrail
 
+## Review
+
+**Track**:
+One independently-contexted reviewer in a review run, whose report is printed verbatim and scored
+only against itself. Tracks are never merged or ranked against each other.
+_Avoid_: lane, pass, reviewer
+
+**Stage**:
+One serial phase of a review run, sharing the run's context and working tree — `pr-review` reports in
+one and fixes in the next. Stages are ordered and may each depend on the last; a **Track** is
+concurrent, isolated, and never merged or ranked. What runs in sequence is a stage, never a track.
+_Avoid_: track (the error this term exists to prevent), round, leg — and **Step**, which is one
+numbered instruction inside a stage, not the stage itself
+
+**Axis**:
+One question a single review skill asks of a diff — `matt:code-review` asks two, Standards and Spec.
+An axis belongs to the skill that asks it; a **Track** is who ran it. Two of `pr-review`'s three
+tracks are that skill's two axes.
+_Avoid_: dimension, angle
+
 ## Plugins
 
 **Subtree**:
