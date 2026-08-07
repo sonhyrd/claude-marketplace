@@ -1,11 +1,12 @@
 ---
 name: pr-review
-description: Review a PR or branch on three tracks at once — Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate — over one resolved diff, reported side by side with the agreements called out, then apply the Critical and High findings, commit them, and sync translations when the repo has a translation config and the diff touched locales. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
+description: Carry a PR or branch from review to proof — three tracks at once (Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate) over one resolved diff, reported side by side with the agreements called out, then the Critical and High findings applied and committed, then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result via e2e:pw-prove. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
   Requires the `matt` and `sss` plugins from this marketplace, the `gh` CLI for
   PR mode, and the `ocr` CLI for the OCR track. A missing `ocr` degrades to two
-  tracks.
+  tracks. The proof stage needs the `e2e` plugin for `e2e:pw-prove`; without it
+  the run writes the handoff artifact and stops there.
 metadata:
   author: sonhyrd
   version: "1.0.0"
@@ -13,7 +14,7 @@ metadata:
 
 # PR Review
 
-Three **stages** over one diff — a read stage that reports, a write stage that fixes, and a sync stage that gets changed locales onto the translation server. The first runs three **tracks**, each in its own context, each scored on its own:
+Four **stages** over one diff — a read stage that reports, then write stages that fix, sync and prove. The first runs three **tracks**, each in its own context, each scored on its own:
 
 | Track | Source | Asks |
 |-------|--------|------|
@@ -23,7 +24,7 @@ Three **stages** over one diff — a read stage that reports, a write stage that
 
 A track that never sees another track's findings cannot be talked out of its own. Where two land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
 
-Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage, Step 4 the write stage, Step 5 the sync stage — which is conditional, and in a repo with no translation config is simply not there. See `CONTEXT.md`.
+Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage; every step after them writes — Step 4 fixes, Step 5 syncs, Step 6 proves. Step 5 is conditional, and in a repo with no translation config is simply not there. One `BASE`, resolved in Step 1, holds from the first step to the last. See `CONTEXT.md`.
 
 ## Step 1 — Prep
 
@@ -177,6 +178,85 @@ Run it even when Step 4 applied nothing and committed nothing. The findings are 
 
 Done when either `sss:translation-sync` has reported its own closing status line, or one of the two findings was false and nothing was said.
 
+## Step 6 — Prove
+
+The last stage. What the review concluded gets written down where `e2e:pw-prove` reads it, and then
+`pw-prove` runs. Nothing here re-reviews and nothing here re-fixes.
+
+### 6a. Ignore the artifact path first
+
+`.pw-prove/` is expected to be gitignored in the target repo. Check before writing anything:
+
+```bash
+git check-ignore -q .pw-prove/handoff.json || echo "not ignored"
+```
+
+Not ignored → append `.pw-prove/` to the repo's root `.gitignore` and commit that one line on its
+own, in the repo's subject-line style. Still never push.
+
+The commit is deliberate: the artifact is written on every review this repo ever gets, so ignoring
+it once for everyone beats each contributor's checkout carrying an untracked directory nobody
+recognises. `.git/info/exclude` hides it with no commit at all and is the fallback where the repo's
+policy forbids touching `.gitignore` — say in `## Fixes` which of the two you used.
+
+Do this **before** 6b, not after. Review findings are not PR content, and an artifact written into
+an un-ignored path sits in someone's `git status` from then on — `pw-prove` stages only the spec,
+the POM and the HAR, so nothing downstream ever cleans it up.
+
+### 6b. Write the handoff artifact
+
+`.pw-prove/handoff.json` at the repo root. **`pw-prove` owns this schema** — it is the only reader,
+and its `SKILL.md` (`plugins/e2e-skills/skills/pw-prove/SKILL.md` in this marketplace, Step 2 step 0)
+is where the shape is defined. Write to it; do not
+extend it. A key it does not read is a key nobody reads.
+
+```jsonc
+{
+  "base":      "origin/main",   // the BASE Step 1 resolved — the same one all three tracks saw
+  "head_sha":  "<40-hex sha>",  // REQUIRED — `git rev-parse HEAD` read as you write this file
+  "pr":        123,             // the PR number, or null in branch mode
+  "findings":  [                // confirmed findings, highest confidence first
+    { "title": "…", "severity": "Critical|High|Medium|Low", "file": "src/x.ts", "line": 12, "detail": "…" }
+  ],
+  "fixes_applied": [            // what Step 4 changed and committed
+    { "title": "…", "file": "src/x.ts", "commit": "<sha>" }
+  ]
+}
+```
+
+- **`findings` is ordered, and the order is Step 4b's**: overlap-confirmed before single-track,
+  Critical before High. "Highest confidence first" is what agreement between tracks bought.
+- **Every severity ships**, Medium and Low included. Step 4 only *applies* Critical and High;
+  `pw-prove` decides for itself which findings name a user-observable behaviour worth a scenario,
+  and a finding withheld here is one it cannot weigh.
+- **`fixes_applied` is the Applied list from 4d**, carrying the commit SHA from 4e.
+- A run that applied nothing writes `"fixes_applied": []`. It does not skip the artifact — the
+  findings are the payload, and a review that fixed nothing still has them.
+
+**`head_sha` is `HEAD` at the moment this file is written — run `git rev-parse HEAD` here, last, once
+every commit this run makes has landed** (Step 4e's, and 6a's `.gitignore` commit if there was one).
+`pw-prove` compares it to `HEAD` and drops the whole file when they differ, so a SHA captured one
+commit too early is not a stale artifact you get warned about — it is the review silently thrown
+away. Nothing between here and the handoff may commit; once `pw-prove` has it, its commits are its
+own business.
+
+### 6c. Hand into `pw-prove`
+
+Invoke the Skill tool with `e2e:pw-prove`, passing the PR number (or the branch and `BASE` in branch
+mode). It reads the artifact itself in its own Step 2 — the handoff is the file, not the prompt.
+
+- **Its confirmation gate fires here, and that is the point.** A model invoked it, so it asks before
+  a browser bring-up, a HAR record, a commit and a push. Do not try to pre-answer or suppress it;
+  it is the one human checkpoint in the run.
+- **`pw-prove` owns everything from this point**, including the push. Do not run its steps ahead of
+  it, and do not push to make its job smaller.
+- **If it is not installed**, say so in one line and stop. The artifact is on disk and a later
+  `/e2e:pw-prove <PR#>` picks up the same findings — that standalone path is why the file is written
+  at all, and it is not a failure of this run.
+
+Done when `.pw-prove/handoff.json` is on disk with a `head_sha` equal to `HEAD`, the path is
+gitignored, and `pw-prove` has either reached its own pipeline or been reported absent.
+
 ## Why inline
 
 `matt:code-review` fans out on its own. Running it inside an agent of ours would put its two tracks a level below OCR's, betting that a spawned agent may itself spawn — a bet whose loss is silent, degrading a two-axis review to one context with nothing in the output saying so. Loading it here instead makes the bet unnecessary.
@@ -187,6 +267,10 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 
 - **Coverage is the OCR track's contract.** A report without `coverage_rate` and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on.
 - **Overlap is additive.** It names the agreements underneath three intact verbatim sections.
+- **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
+  renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`
+  is told to ignore without complaint. `tests/bash/test-pr-review-handoff-parity.sh` is what
+  notices. If the contract is wrong, change it there and push the fork — not here.
 - **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
 - **Report before you write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence.
 - **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.

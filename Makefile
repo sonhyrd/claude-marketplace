@@ -1,4 +1,4 @@
-.PHONY: help sync sync-codex-plugins check-codex-plugins check-e2e-subtree test-e2e-subtree-check validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-tmux-build test-tmux test-tmux-local test-tmux-shell test-session-registry test-session-registry-local test-registry test-create-session test-list-sessions test-cleanup-sessions test-session-integration test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
+.PHONY: help sync sync-codex-plugins check-codex-plugins check-e2e-subtree test-e2e-subtree-check test-pr-review-handoff-parity validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-tmux-build test-tmux test-tmux-local test-tmux-shell test-session-registry test-session-registry-local test-registry test-create-session test-list-sessions test-cleanup-sessions test-session-integration test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
 
 # Default target
 .DEFAULT_GOAL := help
@@ -401,6 +401,11 @@ test-e2e-subtree-check: ## Run tests for the e2e subtree divergence check
 	@echo "$(CYAN)Running e2e subtree check tests...$(NC)"
 	@./tests/bash/test-e2e-subtree-check.sh
 	@echo "$(GREEN)✓ e2e subtree check tests passed$(NC)"
+
+test-pr-review-handoff-parity: ## Check pr-review writes the handoff schema pw-prove reads
+	@echo "$(CYAN)Running pr-review handoff parity tests...$(NC)"
+	@./tests/bash/test-pr-review-handoff-parity.sh
+	@echo "$(GREEN)✓ pr-review handoff parity tests passed$(NC)"
 
 SEQ_THINKING_DIR := plugins/sequential-thinking
 
