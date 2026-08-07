@@ -74,8 +74,8 @@ setup_error() {
 # stripped) for the diff FROM the fork TO the prefix. "A" therefore means
 # "exists only in the marketplace".
 #
-# This list, and the one-added-line assertion below it, are the whole contract.
-# Each element is "<name-status line>|<why it is expected>". The two halves live
+# This list is the whole contract: anything in it that is missing is a reverted
+# decision, anything outside it that differs is drift. Each element is "<name-status line>|<why it is expected>". The two halves live
 # together so a new divergence cannot be added without a stated reason, and so
 # `--explain` and the comparison read from one list rather than two.
 EXPECTED_WITH_REASON=(
@@ -170,7 +170,7 @@ fi
 # The generic "unexpected divergence" report names the file but not the reason,
 # and for this one file the most likely reason has a name and a decision behind
 # it. Say so rather than making the reader diff it.
-if grep -qx "M	${PIN_FILE}" <<<"$ACTUAL"; then
+if grep -qxF "M	${PIN_FILE}" <<<"$ACTUAL"; then
     # Materialize the diff before grepping it: under `pipefail`, `grep -q`
     # exiting on the first match can SIGPIPE the git process and turn a match
     # into a non-zero pipeline -- i.e. silently skip the note when the pin IS
@@ -180,8 +180,9 @@ if grep -qx "M	${PIN_FILE}" <<<"$ACTUAL"; then
         printf "  Note: the added lines include\n\n"
         printf "      %s\n\n" "$PIN_LINE"
         printf "  The pin was deliberately removed and pushed to the fork; see\n"
-        printf "  docs/adr/0005. Restoring it breaks every skill that chains into\n"
-        printf "  pw-prove. Drop the line rather than adding it to EXPECTED.\n\n"
+        printf "  this repo's docs/adr/0005 (the prefix has an unrelated ADR of the\n"
+        printf "  same number). Restoring the pin breaks every skill that chains\n"
+        printf "  into pw-prove. Drop the line rather than adding it to EXPECTED.\n\n"
     fi
 fi
 

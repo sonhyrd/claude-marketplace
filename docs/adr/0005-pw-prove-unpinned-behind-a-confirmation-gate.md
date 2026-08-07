@@ -46,8 +46,9 @@ confirmation gate that fires on the model-invoked path only.**
   happen, and waits. Declined or unanswered means nothing was run — never a partial run, never a
   re-ask.
 
-**The change is pushed to the fork** (`git subtree push --prefix=plugins/e2e-skills e2e-fork main`),
-so `skills/pw-prove/SKILL.md` is byte-identical on both sides. `check-e2e-subtree.sh`'s expected
+**The change is pushed to the fork** — as a targeted push, *not* `git subtree push`; see
+*How the change reached the fork* below, which is load-bearing rather than incidental — so
+`skills/pw-prove/SKILL.md` is byte-identical on both sides. `check-e2e-subtree.sh`'s expected
 divergence set drops from three entries to the two plugin manifests, and `CLAUDE.md`'s paragraph on
 the pin is rewritten in the same change — a test asserts that paragraph names every path the script
 expects, so the two cannot be changed apart.
