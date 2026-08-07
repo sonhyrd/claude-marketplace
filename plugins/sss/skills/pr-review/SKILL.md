@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Review a PR or branch on three tracks at once — Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate — over one resolved diff, reported side by side with the agreements called out, then apply the Critical and High findings and commit them. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
+description: Review a PR or branch on three tracks at once — Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate — over one resolved diff, reported side by side with the agreements called out, then apply the Critical and High findings, commit them, and sync translations when the repo has a translation config and the diff touched locales. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
   Requires the `matt` and `sss` plugins from this marketplace, the `gh` CLI for
@@ -13,7 +13,7 @@ metadata:
 
 # PR Review
 
-Two **stages** over one diff — a read stage that reports, then a write stage that fixes. The first runs three **tracks**, each in its own context, each scored on its own:
+Three **stages** over one diff — a read stage that reports, a write stage that fixes, and a sync stage that gets changed locales onto the translation server. The first runs three **tracks**, each in its own context, each scored on its own:
 
 | Track | Source | Asks |
 |-------|--------|------|
@@ -23,7 +23,7 @@ Two **stages** over one diff — a read stage that reports, then a write stage t
 
 A track that never sees another track's findings cannot be talked out of its own. Where two land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
 
-Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage, Step 4 the write stage. See `CONTEXT.md`.
+Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage, Step 4 the write stage, Step 5 the sync stage — which is conditional, and in a repo with no translation config is simply not there. See `CONTEXT.md`.
 
 ## Step 1 — Prep
 
@@ -42,7 +42,22 @@ git diff $BASE...HEAD --stat
 
 Then `which ocr`.
 
-Done when four findings are in hand: the resolved `BASE` SHA, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), and whether `ocr` is on PATH. A bad ref or an empty diff stops here, naming which one failed.
+**Then resolve the two sync findings** — both of them here, off the one `BASE` the tracks share, so Step 5 decides from settled facts rather than re-reading the tree after the fixes have moved it:
+
+```bash
+CFG=.github/hyrd-trans-bot.json
+[ -f "$CFG" ] && cat "$CFG"
+```
+
+No file, and the first finding is false and the second does not need asking. Otherwise read `localesDir` out of what it printed — the config is a handful of keys, so read it rather than shelling out to a JSON parser this skill would then depend on — and resolve the directory the way `translation-sync` Step 2 does: `localesDir` if it is set **and exists on disk**, else the first of `i18n/locales`, `app/locales`, `locales` that does. Only once that resolved to a real directory:
+
+```bash
+git diff --name-only "$BASE"...HEAD -- "$DIR" | grep '\.json$'
+```
+
+Any output at all and the second finding is true. Do not run it with `$DIR` unset: git rejects an empty pathspec outright, and this line failing would be indistinguishable from the failures that are meant to stop the run. A config present but naming no resolvable directory is simply the second finding false — the sync has nowhere to read from — and that is a deliberate divergence from `translation-sync`, which stops with a named error in the same case. It gets to: it was invoked on purpose. Here the two findings only decide whether it is invoked at all.
+
+Done when six findings are in hand: the resolved `BASE` SHA, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A bad ref or an empty diff stops here, naming which one failed. Neither sync finding ever stops the run — they only decide whether Step 5 exists.
 
 ## Step 2 — Load `matt:code-review`, fan out three
 
@@ -139,6 +154,29 @@ A run that applied nothing commits nothing and says so — an empty commit claim
 
 Done when every Critical and High finding appears in `## Fixes` as Applied or Described, the tree is clean, and the branch is one commit ahead of where Step 3 left it.
 
+## Step 5 — Sync
+
+Conditional. It runs after the fix commit and before any proof, because an unsynced key renders as its raw dot-path — a browser pointed at a pre-sync server photographs `board.title` instead of the string the PR added.
+
+Take both sync findings from Step 1. **Both true** — the repo has `.github/hyrd-trans-bot.json` and the diff touched locale JSON under the directory it resolves to — and the stage runs: invoke the Skill tool with `sss:translation-sync` and let it run its own steps end to end. It resolves its own config, validates its own token, and owns its own confirmation prompt and its own push; nothing here re-derives any of that.
+
+**Either false and the stage is absent.** Not skipped-with-a-note, not a prompt asking whether to sync anyway — absent. No line in the report says it did not run. Almost every repo in reach of this skill has no translation config, so a stage that announced its own irrelevance would announce it on nearly every run.
+
+Both conditions are load-bearing and neither implies the other:
+
+| Config | Locale diff | Why |
+|--------|-------------|-----|
+| present | touched | Sync. There is a server, and this PR changed what should be on it. |
+| present | untouched | No sync. Otherwise every PR in the two repos that have a config talks to the translation server, including the ones that touch no locale at all. |
+| absent | touched | No sync. Locale JSON with no config is a repo with no server to sync to. |
+| absent | absent | No sync — and this is every other repo, which is the point. |
+
+Requiring both is also what makes the stage self-disabling everywhere else: the config is the repo saying it has a server, so nothing here maintains a list of repo names.
+
+Run it even when Step 4 applied nothing and committed nothing. The findings are properties of the diff, not of the fixes, and a review that changed no code can still be reviewing a PR whose locale keys are not on the server yet.
+
+Done when either `sss:translation-sync` has reported its own closing status line, or one of the two findings was false and nothing was said.
+
 ## Why inline
 
 `matt:code-review` fans out on its own. Running it inside an agent of ours would put its two tracks a level below OCR's, betting that a spawned agent may itself spawn — a bet whose loss is silent, degrading a two-axis review to one context with nothing in the output saying so. Loading it here instead makes the bet unnecessary.
@@ -151,4 +189,6 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 - **Overlap is additive.** It names the agreements underneath three intact verbatim sections.
 - **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
 - **Report before you write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence.
+- **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.
+- **Step 5 may push, and that is not a contradiction of Step 4.** Step 4 commits and never pushes because a third pusher makes the history unreadable; `translation-sync` owns its own empty re-trigger commit and push, which is exactly the "later stages own the pushing" Step 4 defers to. It pushes only when it actually applied something, on a non-default branch, with a clean index — so a run whose sync changed nothing ends with the fix commit still local, and that is the correct outcome, not a stage that failed.
 - **Do not use OCR's fix mode for this.** `sss:ocr-delegate` has its own Step 7; the OCR track finishes at Step 6 and reports. Fixes are applied here, in the parent, from all three tracks at once — one agent fixing what only it found is how the overlap ordering gets bypassed.
