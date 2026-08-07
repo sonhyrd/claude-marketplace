@@ -2,21 +2,14 @@
 name: translation-sync
 description: >
   Syncs local locale files to the hyrd-translation server via the bundled hyrd-trans CLI.
-  Use when the user asks to sync translations, push locales or locale files to the translation
-  server, run a translation sync, or when a PR's "Check locales/*.json" run is red because the
-  server has not seen this branch's keys yet.
+  Use when asked to sync translations, push locales to the translation server, run a translation
+  sync, or when a PR's "Check locales/*.json" run is red for want of one.
   Reads .github/hyrd-trans-bot.json, validates the token, diffs each configured language against
   the server in ONE whole-file call, auto-applies ADDs, and batch-confirms UPDATE/DELETE. PR-aware
   gating (default-on) keeps UPDATE/DELETE only for keys this branch actually changed vs its base, so
   a shared server's unmerged keys are never proposed for deletion. After applying changes it
   auto-pushes an empty "chore: trigger translation sync" commit (PR branch only) so the GitHub
   Check locales/* bot re-runs against the now-synced server.
-triggers:
-  - sync translations
-  - push locales to translation server
-  - sync locale files
-  - push translations
-  - run translation sync
 requires:
   cli: hyrd-trans.mjs        # ships next to this SKILL.md in the sss plugin; run with `node` (Node >= 20)
   subcommands:
@@ -39,8 +32,8 @@ safety: >
 > First-time setup or trouble? See `SETUP.md`.
 
 Orchestrate a full locale-to-server sync using the **bundled `hyrd-trans` CLI** (a dependency-free
-Node script that ships beside this `SKILL.md` inside the `sss` plugin — no install, no separate
-server, no registry auth, and nothing to vendor into the repo being synced).
+Node script shipped beside this `SKILL.md` in the `sss` plugin — no install, no separate server, no
+registry auth, nothing to vendor into the repo being synced).
 
 The diff is computed **server-side over the whole file** (`POST /api/translations/sync-diff`):
 you pass the path to the entire `{lang}.json` and the server returns only the real changes,
@@ -71,9 +64,8 @@ skill runs fast — each extra narration turn adds latency with no user-facing v
 
 ## The CLI: how to invoke it
 
-The CLI ships **inside this plugin**, next to this `SKILL.md` — it is not vendored into the repo
-being synced. So `$CLI` resolves from the **plugin root**, never from the working repo. Resolve it
-once, at the top of the run:
+The CLI ships **inside this plugin**, not in the repo being synced, so `$CLI` resolves from the
+**plugin root**. Resolve it once, at the top of the run:
 
 ```sh
 CLI=$(
@@ -81,25 +73,20 @@ CLI=$(
     [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] &&
       printf '%s\n' "$CLAUDE_PLUGIN_ROOT/skills/translation-sync/hyrd-trans.mjs"
     find "$HOME/.claude/plugins/cache" -maxdepth 7 \
-      -path '*/sss/*/skills/translation-sync/hyrd-trans.mjs' 2>/dev/null | sort -r
+      -path '*/sss/*/skills/translation-sync/hyrd-trans.mjs' 2>/dev/null | sort -Vr
     printf '%s\n' "./plugins/sss/skills/translation-sync/hyrd-trans.mjs"
   } | while IFS= read -r c; do [ -f "$c" ] && printf '%s\n' "$c"; done | head -1
 )
-[ -n "$CLI" ] || echo "ERROR: could not locate hyrd-trans.mjs in the sss plugin. See SETUP.md."
+[ -n "$CLI" ] && CLI="$(cd "$(dirname "$CLI")" && pwd)/hyrd-trans.mjs" ||
+  { echo "ERROR: hyrd-trans.mjs not found in the sss plugin. See SETUP.md." >&2; false; }
 ```
 
-- `$CLAUDE_PLUGIN_ROOT` is the authoritative answer when Claude Code exports it, so it is tried first.
-- The cache search is the fallback for a normal plugin install; `sort -r` takes the highest version.
-- The last candidate is the claude-marketplace source checkout (dogfooding this repo).
-- `find` rather than a bare glob: an unmatched glob is a hard error in `zsh`, and this block has to
-  survive whichever shell the session is using.
+Non-zero exit means no CLI: **STOP** — never substitute a repo-local path, which fails mid-run after
+the server has already been contacted. Why each line is written that way → `SETUP.md` › CLI resolution.
 
-If `$CLI` comes back empty, STOP and report the error above — do not fall back to a repo-local path.
-
-Always invoke from the **repo root of the repo being synced** (the default cwd) — `$CLI` is
-absolute-or-plugin-relative and stays valid regardless of cwd. The CLI reads `HYRD_TRANS_TOKEN` **fresh on
-every call** (a new process per invocation), so — unlike the old MCP — the token does **not** have to
-be present when Claude Code launched.
+Always invoke from the **repo root of the repo being synced** (the default cwd). The CLI reads
+`HYRD_TRANS_TOKEN` **fresh on every call** (a new process per invocation), so — unlike the old MCP —
+the token does **not** have to be present when Claude Code launched.
 
 ### Getting the token — resolve `$RUN` too
 

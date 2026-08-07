@@ -46,6 +46,32 @@ Before the first sync in a repo:
 
 ---
 
+## CLI resolution
+
+`SKILL.md` › The CLI resolves `$CLI` from the **plugin root**, never from the repo being synced —
+that repo does not carry the CLI. Three candidates, in preference order, first hit wins:
+
+1. `$CLAUDE_PLUGIN_ROOT/skills/translation-sync/hyrd-trans.mjs` — authoritative when Claude Code
+   exports it.
+2. `~/.claude/plugins/cache/*/sss/*/skills/translation-sync/hyrd-trans.mjs` — a normal plugin
+   install. Sorted with `sort -Vr`, a **version** sort. Plain `sort -r` is lexicographic and would
+   pick `1.9.0` over `1.10.0`, silently running a stale CLI against the live server.
+3. `./plugins/sss/skills/translation-sync/hyrd-trans.mjs` — the claude-marketplace checkout,
+   for dogfooding this repo.
+
+Two details that look like style and are not:
+
+- **`find`, not a glob.** An unmatched glob is a hard error in `zsh`, and the block has to survive
+  whichever shell the session is using.
+- **The result is absolutised** (`cd "$(dirname …)" && pwd`). Candidate 3 is cwd-relative, so
+  without this a later `cd` — into the repo being synced, say — silently invalidates `$CLI`.
+
+Failure is a **stop**, not a fallback: the block writes to stderr and exits non-zero. Substituting a
+repo-local path instead would fail as `Cannot find module` several steps into a run that has already
+contacted the server. If it fires, install the `sss` plugin.
+
+---
+
 ## Config reference
 
 > **Scope (`path`).** If `config.path` is set, this repo owns a single namespace inside a larger,
