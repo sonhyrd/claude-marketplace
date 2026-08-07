@@ -98,3 +98,8 @@ Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, both created lazily. See `docs/agents/domain.md`.
+
+### Delegation profile
+
+Branch prefix, post-merge check, commit policy, and worker constraints for `/delegate-tickets`.
+See `docs/agents/delegate-profile.md`.
