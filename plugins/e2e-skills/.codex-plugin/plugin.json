@@ -1,7 +1,7 @@
 {
   "name": "e2e",
-  "version": "1.0.0+codex.bc08d02511dc",
-  "description": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. pw-prove is user-invocable only; e2e-reviewer is model-invocable so pw-prove and playwright-test-generator can chain into it at their quality gate.",
+  "version": "1.0.0+codex.75b2e67771dd",
+  "description": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. pw-prove is user-invocable only; e2e-reviewer is model-invocable so pw-prove can chain into it at its quality gate.",
   "author": {
     "name": "voidmatcha"
   },
@@ -17,7 +17,7 @@
   "interface": {
     "displayName": "E2e",
     "shortDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer...",
-    "longDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. pw-prove is user-invocable only; e2e-reviewer is model-invocable so pw-prove and playwright-test-generator can chain into it at their quality gate.",
+    "longDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. pw-prove is user-invocable only; e2e-reviewer is model-invocable so pw-prove can chain into it at its quality gate.",
     "developerName": "voidmatcha",
     "category": "Productivity",
     "capabilities": [
