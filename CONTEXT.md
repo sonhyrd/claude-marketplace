@@ -43,6 +43,19 @@ A repo rule injected verbatim into every worker brief, true only because the wor
 Its counterpart is a **Convention**, which the repo's own agent guide owns.
 _Avoid_: worker constraint, guardrail
 
+## Review
+
+**Track**:
+One independently-contexted reviewer in a review run, whose report is printed verbatim and scored
+only against itself. Tracks are never merged or ranked against each other.
+_Avoid_: lane, pass, reviewer
+
+**Axis**:
+One question a single review skill asks of a diff — `matt:code-review` asks two, Standards and Spec.
+An axis belongs to the skill that asks it; a **Track** is who ran it. Two of `pr-review`'s three
+tracks are that skill's two axes.
+_Avoid_: dimension, angle
+
 ## Plugins
 
 **Subtree**:
