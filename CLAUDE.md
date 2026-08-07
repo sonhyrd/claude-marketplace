@@ -36,8 +36,16 @@ These live as skills so they load only when you're doing the task:
   skills invoke as `/e2e:pw-prove`). **The verbatim rule above does not apply here** — this is the
   opposite of `mattpocock-skills`: edit it in place. Fixing `pw-prove` is one commit in this repo,
   not a commit in another clone plus a pull.
-  - Push work back: `git subtree push --prefix=plugins/e2e-skills e2e-fork main`
+  - Push work back with a **targeted push**, not `git subtree push`
     (`e2e-fork` = `git@github.com:sonhyrd/e2e-skills.git`; add it with `git remote add` if missing).
+    Build a commit on `e2e-fork/main` carrying only the paths the fork owns and
+    `git push e2e-fork <sha>:main`. `git subtree push --prefix=plugins/e2e-skills e2e-fork main`
+    splits the *whole* prefix, so its tip carries `.claude-plugin/plugin.json` and
+    `.codex-plugin/plugin.json` — the two files the fork deliberately does not ship, and the two
+    entries in the expected divergence set below. Running it lands them on the fork and collapses
+    that set to zero, which `check-e2e-subtree.sh` reports as two reverted marketplace-only
+    decisions. `docs/adr/0005` records the measurement. `git subtree pull` is unaffected and stays
+    the inbound path.
   - Pull upstream in: merge `voidmatcha/main` into the fork *in the merge workbench clone at*
     `/Users/sondh0127/orca/e2e-skills`, push that, then
     `git subtree pull --prefix=plugins/e2e-skills e2e-fork main` here. That clone is a merge

@@ -68,6 +68,28 @@ because the pin was a marketplace decision the fork did not share. The unpin is 
 a chainable `pw-prove` for the same reason this repo does, and a file that is identical on both
 sides is one fewer thing for the guard to police and one fewer thing a merge can silently revert.
 
+## How the change reached the fork — not with `git subtree push`
+
+`git subtree push --prefix=plugins/e2e-skills e2e-fork main` is the command
+[ADR-0001](./0001-e2e-skills-as-an-editable-subtree.md) records and `CLAUDE.md` used to give
+unqualified. **Do not run it.** It splits the *whole* prefix, so the tip it pushes carries
+`.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` — measured, not assumed: the split
+diffs against `e2e-fork/main` as `A .claude-plugin/plugin.json`, `A .codex-plugin/plugin.json`,
+`M skills/pw-prove/SKILL.md`.
+
+Landing those two on the fork defeats this change twice over. The fork must stay manifest-free —
+its own `AGENTS.md` says so, and "the fork ships no plugin manifests at all" is the *reason* both
+entries are in the expected divergence set. Push them and the set collapses from two entries to
+zero, and `check-e2e-subtree.sh` immediately reports both as reverted marketplace-only decisions.
+
+So the pw-prove edit went over as a **targeted push**: a commit built on `e2e-fork/main` carrying
+only `skills/pw-prove/SKILL.md`, pushed with `git push e2e-fork <sha>:main`. The fork gets exactly
+the skill change, the manifests stay marketplace-only, and the next `git subtree pull` is a no-op
+for that file because both sides already hold it.
+
+**This is the rule for any prefix change from here on**, not a one-off: a marketplace → fork push is
+targeted at the paths the fork owns. `git subtree pull` is unaffected and stays the inbound path.
+
 ## Consequences
 
 **The alarm inverts rather than disappearing.** `skills/pw-prove/SKILL.md` used to be an expected
