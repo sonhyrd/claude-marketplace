@@ -67,9 +67,9 @@ Invoke the Skill tool with `matt:code-review` **inline, in this context**. It lo
 Then send **one** message with **three** `general-purpose` `Agent` calls. The loaded skill's step 4 says two; you send its two plus OCR, so all three tracks run concurrently at the same depth. This is the one instruction `pr-review` overrides in a skill it does not own — an upstream rewrite of that step is where it breaks.
 
 - **Standards** and **Spec** — the two prompts `matt:code-review` step 4 specifies, verbatim, including the smell baseline it says to paste in full.
-- **OCR** — invoke the Skill tool with `sss:ocr-delegate` in range mode (`--from`/`--to`), passing the PR title and body as `--background`. Review only: finish at its Step 6 and report. Return the structured comments plus the coverage summary — `total_files`, `reviewed_files`, `skipped_files`, `coverage_rate`, and a reason for every skipped file.
+- **OCR** — invoke the Skill tool with `sss:ocr-delegate` in range mode (`--from`/`--to`), passing the PR title and body as `--background`. Review only: finish at its Step 6 and report. Return the structured comments plus the coverage summary — total, reviewable, reviewed and skipped file counts, the coverage rate over the reviewable set, and a reason for every skipped file.
 
-With no `ocr` on PATH, send the two and open the report with: *OCR track skipped, no `ocr` on PATH — this is a plain `matt:code-review` run.*
+With no `ocr` on PATH, send the two and open the report with: *OCR track skipped, no `ocr` on PATH — this is a plain `matt:code-review` run.* An `ocr` that is present but whose `delegate` sub-commands reject the skill's invocation degrades the same way, with the failing command quoted instead of the PATH note — it is a broken tool, not a review with nothing to say, and the two must never read alike in the report.
 
 Done when every launched track has returned.
 
@@ -265,7 +265,7 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 
 ## Gotchas
 
-- **Coverage is the OCR track's contract.** A report without `coverage_rate` and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on.
+- **Coverage is the OCR track's contract.** A report without a coverage rate and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on. A high rate over a handful of reviewable files is not coverage either — OCR excludes Markdown, so a skills or docs repo can report 100% having seen almost none of the diff.
 - **Overlap is additive.** It names the agreements underneath three intact verbatim sections.
 - **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
   renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`

@@ -41,14 +41,32 @@ No LLM configuration is needed for delegation mode.
 ### Step 1: Preview — Determine What to Review
 
 ```bash
-ocr delegate preview --format json [--from <ref> --to <ref>] [--commit <hash>] [--exclude <patterns>]
+ocr delegate preview [--from <ref> --to <ref>] [--commit <hash>] [--exclude <patterns>]
 ```
 
-This outputs:
-- **mode** (workspace / range / commit)
-- **from / to / commit / merge_base** — ref metadata for constructing git commands
-- **Reviewable file list** — paths, status, insertions/deletions
-- **Excluded files** — with exclusion reason
+There is no `--format` flag on `ocr delegate` — passing one exits non-zero with
+`unknown flag: --format`. The output is Markdown, and it is parseable as-is:
+
+```
+# Files (12 reviewable / 26 total)
+
+- mode: range
+- from: origin/main
+- to: feature
+- merge_base: 47fcf0f…
+- total_insertions: 2851
+- total_deletions: 81
+
+  - `path/reviewable.ts` [modified] +6/-1
+~~- `path/skipped.md` [modified] +9/-0 (excluded: unsupported_ext)~~
+```
+
+Read it as:
+- **mode** (workspace / range / commit) and the **from / to / commit / merge_base**
+  ref metadata, from the bullet list — this is what Step 3 builds git commands from
+- **Reviewable files** — the plain ` - ` bullets: path, status, insertions/deletions
+- **Excluded files** — the `~~`-struck bullets, each with its exclusion reason in
+  parentheses. These are out of scope; only the reviewable ones need accounting for.
 
 **Common invocations:**
 
@@ -61,7 +79,7 @@ This outputs:
 ### Step 2: Get Rules for Files
 
 ```bash
-ocr delegate rule --format json <path1> <path2> ...
+ocr delegate rule <path1> <path2> ...
 ```
 
 Pass the reviewable file paths from Step 1. Output is grouped by rule content — files sharing the same rule appear under one group, avoiding repetition.
@@ -90,7 +108,8 @@ cat <path>
 
 ### Step 4: Review Each File
 
-Create a checklist containing every `reviewable_files` entry. For each reviewable file:
+Create a checklist containing every reviewable file from Step 1 — the plain bullets,
+not the `~~`-struck excluded ones. For each:
 
 Use `(path, status)` as the checklist identity. Workspace mode can report the same path twice when a staged deletion is followed by an untracked recreation.
 
@@ -116,7 +135,11 @@ Each comment must follow this structure:
 
 ### Step 6: Classify and Report
 
-Before reporting, verify that every previewed file is accounted for. Include `total_files`, `reviewed_files`, `skipped_files`, and `coverage_rate` in the summary. A skipped file must include its reason.
+Before reporting, verify that every reviewable file from Step 1 is accounted for. Open
+the report with a coverage summary naming, in these words, **total files**, **reviewable
+files**, **reviewed files**, **skipped files** and **coverage rate** — the rate is over
+the reviewable set, not the total, since the excluded files were never in scope. A
+skipped file must include its reason.
 
 Group findings by severity:
 
@@ -152,7 +175,7 @@ If the user requested "review and fix":
 | `--exclude <patterns>` | Comma-separated exclude patterns |
 | `-b, --background <text>` | Business context |
 | `-B, --background-file <path>` | Business context from Markdown file |
-| `-f, --format <text\|json>` | Output format; use `json` for agent integrations |
+| `--max-git-procs <n>` | Max concurrent git subprocesses (default 16) |
 
 ## Gotchas
 
@@ -161,4 +184,5 @@ If the user requested "review and fix":
 - **Working directory matters** — `ocr delegate` operates on the Git repo at the current directory. Use `--repo /path` to override.
 - **Untracked files in workspace mode** — `preview` includes untracked files. For these, read the file directly instead of using `git diff`.
 - **Background context** — pass `--background` to `preview` when you have requirement context; it appears in the output for your reference during review.
-- **Coverage is mandatory** — every `reviewable_files` entry must end as reviewed or explicitly skipped; do not silently omit files.
+- **Coverage is mandatory** — every reviewable file must end as reviewed or explicitly skipped; do not silently omit files.
+- **Markdown-only repos get an empty review** — OCR excludes `.md` as `unsupported_ext`, so a docs or skills repo can preview 26 files and offer 2. That is a real limit of the tool, not a clean bill of health: say so in the report rather than letting a high coverage rate over a tiny reviewable set imply the diff was covered.

@@ -372,11 +372,12 @@ function offGate() {
 /**
  * Build a single translations map and issue one PUT to the server.
  * - adds / updates: plain key→value (empty values defensively dropped + reported)
- * - deletes: each key → "" (server interprets empty string as delete)
+ * - deletes: each key → "" (server interprets empty string as delete), except a key
+ *   that is also an add/update — dropped and reported as `skippedConflicting`
  * - dryRun=true: returns the would-send payload WITHOUT calling PUT
  * Maps the `scope` param to the wire body param `path`.
  * @param {{ projectName: string, languageCode: string, subProjectName?: string, scope?: string, adds?: Record<string, string>, updates?: Record<string, string>, deletes?: string[], dryRun?: boolean }} input
- * @returns {Promise<{ success: boolean, applied: { adds: number, updates: number, deletes: number }, skippedEmpty: string[], server: unknown }>}
+ * @returns {Promise<{ success: boolean, applied: { adds: number, updates: number, deletes: number }, skippedEmpty: string[], skippedConflicting: string[], server: unknown }>}
  */
 export async function applyTranslations(input) {
   const {
@@ -416,10 +417,16 @@ export async function applyTranslations(input) {
   // Deletes are encoded as empty string — the server treats "" as delete.
   // Guard: never clobber a real add/update value if the same key is also in
   // `deletes` (the skill never does this, but the CLI is a public surface).
+  // A dropped delete is REPORTED, not just skipped: silently returning
+  // `deletes: 0` for a key the caller asked to delete reads as "already gone".
+  /** @type {string[]} */
+  const skippedConflicting = []
   let appliedDeletes = 0
   for (const key of deletes) {
-    if (key in translations)
+    if (key in translations) {
+      skippedConflicting.push(key)
       continue
+    }
     translations[key] = ''
     appliedDeletes++
   }
@@ -447,6 +454,7 @@ export async function applyTranslations(input) {
         deletes: appliedDeletes,
       },
       skippedEmpty,
+      skippedConflicting,
       server: { dryRun: true, wouldSend: payload },
     }
   }
@@ -464,6 +472,7 @@ export async function applyTranslations(input) {
       deletes: appliedDeletes,
     },
     skippedEmpty,
+    skippedConflicting,
     server: serverResponse,
   }
 }

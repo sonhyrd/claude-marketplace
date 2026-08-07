@@ -53,13 +53,32 @@ nope() {
 # Comments are stripped first so prose in a `//` can never be read as a key.
 extract_keys() {
     awk -v marker="$2" '
+        # Cut a // comment, but only one that starts OUTSIDE a string. A blind
+        # sub(/\/\/.*$/) also truncates at the // in a value like
+        # "https://github.com/…", dropping any key that follows it on that line --
+        # and two equally-shortened key sets still compare equal, so the drift this
+        # test exists to catch would pass. MIN_KEYS only catches a near-empty result,
+        # not a set short by one.
+        function strip_comment(s,   i, c, instr, esc) {
+            instr = 0; esc = 0
+            for (i = 1; i <= length(s); i++) {
+                c = substr(s, i, 1)
+                if (instr) {
+                    if (esc) esc = 0
+                    else if (c == "\\") esc = 1
+                    else if (c == "\"") instr = 0
+                }
+                else if (c == "\"") instr = 1
+                else if (c == "/" && substr(s, i + 1, 1) == "/") return substr(s, 1, i - 1)
+            }
+            return s
+        }
         index($0, marker) { seen = 1 }
         seen && $0 == "```jsonc" { inblock = 1; next }
         inblock && $0 == "```" { exit }
         inblock {
-            line = $0
-            sub(/\/\/.*$/, "", line)
-            while (match(line, /"[a-z_]+"[[:space:]]*:/)) {
+            line = strip_comment($0)
+            while (match(line, /"[a-z0-9_]+"[[:space:]]*:/)) {
                 key = substr(line, RSTART, RLENGTH)
                 gsub(/[":[:space:]]/, "", key)
                 print key
@@ -75,7 +94,14 @@ extract_keys() {
 assert_schema_found() {
     local label="$1" keys="$2"
     local count=0
-    [ -n "$keys" ] && count="$(echo "$keys" | wc -l | tr -d ' ')"
+    # `if`, not `[ -n "$keys" ] && count=…`: that form returns 1 on an empty $keys,
+    # which under `set -e` would abort the run. It survived only because both call
+    # sites append `|| true`, which suspends `set -e` for the whole function body --
+    # and `|| true` looks removable, since `nope` already records the failure. Do not
+    # make correctness here depend on punctuation at the call site.
+    if [ -n "$keys" ]; then
+        count="$(echo "$keys" | wc -l | tr -d ' ')"
+    fi
 
     if [ "$count" -ge "$MIN_KEYS" ]; then
         ok "$label carries the handoff schema (${count} keys)"

@@ -25,13 +25,20 @@ export class BaseRefUnresolvable extends Error {
  * Run a git subprocess; returns `{ ok, stdout }` and never throws, so callers branch
  * on absence vs failure without try/catch noise. `execFileSync` (not `exec`) avoids
  * shell quoting/injection on branch & path names.
+ *
+ * `maxBuffer` is set explicitly: the 1 MB default is smaller than a real locale file.
+ * `git show <base>:<locale>.json` on a multi-MB blob would exceed it and throw, and
+ * the caller (computeChangeset) reads a failed `show` on a path that DOES exist at
+ * base as a mis-resolved path -- fail-safe adds-only, reported as
+ * "path-resolution failure". Safe direction, wrong reason, and it would arrive as a
+ * function of file size on a repo whose locale files only grow.
  * @param {string[]} args
  * @param {string} cwd
  * @returns {{ ok: boolean, stdout: string }}
  */
 function gitTry(args, cwd) {
   try {
-    return { ok: true, stdout: execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim() }
+    return { ok: true, stdout: execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 }).trim() }
   }
   catch {
     return { ok: false, stdout: '' }

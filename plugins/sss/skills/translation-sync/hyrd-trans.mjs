@@ -253,24 +253,66 @@ async function run() {
   }
 }
 
+/**
+ * Write `text` to `stream`, resolving only once it has actually reached the OS.
+ * Resolves on `error` too (a downstream that closed the pipe), so a broken reader
+ * can never hang the exit.
+ * @param {NodeJS.WriteStream} stream
+ * @param {string} text
+ * @returns {Promise<void>}
+ */
+function writeAsync(stream, text) {
+  return new Promise((resolve) => {
+    stream.once('error', () => resolve())
+    stream.write(text, () => resolve())
+  })
+}
+
+/**
+ * Perform every `[stream, text]` write, then exit `code` — but only once all of them
+ * have flushed.
+ *
+ * `process.exit()` immediately after `stream.write()` truncates. When the target is a
+ * pipe — always, under an agent's Bash tool, `| jq`, or a command substitution —
+ * Node's writes are asynchronous, and exit tears the process down without flushing
+ * them. `diff-all` over several languages of a large project emits exactly the payload
+ * that gets cut, and a half-written JSON body reaches the caller alongside exit 0, i.e.
+ * the output contract at the top of this file reporting success on lost data.
+ *
+ * Every stream the run writes goes through here, stderr included: the gate warning is
+ * small enough to look safe, but "small enough" is the reasoning that produced the bug.
+ *
+ * `process.exitCode` is set as well, because awaiting the flush is not enough on its
+ * own — an idle keep-alive socket left by `fetch` can hold the event loop open for
+ * seconds after the output is complete, so the explicit exit is what keeps the CLI
+ * prompt. The assignment is the fallback if that exit is somehow not reached.
+ * @param {Array<[NodeJS.WriteStream, string]>} writes
+ * @param {number} code
+ */
+async function writeThenExit(writes, code) {
+  process.exitCode = code
+  await Promise.all(writes.map(([stream, text]) => writeAsync(stream, text)))
+  process.exit(code)
+}
+
 run()
   .then((result) => {
+    /** @type {Array<[NodeJS.WriteStream, string]>} */
+    const writes = []
     // A diff that fell back to fail-safe gating carries a warning. Surface it on
     // stderr (keeping exit 0) so CI sees the suppression even when it only reads
     // stderr; stdout JSON stays the machine contract. (Output-contract carve-out:
     // at exit 0 a gate warning MAY appear on stderr.)
     const warning = /** @type {any} */ (result)?.gate?.warning
     if (typeof warning === 'string' && warning)
-      process.stderr.write(`${warning}\n`)
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
-    process.exit(0)
+      writes.push([process.stderr, `${warning}\n`])
+    writes.push([process.stdout, `${JSON.stringify(result, null, 2)}\n`])
+    return writeThenExit(writes, 0)
   })
   .catch((err) => {
     if (err instanceof HttpError) {
       const status = err.statusCode
-      process.stderr.write(`${JSON.stringify({ error: err.message, status })}\n`)
-      process.exit(status === 401 ? 2 : 3)
+      return writeThenExit([[process.stderr, `${JSON.stringify({ error: err.message, status })}\n`]], status === 401 ? 2 : 3)
     }
-    process.stderr.write(`${JSON.stringify({ error: err instanceof Error ? err.message : String(err) })}\n`)
-    process.exit(1)
+    return writeThenExit([[process.stderr, `${JSON.stringify({ error: err instanceof Error ? err.message : String(err) })}\n`]], 1)
   })

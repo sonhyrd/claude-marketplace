@@ -75,9 +75,10 @@ setup_error() {
 # "exists only in the marketplace".
 #
 # This list is the whole contract: anything in it that is missing is a reverted
-# decision, anything outside it that differs is drift. Each element is "<name-status line>|<why it is expected>". The two halves live
-# together so a new divergence cannot be added without a stated reason, and so
-# `--explain` and the comparison read from one list rather than two.
+# decision, anything outside it that differs is drift. Each element is
+# "<name-status line>|<why it is expected>". The two halves live together so a new
+# divergence cannot be added without a stated reason, and so `--explain` and the
+# comparison read from one list rather than two.
 EXPECTED_WITH_REASON=(
     $'A\t.claude-plugin/plugin.json|The fork ships no plugin manifests at all; this exists only here.'
     $'A\t.codex-plugin/plugin.json|Same -- generated Codex manifest, marketplace-only.'
