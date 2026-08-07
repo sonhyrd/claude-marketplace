@@ -40,7 +40,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   its presence in the callable catalog, so a findable-but-uncallable action returning HTTP 200 no
   longer reads as working. The fork's transport spec, ADR-0014, delegation profile and
   issue-tracker doc arrive under the prefix so the rationale sits beside the code.
-  `make check-e2e-subtree` guards the three marketplace-only divergences this sync had to preserve.
+  `make check-e2e-subtree` guards the marketplace-only divergences this sync had to preserve.
+
+### Changed
+
+- **`pw-prove` is unpinned, and gated instead.** `disable-model-invocation: true` is gone from its
+  frontmatter, so another skill can hand into it through the Skill tool — the flag blocks *chained*
+  launches as well as unprompted ones, which is the seam that made a review-to-proof chain
+  impossible. What the pin was protecting moves into the skill body as a **Step 1 confirmation
+  gate**: a run the model started stops once, says it is about to bring up a dev server,
+  base-merge a branch, commit, push and comment on the PR, and waits; a run the user started by
+  name asks nothing. The pin's other job — keeping a mistyped `/e2e:pw-prove` from falling through
+  to a shadowing skill — died with the retirement of `playwright-test-generator`, which was that
+  skill. `docs/adr/0005` in the marketplace records the trade.
+- **`pw-prove` reads a handoff artifact.** `.pw-prove/handoff.json` at the target repo root carries
+  a preceding review's confirmed findings into Step 2 as **additive** context. A current handoff
+  (its `head_sha` matches HEAD) folds findings into the AC table with `handoff` in the Source
+  column; a stale one is deleted and reported in one line of the Step 4 Assumptions block, never
+  silently, because its findings point at line numbers that have moved. The skill's own Diff → AC
+  derivation runs identically either way, and `pw-prove` owns the schema as its only reader.
+- **The expected divergence set is two entries, not three.** Both `pw-prove` edits are pushed to
+  the fork, so `skills/pw-prove/SKILL.md` is byte-identical on both sides and only the two plugin
+  manifests remain marketplace-only. The guard's alarm inverted rather than disappearing: a pin
+  restored by hand or carried in by a `git subtree pull` is now reported as an *unexpected*
+  divergence, and `tests/bash/test-e2e-subtree-check.sh` covers that direction.
 
 ### Fixed
 
@@ -50,7 +73,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `disable-model-invocation: true` blocks *every* model-initiated launch — including a chained one
   from inside a skill the user invoked by name, which is the only path that ever reached this gate.
   Dropped the flag from `e2e-reviewer`: a skill that is a documented handoff target cannot be
-  pinned user-invocable-only. `pw-prove` keeps its own pin — it is an entry point, never a target.
+  pinned user-invocable-only. `pw-prove` kept its own pin at the time, as an entry point rather
+  than a target — see **Changed** for why it lost it too.
 
 - `playwright-test-generator` no longer shadows `/e2e:pw-prove`. Session
   `31c05f72-b031-4071-afa7-5d643f611c55` sent `/e2e:pw-prove <PR url>` with a leading U+00A0
@@ -69,7 +93,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   at pw-prove`) and carried in by the subtree pull. This repo had disabled the former by renaming
   its `SKILL.md` to `SKILL.md.disabled` — a marketplace-only deviation tracked by
   `check-e2e-subtree.sh`. Upstream removing the directory outright supersedes that rename, so the
-  deviation is dropped from the expected set and the check is back to three entries. The run
+  deviation is dropped from the expected set, taking the check back to three entries — and then to
+  two, once `pw-prove` lost its pin (see Changed). The run
   ledger's dynamic import of `playwright-test-generator/scripts/ptg-run.mjs` went with it, so
   keeping the directory is no longer load-bearing anywhere. Three skills remain on disk:
   `pw-prove`, `e2e-reviewer`, `playwright-debugger`.
@@ -88,10 +113,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Two of the three live skills are declared.** `playwright-debugger` ships inside the subtree
   and loads, but is not registered in the manifest. Re-declaring it is a one-line edit to the
   `skills` array in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
-- **`pw-prove` is user-invocable only**, via `disable-model-invocation: true` in its frontmatter.
-  That field is the only mechanism that pins a plugin-sourced skill — `skillOverrides` in
-  `~/.claude/settings.json` does not apply to plugin skills. `e2e-reviewer` deliberately carries
-  no such flag; see Fixed above.
+- **No skill in this bundle is pinned.** `disable-model-invocation: true` is the only mechanism
+  that pins a plugin-sourced skill — `skillOverrides` in `~/.claude/settings.json` does not apply
+  to plugin skills — and it is now absent from all three. `pw-prove` confirms instead of pinning;
+  see Changed. `e2e-reviewer` has deliberately carried no such flag since the fix above.
 - **Version is fresh, not borrowed.** Upstream publishes no plugin and no repo version; the only
   signals are per-skill `metadata.version` (`1.9.0` on the four voidmatcha skills, `0.1.0` on
   `pw-prove`). Those disagree, and `1.9.0` describes a five-skill bundle. `1.0.0` is the honest

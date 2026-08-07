@@ -36,8 +36,16 @@ These live as skills so they load only when you're doing the task:
   skills invoke as `/e2e:pw-prove`). **The verbatim rule above does not apply here** — this is the
   opposite of `mattpocock-skills`: edit it in place. Fixing `pw-prove` is one commit in this repo,
   not a commit in another clone plus a pull.
-  - Push work back: `git subtree push --prefix=plugins/e2e-skills e2e-fork main`
+  - Push work back with a **targeted push**, not `git subtree push`
     (`e2e-fork` = `git@github.com:sonhyrd/e2e-skills.git`; add it with `git remote add` if missing).
+    Build a commit on `e2e-fork/main` carrying only the paths the fork owns and
+    `git push e2e-fork <sha>:main`. `git subtree push --prefix=plugins/e2e-skills e2e-fork main`
+    splits the *whole* prefix, so its tip carries `.claude-plugin/plugin.json` and
+    `.codex-plugin/plugin.json` — the two files the fork deliberately does not ship, and the two
+    entries in the expected divergence set below. Running it lands them on the fork and collapses
+    that set to zero, which `check-e2e-subtree.sh` reports as two reverted marketplace-only
+    decisions. `docs/adr/0005` records the measurement. `git subtree pull` is unaffected and stays
+    the inbound path.
   - Pull upstream in: merge `voidmatcha/main` into the fork *in the merge workbench clone at*
     `/Users/sondh0127/orca/e2e-skills`, push that, then
     `git subtree pull --prefix=plugins/e2e-skills e2e-fork main` here. That clone is a merge
@@ -46,9 +54,9 @@ These live as skills so they load only when you're doing the task:
     `e2e` would break both `pull` and `push`. Plugin name ≠ directory name, same as `matt`.
   - **After any pull, run `make check-e2e-subtree`.** A pull is a merge, and a merge can silently
     revert a marketplace-only decision. The prefix is expected to differ from the fork by exactly
-    three things and nothing else: the two plugin manifests `.claude-plugin/plugin.json` and
-    `.codex-plugin/plugin.json` (the fork ships none), and exactly one added line in
-    `skills/pw-prove/SKILL.md`. `scripts/check-e2e-subtree.sh` is the single owner of that set and
+    two things and nothing else: the two plugin manifests `.claude-plugin/plugin.json` and
+    `.codex-plugin/plugin.json` (the fork ships none). Everything else, skill bodies included, is
+    byte-identical on both sides. `scripts/check-e2e-subtree.sh` is the single owner of that set and
     the only thing that asserts it — this list is orientation, the exit code is the verdict, and
     `./scripts/check-e2e-subtree.sh --explain` prints the set with each entry's reason straight from
     the script. A test asserts this paragraph names every path the script expects, so the two cannot
@@ -64,17 +72,24 @@ These live as skills so they load only when you're doing the task:
     former by renaming its `SKILL.md` to `SKILL.md.disabled` — that rename was a marketplace-only
     deviation tracked by `check-e2e-subtree.sh`, and it was dropped when the directory it renamed
     stopped existing. Do not re-add it.
-  - `disable-model-invocation: true` also removes a skill from the model-facing skill listing
-    entirely, so a hidden skill can be *shadowed*: if the user's `/e2e:pw-prove` fails to parse as a
-    command (e.g. a leading U+00A0 from a paste), the model sees no `pw-prove` and falls through to
-    whatever listed skill advertises the same job. `playwright-test-generator` was that skill — its
-    retirement removes the shadow at the source.
-  - `pw-prove` carries `disable-model-invocation: true` in its frontmatter. That is the *only*
-    mechanism that pins a plugin skill to user-invocable-only — `skillOverrides` in
-    `~/.claude/settings.json` is inert for skills whose source is a plugin. Do not "fix" this by
-    adding settings keys.
-  - **`e2e-reviewer` must stay un-pinned.** It carried the same flag briefly and it broke the
-    Step 6 quality gate in `pw-prove`, which invokes it through
+  - `disable-model-invocation: true` in a skill's frontmatter is the *only* mechanism that pins a
+    plugin skill to user-invocable-only — `skillOverrides` in `~/.claude/settings.json` is inert for
+    skills whose source is a plugin, so never "fix" a pin question by adding settings keys. The flag
+    also removes the skill from the model-facing listing entirely, so a hidden skill can be
+    *shadowed*: if the user's `/e2e:pw-prove` fails to parse as a command (e.g. a leading U+00A0
+    from a paste), the model sees no `pw-prove` and falls through to whatever listed skill
+    advertises the same job. `playwright-test-generator` was that skill — its retirement removes the
+    shadow at the source.
+  - **No skill in this subtree carries the pin, and `pw-prove` must stay un-pinned.** It was pinned
+    until the pin's two jobs both ran out: shadowing died with `playwright-test-generator`, and
+    keeping an expensive irreversible run human-triggered moved into `pw-prove`'s own Step 1
+    confirmation gate, which fires on the model-invoked path only. `docs/adr/0005` records the
+    trade. The line was removed here and pushed to the fork, so it is no longer a marketplace
+    deviation — `check-e2e-subtree.sh` now catches it *returning*, as an unexpected divergence,
+    rather than catching it going missing. Nothing catches it being re-added by hand; that is what
+    the ADR is for.
+  - **`e2e-reviewer` must stay un-pinned** for the same reason it always did. It carried the flag
+    briefly and it broke the Step 6 quality gate in `pw-prove`, which invokes it through
     the Skill tool: the flag blocks *chained* launches too, so the gate died with `Skill
     e2e:e2e-reviewer cannot be used with Skill tool due to disable-model-invocation` even inside a
     run the user had started by name. Do not re-add it; a skill that is a handoff target cannot be

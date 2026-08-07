@@ -81,19 +81,29 @@ run_check() {
 
 # Assert that a mutation is reported as drift (exit 1) and that the report names
 # the decision that was undone -- a check that only says "drift" does not tell an
-# operator which one.
-# $1 = mutation snippet, $2 = pattern the output must contain, $3 = label.
+# operator which one. Every pattern must match, so a label claiming two things
+# ("reported as an unexpected divergence, and names the file") is asserted as two
+# things rather than passing on whichever half is easier to match.
+# $1 = mutation snippet, $2 = label, $3.. = patterns the output must all contain.
 expect_drift() {
-    local snippet="$1" pattern="$2" label="$3"
-    local sha out rc
+    local snippet="$1" label="$2"
+    shift 2
+    local sha out rc pattern
 
     sha="$(mutate_and_commit "$snippet")"
     out="$(run_check "$sha")" && rc=0 || rc=$?
-    if [ "$rc" -eq 1 ] && grep -qi -- "$pattern" <<<"$out"; then
-        ok "$label"
-    else
+
+    if [ "$rc" -ne 1 ]; then
         nope "$label" "rc=$rc: $out"
+        return
     fi
+    for pattern in "$@"; do
+        if ! grep -qi -- "$pattern" <<<"$out"; then
+            nope "$label" "no match for '${pattern}': $out"
+            return
+        fi
+    done
+    ok "$label"
 }
 
 echo ""
@@ -126,33 +136,44 @@ fi
 
 echo -e "${YELLOW}Each reverted decision is caught and named${NC}"
 
-# 1. pw-prove un-pinned: the disable-model-invocation line removed. The command
-#    substitution reads the whole file before the redirect truncates it, so this
-#    needs no temp file inside the worktree (where `git add -A` would sweep one
-#    up into the mutation commit).
-expect_drift \
-    "pin_stripped=\"\$(grep -v '^disable-model-invocation: true\$' '${PREFIX}/skills/pw-prove/SKILL.md')\"; printf '%s\n' \"\$pin_stripped\" > '${PREFIX}/skills/pw-prove/SKILL.md'" \
-    "skills/pw-prove/SKILL.md" \
-    "un-pinning pw-prove fails and names the SKILL.md"
-
-# 2. The Claude plugin manifest deleted.
+# 1. The Claude plugin manifest deleted.
 expect_drift \
     "rm '${PREFIX}/.claude-plugin/plugin.json'" \
-    "\.claude-plugin/plugin\.json" \
-    "deleting .claude-plugin/plugin.json fails and names it"
+    "deleting .claude-plugin/plugin.json fails and names it" \
+    "reverted" "\.claude-plugin/plugin\.json"
 
-# 3. The Codex plugin manifest deleted.
+# 2. The Codex plugin manifest deleted.
 expect_drift \
     "rm '${PREFIX}/.codex-plugin/plugin.json'" \
-    "\.codex-plugin/plugin\.json" \
-    "deleting .codex-plugin/plugin.json fails and names it"
+    "deleting .codex-plugin/plugin.json fails and names it" \
+    "reverted" "\.codex-plugin/plugin\.json"
 
-# 4. pw-prove pinned but otherwise overwritten: the entry set still matches, so
-#    only the one-added-line assertion can catch this.
+# --- The pin, in the direction it can now come back ---------------------------
+
+echo -e "${YELLOW}A returning pw-prove pin is caught${NC}"
+
+# `disable-model-invocation: true` used to be an EXPECTED entry, and the check
+# fired when it vanished. It was removed and pushed to the fork (docs/adr/0005),
+# so pw-prove's SKILL.md is now byte-identical on both sides and the alarm
+# inverted: the pin coming back -- by hand, or carried in by a subtree pull --
+# makes the file diverge, which is an UNEXPECTED divergence. Nothing else now
+# asserts that the pin is gone, so this case is the whole mechanical guard.
+#
+# The report must also name the pin, not just the file: an operator who reads
+# "skills/pw-prove/SKILL.md differs" still has to go diff it, and naming the
+# decision that was undone is the entire point of this guard.
+expect_drift \
+    "printf 'disable-model-invocation: true\n' >> '${PREFIX}/skills/pw-prove/SKILL.md'" \
+    "a returning pin is unexpected divergence, and is named with its ADR" \
+    "unexpected divergence" "skills/pw-prove/SKILL\.md" \
+    "disable-model-invocation: true" "docs/adr/0005"
+
+# 3. Any other prefix-only edit to that file is ordinary drift -- the pin note is
+#    additive, never a substitute for the unexpected-divergence report.
 expect_drift \
     "printf '\n<!-- overwritten -->\n' >> '${PREFIX}/skills/pw-prove/SKILL.md'" \
-    "one added line" \
-    "a pw-prove edit beyond the pin fails the one-added-line assertion"
+    "an unrelated pw-prove edit is reported as an unexpected divergence" \
+    "unexpected divergence" "skills/pw-prove/SKILL\.md"
 
 # --- Ordinary incoming work must not trip the guard ---------------------------
 
@@ -185,8 +206,8 @@ fi
 # and never pushed back -- is drift, and must be named.
 expect_drift \
     "printf '\n<!-- authored here, never pushed -->\n' >> '${PREFIX}/README.md'" \
-    "README.md" \
-    "a prefix-only edit to a fork-owned file is reported as drift"
+    "a prefix-only edit to a fork-owned file is reported as drift" \
+    "unexpected divergence" "README\.md"
 
 # A change outside the prefix is invisible to the check.
 sha="$(mutate_and_commit "printf '\n<!-- unrelated -->\n' >> README.md")"
