@@ -3,9 +3,9 @@
 Read by `/delegate-tickets` (step 1). Amended by the coordinator when a merge-back reveals a new
 baseline, known-noise test, or environment trap.
 
-- **Remote**: `sonhyrd/e2e-skills` — the origin this profile describes. Step 1 compares it against
-  `git remote get-url origin` and warns on mismatch. Note this repo also carries an `upstream`
-  remote (`voidmatcha/e2e-skills`); it is never a push target.
+- **Remote**: `sonhyrd/e2e-skills` — the origin this profile describes, and the only remote the repo
+  carries. Step 1 compares it against `git remote get-url origin` and warns on mismatch. If a second
+  remote is ever present, it is never a push target.
 
 - **Branch prefix**: `sss/` — Orca prefixes worktree branches itself, so a worktree named
   `ticket/<slug>` produces branch `sss/ticket-<slug>`. Do not fight it; merge by the real branch

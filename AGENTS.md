@@ -32,8 +32,12 @@ There is deliberately no plugin manifest, no host adapter, no installer script a
 Manifest, marketplace and cross-host parity are not concepts this repo has. Changes you make land in
 a runtime only after the operator pulls the subtree.
 
-`upstream` (`voidmatcha/e2e-skills`) is fetch-only and mechanically push-disabled. Never push to it,
-never open an issue or PR against it.
+`origin` (`sonhyrd/e2e-skills`) is the only remote. There is deliberately no `upstream` remote: the
+fork it would point at (`voidmatcha/e2e-skills`) has diverged into the public-bundle arrangement this
+repo retired, so nothing there is mergeable wholesale. If you ever need a scanner fix from it, add it
+fetch-only and push-disabled for that one job, port the change into `scan.mjs` by hand — upstream's
+fix will land in `scan.sh`, which does not exist here — and remove the remote and any tags it
+brought with it afterwards.
 
 ## Verification gate (must pass before commit)
 
@@ -160,7 +164,7 @@ marketplace subtree) — a plain skill copy never sees them. So any skill that d
 - Do **not** introduce out-of-scope framework code paths. Skills must say "out of scope" rather than emit half-working examples for Selenium/WebdriverIO/etc.
 - Do **not** push commits without running `bash scripts/ci/ci-local.sh`.
 - Do **not** reintroduce plugin manifests, a host adapter surface, or a second installer. The marketplace owns distribution; a second propagation path is how a runtime ends up running a skill version this repo does not have.
-- Do **not** push to `upstream`, or open issues/PRs against it. It exists to fetch scanner fixes.
+- Do **not** add a permanent `upstream` remote, merge `voidmatcha/e2e-skills`, or open issues/PRs against it. `origin` is the only remote; see the distribution section for the one-off fetch-only exception.
 - Do **not** edit `skills/e2e-reviewer/references/grep-patterns.md` without checking that the matching pattern IDs in `skills/e2e-reviewer/scripts/scan.mjs` still line up — `scan.mjs` is the runtime source of truth, `grep-patterns.md` is an ID-meaning reference for Phase 2 / debugger lookup.
 - Do **not** create side effects on third-party repos when validating the skill. Cloning into `testbed/` and running `scan.mjs` locally is allowed; pushing to forks, opening PRs/issues, posting comments, or any state-changing `gh` command is not.
 
