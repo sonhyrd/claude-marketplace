@@ -7,12 +7,15 @@
 # validates the manifest and writes both settings keys itself. Both commands are idempotent,
 # so re-running this is a no-op on an already-provisioned machine.
 #
-# Machine-local by design and NOT handled here: directory-sourced marketplaces (this repo).
-# Add those by hand — the path differs per machine.
+# Directory-sourced marketplaces (this repo) are handled too, in step 3. Only their PATH is
+# machine-local; the plugin names behind them are not, so the roster carries the names and this
+# script resolves the path once. See resolve_local_path for the order it tries.
 set -euo pipefail
 
 roster="${1:?usage: apply-plugins.sh <path/to/baseline/plugins.json>}"
 dry=${DRY_RUN:-0}
+settings="${CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 command -v claude >/dev/null || { echo "the claude CLI is required" >&2; exit 1; }
@@ -20,6 +23,48 @@ command -v claude >/dev/null || { echo "the claude CLI is required" >&2; exit 1;
 
 run() {
   if [ "$dry" = 1 ]; then echo "DRY: $*"; else "$@"; fi
+}
+
+# Where does directory-sourced marketplace $1 live on THIS machine? Prints nothing and returns
+# 1 when it cannot be answered, which is the normal state of a machine that has never had it.
+resolve_local_path() {
+  local name="$1" env_var candidate
+
+  # 1. Explicit override, for a checkout in a non-obvious place.
+  env_var="SSS_MARKETPLACE_PATH"
+  if [ -n "${!env_var:-}" ]; then printf '%s\n' "${!env_var}"; return 0; fi
+
+  # 2. Already registered here — settings holds the answer from the last time it was added.
+  if [ -r "$settings" ]; then
+    candidate=$(jq -r --arg n "$name" \
+      '.extraKnownMarketplaces[$n].source.path // empty' "$settings" 2>/dev/null || true)
+    if [ -n "$candidate" ] && [ -d "$candidate" ]; then printf '%s\n' "$candidate"; return 0; fi
+  fi
+
+  # 3. This script is itself in the marketplace. When it runs from a checkout rather than from
+  #    the versioned plugin cache, the repo containing it IS the marketplace — so a fresh clone
+  #    can bootstrap with no path typed anywhere.
+  if candidate=$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null); then
+    if [ "$(jq -r '.name // empty' "$candidate/.claude-plugin/marketplace.json" 2>/dev/null)" = "$name" ]; then
+      printf '%s\n' "$candidate"; return 0
+    fi
+  fi
+
+  return 1
+}
+
+# A vendored skill can ship a package.json with no node_modules and no lockfile — installing the
+# plugin then leaves a skill that fails on first call. Install deps for any skill in $1 that is
+# in that state. Silent no-op for the plugins that carry no package.json, which is most of them.
+ensure_skill_deps() {
+  local root="$1" pkg dir mgr
+  command -v bun >/dev/null && mgr=bun || { command -v npm >/dev/null && mgr=npm || return 0; }
+  while IFS= read -r pkg; do
+    dir="$(dirname "$pkg")"
+    [ -d "$dir/node_modules" ] && continue
+    echo "+ installing dependencies for $(basename "$dir") ($mgr)"
+    run bash -c "cd \"\$1\" && $mgr install" _ "$dir"
+  done < <(find "$root" -name package.json -not -path '*/node_modules/*' 2>/dev/null)
 }
 
 have_mk=$(claude plugin marketplace list 2>/dev/null || true)
@@ -48,6 +93,46 @@ while read -r id; do
   fi
 done < <(jq -r '.enabledPlugins | to_entries[] | select(.value == true) | .key' "$roster")
 
+# 3. Directory-sourced marketplaces. The roster carries the plugin names; the path is resolved
+#    per machine. Unresolvable is not an error — it is a machine that has never had this repo,
+#    and the only thing missing is one path the user has to supply.
+unresolved=0
+while IFS= read -r mk; do
+  [ -n "$mk" ] || continue
+  if ! path=$(resolve_local_path "$mk"); then
+    unresolved=1
+    echo "! marketplace $mk not resolvable on this machine — skipping its plugins:"
+    jq -r --arg m "$mk" '.localMarketplaces[$m][] | "    " + . + "@" + $m' "$roster"
+    continue
+  fi
+
+  if grep -qE "^[[:space:]]*❯[[:space:]]+${mk}\$" <<<"$have_mk"; then
+    echo "= marketplace $mk already registered ($path)"
+  else
+    echo "+ adding marketplace $mk ($path)"
+    run claude plugin marketplace add "$path"
+  fi
+
+  while read -r plugin; do
+    [ -n "$plugin" ] || continue
+    id="$plugin@$mk"
+    if grep -qE "^[[:space:]]*❯[[:space:]]+${id}\$" <<<"$have_pl"; then
+      echo "= plugin $id already installed"
+    else
+      echo "+ installing plugin $id"
+      run claude plugin install "$id"
+    fi
+    # Only ever look inside a cache dir that exists — a dry run installed nothing.
+    for cached in "$HOME/.claude/plugins/cache/$mk/$plugin"/*/; do
+      [ -d "$cached" ] && ensure_skill_deps "$cached"
+    done
+  done < <(jq -r --arg m "$mk" '.localMarketplaces[$m][]' "$roster")
+done < <(jq -r '.localMarketplaces // {} | keys[]' "$roster")
+
 echo
-echo "roster applied. Directory-sourced marketplaces are machine-local and were skipped:"
-echo "  claude plugin marketplace add /path/to/claude-marketplace   # then enable sss, matt, e2e"
+if [ "$unresolved" = 1 ]; then
+  echo "roster applied, minus the directory-sourced plugins listed above. To finish:"
+  echo "  SSS_MARKETPLACE_PATH=/path/to/claude-marketplace $0 $roster"
+else
+  echo "roster applied."
+fi

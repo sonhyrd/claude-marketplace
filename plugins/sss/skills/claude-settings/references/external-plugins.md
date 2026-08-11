@@ -8,8 +8,8 @@ rationale behind the ones whose packaging is a decision rather than an accident.
 `scripts/apply-plugins.sh`. Sections 1 and 2 below are what that roster currently holds; if
 they disagree with the JSON, the JSON is right and this file is stale.
 
-Only *directory*-sourced marketplaces stay manual, because their path differs per machine —
-that is section 3, and it is one command.
+Directory-sourced marketplaces are in the roster too, by name — see section 3. Only their
+*path* is machine-local, and apply resolves that itself.
 
 Enabled plugins only. Anything installed and left disabled is an evaluation leftover; capture
 records what is enabled, so disabling is how something leaves the roster.
@@ -45,16 +45,30 @@ strip.
 - `frontend-design`
 - `skill-creator`
 
-## 3. This repo — the one that stays manual
+## 3. This repo — in the roster by name, resolved by path
 
 Added as a **directory** source pointing at the working tree, so uncommitted edits are live
-locally and invisible on every other machine. That working-tree path is the reason it cannot
-be in the roster: it is the one field a shared baseline cannot get right.
+locally and invisible on every other machine. That working-tree path is the one field a shared
+baseline cannot get right — but the plugin names are fine, so they live in the roster under
+`localMarketplaces` and `apply-plugins.sh` installs them. It resolves the path from
+`$SSS_MARKETPLACE_PATH`, then settings, then the repo containing the script itself.
 
-```bash
-claude plugin marketplace add /path/to/claude-marketplace
-claude plugin install sss@sss-marketplace matt@sss-marketplace e2e@sss-marketplace
-```
+| Plugin | What it gives you |
+|---|---|
+| `sss` | Locally-authored skills — `/sss:pr-review`, `/sss:claude-settings`, `/sss:autoship`, … |
+| `matt` | `mattpocock/skills` — `/matt:code-review`, `/matt:tdd`, `/matt:research`, … |
+| `e2e` | `/e2e:pw-prove`, `/e2e:e2e-reviewer`, `/e2e:playwright-debugger` |
+| `web-search` | `/web-search` — browser-backed Google/DuckDuckGo search, pages as Markdown |
+
+`web-search` vendors upstream's `package.json` with no `node_modules` and no lockfile (both
+excluded by upstream's `.gitignore`), so installing the plugin alone leaves a skill that fails
+its first call on a missing `playwright`. Apply installs deps for any newly installed skill in
+that state, so this needs no separate step.
+
+**A checkout that predates a plugin hides it.** The marketplace resolves against the working
+tree, so on a branch cut before `web-search` landed, `claude plugin list` reports
+`Plugin web-search not found in marketplace sss-marketplace` while settings still show it
+installed and enabled. Nothing is broken — check out `main`, or a branch based on it.
 
 ## Verifying a machine
 
