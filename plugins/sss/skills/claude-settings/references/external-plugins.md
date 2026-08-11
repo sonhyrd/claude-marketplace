@@ -53,8 +53,22 @@ be in the roster: it is the one field a shared baseline cannot get right.
 
 ```bash
 claude plugin marketplace add /path/to/claude-marketplace
-claude plugin install sss@sss-marketplace matt@sss-marketplace e2e@sss-marketplace
+claude plugin install sss@sss-marketplace matt@sss-marketplace e2e@sss-marketplace \
+  web-search@sss-marketplace
+(cd ~/.claude/plugins/cache/sss-marketplace/web-search/*/skills/web-search && bun install)
 ```
+
+| Plugin | What it gives you |
+|---|---|
+| `sss` | Locally-authored skills — `/sss:pr-review`, `/sss:claude-settings`, `/sss:autoship`, … |
+| `matt` | `mattpocock/skills` — `/matt:code-review`, `/matt:tdd`, `/matt:research`, … |
+| `e2e` | `/e2e:pw-prove`, `/e2e:e2e-reviewer`, `/e2e:playwright-debugger` |
+| `web-search` | `/web-search` — browser-backed Google/DuckDuckGo search, pages as Markdown |
+
+`web-search` is the one that is not usable the moment it installs. It vendors upstream's
+`package.json` without `node_modules` or a lockfile (upstream's `.gitignore` excludes both), so
+its first call fails on a missing `playwright` until the `bun install` above runs. The cache
+path is versioned — repeat it after a version bump, which lands in a new empty directory.
 
 ## Verifying a machine
 

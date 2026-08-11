@@ -103,8 +103,16 @@ The per-machine `settings.json` write is unavoidable; this skill automates it.
    marketplace the roster cannot carry:
    ```bash
    claude plugin marketplace add /path/to/claude-marketplace
-   claude plugin install sss@sss-marketplace matt@sss-marketplace e2e@sss-marketplace
+   claude plugin install sss@sss-marketplace matt@sss-marketplace e2e@sss-marketplace \
+     web-search@sss-marketplace
    ```
+   `web-search` then needs its own dependencies — it ships no `node_modules` and no lockfile,
+   so an install alone leaves a skill that fails on first use:
+   ```bash
+   (cd ~/.claude/plugins/cache/sss-marketplace/web-search/*/skills/web-search && bun install)
+   ```
+   Re-run that after any `web-search` version bump; the cache path is versioned, so an upgrade
+   lands in a new empty directory.
 
 6. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
