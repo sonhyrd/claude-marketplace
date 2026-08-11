@@ -1,6 +1,6 @@
 {
   "name": "sss",
-  "version": "1.4.0+codex.51b34d8e3861",
+  "version": "1.4.0+codex.362313bed7af",
   "description": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a config schema with devDefault, a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable \u2014 ports owned by portless, a refusing preflight, and a Liveness Proof. autoship, delegate-tickets and setup-cursor-worker drive autonomous implementation via Orca workers.",
   "author": {
     "name": "sonhyrd"
