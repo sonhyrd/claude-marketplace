@@ -26,7 +26,7 @@ Each changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) 
 Changelog filenames match the plugin name from marketplace.json (kebab-case):
 - `skill-creator.md` for the skill-creator plugin
 - `git-absorb.md` for the git-absorb plugin
-- `tmux.md` for the tmux plugin
+- `ripgrep.md` for the ripgrep plugin
 
 ## Relationship to Main CHANGELOG.md
 

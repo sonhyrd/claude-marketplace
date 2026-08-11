@@ -40,9 +40,6 @@ Tool for creating and managing Agent Skills.
 ### [skill-reviewer](./skill-reviewer/)
 Review and ensure Agent Skills maintain high quality standards.
 
-### [tmux](./tmux/)
-Remote control tmux sessions for interactive CLIs (Python, gdb, etc.) by sending keystrokes and scraping pane output.
-
 ## Relationship to Other Documentation
 
 - **[plugins/](../plugins/)** - Actual plugin code and runtime documentation
