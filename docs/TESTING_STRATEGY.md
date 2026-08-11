@@ -6,6 +6,11 @@
 **Last Updated**: 2025-11-23
 **Status**: Implementation Plan
 
+> **Note:** this is an unimplemented plan, and it uses the `tmux` plugin as its running example
+> throughout. That plugin was removed from the marketplace — every `tmux` reference below is
+> illustrative pseudocode, not a pointer to code in this repo. The tests that do exist are
+> described in [tests/README.md](../tests/README.md).
+
 ---
 
 ## Executive Summary

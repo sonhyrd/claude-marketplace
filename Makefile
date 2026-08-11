@@ -1,4 +1,4 @@
-.PHONY: help sync sync-codex-plugins check-codex-plugins check-e2e-subtree test-e2e-subtree-check test-pr-review-handoff-parity validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-tmux-build test-tmux test-tmux-local test-tmux-shell test-session-registry test-session-registry-local test-registry test-create-session test-list-sessions test-cleanup-sessions test-session-integration test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
+.PHONY: help sync sync-codex-plugins check-codex-plugins check-e2e-subtree test-e2e-subtree-check test-pr-review-handoff-parity validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
 
 # Default target
 .DEFAULT_GOAL := help
@@ -85,7 +85,6 @@ test: ## Run all tests (pytest + vitest)
 		$(UV_RUN) pytest tests/ -v; \
 	else \
 		echo "$(YELLOW)No Python tests found - skipping pytest$(NC)"; \
-		echo "$(YELLOW)Bash tests are located in tests/bash/ (run with make test-tmux)$(NC)"; \
 	fi
 	@$(MAKE) test-linear
 
@@ -95,7 +94,6 @@ test-cov: ## Run tests with coverage report
 		$(UV_RUN) pytest tests/ -v --cov=scripts --cov-report=html --cov-report=term; \
 	else \
 		echo "$(YELLOW)No Python tests found - skipping pytest with coverage$(NC)"; \
-		echo "$(YELLOW)Bash tests are located in tests/bash/ (run with make test-tmux)$(NC)"; \
 	fi
 
 CODEX_SKILLS_FILES := scripts/install_codex_skills.py scripts/manage_codex_skills.py scripts/sync_codex_plugins.py tests/test_install_codex_skills.py tests/test_manage_codex_skills.py tests/test_sync_codex_plugins.py
@@ -132,86 +130,6 @@ format-codex-installer-check: format-codex-skills-check ## Alias for Codex skill
 
 manage-codex-skills: ## Open the interactive Codex skills manager
 	@./scripts/manage_codex_skills.py
-
-# Docker configuration for tmux tests
-DOCKER_IMAGE := tmux-tests
-DOCKER_RUN_OPTS ?= --rm -t
-DOCKER_RUN := docker run $(DOCKER_RUN_OPTS) -v $(PWD):/workspace:ro -w /workspace $(DOCKER_IMAGE)
-
-# Tmux test groups
-TMUX_BASE_TESTS := pane-health wait-for-text find-sessions safe-send
-TMUX_SESSION_REGISTRY_TESTS := registry create-session list-sessions cleanup-sessions kill-session session-integration
-TMUX_TESTS := $(TMUX_BASE_TESTS) $(TMUX_SESSION_REGISTRY_TESTS)
-
-# Helper macros for running tests
-define run_test_docker
-	@echo ""
-	@echo "$(YELLOW)Running $1.sh tests...$(NC)"
-	$(DOCKER_RUN) tests/bash/test-$1.sh
-endef
-
-define run_test_local
-	@echo ""
-	@echo "$(YELLOW)Running $1.sh tests...$(NC)"
-	tests/bash/test-$1.sh
-endef
-
-test-tmux-build: ## Build Docker image for tmux tests
-	@echo "$(CYAN)Building Docker image for tmux tests...$(NC)"
-	docker build -f tests/Dockerfile.tests -t $(DOCKER_IMAGE) .
-	@echo "$(GREEN)✓ Docker image built: $(DOCKER_IMAGE)$(NC)"
-
-test-tmux: test-tmux-build ## Run all tmux tool tests in Docker
-	@echo "$(CYAN)Running all tmux tests in Docker...$(NC)"
-	$(foreach t,$(TMUX_TESTS),$(call run_test_docker,$(t)))
-	@echo ""
-	@echo "$(GREEN)✓ All tmux tests passed ($(words $(TMUX_TESTS)) test suites)$(NC)"
-
-test-session-registry: test-tmux-build ## Run tmux session registry tests in Docker
-	@echo "$(CYAN)Running tmux session registry tests in Docker...$(NC)"
-	$(foreach t,$(TMUX_SESSION_REGISTRY_TESTS),$(call run_test_docker,$(t)))
-	@echo ""
-	@echo "$(GREEN)✓ Session registry tests passed ($(words $(TMUX_SESSION_REGISTRY_TESTS)) test suites)$(NC)"
-
-test-tmux/%: test-tmux-build ## Run specific tmux test (e.g., make test-tmux/pane-health)
-	@echo "$(CYAN)Running tmux test: $*$(NC)"
-	$(DOCKER_RUN) tests/bash/test-$*.sh
-
-test-tmux-local: ## Run tmux tests locally (without Docker)
-	@echo "$(CYAN)Running tmux tests locally...$(NC)"
-	$(foreach t,$(TMUX_TESTS),$(call run_test_local,$(t)))
-	@echo ""
-	@echo "$(GREEN)✓ All tmux tests passed ($(words $(TMUX_TESTS)) test suites)$(NC)"
-
-test-session-registry-local: ## Run session registry tests locally (without Docker)
-	@echo "$(CYAN)Running session registry tests locally...$(NC)"
-	$(foreach t,$(TMUX_SESSION_REGISTRY_TESTS),$(call run_test_local,$(t)))
-	@echo ""
-	@echo "$(GREEN)✓ Session registry tests passed ($(words $(TMUX_SESSION_REGISTRY_TESTS)) test suites)$(NC)"
-
-# Individual test targets (Docker)
-test-registry: test-tmux-build ## Run registry library tests in Docker
-	$(call run_test_docker,registry)
-
-test-create-session: test-tmux-build ## Run create-session.sh tests in Docker
-	$(call run_test_docker,create-session)
-
-test-list-sessions: test-tmux-build ## Run list-sessions.sh tests in Docker
-	$(call run_test_docker,list-sessions)
-
-test-cleanup-sessions: test-tmux-build ## Run cleanup-sessions.sh tests in Docker
-	$(call run_test_docker,cleanup-sessions)
-
-test-kill-session: test-tmux-build ## Run kill-session.sh tests in Docker
-	$(call run_test_docker,kill-session)
-
-test-session-integration: test-tmux-build ## Run session integration tests in Docker
-	$(call run_test_docker,session-integration)
-
-test-tmux-shell: test-tmux-build ## Open interactive shell in tmux test container
-	@echo "$(CYAN)Opening shell in tmux test container...$(NC)"
-	@echo "$(YELLOW)Run tests with: ./tests/bash/test-*.sh$(NC)"
-	@docker run --rm -it -v $(PWD):/workspace:ro -w /workspace $(DOCKER_IMAGE) /bin/bash
 
 # Playwright test configuration
 PLAYWRIGHT_DOCKER_IMAGE := playwright-tests
@@ -449,7 +367,7 @@ clean: ## Clean up generated files
 	@echo "$(GREEN)✓ Cleaned up$(NC)"
 
 # CI/CD target for continuous integration
-ci: validate-strict test lint type-check format-check test-tmux ## Run all CI/CD checks (strict mode)
+ci: validate-strict test lint type-check format-check ## Run all CI/CD checks (strict mode)
 	@echo "$(GREEN)✓ All CI/CD checks passed$(NC)"
 
 # Quick check target for development
