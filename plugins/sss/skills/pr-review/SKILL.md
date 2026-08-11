@@ -24,7 +24,7 @@ Four **stages** over one diff — a read stage that reports, then write stages t
 
 A track that never sees another track's findings cannot be talked out of its own. Where two land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
 
-Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage; every step after them writes — Step 4 fixes, Step 5 syncs, Step 6 proves. Step 5 is conditional, and in a repo with no translation config is simply not there. One `BASE`, resolved in Step 1, holds from the first step to the last. See `CONTEXT.md`.
+Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage; every step after them writes — Step 4 fixes, Step 5 syncs, Step 6 proves. The read stage runs from any tree; the write stages need the tree to be at the PR head. Step 5 is conditional on top of that, and in a repo with no translation config is simply not there. One `BASE`, resolved in Step 1, holds from the first step to the last. See `CONTEXT.md`.
 
 ## Step 1 — Prep
 
@@ -34,12 +34,33 @@ Run this in the parent, before anything spawns. Its output is a set of **finding
 
 ```bash
 gh pr view <NUM> --json title,body,baseRefName,headRefName,commits
-git fetch origin && git checkout <headRefName> && git pull
-BASE=$(git merge-base origin/<baseRefName> HEAD)
-git diff $BASE...HEAD --stat
+git fetch origin
+HEAD_SHA=$(git rev-parse origin/<headRefName>)
+BASE=$(git merge-base origin/<baseRefName> "$HEAD_SHA")
+git diff "$BASE...$HEAD_SHA" --stat
 ```
 
-**Branch mode:** take the fixed point the user named (`main`, a tag, a SHA) and set `BASE` to it.
+**Both ends of the diff resolve to SHAs, and the tree is left where it stands.** Git reads between two SHAs from any working tree, so the read stage wants no checkout, no branch and no pull. That is what answers `fatal: '…' is already used by worktree at '…'`: the ordinary Orca case is a review running in a fresh worktree while the PR branch is live in the main clone, and a step that asks git only for SHAs is a step git has nothing to refuse.
+
+**Stacked PRs.** `baseRefName` may itself be an open PR, and then `BASE` sits off the default branch:
+
+```bash
+gh pr list --head <baseRefName> --state open --json number
+```
+
+The merge-base formula already handles that — against the parent branch it yields this PR's own commits rather than the parent's, which is what keeps a stacked review off the parent's 86 unrelated files. What was missing was any statement of it, so a run holding `baseRefName` was not trusted to use it. The arithmetic is unchanged; the stack goes in the provenance line.
+
+**Is this tree at the PR head?** `git rev-parse HEAD` against `$HEAD_SHA`. This is a finding like the others, and the one that decides whether the write stages exist — Step 4 owns what it does with it.
+
+**Branch mode:** take the fixed point the user named (`main`, a tag, a SHA) and set `BASE` to it. `HEAD_SHA` is `HEAD`, so the tree is trivially at it.
+
+**Echo one provenance line**, before any track is spawned:
+
+```
+BASE=<sha> (merge-base of origin/MAMAS-9316 ← stacked on open PR 3140) · HEAD=<sha> (origin/mamas-9299-x) · tree at PR head
+```
+
+Three fields, in both modes: the resolved `BASE` with the ref it came from and a stack clause where there is one, `HEAD_SHA` with its ref, and the tree verdict — `tree at PR head`, or `tree at <sha> — write stages off`. Branch mode fills the same slots with what it has: `BASE=<sha> (user-named fixed point 'main') · HEAD=<sha> · branch mode`. One line, printed before the fan-out, is the point: three tracks reading a base nobody printed is how a wrong one survives to the end of a run.
 
 Then `which ocr`.
 
@@ -53,12 +74,12 @@ CFG=.github/hyrd-trans-bot.json
 No file, and the first finding is false and the second does not need asking. Otherwise read `localesDir` out of what it printed — the config is a handful of keys, so read it rather than shelling out to a JSON parser this skill would then depend on — and resolve the directory the way `translation-sync` Step 2 does: `localesDir` if it is set **and exists on disk**, else the first of `i18n/locales`, `app/locales`, `locales` that does. Only once that resolved to a real directory:
 
 ```bash
-git diff --name-only "$BASE"...HEAD -- "$DIR" | grep '\.json$'
+git diff --name-only "$BASE"..."$HEAD_SHA" -- "$DIR" | grep '\.json$'
 ```
 
 Any output at all and the second finding is true. Do not run it with `$DIR` unset: git rejects an empty pathspec outright, and this line failing would be indistinguishable from the failures that are meant to stop the run. A config present but naming no resolvable directory is simply the second finding false — the sync has nowhere to read from — and that is a deliberate divergence from `translation-sync`, which stops with a named error in the same case. It gets to: it was invoked on purpose. Here the two findings only decide whether it is invoked at all.
 
-Done when six findings are in hand: the resolved `BASE` SHA, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A bad ref or an empty diff stops here, naming which one failed. Neither sync finding ever stops the run — they only decide whether Step 5 exists.
+Done when seven findings are in hand and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and whether this tree is at it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A bad ref or an empty diff stops here, naming which one failed. The tree finding never stops the run and neither sync finding does — the first decides whether the write stages exist, the other two decide whether Step 5 does.
 
 ## Step 2 — Load `matt:code-review`, fan out three
 
@@ -94,6 +115,10 @@ Done when all four sections are on screen and no file in the working tree has be
 ## Step 4 — Fix
 
 The stage that writes. Findings become edits, the edits get committed, and nothing is pushed.
+
+**Step 1's tree finding gates this stage and the two after it.** Equal SHAs is the ordinary case and everything here runs. Unequal — a worktree cut from `main`, or one behind a push — means the tree holds different files from the ones the three tracks read, so Steps 4, 5 and 6 are all absent and the run ends after Step 3 with one line naming both SHAs: *write stages skipped: tree at `<sha>`, PR head is `<sha>`*.
+
+This degrades rather than refusing, because the report is the expensive half and it is valid from any tree. It degrades *declaredly*, unlike Step 5's silence, because a review that produced no fixes because it could not is not the same as one that found nothing to fix and the reader has no other way to tell them apart. Fixes applied to files the tracks never read are not fixes, and a handoff artifact built off them is worse — `pw-prove` would prove a tree nobody reviewed.
 
 ### 4a. Assign a severity
 
@@ -267,6 +292,7 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 
 - **Coverage is the OCR track's contract.** A report without a coverage rate and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on. A high rate over a handful of reviewable files is not coverage either — OCR excludes Markdown, so a skills or docs repo can report 100% having seen almost none of the diff.
 - **Overlap is additive.** It names the agreements underneath three intact verbatim sections.
+- **Step 1 resolves refs to SHAs, and that is load-bearing.** Reaching for a branch name there — a checkout to "make the later steps simpler" — reinstates a failure that cost a recovery detour in 3 of 8 logged runs, because the branch under review is usually live in another worktree. The later steps read `$HEAD_SHA` and the tree finding instead. `tests/bash/test-pr-review-step1-cases.sh` is what notices.
 - **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
   renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`
   is told to ignore without complaint. `tests/bash/test-pr-review-handoff-parity.sh` is what
