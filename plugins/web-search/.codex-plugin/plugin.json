@@ -1,0 +1,32 @@
+{
+  "name": "web-search",
+  "version": "1.0.0+codex.fba4c539484e",
+  "description": "Search the internet with Google or DuckDuckGo, inspect results, and extract selected pages as readable Markdown. Use when answers require current web sources, JavaScript-rendered pages, or browser access that can handle bot protection. Prefer dedicated tools such as GitHub CLI for GitHub data and curl for direct files or simple URLs.",
+  "author": {
+    "name": "Can Celik"
+  },
+  "license": "MIT",
+  "keywords": [
+    "web-search",
+    "browser-automation",
+    "cdp",
+    "markdown",
+    "scraping",
+    "playwright"
+  ],
+  "interface": {
+    "displayName": "Web Search",
+    "shortDescription": "Search the internet with Google or DuckDuckGo, inspect results, and extract selected pages as readable Markdown. Use when answers require current web sources, JavaScript-rendered...",
+    "longDescription": "Search the internet with Google or DuckDuckGo, inspect results, and extract selected pages as readable Markdown. Use when answers require current web sources, JavaScript-rendered pages, or browser access that can handle bot protection. Prefer dedicated tools such as GitHub CLI for GitHub data and curl for direct files or simple URLs.",
+    "developerName": "Can Celik",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills"
+    ],
+    "defaultPrompt": [
+      "Use $web-search for this task."
+    ]
+  },
+  "repository": "https://github.com/ogulcancelik/agent-skills/tree/main/skills/web-search",
+  "skills": "./skills/"
+}

@@ -5,6 +5,7 @@
     "padding": 0
   },
   "skillOverrides": {
+    "code-review": "off",
     "cypress-debugger": "off",
     "git-guardrails-claude-code": "off",
     "loop-me": "off",
