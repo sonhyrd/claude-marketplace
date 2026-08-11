@@ -7,7 +7,8 @@ description: >-
   into the baseline. Use when setting up Claude Code on a new machine or VPS, when the user
   says their settings/statusline/skill overrides are out of sync between machines, when they
   want to save or restore their Claude Code configuration, or when adding a segment to the
-  statusline, or when a new machine is missing plugins that another machine has. Also
+  statusline, or when a new machine is missing plugins that another machine has, or when
+  web-search fails with "No supported browser binary found" on a box with no browser. Also
   installs the tracked plugin roster (external marketplaces and their plugins) via the
   claude plugin CLI. Never touches env or hooks — those are machine-local.
 ---
@@ -79,6 +80,34 @@ ephemeral — pointing settings at it breaks on every plugin update.
 So the script is copied to a stable `~/.claude/statusline-native.sh` and settings point there.
 The per-machine `settings.json` write is unavoidable; this skill automates it.
 
+## Why a chromium shim is deployed
+
+`web-search` needs a Chromium-family browser and finds one by **name on `PATH`** — its
+resolver's OS default-path tier is populated for macOS and Windows but empty on Linux, so a
+Linux box with no `chromium`/`google-chrome` on `PATH` fails every call with `No supported
+browser binary found`. That is the normal state of a VPS, where the only browser present is
+usually the Chrome that Playwright downloaded into `~/.cache/ms-playwright`, under a
+versioned path nothing looks in.
+
+`scripts/browser-shim.sh` bridges the two, deployed to `~/.local/bin/chromium` so the
+resolver's existing `"chromium"` candidate hits. Three properties matter:
+
+- **A real system browser always wins.** The shim `exec`s `/usr/bin/chromium`,
+  `google-chrome`, `/opt/google/chrome/chrome`, a snap, or a macOS `.app` before it looks at
+  any cache, so it cannot shadow a browser installed later — which is the standing hazard of
+  putting a file named `chromium` first on `PATH`.
+- **Resolution is at run time, not install time.** Playwright deletes old revisions on
+  upgrade; a symlink to `chromium-1234` becomes a dangling exec the day it becomes
+  `chromium-1250`. The shim re-picks the highest revision on every call.
+- **`chromium_headless_shell-*` is skipped** even though it speaks CDP, because it cannot run
+  headed and the `web-search` daemon may.
+
+The alternative — patching `lib/browser-bin.js` to read the Playwright cache — is the better
+*upstream* fix and the wrong one here: `plugins/web-search/` is vendored verbatim from
+`ogulcancelik/agent-skills`, and this buys the same result with no tracked deviation. Setting
+`WEB_SEARCH_BROWSER_BIN` in `settings.json` would also work but lands in `env`, which this
+skill does not sync, and would only apply inside Claude Code rather than to any shell.
+
 ## Apply — baseline to this machine
 
 1. **Check dependencies.** The statusline needs `jq`, `bash`, and `git`. Run
@@ -121,10 +150,34 @@ The per-machine `settings.json` write is unavoidable; this skill automates it.
    lockfile, so without this it installs and then fails its first call on a missing
    `playwright`. Skills with no `package.json` are untouched, which is nearly all of them.
 
-6. **Report the baseline's commit** so the user knows what they deployed:
+6. **Deploy the browser shim, but only if nothing else answers.** `web-search` is the one
+   skill in the roster that needs a browser. Check first — a machine with Chrome installed
+   needs no shim:
+   ```bash
+   for b in google-chrome google-chrome-stable chrome brave brave-browser chromium \
+            chromium-browser microsoft-edge msedge; do command -v "$b" && break; done
+   ```
+   If that prints nothing (and on macOS, `/Applications/Google Chrome.app` is absent too),
+   deploy it:
+   ```bash
+   mkdir -p ~/.local/bin
+   cp "$SKILL_DIR/scripts/browser-shim.sh" ~/.local/bin/chromium
+   chmod +x ~/.local/bin/chromium
+   ```
+   Then **verify it resolves**, because a shim that exits 127 is a shim that changed nothing:
+   ```bash
+   command -v chromium && chromium --version
+   ```
+   Two failures to report rather than paper over. If `command -v chromium` finds nothing,
+   `~/.local/bin` is not on this machine's `PATH` — say so and stop, since the alternative
+   (`WEB_SEARCH_BROWSER_BIN` in `env`) is a machine-local edit this skill does not make. If
+   `--version` exits 127, the box has neither a browser nor a Playwright cache; the fix is
+   `npx playwright install chromium`, and re-running the shim then needs no redeploy.
+
+7. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
 
-7. Tell the user the statusline refreshes on the next assistant message, and that **plugins
+8. Tell the user the statusline refreshes on the next assistant message, and that **plugins
    need a Claude Code restart** — a newly installed plugin's skills do not appear in the
    session that installed them.
 
@@ -142,7 +195,9 @@ The `.statusLine.command` rewrite is required — the live file holds an absolut
 (`/Users/<you>/.claude/...`) that is wrong on every other machine.
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
-`scripts/statusline.sh` too, so the repo is the source of truth again.
+`scripts/statusline.sh` too, so the repo is the source of truth again. Same for
+`~/.local/bin/chromium` and `scripts/browser-shim.sh` — the shim's whole job is to name paths
+that vary per machine, so a hand-added path on one box is one the next box probably wants.
 
 Then capture the plugin roster, which computes the portable/local split itself:
 
