@@ -97,6 +97,15 @@ These live as skills so they load only when you're doing the task:
   - `plugins/e2e-skills/CLAUDE.md` is an 11-byte `@AGENTS.md` include that pulls a 15.4K file into
     context for any agent working in that directory. Known and accepted; deleting it would diverge
     from the fork.
+- `plugins/sss/skills/skill-upper/` is **vendored verbatim** from
+  [alibaba/skill-up](https://github.com/alibaba/skill-up) (`skills/skill-upper/`, upstream `5ba8c3a`
+  / release `v0.8.0`) — the one exception to `plugins/sss/` being entirely locally authored. Do not
+  edit or reformat it; re-sync by re-copying that directory from upstream. Upstream's own `evals/`
+  subtree is intentionally omitted (its cases grade the skill against upstream fixtures), so a
+  re-copy must omit it again. Its frontmatter `name` is `skill-upper` while the body's H1 reads
+  `use-skill-up-cli`; that mismatch is upstream's and the frontmatter is what the host reads. The
+  skill is a wrapper around the `skill-up` Go CLI and does nothing without it on `PATH` — install
+  per `references/install.md`.
 - Never reference a plugin MCP tool by its bare `mcp__<server>__<tool>` name; plugin tools are
   namespaced `mcp__plugin_<plugin>_<server>__<tool>`. Verify the real id after install.
 

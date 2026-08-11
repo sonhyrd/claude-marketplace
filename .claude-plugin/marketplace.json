@@ -1257,7 +1257,7 @@
       "name": "sss",
       "version": "1.4.0",
       "source": "./plugins/sss",
-      "description": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a config schema with devDefault, a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable — ports owned by portless, a refusing preflight, and a Liveness Proof. autoship, delegate-tickets and setup-cursor-worker drive autonomous implementation via Orca workers.",
+      "description": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a schema with a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable — portless-owned ports and a Liveness Proof. skill-upper: author and run Agent Skill evals via the skill-up CLI. autoship, delegate-tickets and setup-cursor-worker drive autonomous Orca workers.",
       "author": {
         "name": "sonhyrd"
       },
@@ -1268,11 +1268,13 @@
         "autonomous",
         "config",
         "env",
+        "evals",
         "jira",
         "orca",
         "personal",
         "portless",
         "release",
+        "skill-up",
         "tickets"
       ],
       "strict": false,
