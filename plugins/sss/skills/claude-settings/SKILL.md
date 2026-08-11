@@ -44,10 +44,20 @@ The portable/local split is computed, not hand-maintained:
   identical on every machine. `claude-plugins-official` ships with Claude Code and never
   appears in `extraKnownMarketplaces` at all, so its plugins have no marketplace entry to
   filter on and are portable by definition.
-- **Machine-local** — directory sources and their plugins. This repo is added as a directory
-  source pointing at the working tree, so its path (`/home/orca/work/claude-marketplace` on
-  one box, something else on another) is exactly what cannot be shared. `sss`, `matt` and
-  `e2e` are therefore still a manual `marketplace add` on a new machine — one command.
+- **Machine-local — the path only.** This repo is added as a directory source pointing at the
+  working tree, so its path (`/home/orca/work/claude-marketplace` on one box, something else
+  on another) is exactly what cannot be shared. The plugin *names* behind it can be, so they
+  are captured under `localMarketplaces` (`{"sss-marketplace": ["e2e", "matt", "sss",
+  "web-search"]}`) and apply installs them like any other. Only the path is resolved per
+  machine, in this order: `$SSS_MARKETPLACE_PATH`, then the `extraKnownMarketplaces` entry
+  already in settings, then **the repo containing the script itself** — running apply out of a
+  fresh clone needs no path typed anywhere, because that clone *is* the marketplace. If none
+  of the three answer, those plugins are listed and skipped with the command to finish; a
+  machine that has never had this repo is not an error.
+
+A registered marketplace with nothing enabled from it is **not** captured. Otherwise every
+other machine clones a third-party repo to install nothing from it — the roster follows
+enabled plugins, and a marketplace is only along for the ride.
 
 **Apply drives the `claude plugin` CLI, it does not merge these keys into `settings.json`.**
 That distinction is the whole reason this is a second file. Hand-writing
@@ -99,12 +109,17 @@ The per-machine `settings.json` write is unavoidable; this skill automates it.
    DRY_RUN=1 "$SKILL_DIR/scripts/apply-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
    ```
    Show the user what is missing, confirm, then run it without `DRY_RUN`. Lines starting `=`
-   are already present and will be skipped. Then add this repo by hand — it is the one
-   marketplace the roster cannot carry:
+   are already present and will be skipped; `+` is a change; `!` is a directory-sourced
+   marketplace whose path could not be resolved, and the epilogue prints the one command that
+   finishes those:
    ```bash
-   claude plugin marketplace add /path/to/claude-marketplace
-   claude plugin install sss@sss-marketplace matt@sss-marketplace e2e@sss-marketplace
+   SSS_MARKETPLACE_PATH=/path/to/claude-marketplace \
+     "$SKILL_DIR/scripts/apply-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
    ```
+   Apply also installs Node dependencies for any newly installed skill that ships a
+   `package.json` with no `node_modules` — `web-search` vendors upstream's manifest without a
+   lockfile, so without this it installs and then fails its first call on a missing
+   `playwright`. Skills with no `package.json` are untouched, which is nearly all of them.
 
 6. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
@@ -135,9 +150,10 @@ Then capture the plugin roster, which computes the portable/local split itself:
 "$SKILL_DIR/scripts/capture-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
 ```
 
-It prints what it captured. Check the list for anything that was an evaluation leftover —
-capture records what is *enabled*, and an enabled-but-unwanted plugin propagates to every
-machine on the next apply. Disabling it and re-capturing is the fix, not editing the JSON.
+It prints what it captured, marking directory-sourced entries `(local)`. Check the list for
+anything that was an evaluation leftover — capture records what is *enabled*, and an
+enabled-but-unwanted plugin propagates to every machine on the next apply. Disabling it and
+re-capturing is the fix, not editing the JSON.
 
 **`skillOverrides` is inert for plugin-sourced skills.** Capture takes the key verbatim from
 live settings, so an override naming a plugin skill will be picked up even though it does

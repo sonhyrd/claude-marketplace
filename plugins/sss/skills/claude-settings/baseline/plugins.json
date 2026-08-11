@@ -1,15 +1,15 @@
 {
   "marketplaces": {
+    "claude-video": {
+      "source": {
+        "source": "github",
+        "repo": "bradautomates/claude-video"
+      }
+    },
     "cloudflare": {
       "source": {
         "source": "github",
         "repo": "cloudflare/skills"
-      }
-    },
-    "i-have-adhd": {
-      "source": {
-        "source": "github",
-        "repo": "ayghri/i-have-adhd"
       }
     },
     "effective-html": {
@@ -18,20 +18,28 @@
         "repo": "plannotator/effective-html"
       }
     },
-    "claude-video": {
+    "i-have-adhd": {
       "source": {
         "source": "github",
-        "repo": "bradautomates/claude-video"
+        "repo": "ayghri/i-have-adhd"
       }
     }
   },
   "enabledPlugins": {
     "cloudflare@cloudflare": true,
-    "i-have-adhd@i-have-adhd": true,
-    "plannotator-effective-html@effective-html": true,
-    "watch@claude-video": true,
     "commit-commands@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true
+    "i-have-adhd@i-have-adhd": true,
+    "plannotator-effective-html@effective-html": true,
+    "skill-creator@claude-plugins-official": true,
+    "watch@claude-video": true
+  },
+  "localMarketplaces": {
+    "sss-marketplace": [
+      "e2e",
+      "matt",
+      "sss",
+      "web-search"
+    ]
   }
 }
