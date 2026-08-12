@@ -10,7 +10,8 @@ description: >-
   statusline, or when a new machine is missing plugins that another machine has, or when
   web-search fails with "No supported browser binary found" on a box with no browser. Also
   installs the tracked plugin roster (external marketplaces and their plugins) via the
-  claude plugin CLI. Never touches env or hooks — those are machine-local.
+  claude plugin CLI. Never touches hooks, and touches exactly one `env` key — the auto-memory
+  kill switch; the rest of `env` is machine-local.
 ---
 
 # Claude settings sync
@@ -26,12 +27,34 @@ each machine. Two directions: **apply** (baseline → machine) and **capture** (
 | `skillOverrides` | Yes | Pure preference, no paths. ~50 hand-tuned entries |
 | `permissions` | Yes | `defaultMode` and `deny` list are portable |
 | `attribution`, `includeCoAuthoredBy` | Yes | Plain booleans/strings |
-| `env` | **No** | Machine-specific (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`) |
+| `env` | **One key** | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` only — see below. Everything else (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`) is machine-specific |
 | `hooks` | **No** | Contains absolute paths (`~/.orca/agent-hooks/`, `~/.claude/hooks/`) |
 | `enabledPlugins`, `extraKnownMarketplaces` | **Partly** | Non-directory sources sync via `baseline/plugins.json`; directory sources carry a per-machine path and do not |
 
-Writing `env` or `hooks` from a shared baseline would break the machine it lands on. Do not
-add them without changing the paths to be `$HOME`-relative first — that is a separate change.
+Writing `hooks`, or the rest of `env`, from a shared baseline would break the machine it lands
+on. Do not add them without changing the paths to be `$HOME`-relative first — that is a
+separate change.
+
+### The one `env` key that syncs
+
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` turns off Claude Code's automatic memory — the persistent
+file-based store under `~/.claude/projects/<project>/memory/` that a session reads at start and
+writes to as it goes. It is in the baseline because it is a **preference, not a path**: it names
+no directory, no host and no version, so it is exactly as portable as `skillOverrides`, and
+memory left on for one machine only is the worst of both worlds — the same user gets recalled
+facts on the laptop and none on the VPS.
+
+Two mechanisms are *not* this one, and neither belongs in the baseline:
+
+- `/pause-memory` is session-scoped and lives in the transcript, not in settings. Use it to turn
+  memory off for the next hour; use this key to turn it off for good.
+- `autoMemoryEnabled` is a global-config key in `~/.claude.json`, a file this skill does not
+  manage at all. The env var is the setting this skill can reach.
+
+Because apply is a **deep merge** (`jq -s '.[0] * .[1]'`), landing this key adds it to whatever
+`env` the machine already has — `CLAUDE_HOST_LABEL` and friends survive untouched. That is the
+property that makes syncing a single `env` key safe, and it is why the merge must stay a deep
+merge and never become a whole-object replace.
 
 ## The plugin roster
 
@@ -187,12 +210,21 @@ Pull the synced regions out of the live settings and write them back to `baselin
 
 ```bash
 jq '{statusLine, skillOverrides, permissions, attribution, includeCoAuthoredBy}
+    + (.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY
+       | if . then {env: {CLAUDE_CODE_DISABLE_AUTO_MEMORY: .}} else {} end)
     | .statusLine.command = "~/.claude/statusline-native.sh"' \
   ~/.claude/settings.json > "$SKILL_DIR/baseline/settings.base.json"
 ```
 
 The `.statusLine.command` rewrite is required — the live file holds an absolute path
 (`/Users/<you>/.claude/...`) that is wrong on every other machine.
+
+The `env` clause takes **one named key**, never `.env` whole — capturing the whole object would
+push this machine's `CLAUDE_HOST_LABEL` and `PYENV_VERSION` onto every other box. Note the
+asymmetry it creates: capturing on a machine where auto-memory is *on* drops the key from the
+baseline, but apply only ever adds keys, so the machines that already have it keep it. Turning
+memory back on everywhere is therefore a deliberate edit to `baseline/settings.base.json` plus
+an `unset`/removal on each machine, not something a capture can do by accident.
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 `scripts/statusline.sh` too, so the repo is the source of truth again. Same for
