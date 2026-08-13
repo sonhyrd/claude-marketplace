@@ -1,5 +1,15 @@
 # The proof run is serialized, the mutation run is isolated, and the hermetic audit is a script
 
+> **AMENDED by `docs/adr/0016` (issue #46) — this record is LIVE, not superseded.** `--workers=1`
+> **still binds every proof run.** It rests on a documented five-scenario failure, and 0016 stages its
+> removal deliberately: it is lifted on evidence from real runs against a preview server, by issue
+> **#48**, not on the reasoning that its cause is gone. Mutation-output isolation and `hermetic.mjs`
+> are untouched by the proof-target change. What *is* retired with the development server is the
+> **diagnosis**: the Step-7 failure row reading "every test timing out on its first navigation is a
+> saturated server" is deleted, because the built preview compiles nothing and cannot saturate that
+> way. Against the current target, every test timing out at its first navigation is an ordinary
+> failure to diagnose on its evidence, not a signature with a known cause.
+
 A transcript audit of one real 5-AC pw-prove run (57.7 min wall, 155k output tokens) put `playwright test` at 39% of the run — for the first time ahead of model time, which every prior audit in this repo had found to be the dominant cost. Two-thirds of that runner time produced nothing:
 
 - **6.2 minutes on a run where all five scenarios timed out in `page.goto`.** Scaffolded configs pin one worker only on CI (`workers: process.env.CI ? 1 : undefined`), so the proof ran five workers against a dev server that compiles routes on demand; five cold compiles of the same route saturated it. Serialized, the same spec passed in 2 minutes. The agent had read that config line in the first minute and had no rule that made it actionable.

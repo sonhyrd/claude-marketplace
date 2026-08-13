@@ -50,7 +50,7 @@ brought with it afterwards.
 **skill version bump**, security, evals, public skill surface, framework scope, link integrity,
 docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
-**probe HAR and warm contracts**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
+**the probe HAR contract**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
 **run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
@@ -136,7 +136,6 @@ bash scripts/ci/test-pw-prove-scripts.sh # preflight three-phase bring-up gate +
 bash scripts/ci/test-hermetic.sh    # hermetic.mjs: LIVE/MOCKED classification + route.fetch blind spot
 bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clips share link out (four gates, kept-file fallback)
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so
-bash scripts/ci/test-probe-warm.sh  # probe.mjs warm: the Step-7 warm lead's exit codes
 bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts

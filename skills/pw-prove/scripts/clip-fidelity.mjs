@@ -603,9 +603,9 @@ function framesCommand(rest) {
     out('           element off-frame the subject is at the edge or absent -> the ungated\n');
     out("                            scrollIntoView({ block: 'center' }) is missing, or it runs before a\n");
     out('                            re-render that pushes the subject away; centre AT the hold.\n');
-    out('           still booting    the frame is a skeleton, a blank page or a loader -> the warm lead\n');
-    out('                            missed; re-warm the route (probe.mjs warm) before filming again.\n');
-    out('         Apply the fix to the COMMITTED spec or the warm lead, re-run `clip-fidelity.mjs spec`\n');
+    out('           never settled    the frame is a skeleton, a blank page or a loader -> the spec held\n');
+    out('                            on a state it never reached; assert the loaded state, then dwell.\n');
+    out('         Apply the fix to the COMMITTED spec, re-run `clip-fidelity.mjs spec`\n');
     out('         over the edited spec, then re-film ONCE. A second illegible frame PUBLISHES with an\n');
     out('         explicit warning in the report: a bad clip is not a failed test.\n');
   }

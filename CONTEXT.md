@@ -65,10 +65,10 @@ running as the operator can read the same secret. The shipped scripts are lease-
 runtime dependency. See `docs/adr/0014`.
 
 ## Clip fidelity contract
-The four properties a Proof clip must have to be usable as evidence: recorded at the **effective
-viewport** (never Playwright's 800×800-box downscale), opening on a **warmed** route rather than a
-cold compile, ending on the success signal **held** on screen, and holding it in
-[frame](#framing). Held at authoring time — a committed viewport pin, ungated centering, and a
+The three properties a Proof clip must have to be usable as evidence: recorded at the **effective
+viewport** (never Playwright's 800×800-box downscale), ending on the success signal **held** on
+screen, and holding it in [frame](#framing). Held at authoring time — a committed viewport pin,
+ungated centering, and a
 `PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell **inline in each `test()` body** (a
 dwell hoisted into a helper does not count: one shared dwell would satisfy tests that hold on
 nothing) — never by a second run, a measurement
@@ -174,16 +174,6 @@ breath, so the working tree never holds an unscrubbed authenticated capture, and
 placement left to decide. Before commit the hygiene sweep runs `har-scrub.mjs --verify`, whose
 non-zero exit refuses residue rather than asking anyone to confirm its absence.
 See `docs/adr/0011`.
-
-## Runner origin
-The origin **Playwright itself** dials — `webServer.url` / `use.baseURL` after env overrides — as
-distinct from the origin the agent confirmed healthy. Resolved and curled in Step 3, recorded in the
-Step-4 Assumptions block. They differ more often than they look like they should: a dev server bound
-to `[::1]` answers on `localhost` and refuses on the `127.0.0.1` a scaffolded config carries, so
-Playwright boots a duplicate server and dies on `Timed out waiting 120000ms from config.webServer`
-having run zero tests. A mismatch is resolved by carrying the config's own env var (`E2E_BASE_URL`,
-`PLAYWRIGHT_BASE_URL`) on every runner invocation, never by editing the project's config. See
-`docs/adr/0011`.
 
 ## PR-mode
 The pipeline variant that proves a specific change (PR, branch, ticket, or prose "prove this change"

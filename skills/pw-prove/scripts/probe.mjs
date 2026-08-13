@@ -11,7 +11,6 @@
 //   node probe.mjs send '<json>'       # run a batch of commands, print compact summaries
 //   node probe.mjs send -              # ...batch read from stdin
 //   node probe.mjs close               # explicit close (the idle timeout is the net)
-//   node probe.mjs warm <url>          # one-shot UNFILMED browser load — the Step-7 warm lead
 //
 //   BASE_URL       optional, `start` — context baseURL; `navigate` then accepts relative paths.
 //   STORAGE_STATE  optional, `start` — storageState file for the context (Step 3 auth table).
@@ -25,17 +24,6 @@
 //                  browser outlives a session even when the agent forgets to `close`.
 //   PROBE_SOCK     optional — Unix-socket path (default: $TMPDIR/ptg-probe-<cwd-hash>.sock, so each
 //                  project root gets its own daemon).
-//   PROBE_WARM_TIMEOUT optional, `warm` — navigation timeout ms (default 120000).
-//
-// `warm` exists because the Step-7 warm lead used to be a `curl`, and a curl warms the wrong half.
-// It fetches the HTML document; it never executes JS, so it never requests the client module graph
-// and never makes Vite discover-and-pre-bundle its deps (Vite's own docs: a dep found after server
-// start makes it "re-run the dep bundling process and reload the page if needed" — driven by real
-// module requests, which curl does not make). On a Vite-family dev server the browser then pays the
-// whole 20s+ inside the recorded context, because Playwright video is context-scoped: recording
-// starts at context creation and there is no delayed-start or trim option. You cannot warm inside
-// the context you are filming. So `warm` warms from a SEPARATE short-lived process: same server-side
-// caches (route transform, optimizeDeps), no video, nothing to edit afterwards.
 //
 // A batch is a JSON array of {cmd, ...} objects, executed in order, one compact result each.
 // Failures are reported per command and the batch continues — recon wants maximum signal per round
@@ -82,9 +70,8 @@ import { pwproveRun } from './pwprove-run.mjs';
 // their own, six in `node -e`, and seven needed two passes because a header-only scrub under-scrubs.
 import { scrubHar, findResidue } from './har-scrub.mjs';
 
-// Run ledger — registered before validation. The phase splits on the subcommand so the ledger can
-// answer "what did the warm lead cost this run?", which is the whole reason `warm` exists.
-pwproveRun(import.meta.url, process.argv[2] === 'warm' ? 'warm' : 'recon');
+// Run ledger — registered before validation, so a refusal is recorded too.
+pwproveRun(import.meta.url, 'recon');
 
 const out = (s) => process.stdout.write(s);
 const err = (s) => process.stderr.write(s);
@@ -97,10 +84,9 @@ const SOCK =
   );
 
 const MODE = process.argv[2];
-if (!['start', 'send', 'close', 'warm'].includes(MODE)) {
+if (!['start', 'send', 'close'].includes(MODE)) {
   err(
-    "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close | warm <url>" +
-      '   (see the header)\n',
+    "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close   (see the header)\n",
   );
   process.exit(1);
 }
@@ -184,67 +170,6 @@ function client(payload) {
 
 if (MODE === 'send') client(readBatch());
 if (MODE === 'close') client('[{"cmd":"close"}]');
-
-// ============================================================ warm (one-shot, unfilmed)
-// Deliberately NOT a daemon command: by Step 7 the recon daemon is closed, and the warm must be a
-// process the proof run can neither see nor record. No video, no HAR, no storageState — the only
-// artifact is the server-side cache state left behind.
-//
-// Failure policy mirrors the curl it replaces: a warm that did not land is REPORTED, never fatal.
-// The one exception is the browserless refusal (exit 2), which is a signal, not a failure — it tells
-// the caller to fall back to the curl warm.
-if (MODE === 'warm') {
-  const arg = process.argv[3];
-  if (!arg) {
-    err('probe.mjs: warm needs a url: warm <url>   (relative is allowed when BASE_URL is set)\n');
-    process.exit(1);
-  }
-  const base = (process.env.BASE_URL ?? '').replace(/\/+$/, '');
-  const url = /^https?:\/\//.test(arg) ? arg : `${base}${arg.startsWith('/') ? '' : '/'}${arg}`;
-  if (!/^https?:\/\//.test(url)) {
-    err(`probe.mjs: '${arg}' is relative and BASE_URL is not set — pass an absolute url\n`);
-    process.exit(1);
-  }
-  const timeout = Number(process.env.PROBE_WARM_TIMEOUT ?? 120000);
-  const resolved = resolvePinnedPlaywright('warm');
-  const started = Date.now();
-
-  const warm = async () => {
-    let browser;
-    try {
-      const mod = await import(pathToFileURL(resolved).href);
-      const chromium = mod.chromium ?? mod.default?.chromium;
-      if (!chromium) throw new Error(`${resolved} exports no chromium`);
-      browser = await chromium.launch();
-    } catch (e) {
-      err(
-        'probe: STOP — the pinned Playwright could not open a browser here: ' +
-          `${String(e.message ?? e).split('\n')[0]}\n` +
-          '       Fall back to the curl warm; the clip will be boot-heavy. (exit 2)\n',
-      );
-      process.exit(2);
-    }
-    try {
-      const page = await browser.newPage();
-      const resp = await page.goto(url, { waitUntil: 'load', timeout });
-      // The `load` event fires before a Vite-family app has finished discovering deps — and it is
-      // exactly that discovery pass (and the reload it can trigger) we are here to pay for. A short
-      // networkidle grace absorbs it; expiring is fine, the transform work already happened.
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      out(`warm: ${resp?.status() ?? 'no-response'} ${url} in ${Date.now() - started}ms\n`);
-    } catch (e) {
-      out(`warm-failed: ${url} — ${String(e.message ?? e).split('\n')[0].slice(0, 200)}\n`);
-    } finally {
-      await browser.close().catch(() => {});
-    }
-  };
-
-  warm().catch((e) => {
-    // Unreachable in practice — warm() swallows navigation failure by contract. If it ever throws,
-    // still do not fail the run: the caller treats a warm miss as a report line.
-    out(`warm-failed: ${url} — ${String(e?.message ?? e).split('\n')[0].slice(0, 200)}\n`);
-  });
-}
 
 // ============================================================ daemon (start)
 
