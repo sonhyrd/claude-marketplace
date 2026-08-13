@@ -778,6 +778,37 @@
         "False-positive guard: does NOT claim the string form of `eval` was replaced — a plain {\"cmd\":\"eval\",\"expression\":\"location.href\"} remains valid",
         "False-positive guard: does NOT reach for a throwaway _recon.spec.ts or `playwright test` for any of the three questions"
       ]
+    },
+    {
+      "id": 54,
+      "title": "A mutation-check restart that cannot be proven has no verdict to read",
+      "prompt": "Step 7, PR-mode. You mutated one line, rebuilt with BUILD_REUSE=never, stopped and restarted the preview server, and ran the serve phase with SERVE_RESTART=1 and RESTART_LOG_OFFSET set. It reported `SERVE=failed`, `SERVE_CAUSE=restart-port-in-use`, `RESTART=unproven`, and quoted the server's own line:\n\n```\nError: listen EADDRINUSE: address already in use :::36495\n```\n\nhttp://localhost:36495 answers 200. You run the guarding test anyway and it fails after 128s with the page stuck on its loading splash. What do you do?",
+      "expected_output": "Should refuse to read that failure as the mutation check's RED. `RESTART=unproven` says the process answering 36495 is not the one just started, so the run under test is the PREVIOUS artifact — a failure against it is evidence about a stale server, not about whether the spec guards the change. Should fix the bring-up first: find and kill whatever is holding 36495 (the previous preview server, which did not die), restart the preview, and re-run the serve phase with SERVE_RESTART=1 and the mark until it reports `RESTART=proven` / `SERVE=ok`. Should then re-run the guarding test and take the verdict from THAT run. Should NOT record RED, NOT report 'the spec guards the change', NOT proceed to the revert-and-rebuild step, and NOT treat the 128s loading splash as a slow application to be waited out with a longer timeout.",
+      "files": [],
+      "assertions": [
+        "True positive: treats SERVE_CAUSE=restart-port-in-use / RESTART=unproven as a bring-up failure that invalidates the mutation run",
+        "Names the stale predecessor as what answers the port, still serving the pre-mutation artifact",
+        "Kills the process holding the port, restarts, and re-polls with SERVE_RESTART=1 until RESTART=proven before re-running the test",
+        "Takes the mutation verdict only from the run made against the proven restart",
+        "False-positive guard: does NOT record RED or claim the spec guards the change on this run",
+        "False-positive guard: does NOT raise the test timeout, retry the spec, or treat the loading splash as slowness",
+        "False-positive guard: does NOT continue to the revert/rebuild step or to Step 8 on this evidence"
+      ]
+    },
+    {
+      "id": 55,
+      "title": "A proven restart is proven — do not re-litigate a fast one",
+      "prompt": "Step 7, PR-mode. Same mutation check. The preview server restarted in about 400ms, so its `Listening on http://127.0.0.1:36495` line was already in the log when the poll started. The serve phase reported `SERVE=ok`, `RESTART=proven`, `BASE_URL=http://127.0.0.1:36495`, `READY=yes`. The guarding test then fails on `expect(locator).toHaveText` — element(s) not found. What do you do?",
+      "expected_output": "Should record this as the mutation check's RED: the restart was proven by an announcement written after the restart mark, so the server under test is the one holding the artifact just built, and the failed assertion on the hint the mutation removed is exactly the evidence the step wants. Should continue with the step — revert the file exactly, rebuild and restart the preview once more (again with SERVE_RESTART=1 and a fresh mark), and verify the tree is unchanged. Should NOT treat a fast restart as suspicious, NOT re-poll, restart again, or kill anything to 'make sure' the server is fresh, and NOT downgrade the RED to 'unproven' — RESTART=proven is the evidence, and an announcement that arrived before the poll began is the ordinary case, not a stale one.",
+      "files": [],
+      "assertions": [
+        "True positive: reads RESTART=proven plus the failed assertion as a genuine RED and records it",
+        "States that the announcement past the restart mark is what makes the served artifact the mutated one",
+        "Continues the step: reverts exactly, rebuilds and restarts with SERVE_RESTART=1 and a fresh mark, verifies the tree",
+        "False-positive guard: does NOT treat a sub-second restart as evidence of a stale server",
+        "False-positive guard: does NOT kill the process, restart again, or re-run the serve poll to double-check identity",
+        "False-positive guard: does NOT withhold or weaken the RED verdict"
+      ]
     }
   ]
 }
