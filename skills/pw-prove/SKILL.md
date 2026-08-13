@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.6.0"
+  version: "0.7.0"
 ---
 
 # pw-prove
@@ -249,20 +249,26 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
      node <skill-base>/scripts/preflight.mjs config build
    ```
    **exit 4 — configuration**: the output names every missing key. Set them and re-run; never "fix" this by rebuilding. **exit 5 — build**: the build's own standard error is printed and the full log path given. That is a build failure, and it is fixed in the app, not in the port. Both fail in the time they take, not on a poll budget. `APP_ROOT` is the application root — where the build runs and where the app's own `.env`/`.env.example` are read, which matters in a monorepo whose app is a subdirectory. **`BUILD_COMMAND` is not optional**: the phase refuses without one rather than skipping, because a bring-up that quietly declines to build proves whatever server happens to be listening.
-3. **Start the preview server** as a harness-tracked background task (survives the turn, log readable) — the project's own preview/start command against the built output, on the resolved `PORT`. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** (the build, the Step-7 proof run). Never start it from inside a script: a script-started server can bind a sibling worktree on the wrong branch. **You own what you start:** record the port and the task, and stop it in Step 8 hygiene. A server you started and left running holds a port on the user's machine indefinitely — a server that was *already* running is not yours and is never stopped.
-4. **Confirm it serves** — the serve phase polls on a **short** budget (20s default), because a preview server binds in under a second and answers its first page in milliseconds; one that is not answering quickly is broken, not slow.
+3. **Start the preview server** as a harness-tracked background task (survives the turn, **log written to a file you can read**) — the project's own preview/start command against the built output, on the resolved `PORT`. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** (the build, the Step-7 proof run). Never start it from inside a script: a script-started server can bind a sibling worktree on the wrong branch. **You own what you start:** record the port, the log path and the task, and stop it in Step 8 hygiene. A server you started and left running holds a port on the user's machine indefinitely — a server that was *already* running is not yours and is never stopped.
+4. **Confirm it serves — and take the port and the address family from the server's own output, never from your guess.** The resolved `PORT` is a *request*: a framework that finds it taken shifts by itself and says so (`Unable to find an available port (tried 3000)... Using alternative port 3001` is a real observed line), and a server binds one loopback family while your guess dials the other. Both are announcements in the log, so pass it — `SERVER_LOG` is what makes this phase read rather than guess. The poll re-reads it every round (a server announces its port when *it* is ready), tries the announced port on every loopback form, and falls back to the port you asked for.
    ```bash
-   BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs serve
+   BASE_URL="http://localhost:$PORT" SERVER_LOG="<the preview task's log>" \
+     node <skill-base>/scripts/preflight.mjs serve
+   # then take the origin that ANSWERED out of the summary and use THAT from here on:
+   BASE_URL=$(<the summary's BASE_URL= line>)
    ```
-   On STOP (exit 3): read the preview log and confirm the built output exists at all — a serve failure is the server or the artifact, never the configuration or the build, which have already passed. **A status code is liveness, not health** — an app that resolves its tenant from a query parameter answers `200` with an empty shell when the parameter is absent, so carry that parameter (`?company_slug=<slug>`-style) on the recon navigation below and confirm real content through the probe, never from the poll alone.
-5. **Pin the origin *Playwright itself* will dial, and prove that exact string reachable.** Your `curl http://localhost:$PORT` answering does **not** mean the runner can connect: dev servers commonly bind `[::1]` only, so `localhost` resolves and `127.0.0.1` refuses — and `webServer.url` in a scaffolded config is usually the literal `http://127.0.0.1:<port>`. Playwright then concludes no server is up, boots a duplicate, and dies on `Timed out waiting 120000ms from config.webServer`, burning the whole proof run. Read `webServer.url` / `use.baseURL` out of the config **after** env overrides, and curl that literal origin:
+   The serve phase polls on a **short** budget (20s default), because a preview server binds in under a second and answers its first page in milliseconds; one that is not answering quickly is broken, not slow. On success, **`BASE_URL=` in the summary is the origin that actually answered** — with `PORT_SOURCE` (`announced`/`requested`), `PORT_SHIFTED`, and `ADDRESS_FAMILY` (`ipv4`/`ipv6`/`localhost`) saying how it was learned. When it differs from what you asked for, that origin is the one to carry **everywhere** from here on — the probe, the `Runner origin:` line, the HAR binding, and every runner invocation. Each is a fresh environment; fixing it in one is not fixing it.
+
+   On STOP (exit 3), `SERVE_CAUSE` says which of three failures it was, and they are not fixed the same way: `no-announcement` — the log names no listening origin, so the port could not be read at all; its last lines are printed and a server that died before binding is the common case, but a server that binds quietly lands here too, so read them before touching a port; `announced-unreachable` — it announced a port and nothing answers there on any loopback form, so it bound and stopped, and re-guessing the port is not the fix; `no-log` — no log was read, so a shifted port could not be ruled out, which is a gap in the invocation, not a verdict about the server. **A status code is liveness, not health** — an app that resolves its tenant from a query parameter answers `200` with an empty shell when the parameter is absent, so carry that parameter (`?company_slug=<slug>`-style) on the recon navigation below and confirm real content through the probe, never from the poll alone.
+5. **Pin the origin *Playwright itself* will dial, and prove that exact string reachable.** The serve phase found *an* origin that answers; the runner dials whatever the config says, which is a different string. `webServer.url` in a scaffolded config is usually the literal `http://127.0.0.1:<port>` — carrying the old port, or the loopback family the server did not bind. Playwright then concludes no server is up, boots a duplicate, and dies on `Timed out waiting 120000ms from config.webServer`, burning the whole proof run. Read `webServer.url` / `use.baseURL` out of the config **after** env overrides, and curl that literal origin:
    ```bash
    curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
    ```
-   Reachable → record it as `Runner origin:` in the Step-4 Assumptions block. Reachable is also the point at which the proof config's inherited `webServer` must already be neutralised — see Step 7, and `docs/adr/0008`: a proof config that still spreads the project's `webServer` boots a **development** server behind your back the moment nothing is listening at *its* URL, which silently defeats the proof target. **Refused while your `localhost:$PORT` answers** → loopback-family mismatch: set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
+   Reachable → record it as `Runner origin:` in the Step-4 Assumptions block. Reachable is also the point at which the proof config's inherited `webServer` must already be neutralised — see Step 7, and `docs/adr/0008`: a proof config that still spreads the project's `webServer` boots a **development** server behind your back the moment nothing is listening at *its* URL, which silently defeats the proof target. **Refused while the serve phase's `BASE_URL=` origin answers** → the config carries the wrong port or the wrong loopback family (the serve summary's `PORT_SHIFTED`/`ADDRESS_FAMILY` says which): set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
 6. **Probe the publish prerequisites now (PR-mode) — with the serve poll:**
    ```bash
-   PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs serve
+   PROBE_HOSTING=1 BASE_URL="$BASE_URL" SERVER_LOG="<the preview task's log>" \
+     node <skill-base>/scripts/preflight.mjs serve
    ```
    The publish credential is one environment variable, `CLIPS_MCP_TOKEN` — an opaque bearer that carries its own destination, so nothing else needs configuring. It is leased into the run from the workspace vault, never exported into a shell. There is no file fallback: unset means `PUBLISH_READY=no`, which is a WARN, never a stop, and the warning prints the literal `agent-native vault exec …` command to re-run under — app name, key name and this invocation — so the fix is a paste rather than a skill-file read.
    Probes the credential by **running** the real call — a JSON-RPC `tools/call` to the Clips import action with arguments its schema must reject, so nothing is created. The rejection is the PASS, defined **by exclusion** rather than by matching a sentence, and the accepted sentence is echoed into the output so a wrong verdict is legible in the log. Four verdicts are kept apart, because their fixes differ: `rejected` (HTTP 401 — the credential itself), `not-delegable` (HTTP 200, the action is absent from this token's callable catalog — re-mint, do not rotate), `usable`, and `unexpected` (an empty-argument probe that *succeeded*). Also probes `ffmpeg`/`ffprobe`, and Chrome for clip fidelity. Reports `PUBLISH_READY`, `VIDEO_TOOLING`, and `HOSTING_READY` as their conjunction. WARN-only: `HOSTING_READY=no` never stops generation — its printed output is the evidence a later `Proof page: skipped — publish prerequisites not ready` line must paste (Step 8).
@@ -299,10 +305,12 @@ Reaching Step 4 in neither state is a **HARD STOP** (see `docs/adr/0004`). Sourc
 **Start the probe with the harness's background-task mechanism** (`run_in_background: true`) — **never a trailing `&`** (a `&`-backgrounded probe dies with its shell). Set `RECORD_HAR` so the SAME recon pass records the `api.har` the deliverable spec replays:
 
 ```bash
-# start once (background task, app root). STORAGE_STATE seeds a session; RECORD_HAR captures an
+# start once (background task, app root). BASE_URL is the serve phase's `BASE_URL=` line — the
+# origin that ANSWERED, which is not always the one you asked for. STORAGE_STATE seeds a session;
+# RECORD_HAR captures an
 # API-scoped HAR (HAR_URL_FILTER default **/api/**), SCRUBBED AT CAPTURE — the raw recording lands
 # in a private staging file and only the scrubbed result reaches the path below.
-BASE_URL="http://localhost:$PORT" RECORD_HAR="$PWD/<testDir>/<feature>.api.har" \
+BASE_URL="$BASE_URL" RECORD_HAR="$PWD/<testDir>/<feature>.api.har" \
   node <skill-base>/scripts/probe.mjs start
 # ask in batches — one round trip; compact aria + network summaries, never raw DOM dumps
 node <skill-base>/scripts/probe.mjs send '[
@@ -386,7 +394,7 @@ One line per contract-resolved decision that applies (structure, selectors, stas
 
 No file found → no line. A stale handoff **must** produce its line: dropping it silently is how a reader ends up believing the review's findings were carried when they were not.
 
-**Runner origin** is the Step-3 item 4 verdict, carried here verbatim: `Runner origin: <url>` when the config's own `webServer.url`/`baseURL` answered, or `Runner origin: <url> via <ENV_VAR> — config's <url> refused (loopback mismatch)` when it did not. The env-var form is a standing instruction to Steps 6–7, not a note: every runner invocation from here on prefixes it.
+**Runner origin** is the Step-3 item 5 verdict, carried here verbatim: `Runner origin: <url>` when the config's own `webServer.url`/`baseURL` answered, or `Runner origin: <url> via <ENV_VAR> — config's <url> refused (<the serve phase's PORT_SHIFTED/ADDRESS_FAMILY verdict>)` when it did not. Where the serve phase reported `PORT_SHIFTED=yes`, say so here: the port under proof is the one the *server* announced, not the one the run asked for, and a reader comparing the report against the bring-up command should not have to work that out. The env-var form is a standing instruction to Steps 6–7, not a note: every runner invocation from here on prefixes it.
 
 **Effective viewport** is resolved here, from the Step-1 `configPath`, by the rule in `code-rules.md` → Clip Fidelity — state the value *and* which branch produced it (`deliberate: <w>x<h>` when the config carries an explicit `viewport:` key or a mobile descriptor, `pinned: 1600x900` when it carries only a desktop descriptor or nothing). Step 5 writes the pin; Step 7 sizes the recording to match.
 
@@ -507,7 +515,7 @@ npx --no-install tsc --noEmit -p <e2e/tsconfig.json or tsconfig.json>
 mkdir -p .pw-prove
 grep -qxF '.pw-prove/' .git/info/exclude || printf '.pw-prove/\n' >> .git/info/exclude
 node <skill-base>/scripts/har-scrub.mjs bind <testDir>/<feature>.api.har \
-  --out .pw-prove/<feature>.api.har --origin "http://localhost:$PORT"
+  --out .pw-prove/<feature>.api.har --origin "$BASE_URL"
 export PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har"
 ```
 

@@ -124,6 +124,11 @@ expect_exit 1 "an unknown phase name is a usage error" -- \
   env BASE_URL=http://127.0.0.1:1 node "$REPO_ROOT/$S/preflight.mjs" rebuild
 expect_exit 3 "dead origin STOPs after READY_TIMEOUT" -- \
   env BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^SERVE_CAUSE=no-log$' "$W/out"; then
+  ok "a failure with no SERVER_LOG says a port shift could not be ruled out — SERVE_CAUSE=no-log"
+else
+  bad "no-log serve failure — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
+fi
 # A non-numeric timeout used to spin forever (`waited >= NaN` is never true). It must refuse instead.
 expect_exit 1 "non-numeric READY_TIMEOUT is refused, not looped on" -- \
   env BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=abc node "$REPO_ROOT/$S/preflight.mjs" serve
@@ -146,6 +151,116 @@ if [ "$rc" -eq 0 ] && grep -q '^READY=yes$' "$W/out"; then
 else
   bad "ready origin — exit $rc, stdout: $(head -c 120 "$W/out")"
 fi
+if grep -q '^PORT_SOURCE=requested$' "$W/out" && grep -q '^PORT_SHIFTED=no$' "$W/out"; then
+  ok "an unshifted origin says so — PORT_SOURCE=requested, PORT_SHIFTED=no"
+else
+  bad "unshifted origin summary — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
+fi
+
+echo ""
+echo "-- preflight: the port and the address family come from the server's own output --"
+# Three of eight observed readiness failures were the agent polling a port the server had not bound,
+# and one was a server bound to a single loopback family while the agent dialled the other. The
+# server announced both, plainly, in its own log — so the log is read, not the guess re-polled.
+
+# A framework that shifts the port announces the shift. Polling the guess burned the full budget and
+# reported a healthy server absent; re-polling the announced port answered immediately.
+printf 'Nuxt 3.11.2 with Nitro 2.9.6\nUnable to find an available port (tried 8740)... Using alternative port 8741\nListening on http://[::1]:8741\n' >"$W/shifted.log"
+node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(8741,"127.0.0.1")' &
+SRV=$!
+for _ in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:8741 && break; sleep 0.1; done
+( cd "$W" && BASE_URL=http://127.0.0.1:8740 SERVER_LOG="$W/shifted.log" READY_TIMEOUT=10 \
+    node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+if [ "$rc" -eq 0 ] && grep -q '^READY=yes$' "$W/out" && grep -q '^PORT_SHIFTED=yes$' "$W/out" \
+   && grep -q '^BASE_URL=http://127.0.0.1:8741$' "$W/out" && grep -q '^PORT_SOURCE=announced$' "$W/out"; then
+  ok "an announced port shift is followed, not reported as a not-ready server"
+else
+  bad "announced port shift — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# The bound address family is honoured: this server answers on 127.0.0.1 only, and both the caller's
+# guess and the log's own line name the other loopback form. Reachable on one form is not absent.
+printf '  ➜  Local:   http://[::1]:8741/\n' >"$W/family.log"
+( cd "$W" && BASE_URL=http://[::1]:8741 SERVER_LOG="$W/family.log" READY_TIMEOUT=10 \
+    node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+{ kill $SRV && wait $SRV; } 2>/dev/null
+if [ "$rc" -eq 0 ] && grep -q '^BASE_URL=http://127.0.0.1:8741$' "$W/out" && grep -q '^ADDRESS_FAMILY=ipv4$' "$W/out"; then
+  ok "a server reachable on the other loopback family is found, and the family is reported"
+else
+  bad "address family fallback — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# A server that genuinely never started still fails — and the cause is not a port mismatch. The
+# marker says what is KNOWN (the log names no origin), because a server that binds quietly reaches
+# this branch too and a confident wrong verdict is the misdiagnosis the phase split exists to end.
+printf 'Error: Cannot find module ./.output/server/index.mjs\n' >"$W/dead.log"
+expect_exit 3 "a server that never started is still a SERVE failure" -- \
+  env BASE_URL=http://127.0.0.1:1 SERVER_LOG="$W/dead.log" READY_TIMEOUT=2 \
+      node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^SERVE_CAUSE=no-announcement$' "$W/out"; then
+  ok "a log naming no origin is distinguishable from a port mismatch — SERVE_CAUSE=no-announcement"
+else
+  bad "no-announcement cause — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
+fi
+stderr_has "  the stop quotes the server's own last output" "Cannot find module"
+
+# A server that announced an origin and then died is a THIRD answer: the announcement was read, and
+# it does not answer. Nothing was guessed, so re-guessing the port is not the fix.
+printf 'Listening on http://localhost:8747\n' >"$W/gone.log"
+expect_exit 3 "an announced origin that does not answer is a SERVE failure" -- \
+  env BASE_URL=http://127.0.0.1:1 SERVER_LOG="$W/gone.log" READY_TIMEOUT=2 \
+      node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^SERVE_CAUSE=announced-unreachable$' "$W/out" && grep -q '^ANNOUNCED_PORTS=8747$' "$W/out"; then
+  ok "an announced-but-dead origin names what was announced — SERVE_CAUSE=announced-unreachable"
+else
+  bad "announced-unreachable cause — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
+fi
+
+# A SERVER_LOG path that does not exist is not evidence the server never started — it is a missing
+# log, and saying so keeps the two apart.
+expect_exit 3 "a SERVER_LOG that does not exist is reported as a missing log, not a dead server" -- \
+  env BASE_URL=http://127.0.0.1:1 SERVER_LOG="$W/nope.log" READY_TIMEOUT=2 \
+      node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^SERVE_CAUSE=no-log$' "$W/out"; then
+  ok "a missing SERVER_LOG file reports SERVE_CAUSE=no-log"
+else
+  bad "missing SERVER_LOG — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
+fi
+
+# Reading the log must never COST a run. A chatty log mentions origins that are not the server —
+# an API base, a registry, a database — and the port the caller actually asked for must still be
+# dialled inside the short budget, or passing SERVER_LOG would fail a case that passed without it.
+printf 'proxying /api -> http://api.internal:59123\ncache at http://cache.internal:59124\nqueue http://mq.internal:59125\nwarming...\n' >"$W/chatty.log"
+node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(8742,"127.0.0.1")' &
+SRV=$!
+for _ in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:8742 && break; sleep 0.1; done
+( cd "$W" && BASE_URL=http://127.0.0.1:8742 SERVER_LOG="$W/chatty.log" READY_TIMEOUT=10 \
+    node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+{ kill $SRV && wait $SRV; } 2>/dev/null
+if [ "$rc" -eq 0 ] && grep -q '^PORT_SOURCE=requested$' "$W/out" && grep -q '^BASE_URL=http://127.0.0.1:8742$' "$W/out"; then
+  ok "a chatty log does not starve the port the caller asked for"
+else
+  bad "chatty log starvation — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# An address inside a longer one is not a port: `listening on 192.168.1.5:8080` must not announce 192.
+printf 'listening on 192.168.1.5:8080\n' >"$W/octet.log"
+expect_exit 3 "an address octet is not read as an announced port" -- \
+  env BASE_URL=http://127.0.0.1:1 SERVER_LOG="$W/octet.log" READY_TIMEOUT=2 \
+      node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^ANNOUNCED_PORTS=8080$' "$W/out"; then
+  ok "the port comes from the address, not from its first octet — ANNOUNCED_PORTS=8080"
+else
+  bad "octet parse — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
+fi
+
+# The origin is parsed now that candidates are built from it, so a malformed one is a usage refusal
+# rather than a poll that burns its whole budget on a string that could never have answered.
+expect_exit 1 "a BASE_URL that is not a URL is a usage error, not a serve failure" -- \
+  env BASE_URL=localhost:3000 READY_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs" serve
 
 echo ""
 echo "-- probe: browserless refusal + client contract (NO browser in CI) --"

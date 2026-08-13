@@ -684,6 +684,37 @@
         "False-positive guard: does not take the handover stop on line `Error: expect(locator).toHaveText(expected)` merely because two attempts have failed",
         "False-positive guard: does not post a handover PR comment while the run is still converging"
       ]
+    },
+    {
+      "id": 48,
+      "title": "The server announced a shifted port — poll what it said, not what you asked for",
+      "prompt": "Step 3, PR-mode. You allocated port 3000 and started the preview server as a background task with its output going to /tmp/preview-3000.log. The serve phase reported `SERVE=failed`, `SERVE_CAUSE=no-log`, `READY=no` against `http://localhost:3000` after its full budget. The log file reads:\n\n```\nNuxt 3.11.2 with Nitro 2.9.6\nUnable to find an available port (tried 3000)... Using alternative port 3001\nListening on http://[::1]:3001\n```\n\nWhat do you do?",
+      "expected_output": "Should read the port out of the server's own output rather than treating the not-ready verdict as a broken server: the framework shifted to 3001 by itself and said so, and it announced the [::1] loopback form. Should re-run the serve phase passing SERVER_LOG=/tmp/preview-3000.log so the port and the address family are read rather than guessed, and take the effective origin from the summary's `BASE_URL=` line (with PORT_SHIFTED=yes, PORT_SOURCE=announced, ADDRESS_FAMILY). Should then carry that exact origin through every later step — the recon probe's BASE_URL, the Step-4 `Runner origin:` line, the Step-7 HAR binding origin, and every runner invocation — because each is a fresh environment. Should NOT conclude the server is broken or absent, NOT kill and restart it to try to claim 3000, NOT rebuild, and NOT raise READY_TIMEOUT in the hope that a longer poll on 3000 will eventually answer.",
+      "files": [],
+      "assertions": [
+        "True positive: reads port 3001 from the server's announcement instead of re-polling the requested 3000",
+        "Re-runs the serve phase with SERVER_LOG so the port and address family come from the log",
+        "Takes the effective origin from the serve summary's BASE_URL= line rather than reassembling it by hand",
+        "Carries the effective origin into the probe, the Runner origin line, the HAR binding and every runner invocation",
+        "Notes the announced [::1] form and that a server reachable on one loopback family is not absent",
+        "False-positive guard: does not report the server as broken, absent or not-ready",
+        "False-positive guard: does not kill/restart the server, rebuild, or raise READY_TIMEOUT to keep polling 3000"
+      ]
+    },
+    {
+      "id": 49,
+      "title": "A server whose log names no origin is not a port mismatch",
+      "prompt": "Step 3, PR-mode. The config and build phases passed (`CONFIG=ok`, `BUILD=ok`). You started the preview server and ran the serve phase with SERVER_LOG set. It reported `SERVE=failed`, `SERVE_CAUSE=no-announcement`, `READY=no`, and printed the log's last lines:\n\n```\nError: Cannot find module '/repo/.output/server/index.mjs'\n    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)\n```\n\nWhat do you do?",
+      "expected_output": "Should read SERVE_CAUSE=no-announcement as what it says: the log names no listening origin, so the port could never be read — and the printed crash makes this the server or the built output, not a port that was guessed wrong. Should act on the server's own error: the preview command is being pointed at an output path that does not exist, so confirm what the build actually produced and start the project's own preview command against that output. Should NOT hunt for a shifted port, NOT try other loopback forms or other ports, NOT re-run the serve phase on a longer budget, and NOT re-run the build phase, which already passed and whose failure would have been reported as exit 5 with its own standard error.",
+      "files": [],
+      "assertions": [
+        "True positive: treats no-announcement plus the printed crash as the server or the built output, not as a port mismatch",
+        "Uses the printed log lines (the missing module path) as the diagnostic",
+        "Checks what the build produced and starts the project's own preview command against it",
+        "False-positive guard: does not search for a shifted port or dial other loopback forms/ports",
+        "False-positive guard: does not re-run the build phase, which already reported BUILD=ok",
+        "False-positive guard: does not raise READY_TIMEOUT and poll longer"
+      ]
     }
   ]
 }

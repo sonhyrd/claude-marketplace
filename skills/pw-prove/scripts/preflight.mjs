@@ -16,6 +16,9 @@
 //           build failure carrying its standard error — not a server that never became ready.
 //   serve   poll the preview server on a SHORT budget: a preview binds in under a second and serves
 //           its first page in milliseconds, so one that is not answering quickly is broken, not slow.
+//           WHAT is polled comes from the server's own log (SERVER_LOG): the port it announced —
+//           including one it shifted to by itself — and every loopback form, so a server bound to
+//           one address family is not reported absent because the other was dialled.
 //
 // This script still does NOT start a server. The AGENT owns the preview server's lifecycle (pick the
 // port, start it, read the port back out of its own log) — a script-started server can bind a
@@ -30,6 +33,11 @@
 //   BASE_URL=http://localhost:4000 node preflight.mjs serve
 //
 //   BASE_URL       required for the serve phase — the preview server you already started.
+//   SERVER_LOG     optional but wanted for the serve phase — the preview server's own log (the
+//                  harness-tracked task's output). The port and the bound loopback family are read
+//                  from it rather than guessed, and it is re-read every poll round because a server
+//                  announces its port when IT is ready. Absent, the poll can only try what you asked
+//                  for, and a failure says so (`SERVE_CAUSE=no-log`) rather than blaming the server.
 //   REQUIRED_ENV   optional — comma/space-separated keys the built app must have to boot.
 //   ENV_CONTRACT   optional — path to the app's own declared contract (`.env.example` shape). A key
 //                  declared with no value is REQUIRED; a key declared with a value carries its own
@@ -314,43 +322,230 @@ if (phases.includes('build')) {
 // are "not up"; ANY other code — 2xx, 3xx, 401, 403, 404 — means "up and serving", so a 404 is a
 // PASS: we are probing liveness, not routing. Keep using curl rather than fetch(): fetch would need
 // its own abort/retry plumbing to distinguish "refused" from "slow", and curl already prints 000.
+//
+// WHAT is polled is read from the server's own output, not from the port we asked for. Three of the
+// eight observed readiness failures were the agent polling a port the server had not bound — one of
+// them a framework that said so plainly (`Unable to find an available port (tried 3000)... Using
+// alternative port 3001`) while the agent burned its whole budget on 3000 and called a healthy
+// server absent — and one was a server bound to a single loopback family while the agent dialled the
+// other. Both are announcements. Process and socket inspection stay a fallback only: `lsof`/`ps` are
+// blind under sandboxing, so neither can establish that a port is free or that a listener is ours.
+
+// Loopback forms, in the order they are tried. The NUMERIC ipv4 form leads deliberately: `localhost`
+// resolves per-process, so an origin recorded as `localhost` can reach a different family in the
+// runner than it did here, which is the mismatch this whole block exists to end.
+const LOOPBACK_FORMS = ['127.0.0.1', '[::1]', 'localhost'];
+const ANY_HOSTS = new Set(['0.0.0.0', '[::]', '::']);
+const isLoopbackHost = (h) => LOOPBACK_FORMS.includes(h) || /^127\./.test(h);
+const addressFamily = (h) => (h === '[::1]' ? 'ipv6' : /^127\./.test(h) ? 'ipv4' : 'localhost');
+
+// A server log is page-adjacent output: untrusted text. Only PORTS are taken from it, and only
+// loopback forms are ever dialled — a host read out of a log is never connected to, so a log line
+// carrying `http://evil.example/` can move nothing but which local port is polled.
+function announcedPorts(text) {
+  const found = [];
+  const add = (port, host, at) => {
+    if (Number(port) >= 1 && Number(port) <= 65535) found.push({ port, host, at });
+  };
+  for (const m of text.matchAll(/\bhttps?:\/\/(\[[0-9a-fA-F:]+\]|[A-Za-z0-9._-]+):(\d{1,5})\b/g)) {
+    add(m[2], m[1], m.index);
+  }
+  // `Listening on 0.0.0.0:8080` — an address with no scheme. The host is kept for its FORM only;
+  // a non-loopback one contributes its port and nothing else, because nothing off loopback is dialled.
+  for (const m of text.matchAll(
+    /(?:listening on|started on|available at|running at)\s+(\[[0-9a-fA-F:]+\]|[A-Za-z0-9._-]+):(\d{1,5})(?![\d.:])/gi,
+  )) {
+    add(m[2], m[1], m.index);
+  }
+  // The shift is often announced with no URL at all — the observed Nuxt line is one such. The
+  // trailing lookahead keeps this branch off anything that is part of a longer address: without it,
+  // `listening on 192.168.1.5:8080` yields the port `192` and three loopback forms get polled on it.
+  for (const m of text.matchAll(
+    /(?:alternative port|listening on(?: port)?|started on(?: port)?|port:)\s+:?(\d{1,5})(?![\d.:])/gi,
+  )) {
+    add(m[1], undefined, m.index);
+  }
+  // Most recent announcement first: the shifted port is announced AFTER the port that was refused,
+  // so reading the log top-down would re-poll exactly the port the server told us it gave up on.
+  found.sort((a, b) => b.at - a.at);
+  const seen = new Set();
+  return found.filter(({ port, host }) => {
+    const key = `${host ?? ''}:${port}`;
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
+}
+
 if (phases.includes('serve')) {
+  // `requested` is already taken at module scope (the argv phase list): this one is the URL.
+  let requestedUrl;
+  try {
+    requestedUrl = new URL(BASE_URL);
+  } catch {
+    requestedUrl = undefined;
+  }
+  // The scheme check is not pedantry: `new URL('localhost:3000')` parses happily, as the scheme
+  // `localhost:` with the path `3000` and NO host — and the poll would then dial port 80 forever.
+  if (!requestedUrl || !['http:', 'https:'].includes(requestedUrl.protocol) || !requestedUrl.hostname) {
+    warn(`preflight.mjs: BASE_URL must be an http(s) origin (got '${BASE_URL}')\n`);
+    process.exit(EXIT_USAGE);
+  }
+  const requestedPort = requestedUrl.port || (requestedUrl.protocol === 'https:' ? '443' : '80');
+  const SERVER_LOG = process.env.SERVER_LOG ? inApp(process.env.SERVER_LOG) : undefined;
+
+  // Keep the shape the caller gave: a bare origin stays bare. The effective origin is pasted into a
+  // dozen later invocations by hand, and `http://127.0.0.1:4000/` vs `http://127.0.0.1:4000` is the
+  // kind of difference that makes an exact-match HAR binding miss.
+  const originFor = (host, port) =>
+    `${requestedUrl.protocol}//${host}:${port}` +
+    `${requestedUrl.pathname === '/' ? '' : requestedUrl.pathname}${requestedUrl.search}`;
+  const requestedOrigin = originFor(requestedUrl.hostname, requestedPort);
+  const formsFor = (preferred) => {
+    const order = preferred && !ANY_HOSTS.has(preferred) && isLoopbackHost(preferred) ? [preferred] : [];
+    for (const f of LOOPBACK_FORMS) if (!order.includes(f)) order.push(f);
+    return order;
+  };
+  // The port the caller asked for is dialled SECOND, not last. A log that mentions other origins —
+  // an API base, a registry, a database URL — would otherwise fill the whole short budget with
+  // candidates before reaching it, and passing SERVER_LOG would make a case fail that passed
+  // without it. Older announcements come after it, and only the three most recent are kept at all.
+  const MAX_ANNOUNCED = 3;
+  function candidatesFrom(announced) {
+    const list = [];
+    const push = (host, port, source) => {
+      const url = originFor(host, port);
+      if (!list.some((c) => c.url === url)) list.push({ url, host, port, source });
+    };
+    const kept = announced.slice(0, MAX_ANNOUNCED);
+    const pushAnnounced = (a) => {
+      for (const h of formsFor(a.host ?? requestedUrl.hostname)) push(h, a.port, 'announced');
+    };
+    if (kept[0]) pushAnnounced(kept[0]);
+    for (const h of formsFor(requestedUrl.hostname)) push(h, requestedPort, 'requested');
+    for (const a of kept.slice(1)) pushAnnounced(a);
+    return list;
+  }
+
   warn(`preflight: waiting for ${BASE_URL} (up to ${READY_TIMEOUT}s)...\n`);
+  if (!SERVER_LOG) {
+    warn(
+      'preflight: WARN - no SERVER_LOG given; an automatically shifted port cannot be read back and ' +
+        'this poll can only try the port you asked for. Pass the preview server log (SKILL Step 3).\n',
+    );
+  }
 
   // Measure the wall clock, not the loop count. Each attempt can itself take up to `--max-time 5`,
   // so counting two seconds per iteration made a "20-second budget" run for over a minute against a
   // hanging origin — and a short budget that is not short is the poll this rewrite replaced.
   const startedAt = Date.now();
+  const elapsed = () => Math.round((Date.now() - startedAt) / 1000);
   let waited = 0;
+  let logText; // re-read every round: a server announces its port when IT is ready, not when we ask
+  let announced = [];
+  let reached;
+  let lastCode = '000';
   for (;;) {
-    const r = spawnSync(
-      'curl',
-      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', BASE_URL],
-      { encoding: 'utf8' },
-    );
-    const code = (r.stdout || '').trim() || '000'; // curl prints 000 on refused; '' if curl is absent
-
-    if (!['000', '502', '503', '504'].includes(code)) {
-      warn(`preflight: ready - HTTP ${code} after ${waited}s\n`);
+    if (SERVER_LOG) {
+      try {
+        logText = fs.readFileSync(SERVER_LOG, 'utf8');
+        announced = announcedPorts(logText);
+      } catch {
+        /* not there yet, or unreadable — neither is a verdict; the poll below still answers */
+      }
+    }
+    for (const c of candidatesFrom(announced)) {
+      if (elapsed() >= READY_TIMEOUT) break;
+      const r = spawnSync(
+        'curl',
+        ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '5', c.url],
+        { encoding: 'utf8' },
+      );
+      lastCode = (r.stdout || '').trim() || '000'; // curl prints 000 on refused; '' if curl is absent
+      if (!['000', '502', '503', '504'].includes(lastCode)) {
+        reached = c;
+        break;
+      }
+    }
+    if (reached) {
+      warn(`preflight: ready - HTTP ${lastCode} from ${reached.url} after ${elapsed()}s\n`);
       break;
     }
 
-    waited = Math.round((Date.now() - startedAt) / 1000);
+    waited = elapsed();
     if (waited + 2 >= READY_TIMEOUT) {
+      // Three answers, not one. A shifted port that WAS found is not a failure at all (above); these
+      // are the three ways the phase can still end badly, and their fixes have nothing in common.
+      const cause =
+        logText === undefined ? 'no-log' : announced.length === 0 ? 'no-announcement' : 'announced-unreachable';
+      const tail = logText === undefined ? [] : logText.trimEnd().split('\n').slice(-15);
       warn(
-        `preflight: STOP - serve FAILED: ${BASE_URL} did not answer within ${READY_TIMEOUT}s ` +
-          `(last HTTP ${code}). A preview server binds in under a second, so this is a broken or ` +
-          'absent server, not a slow one: read the preview log, and check the port it actually bound.\n',
+        `preflight: STOP - serve FAILED: nothing answered within ${READY_TIMEOUT}s (last HTTP ` +
+          `${lastCode}). A preview server binds in under a second, so this is a broken or absent ` +
+          'server, not a slow one.\n',
       );
+      if (cause === 'no-announcement') {
+        // Deliberately NOT called "never-started": the log naming no origin is evidence about the
+        // LOG. A crash is the common case and its trace is right below, but a server that binds
+        // quietly reaches here too, and a confident wrong verdict is the misdiagnosis this phase
+        // split exists to end. Both next actions are named, in that order.
+        warn(
+          `preflight:   ${SERVER_LOG} names no listening origin, so the port could not be read and only ` +
+            'the one you asked for was tried. Read its last lines below first — a server that died ' +
+            'before binding is the common case. If it IS running and simply announces nothing, it is ' +
+            'the port or the loopback family: pass the port you started it on as BASE_URL.\n',
+        );
+      } else if (cause === 'announced-unreachable') {
+        warn(
+          `preflight:   the server announced port(s) ${announced.map((a) => a.port).join(', ')} and none ` +
+            'of them answers on any loopback form. It bound and then stopped; re-guessing the port is ' +
+            'not the fix. Its own last output is below.\n',
+        );
+      } else {
+        warn(
+          `preflight:   no server log was read${SERVER_LOG ? ` (${SERVER_LOG} does not exist)` : ''}, so a ` +
+            'shifted port could not be ruled out. Start the preview server with a readable log and pass ' +
+            'SERVER_LOG=<path> — that is how the port and the bound family are meant to be learned.\n',
+        );
+      }
+      for (const line of tail) warn(`preflight:   | ${line}\n`);
       summary.push('SERVE=failed');
+      summary.push(`SERVE_CAUSE=${cause}`);
       summary.push(`BASE_URL=${BASE_URL}`);
+      summary.push(`REQUESTED_URL=${BASE_URL}`);
+      if (announced.length) summary.push(`ANNOUNCED_PORTS=${[...new Set(announced.map((a) => a.port))].join(',')}`);
       summary.push('READY=no');
       finish(EXIT_SERVE, 'serve');
     }
     sleep(2000);
   }
+
+  // Compared against the NORMALISED requested origin, not the raw string: a trailing slash is not a
+  // moved server, and warning about one teaches an operator to skim past the warning that matters.
+  const shifted = reached.port !== requestedPort;
+  if (reached.url !== requestedOrigin) {
+    warn(
+      `preflight: the server is at ${reached.url}, not ${BASE_URL} — ` +
+        `${shifted ? `the port shifted (${requestedPort} → ${reached.port})` : `the bound loopback family is ${addressFamily(reached.host)}`}` +
+        '. Use the origin below EVERYWHERE from here on: the recon probe, the Runner origin, the HAR ' +
+        'binding and every runner invocation. Each is a fresh environment; fixing it in one is not ' +
+        'fixing it.\n',
+    );
+    if (shifted) {
+      // The log says which port the server MEANT to bind; it cannot say the listener there is ours.
+      // A co-resident sibling worktree answering on the same port is a proof of the wrong branch.
+      warn(
+        'preflight:   a shifted port is also the case where a sibling worktree can be answering — ' +
+          "fingerprint the served asset paths before trusting it (SKILL Step 3: they carry the serving " +
+          'worktree absolute path).\n',
+      );
+    }
+  }
   summary.push('SERVE=ok');
-  summary.push(`BASE_URL=${BASE_URL}`);
+  summary.push(`BASE_URL=${reached.url}`);
+  summary.push(`REQUESTED_URL=${BASE_URL}`);
+  summary.push(`PORT_SOURCE=${reached.source}`);
+  summary.push(`PORT_SHIFTED=${shifted ? 'yes' : 'no'}`);
+  summary.push(`ADDRESS_FAMILY=${addressFamily(reached.host)}`);
+  if (announced.length) summary.push(`ANNOUNCED_PORTS=${[...new Set(announced.map((a) => a.port))].join(',')}`);
   summary.push('READY=yes');
 }
 
