@@ -177,6 +177,24 @@ mutate "$file" "Find Playwright/Cypress E2E tests that pass CI" "Find Playwright
 assert_fails "Language guard — Hangul outside switcher line in README.md" "Korean text found in public docs: README.md"
 restore "$file"
 
+# Case 15: canonical dwell drift — a second variant of the dwell in code-rules.md.
+# Three near-identical variants is the state this check exists to prevent returning to.
+file="skills/pw-prove/code-rules.md"
+backup "$file"
+mutate "$file" "if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);" \
+  "if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1500);"
+assert_fails "Canonical dwell — a variant duration in code-rules.md" "is not the canonical dwell"
+restore "$file"
+
+# Case 16: the generation step loses its inline snippet — the pointer-only state ten of eleven
+# field sessions never followed.
+file="skills/pw-prove/SKILL.md"
+backup "$file"
+mutate "$file" "// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof" \
+  "// JUSTIFIED: see code-rules.md for the wording"
+assert_fails "Canonical dwell — SKILL.md Step 5 no longer carries it inline" "carries no canonical dwell"
+restore "$file"
+
 # ---------------------------------------------------------------------------
 # Scanner detection smoke — fixture-based and offline: eslint auto-download is
 # disabled via E2E_SMELL_NO_ESLINT_DOWNLOAD=1 (so counts come from the Tier-3

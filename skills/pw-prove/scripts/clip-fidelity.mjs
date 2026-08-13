@@ -360,6 +360,24 @@ function deriveVerdict(original) {
 }
 
 // ============================================================ the spec assertions
+// THE CANONICAL PAYOFF DWELL. One string, one source of truth: this failure path prints it, and the
+// two prose surfaces that must show it to the agent — pw-prove SKILL.md Step 5, where the spec is
+// written, and code-rules.md §Payoff dwell — carry it verbatim. review.sh's "Canonical dwell
+// snippet" check fails the build when any of the three drifts. Three near-identical variants used
+// to exist, differing in wording and duration, and none of them was reachable at the one moment
+// that mattered: ten of eleven field sessions never opened the reference at all, and every recovery
+// in that sample came from this error text rather than from the documentation.
+export const CANONICAL_DWELL = `// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);`;
+
+/** The canonical dwell, every line prefixed with `indent` for printing inside a message. */
+const dwellSnippet = (indent) =>
+  CANONICAL_DWELL.split('\n')
+    .map((line) => indent + line + '\n')
+    .join('');
+
 const CLIP_GATE = /process\.env\.PW_PROVE_CLIP/;
 const WAIT = /waitForTimeout\s*\(/;
 
@@ -788,9 +806,7 @@ if (dwellFailure) {
       '       wait is an unexplained fixed sleep e2e-reviewer will flag as #9. One per test, framed,\n' +
       '       at any beat except between an action and the assertion that covers it:\n' +
       "         await el.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }));\n" +
-      '         // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP; it sits after the\n' +
-      '         // assertion covering the beat above, so it adds time and nothing else. CI never sets it.\n' +
-      '         if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);\n' +
+      dwellSnippet('         ') +
       '       (exit 2)\n',
   );
   process.exit(EXIT.DWELL);

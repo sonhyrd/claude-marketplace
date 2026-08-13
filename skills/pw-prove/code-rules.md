@@ -213,7 +213,7 @@ Report the resolved effective viewport in the run's Assumptions block. Step 7 pa
 
 ### Payoff dwell
 
-The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. **Every generated `test()` carries at least one dwell**, framed:
+The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. **Every generated `test()` carries at least one dwell**, framed. This is the canonical dwell: Step 5 carries it inline, `clip-fidelity.mjs` prints it on failure, and CI fails on any variant.
 
 ```typescript
 // Then: the save is confirmed
@@ -221,8 +221,8 @@ const status = page.getByRole('status');
 await expect(status).toHaveText('Saved');                     // assertion covering this beat
 await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));  // framing, ungated
 // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
-// run); it sits after the assertion above, outside the race window, so it adds time and nothing
-// else. CI never sets it.
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
 if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
 ```
 
@@ -245,10 +245,11 @@ The evidence is the **state change**, not the keystrokes — so fill atomically 
 await page.getByLabel('Title').fill('Q3 revenue review');
 // Then: the form accepts it
 await expect(page.getByLabel('Title')).toHaveValue('Q3 revenue review');
-await page.getByLabel('Title').evaluate((el) => el.scrollIntoView({ block: 'center' }));
-// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP; adds time only, and sits
-// after the assertion covering the fill above. CI never sets it.
-if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1500);
+await page.getByLabel('Title').evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));
+// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
 ```
 
 A held filled field reads as well as keystrokes and costs CI nothing.
