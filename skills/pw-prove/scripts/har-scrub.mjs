@@ -43,6 +43,7 @@
 // It NEVER prints a credential. Residue is reported by location, kind and length only.
 //
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention.
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -547,11 +548,88 @@ export function findResidue(har) {
   });
 }
 
+// ---------------------------------------------------------------- binding for replay
+
+// WHY BINDING EXISTS. Playwright's HAR replay matches on EXACT request-URL string equality:
+// `HarBackend._harFindResponse` skips every candidate where `candidate.request.url !== url`, and
+// there is no tolerance for origin, port or query anywhere in that path (read in playwright-core
+// 1.58.2 and confirmed unchanged in 1.62.1). A committed HAR is deliberately canonical — no port,
+// every secret placeheld — so it can NEVER match a live run on its own: `routeFromHAR` returns
+// `noentry` and `notFound: 'abort'` aborts a call the run itself recorded.
+//
+// So the committed file is bound to THIS run before it is replayed: its canonical origin becomes
+// the run's real origin, and each placeholder in the match key becomes the run's own live value.
+// That is what the stable, shape-keyed placeholders were for — the substitution is deterministic
+// because the same secret always produced the same placeholder.
+//
+// Only the MATCH KEY is rebound — request URL, query string and post data. Headers, cookies and
+// response bodies play no part in the lookup, so re-injecting credentials there would put a live
+// bearer in a file for no gain. The result is a working copy, never the committed file.
+export function bindHar(har, { origin, bindings = {} } = {}) {
+  const unbound = [];
+  let bound = 0;
+  // `required` marks the positions the LOOKUP reads. A placeholder left in one of those cannot
+  // match and must be refused; a placeholder anywhere else is bound when a value is offered and
+  // left alone otherwise, because rebinding it buys nothing and costs a live credential in a file.
+  const subst = (s, where, required) => {
+    if (typeof s !== 'string' || !s) return s;
+    return s.replace(PLACEHOLDER_RE_G, (m) => {
+      const v = bindings[m];
+      if (v === undefined) {
+        if (required) unbound.push({ where, placeholder: m });
+        return m;
+      }
+      bound += 1;
+      return v;
+    });
+  };
+  const entries = har?.log?.entries;
+  if (Array.isArray(entries)) {
+    entries.forEach((e, i) => {
+      const req = e?.request;
+      if (!req) return;
+      const at = `entries[${i}].request`;
+      // Re-point FIRST, substitute second: normalizeUrl leaves a placeholder alone, but a URL that
+      // already carries a live token would look dirty to it and be placeheld right back.
+      if (typeof req.url === 'string') {
+        req.url = subst(origin ? normalizeUrl(req.url, origin) : req.url, `${at}.url`, true);
+      }
+      // queryString mirrors the URL and is not itself looked up; keep the two agreeing, but never
+      // refuse over it — the URL above already refused if this run cannot bind the value.
+      for (const q of req.queryString ?? []) {
+        if (q && typeof q.value === 'string') q.value = subst(q.value, `${at}.queryString[${q.name}]`, false);
+      }
+      // Post data is compared byte for byte, but ONLY when the live request is a POST carrying a
+      // body (`method === 'POST' && postData` in _harFindResponse). A GET's recorded body is never
+      // read, so a placeholder there is not an unbindable entry.
+      const isMatchedBody = String(req.method ?? '').toUpperCase() === 'POST';
+      if (req.postData) {
+        if (typeof req.postData.text === 'string')
+          req.postData.text = subst(req.postData.text, `${at}.postData.text`, isMatchedBody);
+        for (const p of req.postData.params ?? []) {
+          if (p && typeof p.value === 'string')
+            p.value = subst(p.value, `${at}.postData.params[${p.name}]`, isMatchedBody);
+        }
+      }
+      // The response's redirect target is followed by the same exact-match loop, so it is match key
+      // too — but only its ORIGIN needs to agree; a placeheld credential in it is not looked up.
+      const res = e?.response;
+      if (res && typeof res.redirectURL === 'string' && res.redirectURL && origin)
+        res.redirectURL = normalizeUrl(res.redirectURL, origin);
+    });
+  }
+  return { bound, unbound };
+}
+
 // ---------------------------------------------------------------- CLI
 
-// Everything below runs only when this file IS the process. Imported — which is how the pw-prove
-// pipeline will reach `scrubHar`/`findResidue` once the capture-time and pre-commit callers land
-// (issue #41) — it stays a module: no ledger record, no argument parsing, no process.exit().
+// Everything below runs only when this file IS the process. Imported — which is how probe.mjs
+// reaches `scrubHar`/`findResidue` for the capture-time scrub (issue #41) — it stays a module: no
+// ledger record, no argument parsing, no process.exit().
+//
+// The CLI therefore lives INSIDE the guard, not after it. ESM has no top-level `return`, so an
+// `if (!isMain) { }` with the CLI below it reads like a guard and stops nothing: every importer
+// inherited this file's argument parsing and died of "no HAR file given" before it could scrub.
 const isMain = (() => {
   try {
     return path.resolve(process.argv[1] ?? '') === path.resolve(fileURLToPath(import.meta.url));
@@ -559,133 +637,204 @@ const isMain = (() => {
     return false;
   }
 })();
-if (!isMain) {
-  // A module import stops here. The CLI below is dead code in that case, and must not run.
-} else {
+if (isMain) {
   // Called BEFORE any argument validation, so even a usage-error exit leaves a run record.
   pwproveRun(import.meta.url, 'scrub');
-}
 
-const USAGE =
-  'usage: har-scrub.mjs <file.har> [--out <path>] [--origin <url>] [--quiet]\n' +
-  '       har-scrub.mjs <file.har> --verify [--quiet]\n' +
-  '       har-scrub.mjs normalize <url> [--origin <url>]\n' +
-  'exit: 0 scrubbed/clean · 1 usage · 2 unreadable or not a HAR · 3 residue found\n';
+  const USAGE =
+    'usage: har-scrub.mjs <file.har> [--out <path>] [--origin <url>] [--quiet]\n' +
+    '       har-scrub.mjs <file.har> --verify [--quiet]\n' +
+    '       har-scrub.mjs bind <file.har> --out <gitignored> --origin <url> [--bindings <json>]\n' +
+    '       har-scrub.mjs normalize <url> [--origin <url>]\n' +
+    'exit: 0 scrubbed/clean/bound · 1 usage · 2 unreadable or not a HAR · 3 residue found\n' +
+    '      4 a placeholder in the match key has no run-time value · 5 the bound copy would be committable\n';
 
-const argv = process.argv.slice(2);
-// `normalize` is the only subcommand; every other invocation takes a HAR path as its positional.
-const MODE = argv[0] === 'normalize' ? 'normalize' : 'har';
-const rest = MODE === 'normalize' ? argv.slice(1) : argv;
+  const argv = process.argv.slice(2);
+  // Two subcommands; every other invocation takes a HAR path as its positional.
+  const MODE = argv[0] === 'normalize' || argv[0] === 'bind' ? argv[0] : 'har';
+  const rest = MODE === 'har' ? argv : argv.slice(1);
 
-const positional = [];
-let OUT = null;
-let ORIGIN = null;
-let VERIFY = false;
-let QUIET = false;
-for (let i = 0; i < rest.length; i++) {
-  const a = rest[i];
-  if (a === '--verify') VERIFY = true;
-  else if (a === '--quiet') QUIET = true;
-  else if (a === '--out') OUT = rest[++i];
-  else if (a === '--origin') ORIGIN = rest[++i];
-  else if (a === '-h' || a === '--help') {
-    out(USAGE);
+  const positional = [];
+  let OUT = null;
+  let ORIGIN = null;
+  let BINDINGS = null;
+  let VERIFY = false;
+  let QUIET = false;
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === '--verify') VERIFY = true;
+    else if (a === '--quiet') QUIET = true;
+    else if (a === '--out') OUT = rest[++i];
+    else if (a === '--origin') ORIGIN = rest[++i];
+    else if (a === '--bindings') BINDINGS = rest[++i];
+    else if (a === '-h' || a === '--help') {
+      out(USAGE);
+      process.exit(0);
+    } else if (a.startsWith('-')) {
+      err(`har-scrub: unknown flag '${a}'\n${USAGE}`);
+      process.exit(1);
+    } else positional.push(a);
+  }
+  if (positional.length > 1) {
+    err(`har-scrub: unexpected argument '${positional[1]}'\n${USAGE}`);
+    process.exit(1);
+  }
+  if (ORIGIN) {
+    try {
+      new URL(ORIGIN);
+    } catch {
+      err(`har-scrub: --origin '${ORIGIN}' is not an absolute URL\n`);
+      process.exit(1);
+    }
+  }
+
+  // `normalize <url>` — the same normaliser, callable on ONE url. This is how a caller proves that a
+  // recorded entry and a live replayed request land on the same string.
+  if (MODE === 'normalize') {
+    if (!positional.length) {
+      err(`har-scrub: normalize needs a url\n${USAGE}`);
+      process.exit(1);
+    }
+    out(`${normalizeUrl(positional[0], ORIGIN)}\n`);
     process.exit(0);
-  } else if (a.startsWith('-')) {
-    err(`har-scrub: unknown flag '${a}'\n${USAGE}`);
+  }
+
+  const TARGET = positional[0];
+  if (!TARGET) {
+    err(`har-scrub: no HAR file given\n${USAGE}`);
     process.exit(1);
-  } else positional.push(a);
-}
-if (positional.length > 1) {
-  err(`har-scrub: unexpected argument '${positional[1]}'\n${USAGE}`);
-  process.exit(1);
-}
-if (ORIGIN) {
+  }
+
+  let raw;
   try {
-    new URL(ORIGIN);
-  } catch {
-    err(`har-scrub: --origin '${ORIGIN}' is not an absolute URL\n`);
-    process.exit(1);
+    raw = fs.readFileSync(TARGET, 'utf8');
+  } catch (e) {
+    err(`har-scrub: cannot read '${TARGET}' (${e.code ?? e.message})\n`);
+    process.exit(2);
   }
-}
-
-// `normalize <url>` — the same normaliser, callable on ONE url. This is how a caller proves that a
-// recorded entry and a live replayed request land on the same string.
-if (MODE === 'normalize') {
-  if (!positional.length) {
-    err(`har-scrub: normalize needs a url\n${USAGE}`);
-    process.exit(1);
+  let har;
+  try {
+    har = JSON.parse(raw);
+  } catch (e) {
+    err(`har-scrub: '${TARGET}' is not valid JSON (${e.message})\n`);
+    process.exit(2);
   }
-  out(`${normalizeUrl(positional[0], ORIGIN)}\n`);
-  process.exit(0);
-}
+  if (!har?.log || !Array.isArray(har.log.entries)) {
+    err(`har-scrub: '${TARGET}' has no log.entries — this is not a HAR\n`);
+    process.exit(2);
+  }
 
-const TARGET = positional[0];
-if (!TARGET) {
-  err(`har-scrub: no HAR file given\n${USAGE}`);
-  process.exit(1);
-}
+  // `bind <file.har> --out <gitignored>` — the replay binding (issue #41). See `bindHar` above for
+  // why an exact-match replay cannot use the committed file directly.
+  if (MODE === 'bind') {
+    if (!OUT) {
+      err(
+        'har-scrub: bind needs --out <gitignored path> — it binds INTO a working copy and never\n' +
+          `           rewrites the committed HAR\n${USAGE}`,
+      );
+      process.exit(1);
+    }
+    // The bound copy carries this run's live credential, so a path git would commit is the wrong
+    // place for it. `git check-ignore` is the only authority on that question: exit 0 ignored,
+    // exit 1 not ignored, anything else means git could not answer (no repo, no git).
+    const ignored = spawnSync('git', ['check-ignore', '-q', OUT], { stdio: 'ignore' });
+    if (ignored.status === 1) {
+      err(
+        `har-scrub: REFUSED — '${OUT}' is not gitignored, and a bound HAR carries a live credential.\n` +
+          '  Bind into a gitignored path (e.g. .pw-prove/) — the committed HAR stays canonical.\n',
+      );
+      process.exit(5);
+    }
+    if (ignored.status !== 0 && !QUIET)
+      err(`har-scrub: WARNING — git could not say whether '${OUT}' is ignored; never commit it\n`);
 
-let raw;
-try {
-  raw = fs.readFileSync(TARGET, 'utf8');
-} catch (e) {
-  err(`har-scrub: cannot read '${TARGET}' (${e.code ?? e.message})\n`);
-  process.exit(2);
-}
-let har;
-try {
-  har = JSON.parse(raw);
-} catch (e) {
-  err(`har-scrub: '${TARGET}' is not valid JSON (${e.message})\n`);
-  process.exit(2);
-}
-if (!har?.log || !Array.isArray(har.log.entries)) {
-  err(`har-scrub: '${TARGET}' has no log.entries — this is not a HAR\n`);
-  process.exit(2);
-}
+    let bindings = {};
+    if (BINDINGS) {
+      try {
+        bindings = JSON.parse(fs.readFileSync(BINDINGS, 'utf8'));
+      } catch (e) {
+        err(`har-scrub: cannot read the bindings file '${BINDINGS}' (${e.code ?? e.message})\n`);
+        process.exit(2);
+      }
+      if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) {
+        err(`har-scrub: '${BINDINGS}' must be a JSON object of {"__PWPROVE_…__": "<this run's value>"}\n`);
+        process.exit(2);
+      }
+    }
 
-const report = (hits) => {
-  for (const h of hits) err(`  ${h.where}  ${h.kind}  (len ${h.len})\n`);
-};
+    const { bound, unbound } = bindHar(har, { origin: ORIGIN, bindings });
+    if (unbound.length) {
+      err(`har-scrub: REFUSED — ${unbound.length} placeholder(s) in the replay match key have no value:\n`);
+      for (const u of unbound) err(`  ${u.where}  ${u.placeholder}\n`);
+      err(
+        '  Replay matches on the EXACT request URL, so these entries cannot match. Left alone they\n' +
+          "  abort under notFound:'abort' and read as a broken application rather than an unbindable\n" +
+          "  recording. Give each placeholder this run's own value in --bindings <json>, or re-record.\n",
+      );
+      process.exit(4);
+    }
+    try {
+      fs.mkdirSync(path.dirname(path.resolve(OUT)), { recursive: true });
+      fs.writeFileSync(OUT, `${JSON.stringify(har, null, 2)}\n`, { mode: 0o600 });
+      fs.chmodSync(OUT, 0o600);
+    } catch (e) {
+      err(`har-scrub: cannot write the bound HAR to '${OUT}' (${e.code ?? e.message})\n`);
+      process.exit(2);
+    }
+    if (!QUIET)
+      out(
+        `har-scrub: bound ${har.log.entries.length} entries to ` +
+          `${ORIGIN ? new URL(ORIGIN).origin : 'the recorded origin'}, ` +
+          `${bound} placeholder substitution(s) -> ${OUT}\n`,
+      );
+    out(
+      `PWPROVE_SCRUB bound file=${OUT} entries=${har.log.entries.length} substitutions=${bound}\n`,
+    );
+    process.exit(0);
+  }
 
-if (VERIFY) {
-  const hits = findResidue(har);
-  if (hits.length) {
-    err(`har-scrub: REFUSED — ${hits.length} credential residue(s) in '${TARGET}'\n`);
-    report(hits);
-    err('  Re-run the scrubber over this file; a leaked bearer in a committed HAR is the same\n');
-    err('  incident as one in a log line.\n');
-    out(`PWPROVE_SCRUB residue file=${TARGET} hits=${hits.length}\n`);
+  const report = (hits) => {
+    for (const h of hits) err(`  ${h.where}  ${h.kind}  (len ${h.len})\n`);
+  };
+
+  if (VERIFY) {
+    const hits = findResidue(har);
+    if (hits.length) {
+      err(`har-scrub: REFUSED — ${hits.length} credential residue(s) in '${TARGET}'\n`);
+      report(hits);
+      err('  Re-run the scrubber over this file; a leaked bearer in a committed HAR is the same\n');
+      err('  incident as one in a log line.\n');
+      out(`PWPROVE_SCRUB residue file=${TARGET} hits=${hits.length}\n`);
+      process.exit(3);
+    }
+    if (!QUIET) out(`har-scrub: clean — no credential residue in '${TARGET}' (${har.log.entries.length} entries)\n`);
+    out(`PWPROVE_SCRUB clean file=${TARGET} entries=${har.log.entries.length}\n`);
+    process.exit(0);
+  }
+
+  const { secrets } = scrubHar(har, { origin: ORIGIN });
+  const dest = OUT || TARGET;
+  try {
+    fs.writeFileSync(dest, `${JSON.stringify(har, null, 2)}\n`);
+  } catch (e) {
+    err(`har-scrub: cannot write '${dest}' (${e.code ?? e.message})\n`);
+    process.exit(2);
+  }
+
+  // Self-verify: a scrub that leaves residue must not report success. This is the same check the
+  // pre-commit refusal runs, so the two can never disagree.
+  const left = findResidue(har);
+  if (!QUIET)
+    out(
+      `har-scrub: ${secrets} distinct secret(s) placeheld, ${har.log.entries.length} entries, ` +
+        `origins ${ORIGIN ? `re-pointed at ${new URL(ORIGIN).origin}` : 'canonicalised'} -> ${dest}\n`,
+    );
+  if (left.length) {
+    err(`har-scrub: REFUSED — ${left.length} residue(s) SURVIVED the scrub in '${dest}'\n`);
+    report(left);
+    out(`PWPROVE_SCRUB residue file=${dest} hits=${left.length}\n`);
     process.exit(3);
   }
-  if (!QUIET) out(`har-scrub: clean — no credential residue in '${TARGET}' (${har.log.entries.length} entries)\n`);
-  out(`PWPROVE_SCRUB clean file=${TARGET} entries=${har.log.entries.length}\n`);
+  out(`PWPROVE_SCRUB ok file=${dest} secrets=${secrets} entries=${har.log.entries.length}\n`);
   process.exit(0);
 }
-
-const { secrets } = scrubHar(har, { origin: ORIGIN });
-const dest = OUT || TARGET;
-try {
-  fs.writeFileSync(dest, `${JSON.stringify(har, null, 2)}\n`);
-} catch (e) {
-  err(`har-scrub: cannot write '${dest}' (${e.code ?? e.message})\n`);
-  process.exit(2);
-}
-
-// Self-verify: a scrub that leaves residue must not report success. This is the same check the
-// pre-commit refusal runs, so the two can never disagree.
-const left = findResidue(har);
-if (!QUIET)
-  out(
-    `har-scrub: ${secrets} distinct secret(s) placeheld, ${har.log.entries.length} entries, ` +
-      `origins ${ORIGIN ? `re-pointed at ${new URL(ORIGIN).origin}` : 'canonicalised'} -> ${dest}\n`,
-  );
-if (left.length) {
-  err(`har-scrub: REFUSED — ${left.length} residue(s) SURVIVED the scrub in '${dest}'\n`);
-  report(left);
-  out(`PWPROVE_SCRUB residue file=${dest} hits=${left.length}\n`);
-  process.exit(3);
-}
-out(`PWPROVE_SCRUB ok file=${dest} secrets=${secrets} entries=${har.log.entries.length}\n`);
-process.exit(0);
