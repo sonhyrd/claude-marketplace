@@ -129,6 +129,19 @@ someone reads the bring-up timings in isolation: the built target is *slower* to
 slower to mutate, and wins on the session total, on clip quality, and on proving the artifact that
 ships. See `docs/adr/0016` and `docs/studies/proof-target-measurements.md`.
 
+## Session ladder
+The ordered set of **rungs** — `?token=` query bootstrap, `storageState`, a server-set login cookie,
+client-storage seeding — by which a proof establishes its session, walked top-down until one holds.
+A rung is chosen by grepping the application's own source for what it actually reads, on every run,
+never by assumption. A rung whose mechanism sits behind a development-only guard (`import.meta.dev`
+and its equivalents) is **absent**: the [proof target](#proof-target) is a production build, so that
+code is compiled out and the input it reads is never consumed — the ladder records the rung as absent
+and descends rather than driving a path that no longer exists. Absence is a property of the artifact
+under proof, not of any one application, and it is never repaired by editing the application's
+source. Each rung's success is asserted on the authenticated state itself against a short budget, so
+an unestablished session is named in seconds instead of expiring a default timeout on a side effect
+that can never occur. See `docs/studies/proof-target-measurements.md` › The auto-login blocker.
+
 ## Proof config
 `<configDir>/playwright.proof.config.ts` — the second Playwright config pw-prove runs the proof
 through, spreading the project's own config and overriding only `use` (`video`, `trace`). **Static,

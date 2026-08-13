@@ -666,7 +666,8 @@
         "Descends to client-storage seeding rather than attempting the compiled-away path",
         "Seeds BOTH the credential (`auth.token`) and the user record (`auth.user`), naming the empty-shell failure a credential-only seed causes",
         "Derives the rule from grepping the mechanism's enclosing guard in the app's own source, not from a per-application special case",
-        "Asserts the authenticated state (signed-in element / store user) rather than waiting on the stripped query parameter, and confirms the page renders populated",
+        "Asserts the authenticated state (signed-in element / store user) against a short explicit budget, rather than waiting on the stripped query parameter",
+        "Gates recon on the page rendering POPULATED — treats an authenticated-but-empty shell as an incomplete seed, not as a broken locator",
         "Records the skipped rung and its guard in the Step-4 Assumptions block",
         "False-positive guard: does NOT edit the application's source or config to re-enable the dev-only path or replace the guard with a runtime flag",
         "False-positive guard: does NOT reintroduce a development server to make the dev-only rung available"
