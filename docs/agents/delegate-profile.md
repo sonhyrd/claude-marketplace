@@ -99,8 +99,11 @@ entries. A worker brief that names `~/.claude/skills/implement/SKILL.md` sends t
 that does not exist, and it silently falls back to improvising a process. The real path is:
 
 ```
-/Users/sondh0127/SonDev/claude-marketplace/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md
+/home/orca/work/claude-marketplace/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md
 ```
+
+(The macOS path this section used to name — under `/Users/sondh0127/SonDev/` — does not exist on
+this machine. Verified absent 2026-08-13; the Linux path above is the live one.)
 
 Every worker brief must name **that** path. (`/implement` itself is `disable-model-invocation:
 true`, so no dispatched worker can Skill-invoke it — path-reading is the only route.)
