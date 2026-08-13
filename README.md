@@ -172,7 +172,8 @@ Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-
 [0012 publish to Clips](docs/adr/0012-publish-to-clips-stream-copy-concat.md) ·
 [0013 the warm lead is a browser](docs/adr/0013-warm-lead-is-a-browser-not-a-curl.md) ·
 [0014 one vaulted bearer over JSON-RPC](docs/adr/0014-one-vaulted-bearer-over-json-rpc.md) ·
-[0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md).
+[0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md) ·
+[0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md).
 
 ## License
 

@@ -74,7 +74,7 @@ fi
 
 if [ "${E2E_SKILLS_SKIP_PW_PROVE_SCRIPTS:-}" != "1" ]; then
   step "pw-prove scripts (process boundary)"
-  # preflight readiness gate + probe argument/socket contract: exit codes and emitted bytes.
+  # preflight three-phase bring-up gate + probe argument/socket contract: exit codes and emitted bytes.
   # Binds one loopback server for the ready-origin branch; never touches the network.
   if [ "$QUIET" = "1" ]; then
     bash scripts/ci/test-pw-prove-scripts.sh >/dev/null 2>&1 || fail "test-pw-prove-scripts.sh"

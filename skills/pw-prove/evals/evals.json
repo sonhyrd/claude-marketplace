@@ -624,6 +624,36 @@
         "False-positive guard: does not re-record the HAR or hand-mock the reads",
         "False-positive guard: does not relax notFound:'abort' or allow a live round-trip"
       ]
+    },
+    {
+      "id": 44,
+      "title": "A missing configuration key is a configuration failure, named in seconds — not a slow server",
+      "prompt": "Step 3, PR-mode against a Nuxt app whose committed .env.example declares `NUXT_PUBLIC_API_BASE=` and `NUXT_PUBLIC_AUTH_URL=` with no values. You allocate port 4173 and run `ENV_CONTRACT=.env.example BUILD_COMMAND='pnpm build' node <skill-base>/scripts/preflight.mjs config build`. It exits 4 within a second, printing `MISSING_KEYS=NUXT_PUBLIC_AUTH_URL`. What do you do?",
+      "expected_output": "Should read exit 4 as a CONFIGURATION failure and act on the named key: set NUXT_PUBLIC_AUTH_URL in the environment the build and the preview server will run under (or in the dotenv file they load) and re-run the same two phases. Should recognise that the build never ran, so nothing about the build or the server is yet known, and that a production build does not supply the development defaults that used to hide this. Should NOT re-run the gate unchanged hoping it passes, NOT raise READY_TIMEOUT, NOT start or restart a server, NOT kill a port, and NOT rebuild — every one of those answers a different phase's failure. Should NOT invent a value for a key it cannot source; where the value is genuinely unknown, it stops and reports the named key rather than guessing one.",
+      "files": [],
+      "assertions": [
+        "True positive: identifies exit 4 as the configuration phase failing, and names NUXT_PUBLIC_AUTH_URL as the missing key",
+        "Sets the key in the environment the build and preview will run under (or the dotenv file they load), then re-runs `config build`",
+        "States that the build did not run, so the build and the server are not yet implicated",
+        "False-positive guard: does NOT treat it as a readiness/not-ready problem — no READY_TIMEOUT increase, no port kill, no server restart, no rebuild loop",
+        "False-positive guard: does not fabricate a value for a key it cannot source; an unsourceable key is reported by name, not guessed",
+        "Does not report NUXT_PUBLIC_API_BASE as missing when it is already set in the environment"
+      ]
+    },
+    {
+      "id": 45,
+      "title": "The committed proof config must not inherit the project's development webServer",
+      "prompt": "Step 7, PR-mode. `<configDir>/playwright.proof.config.ts` already exists from an earlier run and reads `export default defineConfig({ ...base, use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' } })`. The project's own playwright.config.ts declares `webServer: { command: 'pnpm dev', url: 'http://127.0.0.1:3000', reuseExistingServer: !process.env.CI }`. You built the app and started your preview server on port 4173. What do you do before the proof run?",
+      "expected_output": "Should recognise that `...base` copies `webServer` too, so this proof run would boot the project's DEVELOPMENT server at 127.0.0.1:3000 (nothing is listening there — the preview is on 4173) and the proof would not run against the built target at all. Should migrate the committed proof config ONCE by adding `webServer: undefined` after the spread, leave everything else untouched, and stage it with this run. Should note that dropping Playwright's own readiness wait is safe here precisely because pw-prove owns the server lifecycle and preflight.mjs already gated the three bring-up phases. Should NOT edit the project's own playwright.config.ts, NOT rewrite or regenerate the proof config wholesale, NOT set CI=1 to force the already-in-use error, and NOT move the preview server onto the config's port as a workaround — that leaves the inheritance in place for the next run.",
+      "files": [],
+      "assertions": [
+        "True positive: identifies that the `...base` spread inherits webServer and would start the project's dev server",
+        "Adds `webServer: undefined` to the committed proof config as a one-time, in-place migration and stages it",
+        "Explains the missing readiness wait is acceptable because the agent owns the lifecycle and preflight.mjs gates bring-up",
+        "False-positive guard: does NOT edit the project's own playwright.config.ts",
+        "False-positive guard: does NOT regenerate or rewrite the whole proof config per-run (docs/adr/0008 keeps it static)",
+        "Does not work around it by moving the preview onto the config's port or by setting CI=1"
+      ]
     }
   ]
 }
