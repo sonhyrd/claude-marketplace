@@ -98,8 +98,8 @@ These live as skills so they load only when you're doing the task:
     context for any agent working in that directory. Known and accepted; deleting it would diverge
     from the fork.
 - `plugins/sss/skills/skill-upper/` is **vendored verbatim** from
-  [alibaba/skill-up](https://github.com/alibaba/skill-up) (`skills/skill-upper/`, upstream `5ba8c3a`
-  / release `v0.8.0`) — the one exception to `plugins/sss/` being entirely locally authored. Do not
+  [alibaba/skill-up](https://github.com/alibaba/skill-up) (`skills/skill-upper/`, upstream `24e5185`
+  / release `v0.9.0`) — the one exception to `plugins/sss/` being entirely locally authored. Do not
   edit or reformat it; re-sync by re-copying that directory from upstream. Upstream's own `evals/`
   subtree is intentionally omitted (its cases grade the skill against upstream fixtures), so a
   re-copy must omit it again. Its frontmatter `name` is `skill-upper` while the body's H1 reads
