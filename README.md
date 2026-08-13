@@ -156,7 +156,10 @@ Agent workflow config: [delegation profile](docs/agents/delegate-profile.md) ·
 Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md).
 
 Studies: [proof target measurements](docs/studies/proof-target-measurements.md) — development server
-against a built preview, measured, plus the two claims that were verified by running them.
+against a built preview, measured, plus the two claims that were verified by running them ·
+[the first live proof](docs/studies/live-proof-pr2866.md) — pw-prove run end to end against a real
+pull request on a real application, with the timings against the numbers this work was justified by
+and the twelve behaviours no fixture shows.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
