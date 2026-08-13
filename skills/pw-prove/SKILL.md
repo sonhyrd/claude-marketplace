@@ -245,16 +245,16 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
    # a development server did, so this is the phase that stops you paying for a build to learn a
    # variable is missing.
    ENV_CONTRACT=.env.example REQUIRED_ENV="<keys the app boots on>" \
-     BUILD_COMMAND="<the project's build script>" \
+     BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
      node <skill-base>/scripts/preflight.mjs config build
    ```
-   **exit 4 — configuration**: the output names every missing key. Set them and re-run; never "fix" this by rebuilding. **exit 5 — build**: the build's own standard error is printed and the full log path given. That is a build failure, and it is fixed in the app, not in the port. Both fail in the time they take, not on a poll budget.
+   **exit 4 — configuration**: the output names every missing key. Set them and re-run; never "fix" this by rebuilding. **exit 5 — build**: the build's own standard error is printed and the full log path given. That is a build failure, and it is fixed in the app, not in the port. Both fail in the time they take, not on a poll budget. `APP_ROOT` is the application root — where the build runs and where the app's own `.env`/`.env.example` are read, which matters in a monorepo whose app is a subdirectory. **`BUILD_COMMAND` is not optional**: the phase refuses without one rather than skipping, because a bring-up that quietly declines to build proves whatever server happens to be listening.
 3. **Start the preview server** as a harness-tracked background task (survives the turn, log readable) — the project's own preview/start command against the built output, on the resolved `PORT`. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** (the build, the Step-7 proof run). Never start it from inside a script: a script-started server can bind a sibling worktree on the wrong branch. **You own what you start:** record the port and the task, and stop it in Step 8 hygiene. A server you started and left running holds a port on the user's machine indefinitely — a server that was *already* running is not yours and is never stopped.
 4. **Confirm it serves** — the serve phase polls on a **short** budget (20s default), because a preview server binds in under a second and answers its first page in milliseconds; one that is not answering quickly is broken, not slow.
    ```bash
    BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs serve
    ```
-   On STOP (exit 3): read the preview log for the port and address family it actually bound, and confirm the built output exists at all. **A status code is liveness, not health** — an app that resolves its tenant from a query parameter answers `200` with an empty shell when the parameter is absent, so carry that parameter (`?company_slug=<slug>`-style) on the recon navigation below and confirm real content through the probe, never from the poll alone.
+   On STOP (exit 3): read the preview log and confirm the built output exists at all — a serve failure is the server or the artifact, never the configuration or the build, which have already passed. **A status code is liveness, not health** — an app that resolves its tenant from a query parameter answers `200` with an empty shell when the parameter is absent, so carry that parameter (`?company_slug=<slug>`-style) on the recon navigation below and confirm real content through the probe, never from the poll alone.
 5. **Pin the origin *Playwright itself* will dial, and prove that exact string reachable.** Your `curl http://localhost:$PORT` answering does **not** mean the runner can connect: dev servers commonly bind `[::1]` only, so `localhost` resolves and `127.0.0.1` refuses — and `webServer.url` in a scaffolded config is usually the literal `http://127.0.0.1:<port>`. Playwright then concludes no server is up, boots a duplicate, and dies on `Timed out waiting 120000ms from config.webServer`, burning the whole proof run. Read `webServer.url` / `use.baseURL` out of the config **after** env overrides, and curl that literal origin:
    ```bash
    curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
@@ -291,7 +291,7 @@ The generated spec must **recreate its session from code** — no committed, han
 
 **Step 3 is not complete until both hold:**
 
-- **All three bring-up phases passed** — `preflight.mjs` reported `CONFIG` satisfied, `BUILD=ok` (or a stated skip) and `SERVE=ok`. A run that reached recon against a development server, or against an unbuilt target, is not a proof of what ships.
+- **All three bring-up phases passed** — `preflight.mjs` reported `CONFIG=ok` (or `CONFIG=undeclared`, only where the app genuinely declares no contract, and stated as an assumption), `BUILD=ok`, and `SERVE=ok`. There is no unbuilt fallback and the script refuses to pretend otherwise: a run that reached recon against a development server, or against a target it never built, is not a proof of what ships.
 - **The recon channel is one of exactly two states — no third:** (1) a probe session that has answered at least one batch, or (2) the probe refused with **exit 2** (browserless) and the source-reading fallback is named in the Step 4 Assumptions block.
 
 Reaching Step 4 in neither state is a **HARD STOP** (see `docs/adr/0004`). Source reading *without* a recorded exit-2 refusal is the skip this gate exists to catch. Never install a floated Playwright to force a probe open.

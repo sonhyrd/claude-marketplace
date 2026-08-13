@@ -36,8 +36,12 @@
 //                  default and is not.
 //   ENV_FILES      optional — comma-separated dotenv files the build/preview will load, counted as
 //                  suppliers of a key (default `.env` when it exists).
-//   BUILD_COMMAND  optional — the app's build command. Absent, the build phase is skipped and says so.
-//   BUILD_CWD      optional — where to run it (default: cwd).
+//   BUILD_COMMAND  required for the build phase — the app's build command. There is no skip: the
+//                  proof target is the BUILT app, and a bring-up that quietly declines to build is
+//                  the second, silent path this design removes.
+//   APP_ROOT       optional — the application root: where the build runs and where a relative
+//                  ENV_CONTRACT / ENV_FILES / .env is resolved (default: cwd). `BUILD_CWD` is
+//                  accepted as its older name.
 //   BUILD_TIMEOUT  optional — seconds (default 900). A build that outruns it is a build failure.
 //   READY_TIMEOUT  optional — seconds to poll the preview server (default 20 — a short budget on
 //                  purpose; see above).
@@ -80,7 +84,7 @@ const EXIT_BUILD = 5;
 // Run ledger + version banner. The banner is the FIRST output line, before any validation, so
 // every run's transcript records what executed — stale-install drift is visible at a glance instead
 // of discovered mid-run.
-const SKILL = pwproveRun(import.meta.url, 'readiness');
+const SKILL = pwproveRun(import.meta.url, 'bringup'); // was 'readiness' — the gate is three phases now
 out(`preflight: ${SKILL.skill} v${SKILL.version} (${SKILL.commit})\n`);
 
 // --- phase selection --------------------------------------------------------------------------
@@ -117,6 +121,12 @@ if (!Number.isFinite(BUILD_TIMEOUT) || BUILD_TIMEOUT <= 0) {
   process.exit(EXIT_USAGE);
 }
 const PROBE_HOSTING = process.env.PROBE_HOSTING === '1';
+// One root for every phase. The build runs here, the preview server is started from here by the
+// agent, and the dotenv files the app loads are ITS files — resolving them against the caller's cwd
+// makes a monorepo app's own `.env` invisible and turns phase 1 into the false stop this gate exists
+// to avoid.
+const APP_ROOT = process.env.APP_ROOT || process.env.BUILD_CWD || process.cwd();
+const inApp = (p) => (path.isAbsolute(p) ? p : path.join(APP_ROOT, p));
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
@@ -135,8 +145,10 @@ function commandExists(name) {
 }
 
 // --- the machine-readable summary ---------------------------------------------------------------
-// Printed on EVERY exit, success or failure, so the caller reads one block rather than parsing
-// prose. PHASE_FAILED is the line that keeps the three outcomes apart.
+// Printed on every exit that got as far as running a phase — success or failure — so the caller
+// reads one block rather than parsing prose. A usage refusal (exit 1) prints no block at all: nothing
+// was attempted, so there is no outcome to report. PHASE_FAILED is the line that keeps the three
+// real outcomes apart.
 const summary = [`PHASES=${phases.join(',')}`];
 function finish(code, failedPhase) {
   out('---preflight---\n');
@@ -180,7 +192,7 @@ if (phases.includes('config')) {
   const required = new Map(); // key -> where it was declared
   for (const key of splitKeys(process.env.REQUIRED_ENV)) required.set(key, 'REQUIRED_ENV');
 
-  const contractPath = process.env.ENV_CONTRACT;
+  const contractPath = process.env.ENV_CONTRACT ? inApp(process.env.ENV_CONTRACT) : undefined;
   if (contractPath) {
     if (!fs.existsSync(contractPath)) {
       warn(`preflight.mjs: ENV_CONTRACT names a file that does not exist: ${contractPath}\n`);
@@ -203,10 +215,10 @@ if (phases.includes('config')) {
   } else {
     // Keys the build and the preview will pick up from a dotenv file count as supplied — the check
     // is "will the app boot", not "is this shell exhaustive".
-    const envFiles = splitKeys(process.env.ENV_FILES ?? '').length
-      ? process.env.ENV_FILES.split(',').map((f) => f.trim()).filter(Boolean)
-      : fs.existsSync('.env')
-        ? ['.env']
+    const envFiles = (process.env.ENV_FILES ?? '').trim()
+      ? process.env.ENV_FILES.split(',').map((f) => inApp(f.trim())).filter(Boolean)
+      : fs.existsSync(inApp('.env'))
+        ? [inApp('.env')]
         : [];
     const fromFiles = new Map();
     for (const file of envFiles) {
@@ -242,10 +254,17 @@ if (phases.includes('config')) {
 if (phases.includes('build')) {
   const command = process.env.BUILD_COMMAND;
   if (!command) {
-    summary.push('BUILD=skipped');
-    warn('preflight: WARN - no BUILD_COMMAND; skipping the build phase. The proof target is the BUILT app (docs/adr/0016).\n');
+    // Refuse rather than skip. A skipped build is a bring-up that proves whatever server happens to
+    // be listening — a development server included — which is exactly the silent second path
+    // docs/adr/0016 removes. If a target genuinely needs no build, do not ask for the phase.
+    warn(
+      'preflight.mjs: the build phase needs BUILD_COMMAND. The proof target is the BUILT application ' +
+        '(docs/adr/0016); there is no unbuilt fallback. Set it, or run only the phases you mean ' +
+        '(`node preflight.mjs config serve`) and say in the report why nothing was built.\n',
+    );
+    process.exit(EXIT_USAGE);
   } else {
-    const cwd = process.env.BUILD_CWD || process.cwd();
+    const cwd = APP_ROOT;
     warn(`preflight: building (${command}) in ${cwd}, up to ${BUILD_TIMEOUT}s...\n`);
     const started = Date.now();
     const r = spawnSync(command, {
@@ -265,7 +284,7 @@ if (phases.includes('build')) {
       const tail = errText.split('\n').slice(-40);
       const logFile = path.join(os.tmpdir(), `pwprove-build-${process.pid}.log`);
       try {
-        fs.writeFileSync(logFile, log);
+        fs.writeFileSync(logFile, log, { mode: 0o600 }); // a build log is the app's output, not the world's
       } catch {
         /* the tail below is the diagnostic; a temp-dir failure must not mask the build failure */
       }
@@ -278,7 +297,9 @@ if (phases.includes('build')) {
       for (const line of tail) warn(`preflight:   | ${line}\n`);
       warn(`preflight:   full build log: ${logFile}\n`);
       summary.push('BUILD=failed');
-      summary.push(`BUILD_EXIT=${timedOut ? 'timeout' : r.status}`);
+      // `status` is null when the build died on a signal, and `BUILD_EXIT=null` tells an operator
+      // nothing: name the signal (an OOM-killed build is SIGKILL, and reads as a broken build otherwise).
+      summary.push(`BUILD_EXIT=${timedOut ? 'timeout' : (r.status ?? `signal:${r.signal ?? 'unknown'}`)}`);
       summary.push(`BUILD_LOG=${logFile}`);
       finish(EXIT_BUILD, 'build');
     }
@@ -296,6 +317,10 @@ if (phases.includes('build')) {
 if (phases.includes('serve')) {
   warn(`preflight: waiting for ${BASE_URL} (up to ${READY_TIMEOUT}s)...\n`);
 
+  // Measure the wall clock, not the loop count. Each attempt can itself take up to `--max-time 5`,
+  // so counting two seconds per iteration made a "20-second budget" run for over a minute against a
+  // hanging origin — and a short budget that is not short is the poll this rewrite replaced.
+  const startedAt = Date.now();
   let waited = 0;
   for (;;) {
     const r = spawnSync(
@@ -310,8 +335,8 @@ if (phases.includes('serve')) {
       break;
     }
 
-    waited += 2;
-    if (waited >= READY_TIMEOUT) {
+    waited = Math.round((Date.now() - startedAt) / 1000);
+    if (waited + 2 >= READY_TIMEOUT) {
       warn(
         `preflight: STOP - serve FAILED: ${BASE_URL} did not answer within ${READY_TIMEOUT}s ` +
           `(last HTTP ${code}). A preview server binds in under a second, so this is a broken or ` +
@@ -369,7 +394,9 @@ if (PROBE_HOSTING) {
     // delivery is downstream of both. What absence must not do is cost an operator a skill-file read
     // to fix: the warning prints the lease they can paste, reconstructed from THIS invocation, so the
     // pasted line re-runs this same probe rather than standing in for it.
-    const relaunch = `env PROBE_HOSTING=1 BASE_URL='${BASE_URL}' node ${fileURLToPath(import.meta.url)} serve`;
+    const relaunch =
+      `env PROBE_HOSTING=1 ${BASE_URL ? `BASE_URL='${BASE_URL}' ` : ''}` +
+      `node ${fileURLToPath(import.meta.url)} ${phases.join(' ')}`;
     warn(`preflight: WARN - publish credential not configured (${config.reason}); the proof link will be skipped.\n`);
     warn(`preflight:   re-run under a lease: ${vaultLeaseCommand(relaunch)}\n`);
     warn(`preflight:   never stored it on this machine: ${VAULT_ADD_COMMAND}\n`);

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Process-boundary tests for the shipped pw-prove entry points that no other suite reaches:
-# preflight.mjs (the Step-3 readiness gate) and probe.mjs's argument/socket contract. The seam is
+# preflight.mjs (the Step-3 three-phase bring-up gate) and probe.mjs's argument/socket contract. The seam is
 # the highest one available — spawn the script, assert on the exit code and the bytes it wrote.
 #
 # Carried over from the retired generator-scripts suite: these cases test behaviour that survives
@@ -83,6 +83,31 @@ else
   bad "build failure summary — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
 fi
 
+# There is no unbuilt fallback: asking for the build phase without a command is a refusal, not a
+# quiet skip that would let a run prove whatever server happened to be listening.
+expect_exit 1 "the build phase refuses to be skipped when no BUILD_COMMAND is given" -- \
+  env -u BUILD_COMMAND node "$REPO_ROOT/$S/preflight.mjs" build
+stderr_has "  the refusal names the built proof target" "BUILT application"
+# A build that never exits is a build failure, reported as one, with the timeout named.
+expect_exit 5 "a build that outruns BUILD_TIMEOUT is a BUILD failure" -- \
+  env BUILD_COMMAND='sleep 30' BUILD_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs" build
+if grep -q '^BUILD_EXIT=timeout$' "$W/out"; then ok "a timed-out build says so — BUILD_EXIT=timeout"; else bad "timed-out build summary — $(tr '\n' ' ' <"$W/out" | tail -c 120)"; fi
+# The app's dotenv files are ITS files. Resolving them against the caller's cwd made a key the app
+# itself supplies read as missing — a false stop, in the phase that exists to prevent misdiagnosis.
+mkdir -p "$W/monorepo/apps/web"
+printf 'API_BASE_URL=\n' >"$W/monorepo/apps/web/.env.example"
+printf 'API_BASE_URL=http://api.internal\n' >"$W/monorepo/apps/web/.env"
+expect_exit 0 "a key supplied by the app's own .env satisfies the contract (APP_ROOT, not cwd)" -- \
+  env -u API_BASE_URL APP_ROOT="$W/monorepo/apps/web" ENV_CONTRACT=.env.example \
+      node "$REPO_ROOT/$S/preflight.mjs" config
+# Nothing declared must not read as a pass: the check did not happen, and the output says which.
+( cd "$W" && env -u API_BASE_URL -u REQUIRED_ENV -u ENV_CONTRACT node "$REPO_ROOT/$S/preflight.mjs" config >"$W/out" 2>"$W/err" )
+if grep -q '^CONFIG=undeclared$' "$W/out" && grep -qF 'no configuration contract declared' "$W/err"; then
+  ok "an undeclared contract reports CONFIG=undeclared, not CONFIG=ok"
+else
+  bad "undeclared contract — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 120)"
+fi
+
 echo ""
 echo "-- preflight: dead origin, refused timeout, ready origin --"
 # The serve phase is the third distinct outcome: the build passed, so an unreachable origin can only
@@ -98,15 +123,22 @@ fi
 expect_exit 1 "an unknown phase name is a usage error" -- \
   env BASE_URL=http://127.0.0.1:1 node "$REPO_ROOT/$S/preflight.mjs" rebuild
 expect_exit 3 "dead origin STOPs after READY_TIMEOUT" -- \
-  env BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs"
+  env BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs" serve
 # A non-numeric timeout used to spin forever (`waited >= NaN` is never true). It must refuse instead.
 expect_exit 1 "non-numeric READY_TIMEOUT is refused, not looped on" -- \
-  env BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=abc node "$REPO_ROOT/$S/preflight.mjs"
+  env BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=abc node "$REPO_ROOT/$S/preflight.mjs" serve
+# The short budget must BE short: each attempt can itself take curl's --max-time, so a loop that
+# counted iterations instead of the clock ran a "20s budget" for over a minute. 6s must not become 15.
+start=$(date +%s)
+expect_exit 3 "the serve budget is wall clock, not iterations" -- \
+  env BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=6 node "$REPO_ROOT/$S/preflight.mjs" serve
+elapsed=$(( $(date +%s) - start ))
+if [ "$elapsed" -le 12 ]; then ok "serve budget honoured (${elapsed}s for READY_TIMEOUT=6)"; else bad "serve poll ran ${elapsed}s on a 6s budget"; fi
 
 node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(8739,"127.0.0.1")' &
 SRV=$!
 for _ in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:8739 && break; sleep 0.1; done
-( cd "$W" && BASE_URL=http://127.0.0.1:8739 READY_TIMEOUT=10 node "$REPO_ROOT/$S/preflight.mjs" >"$W/out" 2>"$W/err" )
+( cd "$W" && BASE_URL=http://127.0.0.1:8739 READY_TIMEOUT=10 node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
 rc=$?
 { kill $SRV && wait $SRV; } 2>/dev/null   # wait, else the shell prints its own "Terminated" line
 if [ "$rc" -eq 0 ] && grep -q '^READY=yes$' "$W/out"; then

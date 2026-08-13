@@ -65,6 +65,13 @@ committed migration** of the template and of any proof config already in a repos
 edit — `docs/adr/0008` still holds. It also removes Playwright's own readiness wait, which is correct
 only because the agent owns the server lifecycle and `preflight.mjs` gates bring-up.
 
+**There is no unbuilt fallback, and the gate refuses rather than skips.** Asking for the build phase
+without a build command is a usage error, not a quiet `BUILD=skipped` that lets a run pass while
+proving whatever server happened to be listening — a skipped build is the second, silent path this
+record removes, wearing a different name. An undeclared configuration contract is reported as
+`CONFIG=undeclared` rather than as `CONFIG=ok`: the skill cannot invent another repository's contract,
+so it says the check did not happen instead of implying it passed.
+
 Trade-offs weighed. **Keeping the development server as a fallback** was rejected: two bring-up paths
 mean two sets of failure modes, two sets of workarounds to keep alive, and a silent second path a
 future change can take by accident. **Starting the preview server from inside `preflight.mjs`** was
