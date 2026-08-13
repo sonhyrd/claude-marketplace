@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.5.0"
+  version: "0.6.0"
 ---
 
 # pw-prove
@@ -35,18 +35,18 @@ Step 7  Verify                       (tsc → warm route → proof run [video+tr
 Step 8  Deliver                      (PR-mode: publish ONE chaptered recording → Clips · commit spec+POM+api.har · push · PR comment · report)
 ```
 
-**A PR-mode run ends at Step 8's completion report and nowhere else.** The report is structurally invalid without its `Proof page`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines. The only sanctioned PR-mode stop is a base-merge conflict (Step 3); everything else resolves from the contract with a stated assumption.
+**A PR-mode run ends at Step 8's completion report, or at a sanctioned stop, and nowhere else.** The completion report is structurally invalid without its `Proof page`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines — and a stop never emits those lines, so the two endings can never be confused. PR-mode has exactly **two** sanctioned stops — a base-merge conflict (Step 3) and the **handover stop** (Step 7, the verify loop exhausted); everything else resolves from the contract with a stated assumption.
 
-**Stop reports (target & coverage-gap modes).** A run that cannot legitimately produce coverage (flow absent, the proof target won't build or serve, auth wall with no discoverable credential) STOPs with a report — never a fabricated pass. In order:
+**Stop reports (every mode).** A run that cannot legitimately produce coverage (flow absent, the proof target won't build or serve, auth wall with no discoverable credential) or cannot make its spec pass STOPs with a report — never a fabricated pass. In order:
 
 1. **Verdict + where** — one line ("STOPPED at Step 3 — the build failed", "STOPPED at Step 3 — the preview server never answered").
 2. **Target** — the flow/route/change requested.
 3. **What was attempted** — the concrete bring-up/recon steps.
 4. **Blocker evidence, verbatim** — the real error, HTTP status, or recon counts (`0 forms`, `HTTP 404`), never paraphrased.
-5. **What was NOT produced** — state plainly no spec/POM was written; if a prior spec exists, that it was *not* run against the unavailable app and *not* reported green (a "pass" against a dead surface is the silent-always-pass anti-pattern this pipeline exists to avoid).
+5. **What was NOT produced** — state plainly what is missing: no spec/POM was written, or (at the handover stop) no *passing* spec and nothing committed. If a prior spec exists, that it was *not* run against the unavailable app and *not* reported green (a "pass" against a dead surface is the silent-always-pass anti-pattern this pipeline exists to avoid).
 6. **How to unblock** — the one action that would let a re-run succeed, plus an offer to re-run.
 
-A stop never emits the Step 8 tail — nothing shipped.
+A stop never emits the Step 8 tail — nothing shipped. The [handover stop](#the-handover-stop--pr-modes-exit-when-the-loop-is-exhausted) delivers this same report as a **PR comment**, because a report that only reaches the transcript reaches nobody waiting on the PR.
 
 ---
 
@@ -225,7 +225,7 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
 **Then sync the base — merge `origin/<default>` before bring-up** (`git fetch origin <default>`, `git merge origin/<default>`); a PR proven against a stale base can go green on code that will never ship that way.
 
 - **Clean merge** → continue: you prove the merged result, and the merge commit rides to the PR branch with the Step 8 push.
-- **Conflict** → `git merge --abort`, STOP, report the conflicting paths. The **only sanctioned PR-mode stop**.
+- **Conflict** → `git merge --abort`, STOP, report the conflicting paths. One of the **two sanctioned PR-mode stops** (the other is the Step-7 handover stop).
 
 **The proof target is the BUILT application, served by its preview server** (`docs/adr/0016`). There is no development-server path: what you prove is what ships, and a bundling/chunking/tree-shaking claim is only provable against the artifact. Bring-up is three phases with three distinct failures — a missing configuration key (exit 4), a broken build (exit 5), an absent preview server (exit 3) — so a run never again answers "server not ready" to a missing environment variable.
 
@@ -600,7 +600,7 @@ Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` carry the St
 
 A non-2xx warm, a `warm-failed:` line, or a browserless fallback to `curl` is all reported the same way — `Proof page: <url> — warm miss, clips are boot-heavy`. The reason is one reason: `curl` warms the document but not the client module graph, so the boot still lands in the recording.
 
-### Failure handling (max 3 auto-fix attempts)
+### Failure handling (max 3 auto-fix attempts, fewer if the failure stops changing)
 
 Per attempt, diagnose the actual failure and apply the matching fix:
 
@@ -617,7 +617,39 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 
 **Token diet.** Inside the fix loop, run tool calls back-to-back — no prose narration between them; the diagnosis lands in the fix. Write the spec **once** from the `pomInventory` + Locator Mapping Table — never scaffold a throwaway skeleton and rewrite it. **Non-deliverable spec probes are forbidden** — no `_recon.spec.ts`, no `zz-debug.spec.ts`: the probe is the recon channel, the test runner is not a REPL.
 
-After 3 failed attempts: **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces). Do not attempt a 4th fix.
+**No-progress checkpoint — the bound is three attempts, but not three retries.** After every failed attempt, record that run's **failure signature**: the **error class** (`TimeoutError`, `expect(locator).toBeVisible` failed, `Route.abort` on an unrecorded call, a `tsc` error code) plus the **failing locator** (the selector Playwright names in the error, or the file:line when no locator is involved). Then:
+
+| Signature vs. the previous attempt | What it means | Do |
+|---|---|---|
+| **Same** error class *and* same failing locator | The fix changed nothing the app can see — a retry, not a fix | **STOP the loop immediately.** Do not spend the remaining attempt. |
+| Different error class **or** different failing locator | The spec is converging — each fix moved the failure | Continue; the budget is the full 3 attempts. |
+
+A raw count cannot tell those apart: three attempts at one unchanging timeout is one retry paid three times.
+
+When the loop ends without a green run — three attempts spent, or the checkpoint tripped at two — **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces) for the diagnosis. Do not attempt a 4th fix. Then stop: PR-mode takes the handover stop below; target and coverage-gap modes emit the stop report from the Pipeline Overview.
+
+### The handover stop — PR-mode's exit when the loop is exhausted
+
+The second sanctioned PR-mode stop. The instinct to write a handover is right; a handover filed in a repo directory reaches nobody watching the PR. **The destination is a PR comment.**
+
+**Write the six-beat stop report** from the Pipeline Overview — verdict + where, target, what was attempted, blocker evidence verbatim, what was NOT produced, how to unblock — with these values:
+
+- **Beat 1** — `pw-prove — HANDOVER STOP at Step 7: <N> fix attempts, no green run` (or `… stopped at attempt 2 — unchanged failure signature`).
+- **Beat 3** — every fix already attempted, and why each one did not move the failure signature.
+- **Beat 4** — the runner's own output for the last attempt (error class, locator, stack, attempt/retry counts), never paraphrased.
+- **Beat 5** — no *passing* spec; nothing committed, nothing pushed, no proof page.
+- **Beat 6** — the one change (usually in the app, not the spec) that would let a re-run pass.
+
+Plus two additions this stop alone carries, because the next agent inherits them instead of re-deriving them:
+
+- **The spec, verbatim** — the generated spec and POM in fenced blocks. This is the *only* place they land; see below.
+- **The diagnosis** — `playwright-debugger`'s F-code verdict and its named cause.
+
+**REQUIRED — post it with `gh pr comment` before ending the run.** The stop is not taken until the comment exists; a handover that only reaches the transcript is a non-delivery.
+
+**Nothing is committed to the branch, and nothing is pushed.** A knowingly-failing spec on the branch is precisely the defect this pipeline exists to prevent, so the spec travels in the comment body rather than in a commit. Run the Step-8 hygiene beats that release resources — stop a dev server this run started, sweep `test-results/` — and nothing else from Step 8.
+
+**Never emit the delivery tail.** No `Proof page`, `Mutation`, `Committed`, `Pushed` or `PR comment: <proof link>` lines: the completion report's shape is what distinguishes a delivered proof from a reported non-delivery, and a stop that borrows the tail is indistinguishable from a proof that shipped.
 
 A **flaky verdict** (passed only on retry) is not clean — diagnose once. If the nondeterminism is app-inherent (the app races its own state), remove the scenario on this evidence and report its AC as `unproven — gated: nondeterministic (<cause>)`.
 
@@ -706,7 +738,7 @@ Getting this wrong costs a full extra proof run to regenerate clips — and only
 
 ## Step 8: Deliver (PR-mode tail — deterministic, no questions)
 
-PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips is not delivered. Coverage/target mode: skip to item 5 (report only). Run in order:
+PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips is not delivered. Coverage/target mode: skip to item 5 (report only). **Step 8 is reached only after a green proof run** — a run that took the Step-7 handover stop never arrives here, and in particular never reaches the commit and push below: the spec it holds is failing, and it travelled in the handover comment instead. Run in order:
 
 1. **Publish ONE chaptered recording for the run.** Find the per-test webms under `test-results/**/*.webm` (one per scenario) and map each to the AC it proves. Write a manifest, then hand the whole run to `publish-proof.mjs`: it probes and gates every clip, joins them by **stream copy** into one video, and POSTs the whole thing to Paul Clips in one authenticated JSON-RPC call, returning one `https://clips.paulsjob.ai/share/<id>` link (`docs/adr/0012`). Each clip becomes a **chapter** on the scrubber: the scenario name is the marker label, because a label renders as a tooltip-sized space, and the AC verbatim lands as a timestamped comment beneath it, where a sentence has room to wrap. **N clips, one link** — a reviewer opens one URL and watches the whole proof as one pass.
    ```bash

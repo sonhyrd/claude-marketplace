@@ -204,6 +204,27 @@ observable outcome (e.g. a read-modify-write that re-reads and merges the full r
 verdict in the report and the PR comment, never a silent skip, and never a third
 strengthen-and-retry cycle.
 
+## Handover stop
+A sanctioned, reported non-delivery that ships its partial work to the pull request. PR-mode's second
+legal stop, beside the base-merge conflict: the Step-7 verify loop ended without a green run — three
+fix attempts spent, or the [no-progress checkpoint](#no-progress-checkpoint) tripped at two — so the
+run stops and posts the spec, the verbatim failure and the `playwright-debugger` diagnosis as a **pull-request
+comment**. Named because the concept kept being re-invented without a name: two observed
+non-deliveries each wrote a handover document unprompted and filed it in a repository directory,
+where nobody waiting on the pull request would ever see it. The instinct was right; only the
+destination was wrong. **Nothing is committed** — a knowingly-failing spec on the branch is the
+defect this pipeline exists to prevent — and the stop never emits the [delivery tail](#land-the-proof),
+so a reported non-delivery can never be mistaken for a proof.
+
+## No-progress checkpoint
+The Step-7 test that tells a fix apart from a retry. Each failed attempt is reduced to a **failure
+signature** — error class plus failing locator — and two consecutive attempts carrying the same
+signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
+application can see. Attempts whose signatures differ are converging and still consume the full
+budget of three. The bound was always three; a raw count could not distinguish three fixes from three
+retries, and one run spent an hour rewriting the same binding against one unchanging 30-second
+timeout. Exhausting the loop, by either route, is what triggers the [handover stop](#handover-stop).
+
 ## Hermetic spec
 A generated spec whose every network call is mocked. The default for all pw-prove output; Step 7
 fails a run on any live call that is not part of a declared carve-out.

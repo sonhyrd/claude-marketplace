@@ -654,6 +654,36 @@
         "False-positive guard: does NOT regenerate or rewrite the whole proof config per-run (docs/adr/0008 keeps it static)",
         "Does not work around it by moving the preview onto the config's port or by setting CI=1"
       ]
+    },
+    {
+      "id": 46,
+      "title": "Two attempts with the same failure signature take the handover stop, not a third try",
+      "prompt": "You are at Step 7 of a PR-mode run on branch `feat/reports-filter` (PR #212 exists). Attempt 1 of the fix loop failed with `TimeoutError: locator.click: Timeout 30000ms exceeded. waiting for getByRole('button', { name: 'Apply filter' })`. You rewrote that binding and re-ran attempt 2, which failed with exactly the same error: `TimeoutError: locator.click: Timeout 30000ms exceeded. waiting for getByRole('button', { name: 'Apply filter' })`. You still have `e2e/reports.spec.ts`, `e2e/pages/reports-page.ts` and a full playwright-report/. Say what you do next, in order.",
+      "expected_output": "Should stop the fix loop immediately at attempt 2 rather than spending the third attempt: the failure signature (error class TimeoutError + failing locator getByRole('button', { name: 'Apply filter' })) is unchanged, so the edit changed nothing the app can see — a retry, not a fix. Should invoke playwright-debugger against playwright-report/ for the diagnosis, then take the handover stop: post a PR comment on #212 with `gh pr comment` carrying the verdict and where it stopped, the spec and POM verbatim, the runner's failure output verbatim, the playwright-debugger F-code diagnosis plus the fixes already attempted and why they did not move the failure, what was NOT produced, and the one change that would unblock a re-run. Should stop a dev server this run started and sweep test-results/. Should state plainly that nothing is committed and nothing is pushed, because a knowingly-failing spec on the branch is the defect the pipeline prevents, and should emit no Proof page / Mutation / Committed / Pushed lines.",
+      "files": [],
+      "assertions": [
+        "Stops the loop at attempt 2 on the unchanged failure signature instead of attempting a third fix",
+        "Names the signature as error class plus failing locator",
+        "Invokes playwright-debugger against playwright-report/ for the diagnosis before stopping",
+        "Posts the handover as a PR comment via gh pr comment, carrying the spec, the verbatim failure and the diagnosis",
+        "False-positive guard: does not commit or push the failing spec/POM to the branch",
+        "False-positive guard: does not emit the Step 8 delivery tail (no Proof page / Mutation / Committed / Pushed lines)",
+        "False-positive guard: does not file the handover as a file in a repository directory instead of on the PR"
+      ]
+    },
+    {
+      "id": 47,
+      "title": "Genuinely different failures are a converging run — spend the full budget of three",
+      "prompt": "You are at Step 7 of a PR-mode run. Attempt 1 failed with `TimeoutError: locator.click: Timeout 30000ms exceeded. waiting for getByRole('button', { name: 'Apply filter' })`; you healed that locator by re-snapshotting the live page. Attempt 2 failed differently: `Error: expect(locator).toHaveText(expected) — Expected: \"3 results\" Received: \"12 results\"` on `getByTestId('result-count')`. You have one attempt left in the budget. What do you do?",
+      "expected_output": "Should continue the fix loop and use the third attempt: the failure signature changed on both axes (error class TimeoutError -> assertion failure, and a different failing locator), so each fix moved the failure and the run is converging. Should fix the assertion's expected value for attempt 3, rerun only the failing test with -g, and run the full spec once after the last fix as the gate. Should NOT invoke the no-progress checkpoint, should NOT take the handover stop, and should NOT post a PR comment or a stop report while an attempt remains and the failure is still changing.",
+      "files": [],
+      "assertions": [
+        "Continues to attempt 3 because the failure signature changed",
+        "Names the changed error class and/or changed failing locator as the reason the checkpoint does not fire",
+        "Reruns only the failing test during the attempt and the full spec once as the gate",
+        "False-positive guard: does not take the handover stop on line `Error: expect(locator).toHaveText(expected)` merely because two attempts have failed",
+        "False-positive guard: does not post a handover PR comment while the run is still converging"
+      ]
     }
   ]
 }
