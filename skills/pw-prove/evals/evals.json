@@ -654,6 +654,38 @@
         "False-positive guard: does NOT regenerate or rewrite the whole proof config per-run (docs/adr/0008 keeps it static)",
         "Does not work around it by moving the preview onto the config's port or by setting CI=1"
       ]
+    },
+    {
+      "id": 46,
+      "title": "A dev-guarded session bootstrap does not exist in the built target — descend the ladder",
+      "prompt": "Step 3, PR-mode against a Nuxt app you have built and are previewing on port 4173. Grepping the auth composable for how the app ingests a session finds `if (import.meta.dev && route.query.token) { setToken(route.query.token); await getCurrentUser() }`, and the app also hydrates its store from `localStorage` keys `auth.token` and `auth.user`. You have a valid upstream JWT. How do you establish the session, and what do you record?",
+      "expected_output": "Should read the guard as well as the mechanism: `import.meta.dev` is a build-time constant folded to false by the production build, so the `?token=` rung is compiled out of the artifact under proof — the parameter is never consumed and never stripped. Should record that rung as ABSENT and descend to client-storage seeding, seeding BOTH `auth.token` and `auth.user` via `addInitScript` (a credential-only seed renders an authenticated but empty shell on an app that populates its user through a fetch). Should then assert the authenticated state directly — a signed-in-only element or the store's user — with a short explicit budget, and confirm the page renders populated before recon proceeds. Should state the skipped rung and its `import.meta.dev` guard in the Step-4 Assumptions block. Should NOT navigate to `<path>?token=<jwt>` and wait for the app to strip the parameter, NOT raise the timeout when that wait fails, NOT edit the app's source or config to re-enable the guarded path or swap the guard for a runtime flag, and NOT fall back to bringing up a development server so the dev-only rung exists again.",
+      "files": [],
+      "assertions": [
+        "True positive: identifies `import.meta.dev` as a development-only guard that removes the `?token=` rung from the built artifact, and skips that rung",
+        "Descends to client-storage seeding rather than attempting the compiled-away path",
+        "Seeds BOTH the credential (`auth.token`) and the user record (`auth.user`), naming the empty-shell failure a credential-only seed causes",
+        "Derives the rule from grepping the mechanism's enclosing guard in the app's own source, not from a per-application special case",
+        "Asserts the authenticated state (signed-in element / store user) rather than waiting on the stripped query parameter, and confirms the page renders populated",
+        "Records the skipped rung and its guard in the Step-4 Assumptions block",
+        "False-positive guard: does NOT edit the application's source or config to re-enable the dev-only path or replace the guard with a runtime flag",
+        "False-positive guard: does NOT reintroduce a development server to make the dev-only rung available"
+      ]
+    },
+    {
+      "id": 47,
+      "title": "An unestablished session fails loudly in seconds, not at a sixty-second timeout",
+      "prompt": "Step 3, PR-mode against the built and previewed target. Your auth step does `await page.goto('/dashboard?token=' + jwt)` and then `await page.waitForURL(u => !u.search.includes('token'))`. The run sits there and fails after 60 s with a timeout on that wait; a screenshot shows the app's signed-out landing view. What do you conclude and what do you change?",
+      "expected_output": "Should conclude the query-parameter rung is absent from the built artifact — nothing consumes the parameter, so nothing strips it, and the sixty-second wait was measuring a side effect that can never occur. Should re-grep the auth source for the mechanism's enclosing guard, confirm a development-only condition, skip the rung and descend (client-storage seeding of both credential and user record, a storageState file, or an API-login cookie — whichever the source shows the app reads). Should replace the side-effect wait with a short-budget (≤10s) assertion on the authenticated state itself, so a failed rung is named in seconds. Should NOT raise the timeout, NOT retry the same navigation, NOT treat it as a flaky or slow app or a broken locator, and NOT proceed into recon with an unauthenticated session. If every rung is exhausted, should STOP with the Step-3 stop report naming each rung tried and the guard found, rather than generating a spec against a signed-out app.",
+      "files": [],
+      "assertions": [
+        "True positive: attributes the 60 s timeout to a rung that is compiled out, not to a slow app, a flaky wait, or a broken locator",
+        "Replaces the stripped-parameter side-effect wait with a short-budget assertion on the authenticated state itself",
+        "Descends to the next rung the app's source shows it reads, seeding credential and user record where that rung is client storage",
+        "False-positive guard: does NOT raise the timeout or retry the same navigation to make the wait pass",
+        "False-positive guard: does NOT continue into recon or spec generation with an unauthenticated session",
+        "Exhausted ladder produces a Step-3 STOP report naming each rung and the dev-only guard, not a fabricated pass"
+      ]
     }
   ]
 }
