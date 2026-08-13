@@ -110,7 +110,9 @@ Everything under `scripts/` is repo-only tooling and stays shell.
 - **Failure category IDs**: 15 codes (`F1`–`F15`) used by `playwright-debugger` and its subagent. Codes are stable.
 - **JUSTIFIED comments**: `// JUSTIFIED: <reason>` on the line above (or above the enclosing block / multi-line chain) suppresses scanner findings. Suppress for documented intent, never to hide a real finding.
 - **Severity-first organization**: tables in SKILL.md, README, and `docs/e2e-test-smells.md` group by P0/P1/P2 in the same order.
-- **Run ledger**: every shipped-script entry point emits one `PWPROVE_RUN {json}` line through `skills/pw-prove/scripts/pwprove-run.mjs` and appends it to `~/.ptg/ledger.jsonl` (`PWPROVE_LEDGER` overrides). Telemetry never fails a run.
+- **Run ledger**: every shipped-script entry point emits one `PWPROVE_RUN {json}` line through `skills/pw-prove/scripts/pwprove-run.mjs` and appends it to `~/.ptg/ledger.jsonl` (`PWPROVE_LEDGER` overrides). Telemetry never fails a run. Records carry a `schema`; read it before reading anything else, because fields are added over time (schema 2 added `session`/`session_src`).
+- **Session id**: a proof is many processes, so each record carries the session that produced it — `$PWPROVE_SESSION` (explicit override), else `$CLAUDE_CODE_SESSION_ID` (the host runtime's own id), else a cwd-keyed `$TMPDIR` nonce that expires after 30 idle minutes; `session_src` names which. Count *proofs* by distinct `session`, not by record.
+- **Version bumps**: bump the `metadata.version` in a skill's SKILL.md whenever you change its body or its shipped scripts. The ledger's stale-install detection leans on that field, and a version that never moves detects nothing — pw-prove sat at `0.1.0` across 638 recorded runs and 14 distinct installs.
 - **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check).
 
 ## Frameworks in Scope

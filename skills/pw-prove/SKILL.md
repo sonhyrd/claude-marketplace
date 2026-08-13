@@ -3,8 +3,8 @@ name: pw-prove
 description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast — for pages, flows, components. The default for E2E-verifying a change end to end (owns server bring-up, auth, live-DOM recon); evidence is a byproduct of the proof run (trace/video), not a hosted film."
 license: Apache-2.0
 metadata:
-  author: voidmatcha
-  version: "0.1.0"
+  author: sondh0127
+  version: "0.2.0"
 ---
 
 # pw-prove
