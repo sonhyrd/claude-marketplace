@@ -109,6 +109,75 @@ else
 fi
 
 echo ""
+echo "-- preflight: the built output is reused while the commit and tree stand still --"
+# A build costs 104-201s. Paid once per proof it IS the cost of the built proof target; paid once per
+# batch it rounds to nothing, which is how the fastest observed session finished in twelve minutes.
+# Every case below asserts BOTH halves of the contract: whether the build command actually ran, and
+# whether the run SAID which it did — an operator must be able to see whether a build was paid.
+R="$W/reuse"
+mkdir -p "$R"
+git -C "$R" init -q
+git -C "$R" config user.email pwprove@example.test
+git -C "$R" config user.name pw-prove
+printf 'v1\n' >"$R/src.txt"
+git -C "$R" add -A >/dev/null && git -C "$R" commit -qm 'one'
+STAMP="$W/build-stamp.json"
+BUILDS="$W/builds.log"
+: >"$BUILDS"
+builds_run() { wc -l <"$BUILDS" | tr -d ' '; }
+# Run the build phase against that repo. Extra `KEY=value` args go to `env`, before node.
+run_build() {
+  ( cd "$R" && env APP_ROOT="$R" BUILD_STAMP="$STAMP" BUILD_COMMAND="echo built >>$BUILDS" \
+      "$@" node "$REPO_ROOT/$S/preflight.mjs" build >"$W/out" 2>"$W/err" )
+}
+# usage: assert_reuse <name> <want BUILD=> <want reason> <want cumulative build count>
+assert_reuse() {
+  local name="$1" want_build="$2" want_reason="$3" want_count="$4" got
+  got="$(builds_run)"
+  if grep -q "^BUILD=$want_build\$" "$W/out" && grep -q "^BUILD_REUSE_REASON=$want_reason\$" "$W/out" &&
+     [ "$got" = "$want_count" ]; then
+    ok "$name"
+  else
+    bad "$name — builds=$got (wanted $want_count), summary: $(grep -E '^BUILD' "$W/out" | tr '\n' ' ')"
+  fi
+}
+
+run_build
+assert_reuse "the first build in a worktree is paid, and says why (no-stamp)" ok no-stamp 1
+run_build
+assert_reuse "an unchanged commit and tree reuses the built output" reused commit-and-tree-unchanged 1
+stderr_has "  the reuse is legible in the run's own output" "build REUSED"
+# Any source change rebuilds — and a status-only check would miss this, since ` M src.txt` is the
+# same line whatever the edit was.
+printf 'v2\n' >"$R/src.txt"
+run_build
+assert_reuse "an edit to a tracked source file forces a rebuild" ok tree-changed-since-build 2
+# Same tree, new commit: the artifact was produced from a different commit and must not stand.
+git -C "$R" commit -qam 'two'
+run_build
+assert_reuse "committing that edit forces a rebuild (the commit moved)" ok commit-changed 3
+# A tree dirtied since the build never reuses it, tracked or not.
+printf 'scratch\n' >"$R/untracked.txt"
+run_build
+assert_reuse "an untracked file dirties the tree and forces a rebuild" ok tree-changed-since-build 4
+rm -f "$R/untracked.txt"
+# The mutation check mutates source by definition; it must never inherit an artifact, even when the
+# fingerprint would somehow agree.
+run_build BUILD_REUSE=never
+assert_reuse "BUILD_REUSE=never always rebuilds (the mutation check's contract)" ok forced 5
+# A failed build must not leave a stamp behind: the next run would inherit a half-written artifact.
+( cd "$R" && env APP_ROOT="$R" BUILD_STAMP="$STAMP" BUILD_COMMAND='exit 2' \
+    node "$REPO_ROOT/$S/preflight.mjs" build >"$W/out" 2>"$W/err" )
+if [ ! -e "$STAMP" ]; then ok "a failed build drops the stamp — nothing inherits a broken artifact"; else bad "a failed build left $STAMP in place"; fi
+run_build
+assert_reuse "the run after a failed build is paid for again" ok no-stamp 6
+# No git worktree = nothing to compare, so the honest answer is to build.
+mkdir -p "$W/nogit"
+( cd "$W/nogit" && env APP_ROOT="$W/nogit" BUILD_STAMP="$W/nogit-stamp.json" \
+    BUILD_COMMAND="echo built >>$BUILDS" node "$REPO_ROOT/$S/preflight.mjs" build >"$W/out" 2>"$W/err" )
+assert_reuse "outside a git worktree there is nothing to compare, so the build is paid" ok no-git 7
+
+echo ""
 echo "-- preflight: dead origin, refused timeout, ready origin --"
 # The serve phase is the third distinct outcome: the build passed, so an unreachable origin can only
 # be the preview server. Port 1 is reserved and never listens.

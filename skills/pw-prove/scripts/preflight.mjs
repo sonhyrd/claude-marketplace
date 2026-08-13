@@ -50,6 +50,13 @@
 //   APP_ROOT       optional — the application root: where the build runs and where a relative
 //                  ENV_CONTRACT / ENV_FILES / .env is resolved (default: cwd). `BUILD_CWD` is
 //                  accepted as its older name.
+//   BUILD_REUSE    optional — `never` (also `0`/`no`/`off`) forces a build even when the commit and
+//                  the working tree have not moved since the last one. The MUTATION check sets this:
+//                  it mutates source by definition, so its artifact must always be rebuilt.
+//   BUILD_OUTPUT   optional — the build's output path (`dist`, `.output`). Recorded with the build and
+//                  re-checked before reuse, so an artifact someone deleted is rebuilt rather than served.
+//   BUILD_STAMP    optional — where the reuse record is kept (default: an APP_ROOT-keyed file in $TMPDIR,
+//                  so sibling worktrees never inherit each other's artifact).
 //   BUILD_TIMEOUT  optional — seconds (default 900). A build that outruns it is a build failure.
 //   READY_TIMEOUT  optional — seconds to poll the preview server (default 20 — a short budget on
 //                  purpose; see above).
@@ -74,6 +81,7 @@
 // The three failure codes are the point: they are what makes "the key is missing", "the build broke"
 // and "nothing is listening" three answers instead of one.
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -255,6 +263,88 @@ if (phases.includes('config')) {
   }
 }
 
+// --- the build-reuse check ------------------------------------------------------------------------
+// A build costs 104-201 seconds (`docs/studies/proof-target-measurements.md`). Paid once per proof it
+// IS the cost of the built proof target; paid once per batch it rounds to nothing — which is how the
+// fastest observed session finished in twelve minutes, by inheriting the environment of the five runs
+// before it. Under the built target, the thing inherited is the artifact.
+//
+// "Unchanged" is measured against the state the build was produced FROM, not against cleanliness: the
+// fingerprint is HEAD plus the whole working-tree difference from it — the tracked patch, byte for
+// byte, and the contents of every untracked file. So any source change moves it and forces a rebuild,
+// and a tree dirtied since the build never reuses that build. Only an identical commit AND an
+// identical working tree is a hit.
+//
+// The tracked half is the PATCH, not `git status`: `M src.ts` is the same line whatever the edit was,
+// so a status-only digest would call two different edits the same tree and serve the wrong artifact.
+//
+// Not the framework's own build cache — that was measured and reverted by a prior session: it helped
+// only when source was unchanged, which is exactly the case this check already covers.
+const FORCE_REBUILD = /^(never|no|off|0|false)$/i.test((process.env.BUILD_REUSE ?? '').trim());
+
+function sha(...parts) {
+  const h = crypto.createHash('sha256');
+  for (const p of parts) h.update(p);
+  return h.digest('hex');
+}
+
+const STAMP_FILE = process.env.BUILD_STAMP
+  ? inApp(process.env.BUILD_STAMP)
+  : path.join(os.tmpdir(), `pwprove-build-stamp-${sha(APP_ROOT).slice(0, 16)}.json`);
+
+// HEAD plus everything the working tree differs from it by. `{ unavailable }` when APP_ROOT is not a
+// git worktree, or git cannot answer: with nothing to compare against, the honest answer is to build.
+// In a monorepo this is the WHOLE repository, not the app subdirectory, and deliberately so — an
+// app's build depends on its sibling packages, and reusing across a shared-package edit is a lie.
+function sourceFingerprint() {
+  const git = (args, opts) => spawnSync('git', ['-C', APP_ROOT, ...args], { maxBuffer: 64 * 1024 * 1024, ...opts });
+  const head = git(['rev-parse', 'HEAD'], { encoding: 'utf8' });
+  if (head.status !== 0) return { unavailable: 'no-git' };
+  // Buffers, not utf8: a `--binary` patch is not text, and decoding it lossily would let two
+  // different binary assets hash the same.
+  const diff = git(['diff', 'HEAD', '--binary']);
+  // A diff too large for the buffer, or a git that died: this is a git worktree we cannot fingerprint,
+  // which is a different answer from "not a git worktree" and gets its own reason.
+  if (diff.status !== 0 || diff.error) return { unavailable: 'fingerprint-unavailable' };
+  const others = git(['ls-files', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' });
+  if (others.status !== 0) return { unavailable: 'fingerprint-unavailable' };
+
+  const parts = [head.stdout.trim(), sha(diff.stdout)];
+  for (const rel of others.stdout.split('\0').filter(Boolean).sort()) {
+    let mark;
+    try {
+      const st = fs.statSync(path.join(APP_ROOT, rel));
+      // Content, up to a cap. An untracked recording or fixture blob is not worth re-hashing on every
+      // run, and size+mtime moves whenever it does.
+      mark = st.size > 4 * 1024 * 1024 ? `${st.size}:${st.mtimeMs}` : sha(fs.readFileSync(path.join(APP_ROOT, rel)));
+    } catch {
+      mark = 'unreadable';
+    }
+    parts.push(`${rel}:${mark}`);
+  }
+  return { commit: head.stdout.trim(), digest: sha(parts.join('\n')) };
+}
+
+// One reason string per way of arriving here, because the reason is the operator-facing half of the
+// answer: `no-stamp` on the second run of a batch is a bug, and only a named reason shows it.
+function reuseDecision(fingerprint, command) {
+  if (FORCE_REBUILD) return { hit: false, reason: 'forced' };
+  if (fingerprint.unavailable) return { hit: false, reason: fingerprint.unavailable };
+  let stamp;
+  try {
+    stamp = JSON.parse(fs.readFileSync(STAMP_FILE, 'utf8'));
+  } catch {
+    return { hit: false, reason: 'no-stamp' };
+  }
+  if (stamp?.schema !== 1 || stamp.app_root !== APP_ROOT) return { hit: false, reason: 'no-stamp' };
+  if (stamp.command !== command) return { hit: false, reason: 'command-changed' };
+  if (stamp.commit !== fingerprint.commit) return { hit: false, reason: 'commit-changed' };
+  if (stamp.digest !== fingerprint.digest) return { hit: false, reason: 'tree-changed-since-build' };
+  const output = process.env.BUILD_OUTPUT || stamp.output;
+  if (output && !fs.existsSync(inApp(output))) return { hit: false, reason: 'output-missing' };
+  return { hit: true, reason: 'commit-and-tree-unchanged', stamp };
+}
+
 // --- phase 2: build ------------------------------------------------------------------------------
 // Waited on AS a subprocess. A non-zero exit is reported as a build failure with the build's own
 // standard error attached, because "the server never became ready" sent an operator to the wrong
@@ -273,47 +363,99 @@ if (phases.includes('build')) {
     process.exit(EXIT_USAGE);
   } else {
     const cwd = APP_ROOT;
-    warn(`preflight: building (${command}) in ${cwd}, up to ${BUILD_TIMEOUT}s...\n`);
-    const started = Date.now();
-    const r = spawnSync(command, {
-      shell: true,
-      cwd,
-      encoding: 'utf8',
-      timeout: BUILD_TIMEOUT * 1000,
-      maxBuffer: 64 * 1024 * 1024, // a real build's log; truncating it loses the error we are here for
-    });
-    const seconds = Math.round((Date.now() - started) / 1000);
-    const timedOut = r.error && r.error.code === 'ETIMEDOUT';
-    if (timedOut || r.status !== 0) {
-      // The build's own stderr IS the diagnostic. Print its tail here and the whole log to a file,
-      // rather than a summary of it — a paraphrased build error is not a build error.
-      const log = `${r.stdout ?? ''}${r.stderr ?? ''}`;
-      const errText = (r.stderr ?? '').trim() || (r.stdout ?? '').trim();
-      const tail = errText.split('\n').slice(-40);
-      const logFile = path.join(os.tmpdir(), `pwprove-build-${process.pid}.log`);
-      try {
-        fs.writeFileSync(logFile, log, { mode: 0o600 }); // a build log is the app's output, not the world's
-      } catch {
-        /* the tail below is the diagnostic; a temp-dir failure must not mask the build failure */
-      }
+    // Fingerprint BEFORE the build: it records the source the artifact was produced from, and a build
+    // that writes into the tree would otherwise fingerprint its own output.
+    const fingerprint = sourceFingerprint();
+    const decision = reuseDecision(fingerprint, command);
+    summary.push(`BUILD_REUSE=${decision.hit ? 'hit' : 'miss'}`);
+    summary.push(`BUILD_REUSE_REASON=${decision.reason}`);
+
+    if (decision.hit) {
       warn(
-        timedOut
-          ? `preflight: STOP - build FAILED: no exit after ${BUILD_TIMEOUT}s (${command})\n`
-          : `preflight: STOP - build FAILED with exit ${r.status} after ${seconds}s (${command})\n`,
+        `preflight: build REUSED - ${decision.reason}: commit ${fingerprint.commit.slice(0, 8)}, ` +
+          `built ${decision.stamp.built_at} in ${decision.stamp.seconds}s. No build was paid.\n`,
       );
-      warn('preflight: build stderr (tail):\n');
-      for (const line of tail) warn(`preflight:   | ${line}\n`);
-      warn(`preflight:   full build log: ${logFile}\n`);
-      summary.push('BUILD=failed');
-      // `status` is null when the build died on a signal, and `BUILD_EXIT=null` tells an operator
-      // nothing: name the signal (an OOM-killed build is SIGKILL, and reads as a broken build otherwise).
-      summary.push(`BUILD_EXIT=${timedOut ? 'timeout' : (r.status ?? `signal:${r.signal ?? 'unknown'}`)}`);
-      summary.push(`BUILD_LOG=${logFile}`);
-      finish(EXIT_BUILD, 'build');
+      warn(`preflight:   force one with BUILD_REUSE=never (the mutation check does); stamp: ${STAMP_FILE}\n`);
+      summary.push('BUILD=reused');
+      summary.push(`BUILD_REUSED_FROM=${decision.stamp.built_at}`);
+      summary.push(`BUILD_SAVED_SECONDS=${decision.stamp.seconds}`);
+    } else {
+      warn(`preflight: building (${command}) in ${cwd}, up to ${BUILD_TIMEOUT}s - ${decision.reason}...\n`);
+      const started = Date.now();
+      const r = spawnSync(command, {
+        shell: true,
+        cwd,
+        encoding: 'utf8',
+        timeout: BUILD_TIMEOUT * 1000,
+        maxBuffer: 64 * 1024 * 1024, // a real build's log; truncating it loses the error we are here for
+      });
+      const seconds = Math.round((Date.now() - started) / 1000);
+      const timedOut = r.error && r.error.code === 'ETIMEDOUT';
+      if (timedOut || r.status !== 0) {
+        // The build's own stderr IS the diagnostic. Print its tail here and the whole log to a file,
+        // rather than a summary of it — a paraphrased build error is not a build error.
+        const log = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+        const errText = (r.stderr ?? '').trim() || (r.stdout ?? '').trim();
+        const tail = errText.split('\n').slice(-40);
+        const logFile = path.join(os.tmpdir(), `pwprove-build-${process.pid}.log`);
+        try {
+          fs.writeFileSync(logFile, log, { mode: 0o600 }); // a build log is the app's output, not the world's
+        } catch {
+          /* the tail below is the diagnostic; a temp-dir failure must not mask the build failure */
+        }
+        warn(
+          timedOut
+            ? `preflight: STOP - build FAILED: no exit after ${BUILD_TIMEOUT}s (${command})\n`
+            : `preflight: STOP - build FAILED with exit ${r.status} after ${seconds}s (${command})\n`,
+        );
+        warn('preflight: build stderr (tail):\n');
+        for (const line of tail) warn(`preflight:   | ${line}\n`);
+        warn(`preflight:   full build log: ${logFile}\n`);
+        // Drop any stamp from an earlier build: this one may have half-written over that artifact, and
+        // an inherited artifact nobody can place is worse than a build that has to be paid again.
+        try {
+          fs.rmSync(STAMP_FILE, { force: true });
+        } catch {
+          /* the stamp is an optimisation; failing to remove it must not mask the build failure */
+        }
+        summary.push('BUILD=failed');
+        // `status` is null when the build died on a signal, and `BUILD_EXIT=null` tells an operator
+        // nothing: name the signal (an OOM-killed build is SIGKILL, and reads as a broken build otherwise).
+        summary.push(`BUILD_EXIT=${timedOut ? 'timeout' : (r.status ?? `signal:${r.signal ?? 'unknown'}`)}`);
+        summary.push(`BUILD_LOG=${logFile}`);
+        finish(EXIT_BUILD, 'build');
+      }
+      warn(`preflight: build ok in ${seconds}s\n`);
+      summary.push('BUILD=ok');
+      summary.push(`BUILD_SECONDS=${seconds}`);
+
+      // Record what this artifact was built from, so the next run in the batch can answer the question
+      // without rebuilding. Without a fingerprint there is nothing to record and every run pays.
+      if (!fingerprint.unavailable) {
+        try {
+          fs.writeFileSync(
+            STAMP_FILE,
+            `${JSON.stringify(
+              {
+                schema: 1,
+                app_root: APP_ROOT,
+                command,
+                commit: fingerprint.commit,
+                digest: fingerprint.digest,
+                output: process.env.BUILD_OUTPUT || undefined,
+                built_at: new Date().toISOString(),
+                seconds,
+              },
+              null,
+              2,
+            )}\n`,
+            { mode: 0o600 },
+          );
+        } catch {
+          warn('preflight: WARN - could not record the build stamp; the next run will pay for its own build\n');
+        }
+      }
     }
-    warn(`preflight: build ok in ${seconds}s\n`);
-    summary.push('BUILD=ok');
-    summary.push(`BUILD_SECONDS=${seconds}`);
   }
 }
 
