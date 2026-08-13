@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.6.0"
+  version: "0.7.0"
 ---
 
 # pw-prove
@@ -278,12 +278,16 @@ The generated spec must **recreate its session from code** — no committed, han
 
   | What the app actually reads | How to seed |
   |---|---|
-  | a `?token=`/query bootstrap (`query.token` → `setToken` → `getCurrentUser`) | `page.goto('<path>?token=<jwt>')`, then wait until the app strips the param |
+  | a `?token=`/query bootstrap (`query.token` → `setToken` → `getCurrentUser`) | **dev-guarded → skip the rung entirely** (this is the rung most often compiled out); otherwise `page.goto('<path>?token=<jwt>')` and assert the authenticated state, never that the app strips the param |
   | `storageState` / a `.auth/*.json` | load it as the context's `storageState` |
   | a login **cookie** (server-set) | API-login with the discovered credential, seed the cookie **it returns** (read its `Set-Cookie`, pass that exact name+value to `context.addCookies`). Do not hand-author the cookie value. Hand-seed a literal **only** for a documented static dev flag with no login path. |
-  | `localStorage[<key>]` **only if the app actually reads it** | `addInitScript` — never assume; a blind seed renders a blank shell on apps that populate `user` via `getCurrentUser()` |
+  | `localStorage[<key>]` **only if the app actually reads it** | `addInitScript` seeding **both the credential and the user record** — every key the store hydrates from, read off the source (typically a `token`/`auth.*` key *and* a `user`/`auth.user` key). Never assume; a credential-only seed renders a blank shell on apps that populate `user` via `getCurrentUser()` |
 
-  **Token source, in priority:** (1) the project's `dev-login`-style helper, (2) a repo API-login helper/script, (3) a `storageState` setup / `globalSetup`, (4) an env credential (`E2E_BEARER`, or `TEST_USER`+`TEST_PASSWORD` against the login endpoint). Use the first that exists; if none, **stop and ask**. A freshly-minted token in a gitignored `.auth/…` is sanctioned; a committed `auth/session.json` is the anti-pattern. UI-driven login belongs only in a spec that tests the login flow itself.
+  **Read the guard, not just the mechanism — the proof target is a production build.** A rung reached only under a development-only condition (`import.meta.dev`, `import.meta.env.DEV`, `process.env.NODE_ENV !== 'production'`, `__DEV__`, a `dev`-only plugin/middleware/route file, a bundler `define` that folds to `false`) **is not in the artifact under proof**: it is compiled out, so the app never consumes the input it reads and never produces the side effect that input causes. Grep the enclosing condition of whatever the mechanism grep finds; when it is dev-only, record the rung as **absent** and descend to the next one rather than attempting a path that has been compiled away. This is a rule about the artifact you were given, not about any one application — apply it to whatever the grep finds, and **never edit the app's source to re-enable a guarded path** (out of scope; the skill adapts to the artifact, it does not route around another repo's decisions — swapping the guard for a runtime flag would put "accept an arbitrary bearer from a URL parameter" into a production bundle). State the skipped rung and its guard in the Step-4 Assumptions block. Measured case: `docs/studies/proof-target-measurements.md` › The auto-login blocker.
+
+  **Token source, in priority:** (1) the project's `dev-login`-style helper, (2) a repo API-login helper/script, (3) a `storageState` setup / `globalSetup`, (4) an env credential (`E2E_BEARER`, or `TEST_USER`+`TEST_PASSWORD` against the login endpoint). Use the first that exists; if none, **stop and ask**. A freshly-minted token in a gitignored `.auth/…` is sanctioned; a committed `auth/session.json` is the anti-pattern. UI-driven login belongs only in a spec that tests the login flow itself. A `dev-login` helper is itself subject to the guard rule — check whether its endpoint survives the build before ranking it first.
+
+- **A session that cannot be established fails loudly, in seconds — never at a timeout.** Give every rung an explicit short budget (≤10s) and assert the **authenticated state itself** — a signed-in-only element, or the store's user — never a side effect such as a stripped query parameter, which simply never happens when the rung was compiled away. A default-timeout hang reads as a slow app and hides the one fact you needed: the rung does not exist. Then confirm the page renders **populated** (the user-dependent region has content) before recon proceeds — an authenticated page rendering an empty shell means the seed was incomplete (credential without the user record), not a broken locator. Ladder exhausted → **STOP** with the Step-3 stop report, listing each rung, why it was skipped or failed, and any dev-only guard found.
 
 ### Recon — the probe is the question channel, the test run is the validator
 
