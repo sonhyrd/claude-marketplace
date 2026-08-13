@@ -77,6 +77,17 @@ integration branch**, whether or not git raised a conflict.
 sides append independent evals at the same array slot, so keep BOTH and renumber the incoming ids
 onto the end. Taking one side silently deletes a worker's evals.
 
+### Known noise: `test-parity.sh` drift smoke has failed once, unreproducibly
+
+During #50 (2026-08-13) one full `ci-local.sh` run showed a single drift-smoke failure in
+`scripts/ci/test-parity.sh`. It did not touch any file that ticket changed, and it has not
+recurred in **19 subsequent runs** — 5 standalone plus 3 full by the worker, 11 more by the
+coordinator on the merged result, all `24 passed, 0 failed`.
+
+Treat a lone drift-smoke failure as suspect, not as a verdict: **re-run before acting on it.** A
+second failure, or one that names a file the branch touched, is real and must be investigated.
+Do not add a retry to the script to make this go away — that would hide the real case too.
+
 ### Dispatch note: `worker-release` does not know low-level dispatches
 
 Workers launched with the engine argv go through `terminal create --command …` plus
