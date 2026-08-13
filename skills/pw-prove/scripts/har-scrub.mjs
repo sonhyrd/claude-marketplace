@@ -172,10 +172,10 @@ const COOKIE_ATTRIBUTE_RE =
 // removed from the recording. What it loses is the global sweep, which is the pass that cannot tell
 // a credential from a word. Every such value is reported by name and length (never by value), so a
 // short-but-real secret is a line in the output, not a silence.
-export const MIN_GLOBAL_SECRET_LENGTH = 12;
-export const MIN_GLOBAL_SECRET_DISTINCT = 5;
+const MIN_GLOBAL_SECRET_LENGTH = 12;
+const MIN_GLOBAL_SECRET_DISTINCT = 5;
 
-export function isGloballySubstitutable(value) {
+function isGloballySubstitutable(value) {
   if (typeof value !== 'string') return false;
   const s = value.trim();
   return s.length >= MIN_GLOBAL_SECRET_LENGTH && new Set(s).size >= MIN_GLOBAL_SECRET_DISTINCT;
@@ -210,7 +210,7 @@ function makeMint() {
       .filter(([secret]) => isGloballySubstitutable(secret))
       .sort((a, b) => b[0].length - a[0].length);
   // The ones the floor held back, for the report. Length and learn-site only — never the value.
-  mint.local = () =>
+  mint.withheld = () =>
     [...seen.entries()]
       .filter(([secret]) => !isGloballySubstitutable(secret))
       .map(([secret, placeholder]) => ({
@@ -524,7 +524,7 @@ export function scrubHar(har, { origin } = {}) {
     };
     walk(har);
   }
-  return { har, secrets: mint.size(), local: mint.local() };
+  return { har, secrets: mint.size(), withheld: mint.withheld() };
 }
 
 // ---------------------------------------------------------------- the over-scrub gate
@@ -544,8 +544,8 @@ export function scrubHar(har, { origin } = {}) {
 //
 // Read-only, and it works on a committed HAR without re-scrubbing it, because it counts placeholders
 // rather than secrets. That is what lets `--verify` refuse a recording it did not scrub itself.
-export const OVERSCRUB_MIN_LIMIT = 200;
-export const OVERSCRUB_PER_ENTRY = 12;
+const OVERSCRUB_MIN_LIMIT = 200;
+const OVERSCRUB_PER_ENTRY = 12;
 
 export function findOverScrub(har) {
   const entries = Array.isArray(har?.log?.entries) ? har.log.entries.length : 0;
@@ -563,6 +563,50 @@ export function findOverScrub(har) {
     .filter(([, count]) => count > limit)
     .map(([placeholder, count]) => ({ placeholder, count, limit, entries }))
     .sort((a, b) => b.count - a.count);
+}
+
+// ---------------------------------------------------------------- the two reports
+//
+// Both live HERE, next to the checks that produce them, and both are exported — because `probe.mjs`
+// prints them too, at capture time. A hand-rolled second copy in the caller is how "the two can
+// never disagree" quietly stops being true: the wording drifts, then the thresholds do. This is the
+// same reason probe imports `scrubHar` rather than owning a twin of the transform.
+//
+// Neither ever prints a value. `at` is a learn site — a header name, a cookie name, a body key.
+
+const MAX_REPORTED = 10;
+
+export function shortSecretReport(withheld, prefix) {
+  if (!withheld?.length) return '';
+  const lines = [
+    `${prefix}: NOTE — ${withheld.length} secret(s) shorter than ${MIN_GLOBAL_SECRET_LENGTH} characters ` +
+      `(or under ${MIN_GLOBAL_SECRET_DISTINCT} distinct ones). Each is placeheld where it was\n` +
+      '  found and is NOT substituted elsewhere in the recording:\n',
+  ];
+  for (const s of withheld.slice(0, MAX_REPORTED)) lines.push(`  ${s.placeholder}  learned at ${s.at}  (len ${s.len})\n`);
+  if (withheld.length > MAX_REPORTED) lines.push(`  … and ${withheld.length - MAX_REPORTED} more\n`);
+  lines.push(
+    '  A value this short occurs inside ordinary content too, so a global substitution would corrupt\n' +
+      '  the recording rather than redact it. If one of these is a real credential that also appears\n' +
+      '  elsewhere in the capture, re-record without it.\n',
+  );
+  return lines.join('');
+}
+
+export function overScrubReport(hits, prefix, file) {
+  if (!hits?.length) return '';
+  const lines = [
+    `${prefix}: REFUSED — '${file}' was destroyed by its own scrub: ` +
+      `${hits.length} placeholder(s) over the plausible substitution count\n`,
+  ];
+  for (const h of hits) lines.push(`  ${h.placeholder}  ${h.count} occurrence(s)  (limit ${h.limit} over ${h.entries} entries)\n`);
+  lines.push(
+    '  A credential occupies a handful of positions per entry. A count like this means a learned\n' +
+      '  value also occurs inside ordinary content, so the substitution replaced the application\n' +
+      '  rather than the credential — and a residue check cannot see that, which is why this is a\n' +
+      '  separate refusal. Re-record; do NOT repair it by hand and do NOT commit this HAR.\n',
+  );
+  return lines.join('');
 }
 
 // ---------------------------------------------------------------- residue check
@@ -923,17 +967,7 @@ if (isMain) {
   // never disagree. It names the placeholder and its count, because "this recording is destroyed"
   // is only actionable if the operator can see WHICH substitution did it.
   const refuseOverScrub = (hits, file) => {
-    err(
-      `har-scrub: REFUSED — '${file}' was destroyed by its own scrub: ` +
-        `${hits.length} placeholder(s) over the plausible substitution count\n`,
-    );
-    for (const h of hits) err(`  ${h.placeholder}  ${h.count} occurrence(s)  (limit ${h.limit} over ${h.entries} entries)\n`);
-    err(
-      '  A credential occupies a handful of positions per entry. A count like this means a learned\n' +
-        '  value also occurs inside ordinary content, so the substitution replaced the application\n' +
-        '  rather than the credential — and a residue check cannot see that, which is why this is a\n' +
-        '  separate refusal. Re-record, or narrow what is treated as a secret; do NOT commit this HAR.\n',
-    );
+    err(overScrubReport(hits, 'har-scrub', file));
     out(
       `PWPROVE_SCRUB overscrub file=${file} placeholders=${hits.length} ` +
         `top=${hits[0].placeholder} count=${hits[0].count} limit=${hits[0].limit}\n`,
@@ -958,7 +992,7 @@ if (isMain) {
     process.exit(0);
   }
 
-  const { secrets, local } = scrubHar(har, { origin: ORIGIN });
+  const { secrets, withheld } = scrubHar(har, { origin: ORIGIN });
   const dest = OUT || TARGET;
 
   // BEFORE the write, deliberately. Without `--out` the destination IS the source, so a scrub that
@@ -971,20 +1005,7 @@ if (isMain) {
   // here by its learn site and its length, so a short-but-real secret is visible rather than skipped.
   // Never the value — the same rule the residue report holds. Printed regardless of `--quiet`,
   // because this is the report that makes the floor safe rather than merely convenient.
-  if (local.length) {
-    err(
-      `har-scrub: NOTE — ${local.length} secret(s) are shorter than ${MIN_GLOBAL_SECRET_LENGTH} ` +
-        `characters (or under ${MIN_GLOBAL_SECRET_DISTINCT} distinct ones).\n` +
-        '  Each is placeheld where it was found and is NOT substituted elsewhere in the recording:\n',
-    );
-    for (const s of local.slice(0, 10)) err(`  ${s.placeholder}  learned at ${s.at}  (len ${s.len})\n`);
-    if (local.length > 10) err(`  … and ${local.length - 10} more\n`);
-    err(
-      '  A value this short occurs inside ordinary content too, so a global substitution would\n' +
-        '  corrupt the recording rather than redact it. If one of these is a real credential that\n' +
-        '  also appears elsewhere in the capture, re-record without it.\n',
-    );
-  }
+  err(shortSecretReport(withheld, 'har-scrub'));
 
   try {
     fs.writeFileSync(dest, `${JSON.stringify(har, null, 2)}\n`);
@@ -1009,7 +1030,7 @@ if (isMain) {
   }
   out(
     `PWPROVE_SCRUB ok file=${dest} secrets=${secrets} entries=${har.log.entries.length} ` +
-      `local=${local.length}\n`,
+      `withheld=${withheld.length}\n`,
   );
   process.exit(0);
 }

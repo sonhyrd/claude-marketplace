@@ -652,8 +652,8 @@ else
   ok "a value that clears the floor is still substituted everywhere"
 fi
 case "$(marker "$W/i1.out")" in
-  *" local="*) ok "the marker line carries the count of locally-placeheld short secrets" ;;
-  *) bad "no local= field on the ok marker: '$(marker "$W/i1.out")'" ;;
+  *" withheld="*) ok "the marker line carries the count of withheld short secrets" ;;
+  *) bad "no withheld= field on the ok marker: '$(marker "$W/i1.out")'" ;;
 esac
 run "$W/i2.out" "$W/i2.err" "$I18N_CLEAN" --verify
 if [ "$RC" = "0" ]; then
