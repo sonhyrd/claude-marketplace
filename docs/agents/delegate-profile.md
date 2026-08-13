@@ -7,9 +7,10 @@ baseline, known-noise test, or environment trap.
   carries. Step 1 compares it against `git remote get-url origin` and warns on mismatch. If a second
   remote is ever present, it is never a push target.
 
-- **Branch prefix**: `sss/` — Orca prefixes worktree branches itself, so a worktree named
-  `ticket/<slug>` produces branch `sss/ticket-<slug>`. Do not fight it; merge by the real branch
-  name that `orca worktree create` reports, not by the name you asked for.
+- **Branch prefix**: `sonhyrd/` — Orca prefixes worktree branches with the GitHub account, so a
+  worktree named `ticket-34-dwell-region` produces branch `sonhyrd/ticket-34-dwell-region`. Do not
+  fight it; merge by the real branch name that `orca worktree create` reports, not by the name you
+  asked for. (Measured 2026-08-13. An earlier revision of this line said `sss/`.)
 
 - **Post-merge check**:
 
@@ -114,12 +115,15 @@ Commit `9eb094e` collapsed two manifest checks into one `[OK]` line when it dele
 machinery. The green figure is **7 passed, 0 warnings, 0 blockers**. A brief quoting 8 makes a
 worker hunt a regression that is not there.
 
-### Trap: `orca worktree create` does not branch from the coordinator's HEAD
+### Dispatch trap: `orca worktree create` needs `--base-branch` spelled out
 
-The worktree for #27 was cut at `294b24e` while `main` was at `03d2ae0` — one commit behind. Orca
-branches from its own recorded base, not from where the coordinator is standing. **After creating
-each worktree, `git -C <worktree> reset --hard <integration-branch-HEAD>` before dispatching**, or
-the worker builds on a base that is missing its blockers' merged work.
+Orca branches from its own recorded base, not from where the coordinator is standing — the
+worktree for #27 was cut at `294b24e` while `main` was at `03d2ae0`, one commit behind. **Pass
+`--base-branch <integration-branch>` on every `worktree create`, then verify:** `git -C <worktree>
+merge-base <integration-branch> HEAD` must equal the integration branch head. With the flag passed
+this behaves correctly (verified 2026-08-13 for `#34` and `#36` off `feat/ledger-session-id`), so a
+blind `reset --hard` is not needed — but an omitted flag and an ignored flag fail identically and
+stay invisible until merge-back, which is why the verification is not optional.
 
 - **Commit**: `f0e5cc9` · **Measured**: 2026-08-06 (after #27 merge-back)
 - `ci-local.sh` — **GREEN**, all checks passed. · `pre-push-security.sh` — **GREEN**, 7 passed.
