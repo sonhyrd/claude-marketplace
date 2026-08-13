@@ -129,6 +129,16 @@ someone reads the bring-up timings in isolation: the built target is *slower* to
 slower to mutate, and wins on the session total, on clip quality, and on proving the artifact that
 ships. See `docs/adr/0016` and `docs/studies/proof-target-measurements.md`.
 
+The build behind it is **reused while the commit and the working tree stand still**, and paid again
+otherwise. That is what turns a 104-to-201-second build from a per-proof cost into a per-batch one:
+an unattended batch against one pull request builds once, the way the fastest observed session
+inherited the environment of the five runs before it. *Unchanged* is measured against the source the
+artifact was produced from — HEAD plus the whole working-tree difference from it — so any edit,
+staged or not, tracked or not, is a rebuild, and so is a tree dirtied since the build. The
+mutation check always rebuilds: it mutates source by definition, and an inherited
+artifact would make it prove nothing. Not the framework's own build cache, which was measured and
+reverted — it helped only in the case this check already covers.
+
 ## Session ladder
 The ordered set of **rungs** — `?token=` query bootstrap, `storageState`, a server-set login cookie,
 client-storage seeding — by which a proof establishes its session, walked top-down until one holds.

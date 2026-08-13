@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.8.0"
+  version: "0.9.0"
 ---
 
 # pw-prove
@@ -248,6 +248,8 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
      BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
      node <skill-base>/scripts/preflight.mjs config build
    ```
+   **The build is reused while the commit and the working tree stand still.** A build costs 104–201s; paid once per proof it *is* the cost of the built target, paid once per batch it rounds to nothing — so a second run against the same pull request in the same worktree reports `BUILD=reused` and pays nothing. *Unchanged* means unchanged since the artifact was produced (HEAD plus the whole working-tree difference from it), so any edit — staged or not, tracked or not — rebuilds, and so does a tree dirtied since the build. The decision is always in the output: `BUILD_REUSE=hit|miss` with a `BUILD_REUSE_REASON` (`no-stamp`, `commit-changed`, `tree-changed-since-build`, `command-changed`, `output-missing`, `no-git`, `fingerprint-unavailable`, `forced`), so you can always see whether a build was paid. Force one with `BUILD_REUSE=never`; name `BUILD_OUTPUT=<dist|.output>` and a deleted artifact is rebuilt rather than served. Do **not** reach for the framework's own build cache instead — it was measured and reverted, because it helped only in the case this check already covers.
+
    **exit 4 — configuration**: the output names every missing key. Set them and re-run; never "fix" this by rebuilding. **exit 5 — build**: the build's own standard error is printed and the full log path given. That is a build failure, and it is fixed in the app, not in the port. Both fail in the time they take, not on a poll budget. `APP_ROOT` is the application root — where the build runs and where the app's own `.env`/`.env.example` are read, which matters in a monorepo whose app is a subdirectory. **`BUILD_COMMAND` is not optional**: the phase refuses without one rather than skipping, because a bring-up that quietly declines to build proves whatever server happens to be listening.
 3. **Start the preview server** as a harness-tracked background task (survives the turn, log readable) — the project's own preview/start command against the built output, on the resolved `PORT`. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** (the build, the Step-7 proof run). Never start it from inside a script: a script-started server can bind a sibling worktree on the wrong branch. **You own what you start:** record the port and the task, and stop it in Step 8 hygiene. A server you started and left running holds a port on the user's machine indefinitely — a server that was *already* running is not yours and is never stopped.
 4. **Confirm it serves** — the serve phase polls on a **short** budget (20s default), because a preview server binds in under a second and answers its first page in milliseconds; one that is not answering quickly is broken, not slow.
@@ -290,7 +292,7 @@ The generated spec must **recreate its session from code** — no committed, han
 
 **Step 3 is not complete until both hold:**
 
-- **All three bring-up phases passed** — `preflight.mjs` reported `CONFIG=ok` (or `CONFIG=undeclared`, only where the app genuinely declares no contract, and stated as an assumption), `BUILD=ok`, and `SERVE=ok`. There is no unbuilt fallback and the script refuses to pretend otherwise: a run that reached recon against a development server, or against a target it never built, is not a proof of what ships.
+- **All three bring-up phases passed** — `preflight.mjs` reported `CONFIG=ok` (or `CONFIG=undeclared`, only where the app genuinely declares no contract, and stated as an assumption), `BUILD=ok` **or `BUILD=reused`** (an artifact this worktree already built from this exact commit and tree — the reuse reason is in the same block), and `SERVE=ok`. There is no unbuilt fallback and the script refuses to pretend otherwise: a run that reached recon against a development server, or against a target it never built, is not a proof of what ships.
 - **The recon channel is one of exactly two states — no third:** (1) a probe session that has answered at least one batch, or (2) the probe refused with **exit 2** (browserless) and the source-reading fallback is named in the Step 4 Assumptions block.
 
 Reaching Step 4 in neither state is a **HARD STOP** (see `docs/adr/0004`). Source reading *without* a recorded exit-2 refusal is the skip this gate exists to catch. Never install a floated Playwright to force a probe open.
@@ -701,13 +703,22 @@ npx --no-install playwright test <spec> --project=chromium --workers=1 \
 
 Getting this wrong costs a full extra proof run to regenerate clips — and only if you notice.
 
+**The mutation must be in the artifact under test.** The proof target is a *build*, so a mutated source file changes nothing until it is rebuilt — a mutation check run against the standing artifact is green by construction and proves nothing. Rebuild after mutating and again after reverting, forcing the build both times, and restart the preview server on each so it serves the artifact you just made:
+
+```bash
+BUILD_REUSE=never BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
+  node <skill-base>/scripts/preflight.mjs build
+```
+
+`BUILD_REUSE=never` is not optional here: the reuse check is what makes a batch cheap, and the mutation check is the one run that must never inherit an artifact. (The mutation moves the fingerprint too, so both belt and braces point the same way.) Budget for it — this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
+
 1. **Record pre-state:** `git status --porcelain > /tmp/pre.status && git diff > /tmp/pre.patch`.
-2. **Mutate** the changed behavior (one line is enough).
+2. **Mutate** the changed behavior (one line is enough), then **rebuild and restart the preview** as above.
 3. **Run the spec** with the isolated output above — `-g` the one test that should guard it, not the whole spec. Three verdicts, exactly one retry:
    - **Red** → the spec guards the change. Done.
    - **Green** → strengthen the terminal assertion and repeat **once**.
    - **Green again, behavior not isolable at the browser layer** (another layer independently preserves the outcome — e.g. a read-modify-write that re-reads and merges) → **"unguardable at this layer"**. Never a third cycle. State it in the report and PR comment, naming the masking layer.
-4. **Revert exactly** (`git checkout -- <file>`).
+4. **Revert exactly** (`git checkout -- <file>`), then **rebuild and restart the preview once more** — leaving the mutated artifact behind means every later step (a re-film, a heal run, the hermetic audit) runs against deliberately broken software.
 5. **Verify the tree is unchanged** — process substitution on **both** sides so a trailing-newline artifact isn't mistaken for residue:
    ```bash
    diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch
@@ -852,7 +863,7 @@ All paths are in this directory.
 
 - Playwright best practices: `best-practices.md`
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
-- Step-3 bring-up gate — three phases that fail apart (`config` validates the app's own declared contract and names the missing keys, exit 4; `build` waits on the build as a subprocess and prints its standard error, exit 5; `serve` polls the preview server on a short budget, exit 3). `PROBE_HOSTING=1` also round-trips the publish credential and probes ffmpeg/Chrome: `scripts/preflight.mjs`
+- Step-3 bring-up gate — three phases that fail apart (`config` validates the app's own declared contract and names the missing keys, exit 4; `build` waits on the build as a subprocess and prints its standard error, exit 5; `serve` polls the preview server on a short budget, exit 3). `build` reuses the standing artifact while the commit and tree have not moved and reports which it did (`BUILD_REUSE=hit|miss` + reason); `BUILD_REUSE=never` forces one. `PROBE_HOSTING=1` also round-trips the publish credential and probes ffmpeg/Chrome: `scripts/preflight.mjs`
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
 - HAR scrubber and replay binding (`node scripts/har-scrub.mjs <file.har>` rewrites every secret to a stable placeholder and canonicalises loopback origins — **`probe.mjs` already runs this transform at capture**, so a manual pass is a re-scrub, not the first one; `--verify` is the read-only residue check Step 8 runs before staging, exiting 3 and naming the location — never the value — so a leaked bearer is caught by a refusal, not by a request that someone confirm; `bind … --out <gitignored> --origin <baseURL> --bindings <json>` writes the run-local working copy replay reads, refusing on a placeholder it cannot bind (4) or a committable destination (5)): `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
