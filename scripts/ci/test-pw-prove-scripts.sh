@@ -537,6 +537,14 @@ stderr_has "  the eval rejection names the function form" '"fn"'
 stderr_has "  the eval rejection names the named-map form" 'map of named'
 expect_exit 1 "eval named map with a non-string value is a usage error" -- \
   env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":{"n":1}}]'
+# The two malformed shapes a mis-remembered form produces. Neither may reach a page: a rejection an
+# agent can act on beats a call that returns nothing and reads as an answer.
+expect_exit 1 "eval with no expression at all is a usage error" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval"}]'
+stderr_has "  the empty-eval rejection names the accepted shapes" 'map of named'
+expect_exit 1 "eval with a non-string \"fn\" is a usage error" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":{"fn":42,"arg":1}}]'
+stderr_has "  the bad-fn rejection names the function form" '"fn"'
 # ...and the accepted forms get PAST the client: reaching the browserless gate (exit 2) is the proof
 # that the shape was accepted, since exit 1 is the only thing client validation can produce.
 expect_exit 2 "eval string form still passes client validation (250 calls already use it)" -- \
@@ -570,6 +578,13 @@ const locator = (sel) => ({
   waitFor: async () => {},
   ariaSnapshot: async () => `- generic "${sel}"`,
 });
+// The page the expressions run against. `evaluate` below is the load-bearing part of this stub: a
+// stub that merely ECHOED its arguments back reported the {fn, arg} form as working for three
+// releases while it returned nothing and dropped the argument (#52). Real Playwright is handed a
+// STRING here — its client sets `isFunction` from `typeof pageFunction`, never 'function' for source
+// text — and evaluates that string as an EXPRESSION, discarding extra arguments. So does this. An
+// argument only arrives if the probe put it INSIDE the expression.
+const win = { location: { href: 'http://fake.test/people' }, document: { title: 'Fake' } };
 const page = {
   on,
   url: () => 'http://fake.test/people',
@@ -582,7 +597,14 @@ const page = {
   waitForLoadState: async () => {},
   waitForTimeout: async () => {},
   locator,
-  evaluate: async (expression, arg) => ({ expression: String(expression), arg: arg ?? null }),
+  evaluate: async (expression) => {
+    const v = await new Function('window', 'location', 'document', `return (${String(expression)})`)(
+      win, win.location, win.document,
+    );
+    // The value crosses a wire: what does not survive JSON comes back as undefined, which is exactly
+    // how a bare arrow-function source used to arrive.
+    try { return JSON.parse(JSON.stringify(v)); } catch { return undefined; }
+  },
 };
 const context = {
   on: () => {},
@@ -601,7 +623,7 @@ trap '( cd "$APP" 2>/dev/null && env PROBE_SOCK="$SOCK" node "$REPO_ROOT/$S/prob
 
 # One send, no start: the daemon is started first and the batch runs. This is the sequencing fix and
 # the DSL widening proven in the same round trip.
-probe_send '[{"cmd":"navigate","url":"/people"},{"cmd":"console"},{"cmd":"eval","expression":"location.href"},{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}},{"cmd":"eval","expression":{"url":"location.href","title":"document.title"}},{"cmd":"viewport","width":390}]'
+probe_send '[{"cmd":"navigate","url":"/people"},{"cmd":"console"},{"cmd":"eval","expression":"location.href"},{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}},{"cmd":"eval","expression":{"url":"location.href","t":"document.title"}},{"cmd":"viewport","width":390}]'
 rc=$?
 if [ "$rc" -eq 0 ]; then ok "send with no daemon running boots one and answers the batch — exit 0"; else
   bad "autostarted send — exit $rc, stderr: $(tail -2 "$W/err")"; fi
@@ -616,18 +638,20 @@ if grep -qF '[2] console' "$W/out" && grep -qF 'rows is not iterable' "$W/out" \
 else
   bad "console verb — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 240)"
 fi
-if grep -qF '[3] eval -> {"expression":"location.href","arg":null}' "$W/out"; then
-  ok "eval's string form is unchanged — the expression reaches the page verbatim"
+if grep -qF '[3] eval -> "http://fake.test/people"' "$W/out"; then
+  ok "eval's string form is unchanged — the expression is evaluated and its VALUE returned"
 else
   bad "eval string form — stdout: $(grep -F '[3]' "$W/out" | head -c 200)"
 fi
-if grep -qF '[4] eval -> {"expression":"a => a.id","arg":{"id":7}}' "$W/out"; then
-  ok "eval's function-object form passes its argument through to the page"
+# The form printed in SKILL.md, run verbatim, asserted on the VALUE the function computed from its
+# argument: 7 can only appear if `arg` reached `a`. The old assertion checked that page.evaluate was
+# CALLED with the argument, which it was — Playwright then discarded it (#52).
+if grep -qF '[4] eval -> 7' "$W/out"; then
+  ok "eval's {fn, arg} form calls fn WITH arg and returns what it computed"
 else
   bad "eval {fn,arg} form — stdout: $(grep -F '[4]' "$W/out" | head -c 200)"
 fi
-if grep -F '[5] eval ->' "$W/out" | grep -qF '\"url\": (location.href)' \
-   && grep -F '[5] eval ->' "$W/out" | grep -qF '\"title\": (document.title)'; then
+if grep -qF '[5] eval -> {"url":"http://fake.test/people","t":"Fake"}' "$W/out"; then
   ok "eval's named-map form answers several questions in one round trip"
 else
   bad "eval named-map form — stdout: $(grep -F '[5]' "$W/out" | head -c 220)"
@@ -646,6 +670,33 @@ if [ -z "$missing" ]; then
   ok "the unknown-verb rejection names the full current vocabulary"
 else
   bad "unknown-verb rejection omits:$missing"
+fi
+
+# The form above must be the form an agent READS — a documented shape the suite does not run is how
+# the {fn, arg} form stayed inert through three releases (#52).
+for form in '{"cmd":"eval","expression":"location.href"}' \
+            '{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}}' \
+            '{"cmd":"eval","expression":{"url":"location.href","t":"document.title"}}'; do
+  if grep -qF "$form" skills/pw-prove/SKILL.md; then
+    ok "  SKILL.md prints the eval form this suite runs: $form"
+  else
+    bad "  SKILL.md prints a different eval form than the suite runs: $form"
+  fi
+done
+
+# The live-application reproduction from docs/studies/live-proof-pr2866.md §2, verbatim: the argument
+# is stashed on the page by one command and read back by the NEXT one. Both halves failed silently
+# before — `undefined` returned, `window.__probeArg` never written.
+probe_send '[{"cmd":"eval","expression":{"fn":"(s) => { window.__probeArg = s; return 42 }","arg":{"a":41}}},{"cmd":"eval","expression":"JSON.stringify(window.__probeArg)"}]'
+if grep -qF '[1] eval -> 42' "$W/out"; then
+  ok "the {fn, arg} form returns the function's value rather than serialising to undefined"
+else
+  bad "{fn,arg} return value — stdout: $(grep -F '[1]' "$W/out" | head -c 200)"
+fi
+if grep -qF '[2] eval -> "{\"a\":41}"' "$W/out"; then
+  ok "the argument really arrived in the page — a later eval reads back what fn stored"
+else
+  bad "{fn,arg} argument delivery — stdout: $(grep -F '[2]' "$W/out" | head -c 200)"
 fi
 
 # A second send reuses the daemon it found — the autostart is a sequencing net, not a per-batch boot.
