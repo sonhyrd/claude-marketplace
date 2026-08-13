@@ -134,7 +134,7 @@
       "id": 8,
       "title": "Step 8 lands the proof: the report is structurally invalid without the tail lines",
       "prompt": "A PR-mode run (PR #88, branch feat/consent-banner) has passed Step 7: tests pass hermetically, the mutation check came back RED, and Step 8 item 1 published the recording to https://clips.paulsjob.ai/share/abc123. State exactly what remains before you may emit the Complete report, then produce the report skeleton. Separately: same question for a run whose argument was the prose 'prove this change' on a branch that has no PR.",
-      "expected_output": "The rest of Step 8 remains: the hygiene sweep (delete test-results/ and playwright-report/ litter and /tmp/pw-prove-mutation, keep playwright.proof.config.ts, stop the dev server this run started, revert auto-imports.d.ts-style codegen churn, scrub the HAR), commit the spec + POM + scrubbed api.har to the PR branch, push, and post the share link as a PR comment via gh pr comment -- all without asking. The report skeleton includes Generated, ACs, Dev server, e2e-reviewer, Tests (hermetic + carve-outs), Mutation, Proof page, Committed, Pushed, and PR comment lines; a report missing any of them is structurally invalid in PR-mode. For the prose-arg run with no PR: create one (push the branch, gh pr create with the AC table as body) and post the comment there.",
+      "expected_output": "The rest of Step 8 remains: the hygiene sweep (delete test-results/ and playwright-report/ litter and /tmp/pw-prove-mutation, keep playwright.proof.config.ts, stop the preview server this run started, revert auto-imports.d.ts-style codegen churn, scrub the HAR), commit the spec + POM + scrubbed api.har to the PR branch, push, and post the share link as a PR comment via gh pr comment -- all without asking. The report skeleton includes Generated, ACs, Preview server, e2e-reviewer, Tests (hermetic + carve-outs), Mutation, Proof page, Committed, Pushed, and PR comment lines; a report missing any of them is structurally invalid in PR-mode. For the prose-arg run with no PR: create one (push the branch, gh pr create with the AC table as body) and post the comment there.",
       "assertions": [
         "True positive: commits the spec + POM to the PR branch, pushes, and posts the share link as a PR comment BEFORE emitting the Complete report — without asking \"want me to commit?\"",
         "The report skeleton contains the Committed, Pushed, and PR comment lines (plus Proof page and Mutation) and treats a report missing any of them as structurally invalid",
@@ -174,15 +174,17 @@
     {
       "id": 12,
       "title": "Legible stop report: bring-up failure names verbatim evidence and produces nothing",
-      "prompt": "You are running in target mode to cover the home page (/) of a Nuxt app. You start the dev server, but the readiness gate (preflight.mjs) STOPs (exit 3): the server never binds because nuxt.config.ts imports a file that does not exist ('Cannot find module ./runtime-flags.generated') and the process exits code 1. A spec from an earlier run already exists at e2e/onboarding.spec.ts. What do you do, and what does your report contain?",
-      "expected_output": "Should STOP at Step 3 and report the app cannot start — not generate a spec, not fabricate a pass, not edit the app's own source (nuxt.config) to force a boot, and NOT run the pre-existing e2e/onboarding.spec.ts against the dead server and report it green. The stop report should contain: a one-line verdict naming the Step, the target, the bring-up steps attempted, the VERBATIM dev-server error and preflight STOP, an explicit statement that no spec/POM was produced (and that the pre-existing spec was not run or reported green), and how to unblock (restore the missing file or remove the import, then re-run). Should NOT emit the Step 8 completion tail (Proof page / Committed / Pushed).",
+      "prompt": "You are running in target mode to cover the home page (/) of a Nuxt app. The bring-up gate's build phase FAILS (`node preflight.mjs config build` exits 5): the build aborts because nuxt.config.ts imports a file that does not exist ('Cannot find module ./runtime-flags.generated'). A spec from an earlier run already exists at e2e/onboarding.spec.ts. What do you do, and what does your report contain?",
+      "expected_output": "Should STOP at Step 3 and report a BUILD failure specifically — exit 5, not a not-ready/server verdict — not generate a spec, not fabricate a pass, not edit the app's own source (nuxt.config) to force a build, and NOT run the pre-existing e2e/onboarding.spec.ts against a target that was never built and report it green. The stop report should contain: a one-line verdict naming the Step and the phase, the target, the bring-up steps attempted, the VERBATIM build error and the preflight STOP line, an explicit statement that no spec/POM was produced (and that the pre-existing spec was not run or reported green), and how to unblock (restore the missing file or remove the import, then re-run). Should NOT respond by rebuilding repeatedly, killing ports, or restarting a server — those answer a serve failure, which this is not. Should NOT emit the Step 8 completion tail (Proof page / Committed / Pushed).",
       "assertions": [
         "STOPs at Step 3 (bring-up) rather than generating a spec",
-        "Attributes the failure to the app not booting, tracing it to the nuxt.config import of a missing module",
+        "Names the BUILD phase (exit 5) as the failure, not a generic 'server not ready' verdict",
+        "Attributes the failure to the build aborting on the nuxt.config import of a missing module",
         "Quotes the blocker VERBATIM (the 'Cannot find module' error and the preflight STOP), not a paraphrase",
         "States explicitly that nothing was produced — no spec, no POM",
-        "False-positive guard: does NOT run the pre-existing e2e/onboarding.spec.ts against the dead server and does NOT report it as green",
-        "Does NOT edit the app's own source/config to force a boot (application-source change is out of test-authoring scope)",
+        "False-positive guard: does NOT run the pre-existing e2e/onboarding.spec.ts against an unbuilt target and does NOT report it as green",
+        "False-positive guard: does NOT answer a build failure with rebuild loops, port kills or server restarts",
+        "Does NOT edit the app's own source/config to force a build (application-source change is out of test-authoring scope)",
         "Does NOT emit the Step 8 completion tail (Proof page / Committed / Pushed) for a stop",
         "Gives a concrete unblock action and offers to re-run"
       ]
@@ -584,6 +586,36 @@
         "Names the rule: the gate and the guarded wait need not share a line; brace style and wrapping are not part of the contract",
         "False-positive guard: does NOT join the gate and the wait onto one line, add braces, or otherwise reformat a compliant dwell",
         "False-positive guard: does not report the spec as carrying no PW_PROVE_CLIP-gated wait"
+      ]
+    },
+    {
+      "id": 41,
+      "title": "A missing configuration key is a configuration failure, named in seconds — not a slow server",
+      "prompt": "Step 3, PR-mode against a Nuxt app whose committed .env.example declares `NUXT_PUBLIC_API_BASE=` and `NUXT_PUBLIC_AUTH_URL=` with no values. You allocate port 4173 and run `ENV_CONTRACT=.env.example BUILD_COMMAND='pnpm build' node <skill-base>/scripts/preflight.mjs config build`. It exits 4 within a second, printing `MISSING_KEYS=NUXT_PUBLIC_AUTH_URL`. What do you do?",
+      "expected_output": "Should read exit 4 as a CONFIGURATION failure and act on the named key: set NUXT_PUBLIC_AUTH_URL in the environment the build and the preview server will run under (or in the dotenv file they load) and re-run the same two phases. Should recognise that the build never ran, so nothing about the build or the server is yet known, and that a production build does not supply the development defaults that used to hide this. Should NOT re-run the gate unchanged hoping it passes, NOT raise READY_TIMEOUT, NOT start or restart a server, NOT kill a port, and NOT rebuild — every one of those answers a different phase's failure. Should NOT invent a value for a key it cannot source; where the value is genuinely unknown, it stops and reports the named key rather than guessing one.",
+      "files": [],
+      "assertions": [
+        "True positive: identifies exit 4 as the configuration phase failing, and names NUXT_PUBLIC_AUTH_URL as the missing key",
+        "Sets the key in the environment the build and preview will run under (or the dotenv file they load), then re-runs `config build`",
+        "States that the build did not run, so the build and the server are not yet implicated",
+        "False-positive guard: does NOT treat it as a readiness/not-ready problem — no READY_TIMEOUT increase, no port kill, no server restart, no rebuild loop",
+        "False-positive guard: does not fabricate a value for a key it cannot source; an unsourceable key is reported by name, not guessed",
+        "Does not report NUXT_PUBLIC_API_BASE as missing when it is already set in the environment"
+      ]
+    },
+    {
+      "id": 42,
+      "title": "The committed proof config must not inherit the project's development webServer",
+      "prompt": "Step 7, PR-mode. `<configDir>/playwright.proof.config.ts` already exists from an earlier run and reads `export default defineConfig({ ...base, use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' } })`. The project's own playwright.config.ts declares `webServer: { command: 'pnpm dev', url: 'http://127.0.0.1:3000', reuseExistingServer: !process.env.CI }`. You built the app and started your preview server on port 4173. What do you do before the proof run?",
+      "expected_output": "Should recognise that `...base` copies `webServer` too, so this proof run would boot the project's DEVELOPMENT server at 127.0.0.1:3000 (nothing is listening there — the preview is on 4173) and the proof would not run against the built target at all. Should migrate the committed proof config ONCE by adding `webServer: undefined` after the spread, leave everything else untouched, and stage it with this run. Should note that dropping Playwright's own readiness wait is safe here precisely because pw-prove owns the server lifecycle and preflight.mjs already gated the three bring-up phases. Should NOT edit the project's own playwright.config.ts, NOT rewrite or regenerate the proof config wholesale, NOT set CI=1 to force the already-in-use error, and NOT move the preview server onto the config's port as a workaround — that leaves the inheritance in place for the next run.",
+      "files": [],
+      "assertions": [
+        "True positive: identifies that the `...base` spread inherits webServer and would start the project's dev server",
+        "Adds `webServer: undefined` to the committed proof config as a one-time, in-place migration and stages it",
+        "Explains the missing readiness wait is acceptable because the agent owns the lifecycle and preflight.mjs gates bring-up",
+        "False-positive guard: does NOT edit the project's own playwright.config.ts",
+        "False-positive guard: does NOT regenerate or rewrite the whole proof config per-run (docs/adr/0008 keeps it static)",
+        "Does not work around it by moving the preview onto the config's port or by setting CI=1"
       ]
     }
   ]

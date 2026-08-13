@@ -116,13 +116,26 @@ a `pinned:` verdict. The pin lives in the committed spec, never only in the [pro
 config](#proof-config) — otherwise the proof renders at a size CI never produces. Step 7 passes it to
 the recording as `PW_PROVE_W`/`PW_PROVE_H`.
 
+## Proof target
+The **served form of the application a proof runs against**: the *built* application, served by its
+preview server. Never the development server — that path is removed, not conditional, so there is no
+second bring-up path to maintain or to take by accident. The agent owns its lifecycle (allocate the
+port, build, start the server, stop it in Step 8 hygiene), and bring-up is three phases with three
+distinct failures — configuration (exit 4, names the missing keys), build (exit 5, carries the build's
+standard error), serve (exit 3, a short poll) — because one not-ready verdict for all three was a
+misdiagnosis often enough to cost twelve minutes of wall clock and five needless rebuilds. Named here
+so the choice is a modelled decision rather than a hard-coded assumption re-litigated every time
+someone reads the bring-up timings in isolation: the built target is *slower* to bring up and much
+slower to mutate, and wins on the session total, on clip quality, and on proving the artifact that
+ships. See `docs/adr/0016` and `docs/studies/proof-target-measurements.md`.
+
 ## Proof config
 `<configDir>/playwright.proof.config.ts` — the second Playwright config pw-prove runs the proof
 through, spreading the project's own config and overriding only `use` (`video`, `trace`). **Static,
 project-agnostic and committed once**, then reused verbatim by every later run: the single per-run
 value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a file edit. The
-project's own `playwright.config` is never edited. Superseded the throwaway
-`.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`.
+project's own `playwright.config` is never edited. Carries `webServer: undefined`, so the spread cannot inherit the project's development-server command and boot one behind a run aimed at the [proof target](#proof-target) — a one-time committed migration, not a per-run edit. Superseded the throwaway
+`.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
 ## Hermetic audit
 The Step-7 check that the passing proof run reached nothing it did not declare. `hermetic.mjs`
