@@ -64,6 +64,21 @@ assert_fails() {
   fi
 }
 
+assert_absent() {
+  local name="$1"
+  local unexpected="$2"
+  local output
+  output=$(bash scripts/ci/review.sh --quiet 2>&1 || true)
+  if echo "$output" | grep -qF "$unexpected"; then
+    echo "  [FAIL] $name — unexpected substring found: '$unexpected'" >&2
+    echo "$output" | sed 's/^/         /' >&2
+    FAIL=$((FAIL + 1))
+  else
+    echo "  [PASS] $name"
+    PASS=$((PASS + 1))
+  fi
+}
+
 assert_security_fails() {
   local name="$1"
   local expected="$2"
@@ -89,6 +104,14 @@ text = path.read_text()
 if old not in text:
     sys.exit(f"mutate: substring not found in {path}: {old!r}")
 path.write_text(text.replace(old, new, 1))
+PY
+}
+
+append() {
+  python3 - "$1" "$2" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+path.write_text(path.read_text() + sys.argv[2])
 PY
 }
 
@@ -175,6 +198,63 @@ file="README.md"
 backup "$file"
 mutate "$file" "Find Playwright/Cypress E2E tests that pass CI" "Find Playwright/Cypress E2E tests 한국어 that pass CI"
 assert_fails "Language guard — Hangul outside switcher line in README.md" "Korean text found in public docs: README.md"
+restore "$file"
+
+# Case 15: canonical dwell drift — a second variant of the dwell in code-rules.md.
+# Three near-identical variants is the state this check exists to prevent returning to.
+file="skills/pw-prove/code-rules.md"
+backup "$file"
+mutate "$file" "if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);" \
+  "if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1500);"
+assert_fails "Canonical dwell — a variant duration in code-rules.md" "is not the canonical dwell"
+restore "$file"
+
+# Case 16: the generation step loses its inline snippet — the pointer-only state ten of eleven
+# field sessions never followed.
+file="skills/pw-prove/SKILL.md"
+backup "$file"
+mutate "$file" "// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof" \
+  "// JUSTIFIED: see code-rules.md for the wording"
+assert_fails "Canonical dwell — SKILL.md Step 5 no longer carries it inline" "carries no canonical dwell"
+restore "$file"
+
+# ---------------------------------------------------------------------------
+# Cases 17-20: the skill version bump check. The convention it enforces was stated for the whole
+# life of the repo and never held — pw-prove reported 0.1.0 across 638 ledger records and 14
+# distinct installs — so these cases exist to catch the check silently going back to detecting
+# nothing.
+# ---------------------------------------------------------------------------
+
+# Case 17: an unchanged tree demands no bump. Guards the other direction: a check that fails
+# everything names the right skill too, and would still pass Cases 18-19.
+assert_absent "Version bump — an unchanged skill demands no bump" "metadata.version is still"
+
+# Case 18: a skill body changed, version left alone.
+file="skills/playwright-debugger/SKILL.md"
+backup "$file"
+append "$file" "
+<!-- drift smoke: a body change with no version bump -->
+"
+assert_fails "Version bump — body changed without a bump" \
+  "skills/playwright-debugger: body and/or shipped scripts changed but metadata.version is still"
+
+# Case 19: changing skill A must not demand a bump on skill B. Runs while Case 18's mutation to
+# playwright-debugger is still in place.
+assert_absent "Version bump — a change to one skill does not implicate another" \
+  "skills/e2e-reviewer: body and/or shipped scripts changed"
+restore "$file"
+
+# Case 20: a skill's shipped scripts changed, version left alone. Both this case and Case 18 need a
+# skill whose version has NOT already moved on the branch under test; if a future branch bumps
+# e2e-reviewer or playwright-debugger these go red loudly rather than passing on nothing, and the
+# fix is to point the case at a skill that is still at its base version.
+file="skills/e2e-reviewer/scripts/scan.mjs"
+backup "$file"
+append "$file" "
+// drift smoke: a shipped-script change with no version bump
+"
+assert_fails "Version bump — shipped scripts changed without a bump" \
+  "skills/e2e-reviewer: body and/or shipped scripts changed but metadata.version is still"
 restore "$file"
 
 # ---------------------------------------------------------------------------

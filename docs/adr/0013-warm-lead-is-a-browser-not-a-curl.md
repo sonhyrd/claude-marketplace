@@ -1,5 +1,15 @@
 # The warm lead is a browser load, not a curl
 
+> **SUPERSEDED by `docs/adr/0016` (issue #46). There is no warm lead.** This record's reasoning is
+> correct and that is precisely why it is fenced: it argues, persuasively, for machinery that now has
+> nothing to do. The whole thesis is that a document fetch cannot warm a *client module graph* — true
+> of a development server serving unbundled modules, and irrelevant against the built-and-previewed
+> proof target 0016 made the only target, where a route serves in 14 ms cold and there is no
+> compilation to pay for anywhere. Across the sampled sessions this step cost 598 s; removing it
+> removes that cost rather than reducing it. `probe.mjs warm`, the `curl` fallback, the warm-miss
+> report line and `scripts/ci/test-probe-warm.sh` are all deleted. Do not re-add a warm lead on the
+> argument below without first re-establishing its premise: an on-demand-compiling proof target.
+
 `docs/adr/0007` established the **warm lead**: "one request against the route under proof immediately before filming, so the clip opens on a compiled app. One request, no extra test run, no new dependency." It was implemented as a `curl` of the route.
 
 It did not work. A real pw-prove run against a Nuxt app published a 1:09 clip whose first ~25s was the dev server compiling — the exact failure 0007 wrote the warm lead to prevent — and the cost vanished on the next run, the signature of a per-boot cache being filled.

@@ -360,6 +360,24 @@ function deriveVerdict(original) {
 }
 
 // ============================================================ the spec assertions
+// THE CANONICAL PAYOFF DWELL. One string, one source of truth: this failure path prints it, and the
+// two prose surfaces that must show it to the agent — pw-prove SKILL.md Step 5, where the spec is
+// written, and code-rules.md §Payoff dwell — carry it verbatim. review.sh's "Canonical dwell
+// snippet" check fails the build when any of the three drifts. Three near-identical variants used
+// to exist, differing in wording and duration, and none of them was reachable at the one moment
+// that mattered: ten of eleven field sessions never opened the reference at all, and every recovery
+// in that sample came from this error text rather than from the documentation.
+export const CANONICAL_DWELL = `// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);`;
+
+/** The canonical dwell, every line prefixed with `indent` for printing inside a message. */
+const dwellSnippet = (indent) =>
+  CANONICAL_DWELL.split('\n')
+    .map((line) => indent + line + '\n')
+    .join('');
+
 const CLIP_GATE = /process\.env\.PW_PROVE_CLIP/;
 const WAIT = /waitForTimeout\s*\(/;
 
@@ -411,6 +429,19 @@ function isJustified(lines, n) {
  * failing a spec over its brace style would block Step 7 on a formatting preference. So the guarded
  * REGION is resolved — the braced block, or the single statement that follows the condition — and
  * the wait is looked for inside it.
+ *
+ * BOTH branches resolve the region from the first NON-WHITESPACE character after the condition. The
+ * unbraced branch once searched from the character immediately after the closing paren, which is the
+ * NEWLINE when the guarded wait is on the following line: the region collapsed to that one newline
+ * and the wait inside it was invisible. Eleven field sessions failed this check on first contact and
+ * four agents worked around it by joining the two lines; `test-clip-fidelity.sh` now carries a
+ * fixture for every shape `code-rules.md` permits, because the suite that shipped the defect held
+ * only the single-line one.
+ *
+ * The `if (…)` form is the contract. A gate written without parentheses
+ * (`process.env.PW_PROVE_CLIP && await …`) opens no condition for the walk to leave, so the depth
+ * never returns to 0 and the walk runs to the statement's own `;` — the region resolves onto that
+ * semicolon and holds nothing. Such a gate is NOT counted, which `paren-free.spec.ts` pins.
  */
 function findDwells(original, masked, [start, end]) {
   const lines = original.split('\n');
@@ -421,8 +452,8 @@ function findDwells(original, masked, [start, end]) {
   while ((m = re.exec(masked)) !== null) {
     if (m.index >= end) break;
     // Walk out of the `if (…)` condition: paren depth starts at 1 and the region begins where it
-    // returns to 0. A gate written without parens (`X && await …`) never closes one, and falls back
-    // to the rest of the statement.
+    // returns to 0. Without a condition to leave the depth never returns to 0 and the walk runs to
+    // the statement's own `;` — see the parenthesis note in the doc comment.
     let i = m.index + m[0].length;
     let depth = 1;
     while (i < end && depth > 0) {
@@ -431,17 +462,19 @@ function findDwells(original, masked, [start, end]) {
       else if (masked[i] === ';' || masked[i] === '\n') break;
       i++;
     }
-    let region;
+    // Where the guarded statement actually STARTS — never the whitespace between it and the gate.
     const next = masked.slice(i, end).search(/\S/);
-    if (next >= 0 && masked[i + next] === '{') region = balanced(masked, i + next, '{', '}');
+    const from = next >= 0 ? i + next : i;
+    let region;
+    if (masked[from] === '{') region = balanced(masked, from, '{', '}');
     if (!region) {
-      const stop = masked.slice(i, end).search(/[;\n]/);
-      region = [i, stop < 0 ? end : i + stop + 1];
+      const stop = masked.slice(from, end).search(/[;\n]/);
+      region = [from, stop < 0 ? end : from + stop + 1];
     }
     re.lastIndex = region[1];
     if (!WAIT.test(masked.slice(region[0], region[1]))) continue; // a gate on something else
     const line = lineOf(original, m.index);
-    found.push({ line, justified: isJustified(lines, line) });
+    found.push({ index: m.index, line, justified: isJustified(lines, line) });
   }
   return found;
 }
@@ -570,9 +603,9 @@ function framesCommand(rest) {
     out('           element off-frame the subject is at the edge or absent -> the ungated\n');
     out("                            scrollIntoView({ block: 'center' }) is missing, or it runs before a\n");
     out('                            re-render that pushes the subject away; centre AT the hold.\n');
-    out('           still booting    the frame is a skeleton, a blank page or a loader -> the warm lead\n');
-    out('                            missed; re-warm the route (probe.mjs warm) before filming again.\n');
-    out('         Apply the fix to the COMMITTED spec or the warm lead, re-run `clip-fidelity.mjs spec`\n');
+    out('           never settled    the frame is a skeleton, a blank page or a loader -> the spec held\n');
+    out('                            on a state it never reached; assert the loaded state, then dwell.\n');
+    out('         Apply the fix to the COMMITTED spec, re-run `clip-fidelity.mjs spec`\n');
     out('         over the edited spec, then re-film ONCE. A second illegible frame PUBLISHES with an\n');
     out('         explicit warning in the report: a bad clip is not a failed test.\n');
   }
@@ -708,11 +741,26 @@ for (const spec of specs) {
     out(`payoff dwell:       no test() blocks found in ${spec}\n`);
     continue;
   }
+  // A dwell hoisted into a helper is a real dwell in the wrong PLACE, and saying a spec that visibly
+  // contains one has none sends the agent looking for the wrong bug — which is what the field did.
+  // The scope stays strict: resolving the helper would need call-graph analysis in a zero-dependency
+  // script, and relaxing to file scope would let one test's dwell satisfy tests that hold on nothing.
+  // So only the wording changes.
+  const hoisted = findDwells(src, masked, [0, masked.length]).filter(
+    (d) => !tests.some((t) => d.index >= t.body[0] && d.index < t.body[1]),
+  );
+
   const bad = [];
   for (const t of tests) {
     const dwells = findDwells(src, masked, t.body);
     const unmarked = dwells.filter((d) => !d.justified);
-    if (dwells.length === 0) bad.push({ t, why: 'no PW_PROVE_CLIP-gated wait' });
+    if (dwells.length === 0)
+      bad.push({
+        t,
+        why: hoisted.length
+          ? `its dwell is the one at ${spec}:${hoisted[0].line}, OUTSIDE every test() body`
+          : 'no PW_PROVE_CLIP-gated wait',
+      });
     // EVERY dwell, not just one of them: an unmarked twin beside a justified dwell is still an
     // unexplained fixed wait, and e2e-reviewer will flag it as #9 two audits later.
     else if (unmarked.length)
@@ -726,7 +774,7 @@ for (const spec of specs) {
       'JUSTIFIED, PW_PROVE_CLIP-gated wait\n',
   );
   for (const b of bad) out(`                    MISSING ${spec}:${b.t.line} test('${b.t.name}') — ${b.why}\n`);
-  if (bad.length) dwellFailure ??= { spec, bad };
+  if (bad.length) dwellFailure ??= { spec, bad, hoisted: hoisted.length > 0 };
 }
 
 // A missing pin outranks a missing dwell: without the pin the clip was filmed at a rendering the
@@ -743,16 +791,22 @@ if (pinFailure) {
   process.exit(EXIT.PIN);
 }
 if (dwellFailure) {
+  if (dwellFailure.hoisted)
+    err(
+      `clip-fidelity: the dwell in ${dwellFailure.spec} EXISTS but sits outside every test() body.\n` +
+        '       It must sit INLINE in the test() body it holds — a call to a helper does not count.\n' +
+        '       This scope is deliberate: one shared dwell would satisfy tests that hold on nothing,\n' +
+        '       which is the silent-always-pass this gate exists to prevent. Inline a copy in each\n' +
+        '       test() below, in the shape printed at the end of this message.\n',
+    );
   err(
     `clip-fidelity: STOP — ${dwellFailure.bad.length} test() block(s) in ${dwellFailure.spec} have a\n` +
-      '       missing or unjustified payoff dwell (see the MISSING lines above). Without one,\n' +
+      '       missing, misplaced or unjustified payoff dwell (see the MISSING lines above). Without one,\n' +
       '       PW_PROVE_CLIP=1 at Step 7 is INERT and the clip shows nothing; without the marker the\n' +
       '       wait is an unexplained fixed sleep e2e-reviewer will flag as #9. One per test, framed,\n' +
       '       at any beat except between an action and the assertion that covers it:\n' +
       "         await el.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }));\n" +
-      '         // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP; it sits after the\n' +
-      '         // assertion covering the beat above, so it adds time and nothing else. CI never sets it.\n' +
-      '         if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);\n' +
+      dwellSnippet('         ') +
       '       (exit 2)\n',
   );
   process.exit(EXIT.DWELL);

@@ -7,9 +7,10 @@ baseline, known-noise test, or environment trap.
   carries. Step 1 compares it against `git remote get-url origin` and warns on mismatch. If a second
   remote is ever present, it is never a push target.
 
-- **Branch prefix**: `sss/` — Orca prefixes worktree branches itself, so a worktree named
-  `ticket/<slug>` produces branch `sss/ticket-<slug>`. Do not fight it; merge by the real branch
-  name that `orca worktree create` reports, not by the name you asked for.
+- **Branch prefix**: `sonhyrd/` — Orca prefixes worktree branches with the GitHub account, so a
+  worktree named `ticket-34-dwell-region` produces branch `sonhyrd/ticket-34-dwell-region`. Do not
+  fight it; merge by the real branch name that `orca worktree create` reports, not by the name you
+  asked for. (Measured 2026-08-13. An earlier revision of this line said `sss/`.)
 
 - **Post-merge check**:
 
@@ -57,6 +58,44 @@ baseline, known-noise test, or environment trap.
      evals and adopters depend on them.
   10. **English-only public surface** — SKILL.md, README and `docs/` are English; CI enforces it.
 
+### Merge-back trap: every parallel pair conflicts on `metadata.version`
+
+Two workers touching the same skill both bump `metadata.version` in its SKILL.md, so the merge
+conflicts on that one line every time — it happened on both of the first two merge-backs (#34 vs
+#36, then #40). This is not a worker mistake; the repo requires the bump. **Resolve it at merge:
+take the highest precedence the combined change earns** — a new shipped script makes it a minor, a
+fix on top of an already-merged minor makes it a patch — and say so in the merge commit. Do not ask
+a worker to skip the bump; the ledger's stale-install detection depends on it moving.
+
+**The dangerous case is the one that does NOT conflict.** When two branches independently pick the
+same next version, git auto-merges the line and the second change ships under the first one's
+number — silently, with no conflict to make you look. #42 did exactly this against #41's `0.4.0`.
+**After every merge-back, check that the version actually moved past what is already on the
+integration branch**, whether or not git raised a conflict.
+
+`skills/pw-prove/evals/evals.json` conflicts the same way and needs the opposite resolution: both
+sides append independent evals at the same array slot, so keep BOTH and renumber the incoming ids
+onto the end. Taking one side silently deletes a worker's evals.
+
+### Known noise: `test-parity.sh` drift smoke has failed once, unreproducibly
+
+During #50 (2026-08-13) one full `ci-local.sh` run showed a single drift-smoke failure in
+`scripts/ci/test-parity.sh`. It did not touch any file that ticket changed, and it has not
+recurred in **19 subsequent runs** — 5 standalone plus 3 full by the worker, 11 more by the
+coordinator on the merged result, all `24 passed, 0 failed`.
+
+Treat a lone drift-smoke failure as suspect, not as a verdict: **re-run before acting on it.** A
+second failure, or one that names a file the branch touched, is real and must be investigated.
+Do not add a retry to the script to make this go away — that would hide the real case too.
+
+### Dispatch note: `worker-release` does not know low-level dispatches
+
+Workers launched with the engine argv go through `terminal create --command …` plus
+`orchestration dispatch --inject`, not `worker-start`. `worker-release --dispatch <id>` therefore
+returns `dispatch_not_found` for them even though `dispatch-show` reports the dispatch `completed`,
+and `terminal close` returns `runtime_error`. Settled panes stay idle and harmless; do not chase
+them, and never reach for `orchestration reset` to tidy up while other workers are live.
+
 ## Baseline
 
 - **Commit**: `aae5e82` · **Measured**: 2026-08-05
@@ -99,8 +138,11 @@ entries. A worker brief that names `~/.claude/skills/implement/SKILL.md` sends t
 that does not exist, and it silently falls back to improvising a process. The real path is:
 
 ```
-/Users/sondh0127/SonDev/claude-marketplace/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md
+/home/orca/work/claude-marketplace/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md
 ```
+
+(The macOS path this section used to name — under `/Users/sondh0127/SonDev/` — does not exist on
+this machine. Verified absent 2026-08-13; the Linux path above is the live one.)
 
 Every worker brief must name **that** path. (`/implement` itself is `disable-model-invocation:
 true`, so no dispatched worker can Skill-invoke it — path-reading is the only route.)
@@ -111,12 +153,15 @@ Commit `9eb094e` collapsed two manifest checks into one `[OK]` line when it dele
 machinery. The green figure is **7 passed, 0 warnings, 0 blockers**. A brief quoting 8 makes a
 worker hunt a regression that is not there.
 
-### Trap: `orca worktree create` does not branch from the coordinator's HEAD
+### Dispatch trap: `orca worktree create` needs `--base-branch` spelled out
 
-The worktree for #27 was cut at `294b24e` while `main` was at `03d2ae0` — one commit behind. Orca
-branches from its own recorded base, not from where the coordinator is standing. **After creating
-each worktree, `git -C <worktree> reset --hard <integration-branch-HEAD>` before dispatching**, or
-the worker builds on a base that is missing its blockers' merged work.
+Orca branches from its own recorded base, not from where the coordinator is standing — the
+worktree for #27 was cut at `294b24e` while `main` was at `03d2ae0`, one commit behind. **Pass
+`--base-branch <integration-branch>` on every `worktree create`, then verify:** `git -C <worktree>
+merge-base <integration-branch> HEAD` must equal the integration branch head. With the flag passed
+this behaves correctly (verified 2026-08-13 for `#34` and `#36` off `feat/ledger-session-id`), so a
+blind `reset --hard` is not needed — but an omitted flag and an ignored flag fail identically and
+stay invisible until merge-back, which is why the verification is not optional.
 
 - **Commit**: `f0e5cc9` · **Measured**: 2026-08-06 (after #27 merge-back)
 - `ci-local.sh` — **GREEN**, all checks passed. · `pre-push-security.sh` — **GREEN**, 7 passed.

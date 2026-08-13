@@ -65,11 +65,13 @@ running as the operator can read the same secret. The shipped scripts are lease-
 runtime dependency. See `docs/adr/0014`.
 
 ## Clip fidelity contract
-The four properties a Proof clip must have to be usable as evidence: recorded at the **effective
-viewport** (never Playwright's 800×800-box downscale), opening on a **warmed** route rather than a
-cold compile, ending on the success signal **held** on screen, and holding it in
-[frame](#framing). Held at authoring time — a committed viewport pin, ungated centering, and a
-`PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell — never by a second run, a measurement
+The three properties a Proof clip must have to be usable as evidence: recorded at the **effective
+viewport** (never Playwright's 800×800-box downscale), ending on the success signal **held** on
+screen, and holding it in [frame](#framing). Held at authoring time — a committed viewport pin,
+ungated centering, and a
+`PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell **inline in each `test()` body** (a
+dwell hoisted into a helper does not count: one shared dwell would satisfy tests that hold on
+nothing) — never by a second run, a measurement
 gate, or editing the recording. Authoring-time compliance is *checked*, not assumed: `clip-fidelity
 spec` blocks Step 7 on a spec that carries neither. A clip that fails the contract is a defect, not
 a trade-off. What the contract cannot check from the source is caught by the
@@ -114,13 +116,49 @@ a `pinned:` verdict. The pin lives in the committed spec, never only in the [pro
 config](#proof-config) — otherwise the proof renders at a size CI never produces. Step 7 passes it to
 the recording as `PW_PROVE_W`/`PW_PROVE_H`.
 
+## Proof target
+The **served form of the application a proof runs against**: the *built* application, served by its
+preview server. Never the development server — that path is removed, not conditional, so there is no
+second bring-up path to maintain or to take by accident. The agent owns its lifecycle (allocate the
+port, build, start the server, stop it in Step 8 hygiene), and bring-up is three phases with three
+distinct failures — configuration (exit 4, names the missing keys), build (exit 5, carries the build's
+standard error), serve (exit 3, a short poll) — because one not-ready verdict for all three was a
+misdiagnosis often enough to cost twelve minutes of wall clock and five needless rebuilds. Named here
+so the choice is a modelled decision rather than a hard-coded assumption re-litigated every time
+someone reads the bring-up timings in isolation: the built target is *slower* to bring up and much
+slower to mutate, and wins on the session total, on clip quality, and on proving the artifact that
+ships. See `docs/adr/0016` and `docs/studies/proof-target-measurements.md`.
+
+The build behind it is **reused while the commit and the working tree stand still**, and paid again
+otherwise. That is what turns a 104-to-201-second build from a per-proof cost into a per-batch one:
+an unattended batch against one pull request builds once, the way the fastest observed session
+inherited the environment of the five runs before it. *Unchanged* is measured against the source the
+artifact was produced from — HEAD plus the whole working-tree difference from it — so any edit,
+staged or not, tracked or not, is a rebuild, and so is a tree dirtied since the build. The
+mutation check always rebuilds: it mutates source by definition, and an inherited
+artifact would make it prove nothing. Not the framework's own build cache, which was measured and
+reverted — it helped only in the case this check already covers.
+
+## Session ladder
+The ordered set of **rungs** — `?token=` query bootstrap, `storageState`, a server-set login cookie,
+client-storage seeding — by which a proof establishes its session, walked top-down until one holds.
+A rung is chosen by grepping the application's own source for what it actually reads, on every run,
+never by assumption. A rung whose mechanism sits behind a development-only guard (`import.meta.dev`
+and its equivalents) is **absent**: the [proof target](#proof-target) is a production build, so that
+code is compiled out and the input it reads is never consumed — the ladder records the rung as absent
+and descends rather than driving a path that no longer exists. Absence is a property of the artifact
+under proof, not of any one application, and it is never repaired by editing the application's
+source. Each rung's success is asserted on the authenticated state itself against a short budget, so
+an unestablished session is named in seconds instead of expiring a default timeout on a side effect
+that can never occur. See `docs/studies/proof-target-measurements.md` › The auto-login blocker.
+
 ## Proof config
 `<configDir>/playwright.proof.config.ts` — the second Playwright config pw-prove runs the proof
 through, spreading the project's own config and overriding only `use` (`video`, `trace`). **Static,
 project-agnostic and committed once**, then reused verbatim by every later run: the single per-run
 value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a file edit. The
-project's own `playwright.config` is never edited. Superseded the throwaway
-`.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`.
+project's own `playwright.config` is never edited. Carries `webServer: undefined`, so the spread cannot inherit the project's development-server command and boot one behind a run aimed at the [proof target](#proof-target) — a one-time committed migration, not a per-run edit. Superseded the throwaway
+`.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
 ## Hermetic audit
 The Step-7 check that the passing proof run reached nothing it did not declare. `hermetic.mjs`
@@ -131,23 +169,25 @@ process and therefore look mocked in a browser trace. The verdict stays with the
 call must appear in a `// CARVE-OUT:` line or the run fails despite being green. See `docs/adr/0010`.
 
 ## HAR fixture
-pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`), auth-scrubbed HAR
-recorded during the probe pass and committed alongside the spec. `routeFromHAR(..., { notFound:
-'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Hand-written
+pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`) HAR recorded during
+the probe pass, **scrubbed at capture** and committed alongside the spec. `routeFromHAR(..., { notFound:
+'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Because
+Playwright matches a recorded entry by exact request-URL equality, a live run replays a **bound
+working copy** (`har-scrub.mjs bind`) — the canonical origin re-pointed at the run's port and each
+placeholder in the match key given the run's own value, written to a gitignored path and never
+staged. Hand-written
 `route.fulfill` remains only for the mutation under assertion. Playwright flushes the recording on
 **context** close, so `probe.mjs` closes the context before the browser and reports the written path
 and byte count — a recorder that cannot be observed recording is indistinguishable from a broken one.
+The same close scrubs it: the raw flush goes to a private staging file that is destroyed in the same
+breath, so the working tree never holds an unscrubbed authenticated capture, and the scrub has no
+placement left to decide. Before commit the hygiene sweep runs `har-scrub.mjs --verify`, whose
+non-zero exit refuses residue rather than asking anyone to confirm its absence — and refuses, with a
+distinct code, a recording its own scrub **destroyed**: a value short enough to occur inside ordinary
+content (`i18n_redirected=en`) is placeheld only where it was found and never swept across the
+document, and an implausible substitution count is a wrecked recording that a residue check reads as
+clean.
 See `docs/adr/0011`.
-
-## Runner origin
-The origin **Playwright itself** dials — `webServer.url` / `use.baseURL` after env overrides — as
-distinct from the origin the agent confirmed healthy. Resolved and curled in Step 3, recorded in the
-Step-4 Assumptions block. They differ more often than they look like they should: a dev server bound
-to `[::1]` answers on `localhost` and refuses on the `127.0.0.1` a scaffolded config carries, so
-Playwright boots a duplicate server and dies on `Timed out waiting 120000ms from config.webServer`
-having run zero tests. A mismatch is resolved by carrying the config's own env var (`E2E_BASE_URL`,
-`PLAYWRIGHT_BASE_URL`) on every runner invocation, never by editing the project's config. See
-`docs/adr/0011`.
 
 ## PR-mode
 The pipeline variant that proves a specific change (PR, branch, ticket, or prose "prove this change"
@@ -180,6 +220,27 @@ assertion can distinguish the mutated behavior because another layer independent
 observable outcome (e.g. a read-modify-write that re-reads and merges the full record). A stated
 verdict in the report and the PR comment, never a silent skip, and never a third
 strengthen-and-retry cycle.
+
+## Handover stop
+A sanctioned, reported non-delivery that ships its partial work to the pull request. PR-mode's second
+legal stop, beside the base-merge conflict: the Step-7 verify loop ended without a green run — three
+fix attempts spent, or the [no-progress checkpoint](#no-progress-checkpoint) tripped at two — so the
+run stops and posts the spec, the verbatim failure and the `playwright-debugger` diagnosis as a **pull-request
+comment**. Named because the concept kept being re-invented without a name: two observed
+non-deliveries each wrote a handover document unprompted and filed it in a repository directory,
+where nobody waiting on the pull request would ever see it. The instinct was right; only the
+destination was wrong. **Nothing is committed** — a knowingly-failing spec on the branch is the
+defect this pipeline exists to prevent — and the stop never emits the [delivery tail](#land-the-proof),
+so a reported non-delivery can never be mistaken for a proof.
+
+## No-progress checkpoint
+The Step-7 test that tells a fix apart from a retry. Each failed attempt is reduced to a **failure
+signature** — error class plus failing locator — and two consecutive attempts carrying the same
+signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
+application can see. Attempts whose signatures differ are converging and still consume the full
+budget of three. The bound was always three; a raw count could not distinguish three fixes from three
+retries, and one run spent an hour rewriting the same binding against one unchanging 30-second
+timeout. Exhausting the loop, by either route, is what triggers the [handover stop](#handover-stop).
 
 ## Hermetic spec
 A generated spec whose every network call is mocked. The default for all pw-prove output; Step 7
