@@ -94,7 +94,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pwproveRun } from './pwprove-run.mjs';
 // The ONE shipped transform. The probe never hand-rolls a scrub: eight audited sessions each wrote
 // their own, six in `node -e`, and seven needed two passes because a header-only scrub under-scrubs.
-import { scrubHar, findResidue } from './har-scrub.mjs';
+import {
+  scrubHar,
+  findResidue,
+  findOverScrub,
+  overScrubReport,
+  shortSecretReport,
+} from './har-scrub.mjs';
 
 // Run ledger — registered before validation, so a refusal is recorded too.
 pwproveRun(import.meta.url, 'recon');
@@ -525,8 +531,22 @@ if (MODE === 'start') {
       // Loopback origins are canonicalised in the same pass, so the committed recording is not bound
       // to the port this run happened to get (`har-scrub.mjs --origin` re-points it before replay).
       let secrets = 0;
+      let withheld = [];
       try {
-        ({ secrets } = scrubHar(har, {}));
+        ({ secrets, withheld } = scrubHar(har, {}));
+        // The over-scrub gate, BEFORE the write: a scrub whose substitution count is implausible
+        // destroyed the recording (a two-character locale cookie substituted 125,403 times — see
+        // `docs/studies/live-proof-pr2866.md` §1), and a destroyed capture must never reach the
+        // working tree, where a residue check would go on calling it clean. The refusal text is the
+        // shipped one, imported like the transform itself, so this cannot drift from `--verify`.
+        const wrecked = findOverScrub(har);
+        if (wrecked.length) {
+          // `finally` below destroys the staging directory on this path out too, so neither the
+          // wreckage nor the raw authenticated capture survives.
+          err(overScrubReport(wrecked, 'probe', HAR_TARGET));
+          err(`       Nothing was written to ${HAR_TARGET}. Re-record the recon pass.\n`);
+          return;
+        }
         fs.mkdirSync(path.dirname(path.resolve(HAR_TARGET)), { recursive: true });
         fs.writeFileSync(HAR_TARGET, `${JSON.stringify(har, null, 2)}\n`);
       } catch (e) {
@@ -550,6 +570,9 @@ if (MODE === 'start') {
         `probe: HAR written ${HAR_TARGET} (${size} bytes, filter ${filter}) — ` +
           `scrubbed at capture, ${secrets} secret(s) placeheld, loopback origins canonicalised\n`,
       );
+      // Short values are placeheld where they were found and never swept across the recording. Say
+      // which, by learn site and length only, so a short-but-real secret is reported and not skipped.
+      err(shortSecretReport(withheld, 'probe'));
       // The same residue check the pre-commit refusal runs, so the two can never disagree. A scrub
       // that left something behind must say so HERE, while the recon context is still the thing the
       // operator is looking at — not six steps later.

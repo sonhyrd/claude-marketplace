@@ -182,7 +182,11 @@ and byte count — a recorder that cannot be observed recording is indistinguish
 The same close scrubs it: the raw flush goes to a private staging file that is destroyed in the same
 breath, so the working tree never holds an unscrubbed authenticated capture, and the scrub has no
 placement left to decide. Before commit the hygiene sweep runs `har-scrub.mjs --verify`, whose
-non-zero exit refuses residue rather than asking anyone to confirm its absence.
+non-zero exit refuses residue rather than asking anyone to confirm its absence — and refuses, with a
+distinct code, a recording its own scrub **destroyed**: a value short enough to occur inside ordinary
+content (`i18n_redirected=en`) is placeheld only where it was found and never swept across the
+document, and an implausible substitution count is a wrecked recording that a residue check reads as
+clean.
 See `docs/adr/0011`.
 
 ## PR-mode

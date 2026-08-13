@@ -7,6 +7,7 @@
 //   node har-scrub.mjs normalize <url> [--origin <url>]
 //
 // Exit: 0 scrubbed / clean · 1 usage · 2 unreadable or not a HAR · 3 residue found
+//       6 the recording was destroyed by its own scrub (over-scrub)
 //
 // WHY THIS SHIPS. The documented approach — "remove Authorization and cookie headers" — is an
 // under-scrub, and a correct reading of it still leaks: a bearer survives in `Referer` values and
@@ -39,6 +40,16 @@
 // port it was recorded on is fragile every time the port shifts between runs. A loopback origin is
 // canonicalised to `http://localhost` (port dropped); `--origin <url>` re-points a canonical HAR at
 // a live origin, which is how a committed recording is bound to whatever port THIS run got.
+//
+// WHY A VALUE FLOOR EXISTS, AND WHY OVER-SCRUB IS A REFUSAL. Back-propagation above replaces a
+// learned secret by RAW STRING MATCH everywhere in the document. Against a real application
+// (`docs/studies/live-proof-pr2866.md` §1) Nuxt i18n set `i18n_redirected=en`, so the two-character
+// string `en` was learned as a credential and every `en` in a 9.1 MB German recording was replaced —
+// 125,403 substitutions, a shredded translation payload, and three tests failing against an
+// application that is not broken. So a learned value below the floor below is placeheld WHERE IT WAS
+// FOUND and never substituted globally, and a scrub whose substitution count is implausible REFUSES
+// (exit 6) instead of writing a destroyed recording. `--verify` runs the same gate, because
+// over-scrub is invisible to a residue check: the destroyed HAR reported clean.
 //
 // It NEVER prints a credential. Residue is reported by location, kind and length only.
 //
@@ -139,25 +150,74 @@ const LOOPBACK = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']);
 const COOKIE_ATTRIBUTE_RE =
   /^\s*(path|domain|expires|max-age|samesite|priority|partitioned|version|comment)\s*$/i;
 
+// ---------------------------------------------------------------- the value floor
+
+// The floor a learned value must clear before it may be substituted by RAW STRING MATCH across the
+// whole document. Both numbers are deliberately about the value's own shape, not about the name it
+// was found under, because the name is what already made it a secret.
+//
+// 12 characters: the shortest credential any of the shapes this script mints is realistically that
+// long — a JWT, a `Bearer …`, an `sk_live_…`, a session id, a CSRF token. Below 12 a string stops
+// being a credential and starts being a word: `en`, `de`, `dark`, `UTC`, `true`, `admin`. Those
+// occur inside ordinary prose and inside other identifiers, and replacing them globally does not
+// redact a recording, it corrupts one.
+//
+// 5 distinct characters: length alone still admits `aaaaaaaaaaaa` and `------------`, which are
+// padding, separators or a placeholder-shaped run rather than a credential, and which appear inside
+// unrelated content for the same reason. A real 12-character credential clears 5 distinct
+// characters with room to spare.
+//
+// Nothing is skipped by this: a value under the floor is still placeheld at every position the
+// script identified it at — the cookie pair, the header, the body key — so the credential is still
+// removed from the recording. What it loses is the global sweep, which is the pass that cannot tell
+// a credential from a word. Every such value is reported by name and length (never by value), so a
+// short-but-real secret is a line in the output, not a silence.
+const MIN_GLOBAL_SECRET_LENGTH = 12;
+const MIN_GLOBAL_SECRET_DISTINCT = 5;
+
+function isGloballySubstitutable(value) {
+  if (typeof value !== 'string') return false;
+  const s = value.trim();
+  return s.length >= MIN_GLOBAL_SECRET_LENGTH && new Set(s).size >= MIN_GLOBAL_SECRET_DISTINCT;
+}
+
 // ---------------------------------------------------------------- placeholder minting
 
 // Value-keyed and monotonic: the Nth DISTINCT secret gets `__PWPROVE_SECRET_N__`, and every later
 // occurrence of that same secret gets the same placeholder. Deterministic for a given file, which
 // is what makes a scrub idempotent and a diff reviewable.
+//
+// `label` names WHERE the value was first learned — a header name, a cookie name, a body key. It is
+// never the value, and it is what lets the short-value report say something an operator can act on.
 function makeMint() {
   const seen = new Map();
-  const mint = (secret) => {
+  const labels = new Map();
+  const mint = (secret, label) => {
     let p = seen.get(secret);
     if (!p) {
       p = `__PWPROVE_SECRET_${seen.size + 1}__`;
       seen.set(secret, p);
+      labels.set(p, label ? String(label).trim() : 'a credential-shaped string');
     }
     return p;
   };
   mint.size = () => seen.size;
   // The secrets learned so far, longest first — so a value that contains another value is replaced
-  // before its own substring is.
-  mint.known = () => [...seen.entries()].sort((a, b) => b[0].length - a[0].length);
+  // before its own substring is. Only values that clear the floor: the rest are placeheld in place
+  // and never swept across the document.
+  mint.known = () =>
+    [...seen.entries()]
+      .filter(([secret]) => isGloballySubstitutable(secret))
+      .sort((a, b) => b[0].length - a[0].length);
+  // The ones the floor held back, for the report. Length and learn-site only — never the value.
+  mint.withheld = () =>
+    [...seen.entries()]
+      .filter(([secret]) => !isGloballySubstitutable(secret))
+      .map(([secret, placeholder]) => ({
+        placeholder,
+        at: labels.get(placeholder) ?? 'a credential-shaped string',
+        len: secret.trim().length,
+      }));
   return mint;
 }
 
@@ -224,13 +284,30 @@ function jsonSecrets(text) {
   return found;
 }
 
-// Bodies get both passes: the shape sweep, then a literal replacement of each key-identified secret
-// in the ORIGINAL text, so the body's formatting survives a re-serialisation this never performs.
+const reEscape = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// The JSON-encoded form of a string, without its quotes — the bytes it actually occupies in `text`.
+const jsonInner = (s) => JSON.stringify(String(s)).slice(1, -1);
+
+// Replace ONE key's value, at the positions that key holds it, leaving every other occurrence of the
+// same bytes alone. This is how a value under the floor is still removed from a body: `{"pin":"1234"}`
+// loses its pin without every `1234` in the document losing itself too.
+function replaceKeyedValue(text, key, value, placeholder) {
+  const re = new RegExp(`("${reEscape(jsonInner(key))}"\\s*:\\s*)"${reEscape(jsonInner(value))}"`, 'g');
+  return text.replace(re, `$1"${placeholder}"`);
+}
+
+// Bodies get both passes: the shape sweep, then a replacement of each key-identified secret in the
+// ORIGINAL text, so the body's formatting survives a re-serialisation this never performs. A value
+// that clears the floor is replaced wherever it occurs in the body — that is what catches a token
+// echoed under a second, innocuous key. A value below the floor is replaced only under its own key.
 function scrubBodyText(text, mint) {
   let s = scrubText(text, mint);
-  for (const { value } of jsonSecrets(text)) {
+  for (const { key, value } of jsonSecrets(text)) {
     if (PLACEHOLDER_RE.test(value)) continue;
-    s = s.split(JSON.stringify(value).slice(1, -1)).join(mint(value));
+    const placeholder = mint(value, key);
+    s = isGloballySubstitutable(value)
+      ? s.split(jsonInner(value)).join(placeholder)
+      : replaceKeyedValue(s, key, value, placeholder);
   }
   return s;
 }
@@ -291,20 +368,20 @@ function scrubHeaders(headers, mint, targetOrigin) {
     const name = String(h.name ?? '').toLowerCase();
     if (URL_HEADERS.has(name)) h.value = normalizeUrl(h.value, targetOrigin);
     else if (COOKIE_HEADERS.has(name)) h.value = scrubCookieHeader(h.value, mint);
-    else if (SECRET_HEADERS.has(name)) h.value = scrubWholeCredential(h.value, mint);
+    else if (SECRET_HEADERS.has(name)) h.value = scrubWholeCredential(h.value, mint, h.name);
     else h.value = scrubText(h.value, mint);
   }
 }
 
 // `Bearer eyJ…` keeps its scheme; an opaque `abc123…` is replaced whole. Either way the header is
 // still present and still typed, so the recording keeps its shape.
-function scrubWholeCredential(value, mint) {
+function scrubWholeCredential(value, mint, label) {
   const swept = scrubText(value, mint);
   if (swept !== value) return swept;
   // Already placeheld — minting again would give the placeholder a placeholder and make the scrub
   // non-idempotent, so a second pass over a committed HAR would rewrite it for no reason.
   if (PLACEHOLDER_RE.test(value)) return value;
-  return value.trim() ? mint(value) : value;
+  return value.trim() ? mint(value, `the ${label} header`) : value;
 }
 
 // One jar, or one Set-Cookie with attributes. Only the VALUE of each pair is replaced; `Path`,
@@ -321,7 +398,7 @@ function scrubCookieHeader(value, mint) {
       // Set-Cookie attributes after the first pair are metadata, not credentials.
       if (i > 0 && COOKIE_ATTRIBUTE_RE.test(name)) return part;
       if (!val.trim() || PLACEHOLDER_RE.test(val)) return part;
-      return `${name}=${mint(val.trim())}`;
+      return `${name}=${mint(val.trim(), `the ${name.trim()} cookie`)}`;
     })
     .join(';');
 }
@@ -332,7 +409,7 @@ function scrubCookieArray(cookies, mint) {
   if (!Array.isArray(cookies)) return;
   for (const c of cookies) {
     if (c && typeof c.value === 'string' && c.value.trim() && !PLACEHOLDER_RE.test(c.value))
-      c.value = mint(c.value);
+      c.value = mint(c.value, `the ${String(c.name ?? '').trim() || 'unnamed'} cookie`);
   }
 }
 
@@ -343,7 +420,9 @@ function scrubPostData(postData, mint) {
     for (const p of postData.params) {
       if (!p || typeof p.value !== 'string' || !p.value.trim()) continue;
       const name = String(p.name ?? '').toLowerCase();
-      p.value = SECRET_PARAMS.has(name) ? mint(p.value) : scrubText(p.value, mint);
+      p.value = SECRET_PARAMS.has(name)
+        ? mint(p.value, `the ${p.name} post parameter`)
+        : scrubText(p.value, mint);
     }
   }
 }
@@ -419,6 +498,10 @@ export function scrubHar(har, { origin } = {}) {
   // is now replaced by its literal value everywhere else in the document, in both directions. This
   // is what stops the same bearer being placeheld in `Authorization` and surviving verbatim in a
   // response body, which no shape rule and no key rule catches on its own.
+  //
+  // `mint.known()` returns only the values that clear the floor. A shorter one was already placeheld
+  // at the position it was learned at; sweeping it across the document is the pass that turned a
+  // locale cookie into 125,403 substitutions, so it does not happen.
   const known = mint.known();
   if (known.length) {
     const replaceKnown = (s) => {
@@ -441,7 +524,89 @@ export function scrubHar(har, { origin } = {}) {
     };
     walk(har);
   }
-  return { har, secrets: mint.size() };
+  return { har, secrets: mint.size(), withheld: mint.withheld() };
+}
+
+// ---------------------------------------------------------------- the over-scrub gate
+
+// The backstop for everything the floor above does not catch. The floor is a heuristic about a
+// value; this is a measurement of the RESULT, and it is the check that would have stopped the run
+// in `docs/studies/live-proof-pr2866.md` §1 whatever the floor had said.
+//
+// A credential occupies a bounded number of positions per recorded exchange: the request `Cookie`
+// header and its cookies array, the response `Set-Cookie` and its cookies array, an `Authorization`
+// header, a referrer, a body echo. Call it a handful — five or six. 12 per entry is twice that, and
+// the 200 floor keeps a two-entry fixture from tripping on ordinary repetition. The limit is set
+// generously on purpose: a false refusal costs a re-record, and the failure it exists to catch
+// overshot by two orders of magnitude (809 occurrences PER ENTRY, against a limit of 12). Anything
+// past it is not a credential appearing often, it is a substring of the application appearing often
+// — which is precisely what a destroyed recording looks like from the outside.
+//
+// Read-only, and it works on a committed HAR without re-scrubbing it, because it counts placeholders
+// rather than secrets. That is what lets `--verify` refuse a recording it did not scrub itself.
+const OVERSCRUB_MIN_LIMIT = 200;
+const OVERSCRUB_PER_ENTRY = 12;
+
+export function findOverScrub(har) {
+  const entries = Array.isArray(har?.log?.entries) ? har.log.entries.length : 0;
+  const limit = Math.max(OVERSCRUB_MIN_LIMIT, OVERSCRUB_PER_ENTRY * entries);
+  const counts = new Map();
+  let text;
+  try {
+    text = JSON.stringify(har);
+  } catch {
+    return [];
+  }
+  for (const m of String(text).matchAll(new RegExp(PLACEHOLDER_RE.source, 'g')))
+    counts.set(m[0], (counts.get(m[0]) ?? 0) + 1);
+  return [...counts.entries()]
+    .filter(([, count]) => count > limit)
+    .map(([placeholder, count]) => ({ placeholder, count, limit, entries }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// ---------------------------------------------------------------- the two reports
+//
+// Both live HERE, next to the checks that produce them, and both are exported — because `probe.mjs`
+// prints them too, at capture time. A hand-rolled second copy in the caller is how "the two can
+// never disagree" quietly stops being true: the wording drifts, then the thresholds do. This is the
+// same reason probe imports `scrubHar` rather than owning a twin of the transform.
+//
+// Neither ever prints a value. `at` is a learn site — a header name, a cookie name, a body key.
+
+const MAX_REPORTED = 10;
+
+export function shortSecretReport(withheld, prefix) {
+  if (!withheld?.length) return '';
+  const lines = [
+    `${prefix}: NOTE — ${withheld.length} secret(s) shorter than ${MIN_GLOBAL_SECRET_LENGTH} characters ` +
+      `(or under ${MIN_GLOBAL_SECRET_DISTINCT} distinct ones). Each is placeheld where it was\n` +
+      '  found and is NOT substituted elsewhere in the recording:\n',
+  ];
+  for (const s of withheld.slice(0, MAX_REPORTED)) lines.push(`  ${s.placeholder}  learned at ${s.at}  (len ${s.len})\n`);
+  if (withheld.length > MAX_REPORTED) lines.push(`  … and ${withheld.length - MAX_REPORTED} more\n`);
+  lines.push(
+    '  A value this short occurs inside ordinary content too, so a global substitution would corrupt\n' +
+      '  the recording rather than redact it. If one of these is a real credential that also appears\n' +
+      '  elsewhere in the capture, re-record without it.\n',
+  );
+  return lines.join('');
+}
+
+export function overScrubReport(hits, prefix, file) {
+  if (!hits?.length) return '';
+  const lines = [
+    `${prefix}: REFUSED — '${file}' was destroyed by its own scrub: ` +
+      `${hits.length} placeholder(s) over the plausible substitution count\n`,
+  ];
+  for (const h of hits) lines.push(`  ${h.placeholder}  ${h.count} occurrence(s)  (limit ${h.limit} over ${h.entries} entries)\n`);
+  lines.push(
+    '  A credential occupies a handful of positions per entry. A count like this means a learned\n' +
+      '  value also occurs inside ordinary content, so the substitution replaced the application\n' +
+      '  rather than the credential — and a residue check cannot see that, which is why this is a\n' +
+      '  separate refusal. Re-record; do NOT repair it by hand and do NOT commit this HAR.\n',
+  );
+  return lines.join('');
 }
 
 // ---------------------------------------------------------------- residue check
@@ -647,7 +812,8 @@ if (isMain) {
     '       har-scrub.mjs bind <file.har> --out <gitignored> --origin <url> [--bindings <json>]\n' +
     '       har-scrub.mjs normalize <url> [--origin <url>]\n' +
     'exit: 0 scrubbed/clean/bound · 1 usage · 2 unreadable or not a HAR · 3 residue found\n' +
-    '      4 a placeholder in the match key has no run-time value · 5 the bound copy would be committable\n';
+    '      4 a placeholder in the match key has no run-time value · 5 the bound copy would be committable\n' +
+    '      6 the recording was destroyed by its own scrub (implausible substitution count)\n';
 
   const argv = process.argv.slice(2);
   // Two subcommands; every other invocation takes a HAR path as its positional.
@@ -797,7 +963,21 @@ if (isMain) {
     for (const h of hits) err(`  ${h.where}  ${h.kind}  (len ${h.len})\n`);
   };
 
+  // The over-scrub refusal, shared by --verify and by the scrub's own self-check so the two can
+  // never disagree. It names the placeholder and its count, because "this recording is destroyed"
+  // is only actionable if the operator can see WHICH substitution did it.
+  const refuseOverScrub = (hits, file) => {
+    err(overScrubReport(hits, 'har-scrub', file));
+    out(
+      `PWPROVE_SCRUB overscrub file=${file} placeholders=${hits.length} ` +
+        `top=${hits[0].placeholder} count=${hits[0].count} limit=${hits[0].limit}\n`,
+    );
+    process.exit(6);
+  };
+
   if (VERIFY) {
+    const wrecked = findOverScrub(har);
+    if (wrecked.length) refuseOverScrub(wrecked, TARGET);
     const hits = findResidue(har);
     if (hits.length) {
       err(`har-scrub: REFUSED — ${hits.length} credential residue(s) in '${TARGET}'\n`);
@@ -812,8 +992,21 @@ if (isMain) {
     process.exit(0);
   }
 
-  const { secrets } = scrubHar(har, { origin: ORIGIN });
+  const { secrets, withheld } = scrubHar(har, { origin: ORIGIN });
   const dest = OUT || TARGET;
+
+  // BEFORE the write, deliberately. Without `--out` the destination IS the source, so a scrub that
+  // wrecked the recording would overwrite the only copy of it with the wreckage and leave the
+  // operator nothing to re-scrub.
+  const wrecked = findOverScrub(har);
+  if (wrecked.length) refuseOverScrub(wrecked, TARGET);
+
+  // The floor above is silent about nothing: every value it held back from the global sweep is named
+  // here by its learn site and its length, so a short-but-real secret is visible rather than skipped.
+  // Never the value — the same rule the residue report holds. Printed regardless of `--quiet`,
+  // because this is the report that makes the floor safe rather than merely convenient.
+  err(shortSecretReport(withheld, 'har-scrub'));
+
   try {
     fs.writeFileSync(dest, `${JSON.stringify(har, null, 2)}\n`);
   } catch (e) {
@@ -835,6 +1028,9 @@ if (isMain) {
     out(`PWPROVE_SCRUB residue file=${dest} hits=${left.length}\n`);
     process.exit(3);
   }
-  out(`PWPROVE_SCRUB ok file=${dest} secrets=${secrets} entries=${har.log.entries.length}\n`);
+  out(
+    `PWPROVE_SCRUB ok file=${dest} secrets=${secrets} entries=${har.log.entries.length} ` +
+      `withheld=${withheld.length}\n`,
+  );
   process.exit(0);
 }
