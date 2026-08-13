@@ -133,19 +133,6 @@ if [ "${E2E_SKILLS_SKIP_HAR_SCRUB:-}" != "1" ]; then
   fi
 fi
 
-if [ "${E2E_SKILLS_SKIP_PROBE_WARM:-}" != "1" ]; then
-  step "Probe warm-lead contract (probe.mjs warm, exit codes)"
-  # ADR 0013: the Step-7 warm lead is a browser load, not a curl — a curl warms the document and
-  # leaves the client module graph cold, which Playwright then films. The SKILL's fallback chain is
-  # written against warm's exit codes (1 usage / 2 browserless / 0 even on a warm miss), so those
-  # codes are the contract this freezes.
-  if [ "$QUIET" = "1" ]; then
-    bash scripts/ci/test-probe-warm.sh >/dev/null 2>&1 || fail "test-probe-warm.sh"
-  else
-    bash scripts/ci/test-probe-warm.sh || fail "test-probe-warm.sh"
-  fi
-fi
-
 if [ "${E2E_SKILLS_SKIP_CLIP_FIDELITY:-}" != "1" ]; then
   step "Clip-fidelity audit (clip-fidelity.mjs spec, exit codes)"
   # ADR 0015: the Step-6 gate that the generated spec actually carries the contract — a JUSTIFIED,

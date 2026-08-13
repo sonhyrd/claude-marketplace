@@ -83,7 +83,12 @@ produces both false stops and false confidence, and the applications that fail t
 the declaration. **The framework's own build cache** was measured and reverted by a prior session: 3×
 on unchanged source, useless once source changed.
 
-Removal is **staged**. This record changes the target and the bring-up; the `--workers=1` mandate of
-`docs/adr/0010` and the warm lead of `docs/adr/0013` stay in place until real runs against a preview
-server say otherwise. The mandate rests on a documented five-scenario failure and should not be
-retired on reasoning alone in the same change that introduces the new target.
+Removal is **staged**, and staged per item rather than wholesale. This record changed the target and
+the bring-up first. The **warm lead of `docs/adr/0013` is now gone** (issue #46), together with the
+browserless `curl` fallback, the boot-heavy-clip reporting, and the runner-origin loopback resolution
+of `docs/adr/0011` — none of which has a job against a target that compiles nothing and answers a
+cold route in 14 ms. The `--workers=1` mandate of `docs/adr/0010` **stays**: it rests on a documented
+five-scenario failure, and it is retired on evidence from real runs against a preview server (issue
+#48), not on the reasoning that its cause is gone. That asymmetry is deliberate — the warm lead's
+premise is measurably absent, while the mandate's is a concurrency behaviour nobody has yet observed
+under the new target.

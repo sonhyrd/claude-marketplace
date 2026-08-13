@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.7.0"
+  version: "0.8.0"
 ---
 
 # pw-prove
@@ -31,7 +31,7 @@ Step 3  Bring-up + Probe            (ONE live pass: merge base, three-phase brin
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
 Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + framing + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + clip-fidelity audit + e2e-reviewer skill quality gate)
-Step 7  Verify                       (tsc → warm route → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → look at one frame per clip → hermetic audit → mutation check)
+Step 7  Verify                       (tsc → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → look at one frame per clip → hermetic audit → mutation check)
 Step 8  Deliver                      (PR-mode: publish ONE chaptered recording → Clips · commit spec+POM+api.har · push · PR comment · report)
 ```
 
@@ -255,12 +255,7 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
    BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs serve
    ```
    On STOP (exit 3): read the preview log and confirm the built output exists at all — a serve failure is the server or the artifact, never the configuration or the build, which have already passed. **A status code is liveness, not health** — an app that resolves its tenant from a query parameter answers `200` with an empty shell when the parameter is absent, so carry that parameter (`?company_slug=<slug>`-style) on the recon navigation below and confirm real content through the probe, never from the poll alone.
-5. **Pin the origin *Playwright itself* will dial, and prove that exact string reachable.** Your `curl http://localhost:$PORT` answering does **not** mean the runner can connect: dev servers commonly bind `[::1]` only, so `localhost` resolves and `127.0.0.1` refuses — and `webServer.url` in a scaffolded config is usually the literal `http://127.0.0.1:<port>`. Playwright then concludes no server is up, boots a duplicate, and dies on `Timed out waiting 120000ms from config.webServer`, burning the whole proof run. Read `webServer.url` / `use.baseURL` out of the config **after** env overrides, and curl that literal origin:
-   ```bash
-   curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
-   ```
-   Reachable → record it as `Runner origin:` in the Step-4 Assumptions block. Reachable is also the point at which the proof config's inherited `webServer` must already be neutralised — see Step 7, and `docs/adr/0008`: a proof config that still spreads the project's `webServer` boots a **development** server behind your back the moment nothing is listening at *its* URL, which silently defeats the proof target. **Refused while your `localhost:$PORT` answers** → loopback-family mismatch: set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
-6. **Probe the publish prerequisites now (PR-mode) — with the serve poll:**
+5. **Probe the publish prerequisites now (PR-mode) — with the serve poll:**
    ```bash
    PROBE_HOSTING=1 BASE_URL="http://localhost:$PORT" node <skill-base>/scripts/preflight.mjs serve
    ```
@@ -381,7 +376,7 @@ Cover at minimum one happy path + one error/edge case. **PR-mode:** at minimum o
 
 ### Assumptions (required block in the PR-mode plan)
 
-One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth, **effective viewport**, **runner origin**, **handoff**). This block is the audit trail that replaces the questions.
+One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth, **effective viewport**, **handoff**). This block is the audit trail that replaces the questions.
 
 **Handoff** is the Step-2 verdict, and it is **one line, never zero** when a `.pw-prove/handoff.json` was found:
 
@@ -389,8 +384,6 @@ One line per contract-resolved decision that applies (structure, selectors, stas
 - `Handoff: .pw-prove/handoff.json — stale (recorded head <sha7>, HEAD is <sha7>); dropped, ACs derived from the diff alone`
 
 No file found → no line. A stale handoff **must** produce its line: dropping it silently is how a reader ends up believing the review's findings were carried when they were not.
-
-**Runner origin** is the Step-3 item 4 verdict, carried here verbatim: `Runner origin: <url>` when the config's own `webServer.url`/`baseURL` answered, or `Runner origin: <url> via <ENV_VAR> — config's <url> refused (loopback mismatch)` when it did not. The env-var form is a standing instruction to Steps 6–7, not a note: every runner invocation from here on prefixes it.
 
 **Effective viewport** is resolved here, from the Step-1 `configPath`, by the rule in `code-rules.md` → Clip Fidelity — state the value *and* which branch produced it (`deliberate: <w>x<h>` when the config carries an explicit `viewport:` key or a mobile descriptor, `pinned: 1600x900` when it carries only a desktop descriptor or nothing). Step 5 writes the pin; Step 7 sizes the recording to match.
 
@@ -521,7 +514,7 @@ Most recordings need nothing more: a credential that travelled only in headers a
 { "__PWPROVE_SCRUBBED__": "<the token this run's session uses>" }
 ```
 
-Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run), exactly like the `Runner origin:` env var — each invocation is a fresh environment. Unset in CI, the spec falls back to the committed HAR by construction.
+Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
 
 **2. Proof run — video + trace as byproducts, the project's own config untouched.** There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run (`docs/adr/0008`).
 
@@ -560,26 +553,15 @@ export default defineConfig({
 
 The **only** legitimate reason to edit an existing proof config is a structural mismatch with the project's own config (below) — a one-time, committed fix, never a per-run edit.
 
-**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`, amended by `docs/adr/0015`). Four properties make it usable; none of them re-runs the spec or post-processes the recording:
+**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`, amended by `docs/adr/0015`). Three properties make it usable; none of them re-runs the spec or post-processes the recording:
 
 | | What | Why |
 |---|---|---|
 | **Size** | `PW_PROVE_W`/`PW_PROVE_H` = the effective viewport, from `code-rules.md` → Clip Fidelity | `video.size` is an *encoding* parameter only. It never changes rendering — the **viewport pin in the committed spec** does. That is why size arrives by env and the config stays static: it is the one per-run value, and it belongs on the command line, not in a file diff. Deliberately **do not** set `viewport` in the proof config: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. |
-| **Warm lead** | One **browser** load of the route under proof, just before filming — `probe.mjs warm`, with `curl` as the browserless fallback | Otherwise the clip opens on an on-demand compile and the boot dominates a proof that is only seconds long. A curl alone is not enough: it never executes JS, so on a Vite-family dev server the client module graph and the dep pre-bundle stay cold and get paid *inside* the recording. |
 | **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` dwell. Under the **filming law** the variable may only add time, and the dwell sits outside every race window, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
 | **Framing** | Ungated `scrollIntoView({ block: 'center' })` in the committed spec, at the moment of the hold | A held payoff jammed against the screen edge, or pushed off-frame by a later re-render, is an unwatchable clip that passes every gate. Centring is a scroll, not a wait, so it is unconditional and CI renders identically. |
 
 ```bash
-# Warm the route so the clip opens on a compiled app, not a cold build. Never fails the run —
-# but a warm that didn't land is stated in the report, not swallowed (the clip will be boot-heavy).
-# Run from the APP ROOT: warm drives the project's own pinned Playwright, same rule as recon.
-# A real browser load, not a curl: curl warms the document only. Playwright video is context-scoped
-# (recording starts at context creation, no delayed start, no trim), so anything left cold is paid
-# inside the film. exit 2 = browserless -> fall back to the curl below and say so in the report.
-node <skill-base>/scripts/probe.mjs warm "<baseURL><route under proof>" \
-  || curl -sS -o /dev/null --max-time 60 -w '%{http_code}\n' "<baseURL><route under proof>" \
-  || echo "warm-failed"
-
 # Clear stale recordings FIRST: whatever sits in test-results/ at publish time becomes the
 # evidence. A leftover webm from an earlier (or mutated) run published as proof is a lie.
 rm -rf test-results
@@ -602,8 +584,6 @@ If the project config is not spread-friendly (a function export, or per-project 
 
 Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` carry the Step-4 effective viewport, and a `pinned:` verdict has already produced a `test.use({ viewport })` line in the committed spec. A letterboxed clip means that pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config.
 
-A non-2xx warm, a `warm-failed:` line, or a browserless fallback to `curl` is all reported the same way — `Proof page: <url> — warm miss, clips are boot-heavy`. The reason is one reason: `curl` warms the document but not the client module graph, so the boot still lands in the recording.
-
 ### Failure handling (max 3 auto-fix attempts, fewer if the failure stops changing)
 
 Per attempt, diagnose the actual failure and apply the matching fix:
@@ -614,8 +594,7 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | Assertion failure | Fix expected values, add `{ timeout }` for slow elements |
 | Structural | Fix missing `await`, wrong setup, incorrect `beforeEach` |
 | Unrecorded call aborted (`notFound:'abort'`) | First check the binding: **every** read aborting means the HAR was not bound to this run (Step 7 item 1b — `PW_PROVE_HAR` unset, or bound to a different port), not that the recording is short. A *particular* call aborting is a genuine miss — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
-| **Every** test times out on its first `page.goto` | Not a spec defect — a saturated dev server. Confirm the origin is alive (`curl -w '%{time_total}'`), then re-run with `--workers=1`. Never "fix" this in the spec with longer timeouts. |
-| **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | The proof config still inherits the project's `webServer`: add `webServer: undefined` to it (Step 7, `docs/adr/0008`), because a run that boots its own server is not running against the proof target at all. Before that migration the same line meant Playwright could not reach `webServer.url` and tried to boot a second server — almost always a loopback-family mismatch (`127.0.0.1` in the config, a server bound to `[::1]`). Either way, re-dial that literal URL with `curl`; on refusal, carry the Step-3 `Runner origin:` env var on this invocation. |
+| **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | The proof config still inherits the project's `webServer`: add `webServer: undefined` to it (Step 7, `docs/adr/0008`), because a run that boots its own server is not running against the proof target at all. |
 
 **Rerun only what failed.** During the ≤3 attempts, run just the failing test(s) — `-g "<title>"`. The full spec runs **once** after the last fix, as the gate. A **type-only fix** is gated by `tsc` — batch it into the next behavioral rerun.
 
@@ -659,7 +638,7 @@ A **flaky verdict** (passed only on retry) is not clean — diagnose once. If th
 
 ### Clip inspection — look at the frame before anyone else does
 
-The run that motivated this shipped a correctly sized, warm, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So before the hermetic audit, extract one frame per clip at the moment of the hold and **read it** (`docs/adr/0015`):
+The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So before the hermetic audit, extract one frame per clip at the moment of the hold and **read it** (`docs/adr/0015`):
 
 ```bash
 # One frame per clip, at duration − 0.5s — inside the payoff hold. Duration is probed with the
@@ -682,9 +661,9 @@ A clip you did not look at is reported as **uninspected**, which is the honest v
 |---|---|---|
 | Mid-transition, a spinner, the state not yet reached | **payoff not held** | The dwell is in the wrong place. Move it after that beat's own assertion — outside the race window, still `PW_PROVE_CLIP`-gated, still `// JUSTIFIED:`. |
 | The subject at the edge, cropped, or absent | **element off-frame** | The ungated `scrollIntoView({ block: 'center', inline: 'center' })` is missing, or it runs *before* a re-render that pushes the subject away — centre **at** the moment of the hold. |
-| A skeleton, a blank page, a loader | **still booting** | The warm lead missed. Re-warm the route (`probe.mjs warm`, `curl` fallback) and confirm a 2xx before filming again. |
+| A skeleton, a blank page, a loader | **never settled** | The spec held on a state it never reached. Assert the loaded state — the element the AC is about — *before* the dwell, so the hold cannot land on a loader. |
 
-The fix goes into the **committed spec** or the warm lead — never into the proof config, and never into a filming-only branch (the filming law: `PW_PROVE_CLIP` may only add time).
+The fix goes into the **committed spec** — never into the proof config, and never into a filming-only branch (the filming law: `PW_PROVE_CLIP` may only add time).
 
 1. Apply the matching fix.
 2. **Re-run the Step-6 clip-fidelity audit on the edited spec** (`clip-fidelity.mjs spec … --config … --verdict …`) — exit 0 before filming, exactly as the first time. An edit that moved the dwell can have dropped its marker.
@@ -874,7 +853,7 @@ All paths are in this directory.
 - Playwright best practices: `best-practices.md`
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
 - Step-3 bring-up gate — three phases that fail apart (`config` validates the app's own declared contract and names the missing keys, exit 4; `build` waits on the build as a subprocess and prints its standard error, exit 5; `serve` polls the preview server on a short budget, exit 3). `PROBE_HOSTING=1` also round-trips the publish credential and probes ffmpeg/Chrome: `scripts/preflight.mjs`
-- Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2) **and the Step-7 warm lead** (`probe.mjs warm <url>` — one-shot unfilmed browser load): `scripts/probe.mjs`
+- Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
 - HAR scrubber and replay binding (`node scripts/har-scrub.mjs <file.har>` rewrites every secret to a stable placeholder and canonicalises loopback origins — **`probe.mjs` already runs this transform at capture**, so a manual pass is a re-scrub, not the first one; `--verify` is the read-only residue check Step 8 runs before staging, exiting 3 and naming the location — never the value — so a leaked bearer is caught by a refusal, not by a request that someone confirm; `bind … --out <gitignored> --origin <baseURL> --bindings <json>` writes the run-local working copy replay reads, refusing on a placeholder it cannot bind (4) or a committable destination (5)): `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`

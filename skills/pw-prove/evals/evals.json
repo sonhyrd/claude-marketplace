@@ -262,9 +262,9 @@
     },
     {
       "id": 21,
-      "title": "Clip fidelity: the full bundle (size, warm lead, held payoff) on a project that declares no viewport",
+      "title": "Clip fidelity: the full bundle (size, held payoff, framing) on a project that declares no viewport",
       "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-flat/. The Playwright config declares no explicit `viewport:` key anywhere and there is no proof config in the repo yet. Generate the proof spec and describe the Step 7 proof run: the proof config, the commands, and anything you do before filming. State the effective viewport you resolved and where the pin lives.",
-      "expected_output": "Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should write `playwright.proof.config.ts` next to the project config as a STATIC file — `video: { mode: 'on', size }` with size read from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, no per-run literal substituted into the file — and pass `PW_PROVE_W=1600 PW_PROVE_H=900` on the proof command so the clip is never left at Playwright's 800x800-box downscale. Should warm the route under proof with a single request immediately before the proof run. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell in every test, placed after the assertion covering the beat it holds (never between an action and that assertion), with an UNGATED `scrollIntoView({ block: 'center' })` framing the held element immediately before it. Should not edit the committed playwright.config, should not pin the viewport only in the proof config, and should stage (not delete) the proof config in Step 8.",
+      "expected_output": "Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should write `playwright.proof.config.ts` next to the project config as a STATIC file — `video: { mode: 'on', size }` with size read from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, no per-run literal substituted into the file — and pass `PW_PROVE_W=1600 PW_PROVE_H=900` on the proof command so the clip is never left at Playwright's 800x800-box downscale. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell in every test, placed after the assertion covering the beat it holds (never between an action and that assertion), with an UNGATED `scrollIntoView({ block: 'center' })` framing the held element immediately before it. Should not edit the committed playwright.config, should not pin the viewport only in the proof config, and should stage (not delete) the proof config in Step 8.",
       "files": [
         "evals/files/project-flat/playwright.config.ts",
         "evals/files/project-flat/tests/login.spec.ts"
@@ -278,7 +278,7 @@
         "Keeps the proof config static — recording size comes from PW_PROVE_W/PW_PROVE_H with a 1600x900 default, not a literal substituted per run",
         "Passes the effective viewport on the proof command as PW_PROVE_W=1600 PW_PROVE_H=900",
         "Uses the object form `video: { mode: 'on', size: ... }` rather than bare `video: 'on'`",
-        "Warms the route under proof with one request before the proof run",
+        "False-positive guard: proposes NO warm lead — no `probe.mjs warm`, no curl of the route before filming; the proof target is a built preview and there is nothing to warm",
         "Sets PW_PROVE_CLIP=1 on the Step 7 proof run",
         "Generates a dwell gated on process.env.PW_PROVE_CLIP",
         "Places the dwell after the assertion covering the beat it holds -- never between an action and the assertion that covers it",
@@ -292,7 +292,7 @@
       "id": 22,
       "title": "Clip fidelity guard: respect a deliberate project viewport",
       "prompt": "You are running pw-prove in PR-mode against the project in evals/files/project-viewport/, proving a change to the /reports surface. Generate the proof spec and the Step 7 proof run. State the effective viewport you resolved and which branch of the rule produced it.",
-      "expected_output": "Should read the explicit `viewport: { width: 1440, height: 900 }` key in the chromium project's `use` block, classify it as a DELIBERATE project decision, and respect it. Must NOT pin 1600x900 and must not emit a `test.use({ viewport: ... })` override in the spec. The recording size must match the project's own viewport, passed as `PW_PROVE_W=1440 PW_PROVE_H=900` on the proof command — the proof config file itself stays static with its 1600x900 default untouched, since the size is the one per-run value and it travels on the command line. The dwell, route warm and PW_PROVE_CLIP gating are unchanged by this branch.",
+      "expected_output": "Should read the explicit `viewport: { width: 1440, height: 900 }` key in the chromium project's `use` block, classify it as a DELIBERATE project decision, and respect it. Must NOT pin 1600x900 and must not emit a `test.use({ viewport: ... })` override in the spec. The recording size must match the project's own viewport, passed as `PW_PROVE_W=1440 PW_PROVE_H=900` on the proof command — the proof config file itself stays static with its 1600x900 default untouched, since the size is the one per-run value and it travels on the command line. The dwell and the PW_PROVE_CLIP gating are unchanged by this branch.",
       "files": [
         "evals/files/project-viewport/playwright.config.ts",
         "evals/files/project-viewport/src/routes.ts"
@@ -304,7 +304,7 @@
         "Does NOT emit a test.use({ viewport: ... }) override in the generated spec",
         "Passes PW_PROVE_W=1440 PW_PROVE_H=900 on the proof command, matching the project's viewport",
         "False-positive guard: does NOT hardcode 1440x900 into playwright.proof.config.ts — the file stays static and project-agnostic",
-        "Still warms the route before the proof run",
+        "False-positive guard: proposes no route warm before the proof run — the warm lead is gone with the development-server target",
         "Still generates the JUSTIFIED, PW_PROVE_CLIP-gated dwell, framed by an ungated centring call",
         "Does not edit the project's committed playwright.config.ts"
       ]
