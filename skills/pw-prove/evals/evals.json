@@ -557,6 +557,34 @@
         "Does not install ffmpeg or any dependency into the user's project",
         "False-positive guard: does not describe what the frames show, having never opened one"
       ]
+    },
+    {
+      "id": 39,
+      "title": "Step 6 exit 2 on a dwell hoisted into a helper — inline it, do not conclude there is none",
+      "prompt": "You are at Step 6. `e2e/reports.spec.ts` carries its viewport pin and two test() blocks, each ending in `await payoffHold(page);`. `payoffHold` is a helper declared at the top of the same file: `async function payoffHold(page) { /* JUSTIFIED: proof-clip payoff hold... */ if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500); }`. The clip-fidelity audit exits 2 and says the PW_PROVE_CLIP-gated wait sits OUTSIDE every test() body and must sit INLINE in the test() body it holds. Say what you do next.",
+      "expected_output": "Should read the message as a MISPLACED dwell, not an absent one: the gated wait exists and is marked, but it lives in `payoffHold` rather than inside either test() body. The fix is to inline a framed, `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell into EACH test(), at that test's own payoff and after the assertion covering it, and to drop the `payoffHold` call (leaving both the helper call and an inline dwell would leave an unmarked-or-duplicated wait). Then re-run `clip-fidelity.mjs spec` until it exits 0. The strict scope is deliberate, not a bug to work around: a single shared dwell would satisfy tests that hold on nothing, which is the silent-always-pass the gate exists to prevent — so the answer is never to relax the audit, edit clip-fidelity.mjs, or argue the helper should count.",
+      "files": [],
+      "assertions": [
+        "Identifies the dwell as present but in the wrong PLACE — hoisted into a helper — rather than absent",
+        "Inlines the framed, `// JUSTIFIED:`, PW_PROVE_CLIP-gated dwell into each test() body and removes the helper call",
+        "Re-runs `clip-fidelity.mjs spec` and requires exit 0 before Step 7",
+        "Names why the scope is strict: one shared dwell would satisfy tests that hold on nothing",
+        "False-positive guard: does not report the spec as having no dwell at all, and does not add a second dwell while leaving the `await payoffHold(page)` call in place",
+        "False-positive guard: does not edit clip-fidelity.mjs, relax the audit, or skip Step 6 on the grounds that the helper is equivalent"
+      ]
+    },
+    {
+      "id": 40,
+      "title": "A dwell wrapped across two lines already satisfies Step 6 — do not reformat it to appease the audit",
+      "prompt": "You are at Step 6. Every test() in `e2e/reports.spec.ts` ends with the ungated centring, a `// JUSTIFIED:` comment, then `if (process.env.PW_PROVE_CLIP)` on one line and `  await page.waitForTimeout(2500);` on the next. The viewport pin is committed and matches the Assumptions block. Run the clip-fidelity audit and say what happens next.",
+      "expected_output": "Should run `clip-fidelity.mjs spec <spec> --config <configPath> --verdict \"<the Assumptions block's line verbatim>\"` and report it exits 0: the gate and the guarded wait need not share a line, and brace style and line wrapping are not part of the Clip Fidelity contract (code-rules.md §Payoff dwell). The dwell is framed, marked and gated, so the contract is satisfied and Step 7 may film. Nothing about the spec needs changing — in particular the two lines must not be joined, re-braced or rewritten, and the audit must not be re-run against a reformatted copy to 'make it pass'.",
+      "files": [],
+      "assertions": [
+        "Reports the audit as exiting 0 and proceeds to Step 7",
+        "Names the rule: the gate and the guarded wait need not share a line; brace style and wrapping are not part of the contract",
+        "False-positive guard: does NOT join the gate and the wait onto one line, add braces, or otherwise reformat a compliant dwell",
+        "False-positive guard: does not report the spec as carrying no PW_PROVE_CLIP-gated wait"
+      ]
     }
   ]
 }

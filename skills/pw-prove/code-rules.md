@@ -232,6 +232,7 @@ Every constraint here is load-bearing:
 - **Framed.** A dwell holds on something; if the reader cannot see it, the hold bought nothing. Centre first, hold second.
 - **Env-gated on `PW_PROVE_CLIP`.** Only the Step-7 proof run sets it. CI never does, so the suite does not get slower with every proof that lands.
 - **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful. A dwell without the marker is an unexplained fixed wait and gets flagged like any other.
+- **Written as an `if (…)`, inline in the `test()` body.** Brace style and line wrapping are free — braced or not, on one line or two, all read the same. Two things are not: a gate written without parentheses (`process.env.PW_PROVE_CLIP && await …`) is not recognised, and a dwell hoisted into a helper does not count for the tests that call it, because one shared dwell would satisfy tests that hold on nothing.
 
 This is the **only** sanctioned `page.waitForTimeout()` in generated output. Any other one is #9 and gets fixed, not justified.
 
