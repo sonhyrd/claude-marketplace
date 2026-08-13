@@ -30,6 +30,8 @@
 //                  browser outlives a session even when the agent forgets to `close`.
 //   PROBE_SOCK     optional — Unix-socket path (default: $TMPDIR/ptg-probe-<cwd-hash>.sock, so each
 //                  project root gets its own daemon).
+//   PROBE_START_TIMEOUT optional, `send` — seconds to wait for a daemon this send started itself to
+//                  begin listening (default 60; a cold browser launch is seconds, not milliseconds).
 //
 // A batch is a JSON array of {cmd, ...} objects, executed in order, one compact result each.
 // Failures are reported per command and the batch continues — recon wants maximum signal per round
@@ -53,7 +55,12 @@
 //                                                          question that needs an argument
 //                                                        {"url":"location.href","t":"document.title"}
 //                                                          — a map of named expressions, answered
-//                                                          in ONE round trip as one object
+//                                                          in ONE round trip as one object. Each
+//                                                          value must be SYNCHRONOUS: a promise
+//                                                          nested inside the returned object
+//                                                          serialises as {}. Ask an async question
+//                                                          through the string or "fn" form, both of
+//                                                          which Playwright awaits.
 //   {"cmd":"console"}                                  console output + uncaught page errors since
 //                                                      the last navigate — "level" filters by type
 //                                                      ("error", "warning", …), "max" caps lines
@@ -125,7 +132,8 @@ const MODE = process.argv[2];
 if (!['start', 'send', 'close'].includes(MODE)) {
   err(
     "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close\n" +
-      `probe.mjs: batch verbs: ${VERBS.join(' | ')}   (see the header for each verb's arguments)\n`,
+      `probe.mjs: batch verbs: ${VERBS.join(' | ')}\n` +
+      "probe.mjs: each verb's arguments are documented in this script's header\n",
   );
   process.exit(1);
 }
@@ -240,8 +248,10 @@ function client(payload) {
   });
   sock.on('error', (e) => {
     err(
-      `probe: no probe daemon at ${SOCK} (${e.code ?? e.message}) — start one from the app root: ` +
-        'node probe.mjs start\n',
+      `probe: no probe daemon at ${SOCK} (${e.code ?? e.message}).\n` +
+        '       A `send` starts one itself, so reaching this means the daemon went away mid-batch —\n' +
+        '       re-send. A bare `close` needs one already running, and closing nothing is not a\n' +
+        '       failure to fix.\n',
     );
     process.exit(3);
   });
@@ -327,7 +337,14 @@ async function ensureDaemon() {
 
 if (MODE === 'send') {
   const payload = readBatch();
-  void ensureDaemon().then(() => client(payload));
+  // An unexpected throw in here must still leave through the script's own exit codes: an unhandled
+  // rejection would print a Node stack trace where the probe's refusals are what a caller reads.
+  void ensureDaemon()
+    .then(() => client(payload))
+    .catch((e) => {
+      err(`probe: STOP — could not start a daemon: ${String(e?.message ?? e).split('\n')[0]}\n`);
+      process.exit(3);
+    });
 }
 if (MODE === 'close') client('[{"cmd":"close"}]');
 
@@ -356,7 +373,12 @@ if (MODE === 'start') {
       setTimeout(() => done(false), 1000).unref();
     });
     if (alive) {
-      err(`probe: a daemon is already listening at ${SOCK} — use send/close, not a second start\n`);
+      err(
+        `probe: a daemon is already listening at ${SOCK} — use send/close, not a second start.\n` +
+          '       A `send` starts a daemon when none is running, and it inherits THAT command\'s\n' +
+          '       environment — so if this start was meant to set BASE_URL/RECORD_HAR/STORAGE_STATE,\n' +
+          '       the running daemon does not have them: `node probe.mjs close`, then start again.\n',
+      );
       process.exit(1);
     }
     fs.rmSync(SOCK, { force: true });

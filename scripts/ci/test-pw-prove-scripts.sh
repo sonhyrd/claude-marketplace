@@ -271,9 +271,30 @@ expect_exit 1 "no subcommand is a usage error" -- \
   node "$REPO_ROOT/$S/probe.mjs"
 # The vocabulary must be discoverable from the usage text, not by rejection: fifteen of twenty
 # audited sessions learned it from an error line, and the model reached for verbs that never existed.
+# The expected set is READ FROM the usage text and then checked against every other surface, so a
+# verb added to the script and nowhere else fails here rather than drifting quietly.
+VERBS=$(sed -n 's/^probe.mjs: batch verbs: //p' "$W/err" | tr -d ' ' | tr '|' ' ')
+if [ -n "$VERBS" ]; then
+  ok "the usage text publishes the batch vocabulary ($VERBS)"
+else
+  bad "the usage text publishes no vocabulary line — stderr: $(head -c 160 "$W/err")"
+  VERBS="navigate click fill wait snapshot eval console network-summary storage-state close"
+fi
 for verb in navigate click fill wait snapshot eval console network-summary storage-state close; do
-  stderr_has "  usage text names the '$verb' verb" "$verb"
+  case " $VERBS " in *" $verb "*) ok "  usage text names the '$verb' verb" ;;
+    *) bad "  usage text omits the '$verb' verb" ;; esac
 done
+case " $VERBS " in *" viewport "*) bad "a viewport verb exists — it is deliberately not part of the DSL" ;;
+  *) ok "no viewport verb is published" ;; esac
+# The skill's cheat-sheet is the other surface an agent reads. It must name the SAME verbs — an
+# agent that learns the vocabulary from SKILL.md must not be able to learn a verb that is not there.
+missing=""
+for verb in $VERBS; do grep -qF -- "\`$verb\`" skills/pw-prove/SKILL.md || missing="$missing $verb"; done
+if [ -z "$missing" ]; then
+  ok "the skill's command cheat-sheet lists every verb the probe accepts"
+else
+  bad "SKILL.md's cheat-sheet omits:$missing"
+fi
 expect_exit 2 "browserless env: start refuses cleanly (no pinned Playwright from cwd)" -- \
   node "$REPO_ROOT/$S/probe.mjs" start
 stderr_has "  refusal names the pinned-Playwright requirement" "pinned Playwright"
@@ -402,7 +423,7 @@ else
   bad "viewport must stay unknown — stdout: $(grep -F '[6]' "$W/out" | head -c 200)"
 fi
 missing=""
-for verb in navigate click fill wait snapshot eval console network-summary storage-state close; do
+for verb in $VERBS; do
   grep -F '[6]' "$W/out" | grep -qF "$verb" || missing="$missing $verb"
 done
 if [ -z "$missing" ]; then
