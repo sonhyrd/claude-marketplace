@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.10.0"
+  version: "0.11.0"
 ---
 
 # pw-prove
@@ -328,7 +328,21 @@ node <skill-base>/scripts/probe.mjs send '[
 node <skill-base>/scripts/probe.mjs close   # flushes AND scrubs the HAR on context close; the idle timeout is the net
 ```
 
-Commands for the cases a batch runs into: `{"cmd":"wait","ms":6000}` (or `"selector"`) for a settle; `"max"` on `eval` to raise the 2000-char cap; `"out":"<path>"` on `eval` to write the full result to a file; `{"cmd":"storage-state","path":".auth/<slug>.auth.json"}` to save the live session for the deliverable spec to reuse. **The storageState file holds a working bearer — write it only under a gitignored path.** The HAR needs no such care and no scrub step of your own: `probe.mjs` scrubs it on context close, so it is never unscrubbed on disk. Read the `probe: HAR written …` line — it reports the byte count and how many secrets were placeheld, and a `probe: REFUSED` line beneath it means residue survived and the recording must not be committed.
+**The whole vocabulary — there is no eleventh verb:** `navigate`, `click`, `fill`, `wait`, `snapshot`, `eval`, `console`, `network-summary`, `storage-state`, `close`. There is deliberately **no `viewport` verb**: the effective viewport is resolved once in Step 4 and pinned in the committed spec, and probing at a viewport the proof never uses is recon against a different application. `node <skill-base>/scripts/probe.mjs` with no subcommand prints this list, and an unknown verb is rejected with it — but neither should be how you learn it.
+
+Commands for the cases a batch runs into: `{"cmd":"wait","ms":6000}` (or `"selector"`) for a settle; `{"cmd":"console"}` for the page's console output and uncaught errors since the last navigate (`"level":"error"` filters, `"max"` caps at 50 lines) — the first thing to ask when a page renders an empty shell; `"max"` on `eval` to raise the 2000-char cap; `"out":"<path>"` on `eval` to write the full result to a file; `{"cmd":"storage-state","path":".auth/<slug>.auth.json"}` to save the live session for the deliverable spec to reuse.
+
+**`eval` takes three argument shapes** — a string, and two object forms, so the shape you reach for first is the shape it accepts:
+
+```jsonc
+{"cmd":"eval","expression":"location.href"}                              // string — unchanged
+{"cmd":"eval","expression":{"fn":"a => a.dataset.id","arg":{"id":7}}}    // page.evaluate(fn, arg)
+{"cmd":"eval","expression":{"url":"location.href","t":"document.title"}} // named map — one round trip
+```
+
+The named map answers several questions in one call and is the reason to prefer it over three separate `eval`s; `fn` is the reserved key that selects the function form. **Every value in a named map must be synchronous** — a promise nested inside the returned object serialises as `{}`; ask an async question through the string or `fn` form, which Playwright awaits. **Prefer the semantic verbs regardless** — `snapshot`, `network-summary` and `console` are compact and stable where a raw `eval` returns whatever the page happens to hold today.
+
+**A `send` with no daemon running starts one first** rather than failing: the ordering is the probe's problem, not the application's. The autostarted daemon inherits that command's environment, so if `RECORD_HAR`/`BASE_URL`/`STORAGE_STATE` matter, set them on the `send` too — its stderr names what it started with. Exit 2 there is still the browserless refusal; exit 3 now means only that a daemon could not be reached or started. **The storageState file holds a working bearer — write it only under a gitignored path.** The HAR needs no such care and no scrub step of your own: `probe.mjs` scrubs it on context close, so it is never unscrubbed on disk. Read the `probe: HAR written …` line — it reports the byte count and how many secrets were placeheld, and a `probe: REFUSED` line beneath it means residue survived and the recording must not be committed.
 
 1. **Draft selectors from source + the probed live app.** Read the changed component(s) for roles/labels/testids; `snapshot` a big or gated page once through the probe (scope with `"selector"`). Borrow codegen's *draft-then-refine rhythm* — rough sequence first, then a lean POM — but never invoke `codegen` (it needs a human at the browser and reintroduces the throwaway-spec REPL).
 2. **Record the HAR + drive the mutation mock from `network-summary`.** After navigating/interacting through the probe, its aggregation lists the endpoints the surface calls — including proxy (`/api/request?cmd=`) and SSR calls source-reading misses, with observed query suffixes. The reads are captured in `api.har`; the one **mutation under assertion** gets a hand-written `route.fulfill` (per `code-rules.md` › Network Determinism).

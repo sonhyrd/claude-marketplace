@@ -12,6 +12,12 @@
 //   node probe.mjs send -              # ...batch read from stdin
 //   node probe.mjs close               # explicit close (the idle timeout is the net)
 //
+// `send` with no daemon listening STARTS ONE FIRST and then runs the batch. A batch sent before a
+// start is an ordering mistake about the probe, not a fact about the application under test, and it
+// was every probe failure in the audited sample; sequencing it correctly is the fix. The autostarted
+// daemon inherits this process's environment and cwd, so BASE_URL/STORAGE_STATE/RECORD_HAR still
+// apply if they are set on the `send` — the notice on stderr says what it was started with.
+//
 //   BASE_URL       optional, `start` — context baseURL; `navigate` then accepts relative paths.
 //   STORAGE_STATE  optional, `start` — storageState file for the context (Step 3 auth table).
 //   RECORD_HAR     optional, `start` — path to record an API-scoped HAR of the recon pass, flushed
@@ -24,6 +30,8 @@
 //                  browser outlives a session even when the agent forgets to `close`.
 //   PROBE_SOCK     optional — Unix-socket path (default: $TMPDIR/ptg-probe-<cwd-hash>.sock, so each
 //                  project root gets its own daemon).
+//   PROBE_START_TIMEOUT optional, `send` — seconds to wait for a daemon this send started itself to
+//                  begin listening (default 60; a cold browser launch is seconds, not milliseconds).
 //
 // A batch is a JSON array of {cmd, ...} objects, executed in order, one compact result each.
 // Failures are reported per command and the batch continues — recon wants maximum signal per round
@@ -40,7 +48,23 @@
 //                                                      NEVER a raw DOM dump.
 //   {"cmd":"eval","expression":"location.href"}        JSON-stringified result, truncated at 2000
 //                                                      chars — "max" raises the cap, "out":"<path>"
-//                                                      writes the FULL result to a file instead
+//                                                      writes the FULL result to a file instead.
+//                                                      "expression" also takes two OBJECT forms:
+//                                                        {"fn":"a => a.id","arg":{...}}  — the
+//                                                          page.evaluate(fn, arg) shape, for a
+//                                                          question that needs an argument
+//                                                        {"url":"location.href","t":"document.title"}
+//                                                          — a map of named expressions, answered
+//                                                          in ONE round trip as one object. Each
+//                                                          value must be SYNCHRONOUS: a promise
+//                                                          nested inside the returned object
+//                                                          serialises as {}. Ask an async question
+//                                                          through the string or "fn" form, both of
+//                                                          which Playwright awaits.
+//   {"cmd":"console"}                                  console output + uncaught page errors since
+//                                                      the last navigate — "level" filters by type
+//                                                      ("error", "warning", …), "max" caps lines
+//                                                      (default 50)
 //   {"cmd":"network-summary"}                          method+path aggregation since last navigate;
 //                                                      document/xhr/fetch only (the mock targets) —
 //                                                      "all": true includes scripts/styles/assets
@@ -55,16 +79,18 @@
 // probe by design, and recon there falls back to source reading + the heal loop.
 //
 //   exit 2 = browserless refusal (no pinned Playwright from cwd, or the browser failed to launch)
-//   exit 3 = no daemon listening at the socket (start one: `node probe.mjs start`)
+//   exit 3 = the daemon could not be reached or could not be started (`send` starts one itself, so
+//            this is no longer the "you forgot to start it" code — read the log tail it prints)
 //
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention.
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pwproveRun } from './pwprove-run.mjs';
 // The ONE shipped transform. The probe never hand-rolls a scrub: eight audited sessions each wrote
 // their own, six in `node -e`, and seven needed two passes because a header-only scrub under-scrubs.
@@ -83,12 +109,61 @@ const SOCK =
     `ptg-probe-${createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12)}.sock`,
   );
 
+// The ONE vocabulary. The usage text, the unknown-verb rejection and the header all read from here,
+// so an agent can never learn a verb that does not exist or miss one that does — the audited sample
+// shows the model reaching for verbs the DSL never had (`console` most often, now real) and learning
+// the real ones only by rejection. `viewport` is deliberately absent: the effective viewport is
+// resolved once during planning and pinned in the committed spec, and a probe verb that changed
+// rendering outside that resolution would invite recon against a viewport the proof never uses.
+const VERBS = [
+  'navigate',
+  'click',
+  'fill',
+  'wait',
+  'snapshot',
+  'eval',
+  'console',
+  'network-summary',
+  'storage-state',
+  'close',
+];
+
 const MODE = process.argv[2];
 if (!['start', 'send', 'close'].includes(MODE)) {
   err(
-    "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close   (see the header)\n",
+    "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close\n" +
+      `probe.mjs: batch verbs: ${VERBS.join(' | ')}\n` +
+      "probe.mjs: each verb's arguments are documented in this script's header\n",
   );
   process.exit(1);
+}
+
+// --- eval's argument forms --------------------------------------------------------------------
+// Forty-two percent of probe traffic is raw `eval`, and fifteen of twenty audited sessions paid one
+// rejected call on first contact because they wrote the object shape the DSL did not take. Both
+// object shapes below are now accepted alongside the string form, which is untouched: 250 recorded
+// calls already use it. Resolved in ONE place, so the client's early rejection and the daemon's
+// execution can never disagree about what a legal eval is.
+function evalPlan(c) {
+  const e = c.expression;
+  if (typeof e === 'string') return { source: e, args: [] };
+  if (e && typeof e === 'object' && !Array.isArray(e)) {
+    // `fn` is the reserved discriminator — page.evaluate(fn, arg), the shape a model mirroring
+    // Playwright itself reaches for. Everything else is read as a map of named expressions.
+    if (typeof e.fn === 'string') return { source: e.fn, args: 'arg' in e ? [e.arg] : [] };
+    const names = Object.keys(e);
+    if (names.length && names.every((k) => typeof e[k] === 'string')) {
+      // One round trip, several answers. Each value is parenthesised so an expression containing a
+      // comma or an operator cannot leak into its neighbour.
+      const body = names.map((k) => `${JSON.stringify(k)}: (${e[k]})`).join(', ');
+      return { source: `(() => ({${body}}))()`, args: [] };
+    }
+  }
+  throw new Error(
+    'eval needs "expression" as a string ("location.href"), a function object ' +
+      '({"fn":"a => a.id","arg":{...}}), or a map of named string expressions ' +
+      '({"url":"location.href","title":"document.title"})',
+  );
 }
 
 // --- the browserless gate: resolve the TARGET project's pinned Playwright, or refuse -------------
@@ -140,6 +215,18 @@ function readBatch() {
     err('probe.mjs: the batch must be a JSON ARRAY of 1-50 {"cmd": ...} objects\n');
     process.exit(1);
   }
+  // An eval the daemon could only reject is rejected HERE, before a browser is started for it —
+  // same rule, one implementation. An unknown VERB is deliberately not caught here: the daemon
+  // reports it per command and runs the rest of the batch, so one typo never costs nine answers.
+  for (const [i, c] of batch.entries()) {
+    if (c.cmd !== 'eval') continue;
+    try {
+      evalPlan(c);
+    } catch (e) {
+      err(`probe.mjs: command ${i + 1}: ${e.message}\n`);
+      process.exit(1);
+    }
+  }
   return JSON.stringify(batch);
 }
 
@@ -161,14 +248,104 @@ function client(payload) {
   });
   sock.on('error', (e) => {
     err(
-      `probe: no probe daemon at ${SOCK} (${e.code ?? e.message}) — start one from the app root: ` +
-        'node probe.mjs start\n',
+      `probe: no probe daemon at ${SOCK} (${e.code ?? e.message}).\n` +
+        '       A `send` starts one itself, so reaching this means the daemon went away mid-batch —\n' +
+        '       re-send. A bare `close` needs one already running, and closing nothing is not a\n' +
+        '       failure to fix.\n',
     );
     process.exit(3);
   });
 }
 
-if (MODE === 'send') client(readBatch());
+// --- sequencing: a batch sent before a start starts the daemon, then runs -----------------------
+// All six probe failures in the audited sample were this one ordering mistake, surfacing as a run
+// failure that said nothing about the application under test. Starting the daemon is something the
+// probe can do for itself, so it does.
+//
+// The browserless gate still runs, and runs FIRST: in an environment with no pinned Playwright the
+// operator sees the refusal that explains the environment (exit 2), not "no daemon" (exit 3). Exit 3
+// now means what it says — a daemon that could not be reached or could not be started.
+const connectOnce = (ms) =>
+  new Promise((res) => {
+    const s = net.connect(SOCK);
+    const done = (v) => {
+      s.destroy();
+      res(v);
+    };
+    s.once('connect', () => done(true));
+    s.once('error', () => done(false));
+    setTimeout(() => done(false), ms).unref();
+  });
+
+async function ensureDaemon() {
+  if (await connectOnce(1000)) return;
+  err(`probe: no daemon at ${SOCK} — starting one first (sequencing, not a failure)\n`);
+  resolvePinnedPlaywright('send');
+  // The autostarted daemon inherits cwd and environment, so a RECORD_HAR/BASE_URL set on this send
+  // still takes effect — and is named here, because a daemon started with neither is a legal but
+  // very different recon session and the operator must not have to guess which one they got.
+  err(
+    `probe: starting with BASE_URL=${process.env.BASE_URL || '(none)'} ` +
+      `RECORD_HAR=${process.env.RECORD_HAR || '(none)'} ` +
+      `STORAGE_STATE=${process.env.STORAGE_STATE || '(none)'}\n`,
+  );
+  const logPath = `${SOCK}.log`;
+  let stdio = 'ignore';
+  try {
+    stdio = fs.openSync(logPath, 'a');
+  } catch {
+    /* an unwritable log never blocks a start */
+  }
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'start'], {
+    detached: true,
+    stdio: ['ignore', stdio, stdio],
+  });
+  child.unref();
+  if (typeof stdio === 'number') fs.closeSync(stdio);
+  let died = null;
+  child.on('exit', (code) => {
+    died = code ?? 1;
+  });
+  // A cold browser launch is seconds, not milliseconds; PROBE_START_TIMEOUT is the ceiling.
+  const budget = (Number(process.env.PROBE_START_TIMEOUT) || 60) * 1000;
+  const deadline = Date.now() + budget;
+  while (Date.now() < deadline) {
+    if (await connectOnce(500)) {
+      err(`probe: daemon ready (pid ${child.pid}) — running the batch\n`);
+      return;
+    }
+    // A daemon that exited may still have lost a race to another start that is now listening, so
+    // the socket is asked once more before this is called a failure.
+    if (died !== null) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  if (await connectOnce(1000)) return;
+  const tail = (() => {
+    try {
+      return fs.readFileSync(logPath, 'utf8').trimEnd().split('\n').slice(-6).join('\n  ');
+    } catch {
+      return '(no log)';
+    }
+  })();
+  err(
+    `probe: STOP — the daemon did not come up within ${budget / 1000}s` +
+      `${died === null ? '' : ` (it exited ${died})`}. Its own output:\n  ${tail}\n`,
+  );
+  // A browserless daemon exits 2, and that is the answer worth propagating verbatim.
+  process.exit(died === 2 ? 2 : 3);
+}
+
+if (MODE === 'send') {
+  const payload = readBatch();
+  // An unexpected throw in here must still leave through the script's own exit codes: an unhandled
+  // rejection would print a Node stack trace where the probe's refusals are what a caller reads.
+  void ensureDaemon()
+    .then(() => client(payload))
+    .catch((e) => {
+      err(`probe: STOP — could not start a daemon: ${String(e?.message ?? e).split('\n')[0]}\n`);
+      process.exit(3);
+    });
+}
 if (MODE === 'close') client('[{"cmd":"close"}]');
 
 // ============================================================ daemon (start)
@@ -196,7 +373,12 @@ if (MODE === 'start') {
       setTimeout(() => done(false), 1000).unref();
     });
     if (alive) {
-      err(`probe: a daemon is already listening at ${SOCK} — use send/close, not a second start\n`);
+      err(
+        `probe: a daemon is already listening at ${SOCK} — use send/close, not a second start.\n` +
+          '       A `send` starts a daemon when none is running, and it inherits THAT command\'s\n' +
+          '       environment — so if this start was meant to set BASE_URL/RECORD_HAR/STORAGE_STATE,\n' +
+          '       the running daemon does not have them: `node probe.mjs close`, then start again.\n',
+      );
       process.exit(1);
     }
     fs.rmSync(SOCK, { force: true });
@@ -257,6 +439,21 @@ if (MODE === 'start') {
     const page = await context.newPage();
     // A surprise alert()/confirm() would wedge every later command behind a modal nobody can see.
     page.on('dialog', (d) => d.dismiss().catch(() => {}));
+
+    // --- console log: the recon question that had no answer ------------------------------------
+    // A page that renders an empty shell usually said why in the console, and until now the probe
+    // had no way to ask. Uncaught page errors land in the same buffer, because "the surface is
+    // blank" and "the surface threw" are the same question asked twice. Reset on navigate, like the
+    // network log — a summary is per page, not per session — and bounded, so a chatty app cannot
+    // grow the daemon's memory across a long recon.
+    const CONSOLE_CAP = 500;
+    const consoleLog = [];
+    const pushConsole = (type, text) => {
+      consoleLog.push({ type, text: String(text ?? '').split('\n')[0].slice(0, 300) });
+      if (consoleLog.length > CONSOLE_CAP) consoleLog.shift();
+    };
+    page.on('console', (m) => pushConsole(m.type(), m.text()));
+    page.on('pageerror', (e) => pushConsole('pageerror', e?.message ?? e));
 
     // --- network log: aggregated per method+path, reset on navigate ----------------------------
     // The summary answers "what does this surface actually call" (mock targets, observed query
@@ -415,6 +612,7 @@ if (MODE === 'start') {
         case 'navigate': {
           if (typeof c.url !== 'string') throw new Error('navigate needs a string "url"');
           netLog.clear();
+          consoleLog.length = 0;
           const resp = await page.goto(c.url, { waitUntil: 'load', timeout: Number(c.timeout) || 15000 });
           // Grace for the XHRs a load event does not wait for — they are the network-summary's food.
           await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
@@ -458,8 +656,9 @@ if (MODE === 'start') {
           return `snapshot ${scope} (${lines.length} lines)\n${lines.slice(0, max).join('\n')}${cut}`;
         }
         case 'eval': {
-          if (typeof c.expression !== 'string') throw new Error('eval needs a string "expression"');
-          const v = await page.evaluate(c.expression);
+          // String, {fn, arg} or a named map — one resolver, shared with the client's early check.
+          const plan = evalPlan(c);
+          const v = await page.evaluate(plan.source, ...plan.args);
           let s;
           try {
             s = JSON.stringify(v) ?? String(v);
@@ -477,6 +676,24 @@ if (MODE === 'start') {
             s = `${s.slice(0, max)}… truncated (${s.length} chars — raise "max" or use "out")`;
           }
           return `eval -> ${s}`;
+        }
+        case 'console': {
+          if (c.level !== undefined && typeof c.level !== 'string') {
+            throw new Error('console "level" must be a string ("error", "warning", "pageerror", …)');
+          }
+          const wanted = c.level ? consoleLog.filter((m) => m.type === c.level) : consoleLog;
+          const max = Number(c.max) || 50;
+          const shown = wanted.slice(-max);
+          const cut =
+            wanted.length > shown.length
+              ? `\n… truncated (${wanted.length - shown.length} older messages — raise "max")`
+              : '';
+          const scope = c.level ? ` at level ${c.level}` : '';
+          return (
+            `console (${wanted.length} message(s)${scope} since last navigate)` +
+            (shown.length ? `\n${shown.map((m) => `${m.type}: ${m.text}`).join('\n')}` : '') +
+            cut
+          );
         }
         case 'network-summary': {
           const origin = pageOrigin();
@@ -516,10 +733,9 @@ if (MODE === 'start') {
         case 'close':
           return 'closing — browser down, socket removed';
         default:
-          throw new Error(
-            `unknown cmd '${c.cmd}' ` +
-              '(navigate|click|fill|wait|snapshot|eval|network-summary|storage-state|close)',
-          );
+          // Names the WHOLE vocabulary, from the one list the usage text also prints: a rejection
+          // that shows only the verb you got wrong is how a model learns the DSL one error at a time.
+          throw new Error(`unknown cmd '${c.cmd}' (${VERBS.join('|')})`);
       }
     }
 

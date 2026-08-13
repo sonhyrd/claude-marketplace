@@ -335,20 +335,183 @@ echo ""
 echo "-- probe: browserless refusal + client contract (NO browser in CI) --"
 # The refusal is the CI-provable half of the probe contract: $W has no node_modules anywhere up its
 # tree, so `start` must refuse cleanly (exit 2) BEFORE any launch attempt — never boot a browser,
-# never hang. The batched-command happy path needs a real app + browser and is verified manually.
+# never hang.
 expect_exit 1 "no subcommand is a usage error" -- \
   node "$REPO_ROOT/$S/probe.mjs"
+# The vocabulary must be discoverable from the usage text, not by rejection: fifteen of twenty
+# audited sessions learned it from an error line, and the model reached for verbs that never existed.
+# The expected set is READ FROM the usage text and then checked against every other surface, so a
+# verb added to the script and nowhere else fails here rather than drifting quietly.
+VERBS=$(sed -n 's/^probe.mjs: batch verbs: //p' "$W/err" | tr -d ' ' | tr '|' ' ')
+if [ -n "$VERBS" ]; then
+  ok "the usage text publishes the batch vocabulary ($VERBS)"
+else
+  bad "the usage text publishes no vocabulary line — stderr: $(head -c 160 "$W/err")"
+  VERBS="navigate click fill wait snapshot eval console network-summary storage-state close"
+fi
+for verb in navigate click fill wait snapshot eval console network-summary storage-state close; do
+  case " $VERBS " in *" $verb "*) ok "  usage text names the '$verb' verb" ;;
+    *) bad "  usage text omits the '$verb' verb" ;; esac
+done
+case " $VERBS " in *" viewport "*) bad "a viewport verb exists — it is deliberately not part of the DSL" ;;
+  *) ok "no viewport verb is published" ;; esac
+# The skill's cheat-sheet is the other surface an agent reads. It must name the SAME verbs — an
+# agent that learns the vocabulary from SKILL.md must not be able to learn a verb that is not there.
+missing=""
+for verb in $VERBS; do grep -qF -- "\`$verb\`" skills/pw-prove/SKILL.md || missing="$missing $verb"; done
+if [ -z "$missing" ]; then
+  ok "the skill's command cheat-sheet lists every verb the probe accepts"
+else
+  bad "SKILL.md's cheat-sheet omits:$missing"
+fi
 expect_exit 2 "browserless env: start refuses cleanly (no pinned Playwright from cwd)" -- \
   node "$REPO_ROOT/$S/probe.mjs" start
 stderr_has "  refusal names the pinned-Playwright requirement" "pinned Playwright"
-expect_exit 3 "send with no daemon listening at the socket" -- \
+# A batch sent before a daemon was started is an ORDERING mistake, not a run failure: `send` starts
+# one first. Here that start hits the browserless gate, so the refusal an operator sees is the real
+# one (exit 2, "pinned Playwright") rather than exit 3 "no daemon" — which said nothing about the
+# environment and was every probe failure in the audited sample.
+expect_exit 2 "send with no daemon starts one rather than failing on the ordering" -- \
   env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"snapshot"}]'
+stderr_has "  the sequencing is stated, not implied" "starting one first"
 expect_exit 3 "close with no daemon listening at the socket" -- \
   env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" close
 expect_exit 1 "unparsable batch is a usage error (checked before connecting)" -- \
   env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send 'not json'
 expect_exit 1 "batch must be a JSON ARRAY of {cmd} objects" -- \
   env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '{"cmd":"snapshot"}'
+
+# An eval whose "expression" is neither form is rejected by the CLIENT, before a browser is involved,
+# and the rejection names every accepted form. Exit 1 (usage) and not 2 proves the check ran first.
+expect_exit 1 "eval with a non-string, non-object expression is a usage error" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":42}]'
+stderr_has "  the eval rejection names the string form" '"location.href"'
+stderr_has "  the eval rejection names the function form" '"fn"'
+stderr_has "  the eval rejection names the named-map form" 'map of named'
+expect_exit 1 "eval named map with a non-string value is a usage error" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":{"n":1}}]'
+# ...and the accepted forms get PAST the client: reaching the browserless gate (exit 2) is the proof
+# that the shape was accepted, since exit 1 is the only thing client validation can produce.
+expect_exit 2 "eval string form still passes client validation (250 calls already use it)" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":"location.href"}]'
+expect_exit 2 "eval function-object form passes client validation" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}}]'
+expect_exit 2 "eval named-map form passes client validation" -- \
+  env PROBE_SOCK="$W/no-daemon.sock" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":{"url":"location.href"}}]'
+
+echo ""
+echo "-- probe: the DSL against a live daemon (stub Playwright, no browser) --"
+# The daemon's own vocabulary is only reachable through a resolvable `playwright` — the ONE external
+# dependency the probe declares. A stub package at that exact seam boots the real daemon, the real
+# socket protocol and the real command dispatch, with no browser anywhere. Everything asserted below
+# is a line the daemon wrote to a socket, which is what every caller depends on.
+APP="$W/fakeapp"
+mkdir -p "$APP/node_modules/playwright"
+printf '{"name":"fakeapp","private":true}\n' >"$APP/package.json"
+printf '{"name":"playwright","version":"0.0.0-stub","main":"index.mjs"}\n' \
+  >"$APP/node_modules/playwright/package.json"
+cat >"$APP/node_modules/playwright/index.mjs" <<'STUB'
+// Minimal stand-in for the target project's pinned Playwright: enough surface for the probe daemon
+// to boot and dispatch commands. goto() emits the console traffic a real page load would, so the
+// `console` verb has something to report and its reset-on-navigate ordering is observable.
+const handlers = new Map();
+const on = (ev, h) => { (handlers.get(ev) ?? handlers.set(ev, []).get(ev)).push(h); };
+const emit = (ev, ...a) => (handlers.get(ev) ?? []).forEach((h) => h(...a));
+const locator = (sel) => ({
+  click: async () => {},
+  fill: async () => {},
+  waitFor: async () => {},
+  ariaSnapshot: async () => `- generic "${sel}"`,
+});
+const page = {
+  on,
+  url: () => 'http://fake.test/people',
+  title: async () => 'Fake',
+  goto: async () => {
+    emit('console', { type: () => 'error', text: () => 'Uncaught TypeError: rows is not iterable' });
+    emit('pageerror', new Error('boom from the page'));
+    return { status: () => 200 };
+  },
+  waitForLoadState: async () => {},
+  waitForTimeout: async () => {},
+  locator,
+  evaluate: async (expression, arg) => ({ expression: String(expression), arg: arg ?? null }),
+};
+const context = {
+  on: () => {},
+  newPage: async () => page,
+  storageState: async () => ({}),
+  close: async () => {},
+};
+export const chromium = {
+  launch: async () => ({ newContext: async () => context, close: async () => {} }),
+};
+STUB
+
+SOCK="$W/live.sock"
+probe_send() { ( cd "$APP" && env PROBE_SOCK="$SOCK" PROBE_IDLE=45 node "$REPO_ROOT/$S/probe.mjs" send "$1" >"$W/out" 2>"$W/err" ); }
+trap '( cd "$APP" 2>/dev/null && env PROBE_SOCK="$SOCK" node "$REPO_ROOT/$S/probe.mjs" close >/dev/null 2>&1 ); rm -rf "$W"' EXIT
+
+# One send, no start: the daemon is started first and the batch runs. This is the sequencing fix and
+# the DSL widening proven in the same round trip.
+probe_send '[{"cmd":"navigate","url":"/people"},{"cmd":"console"},{"cmd":"eval","expression":"location.href"},{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}},{"cmd":"eval","expression":{"url":"location.href","title":"document.title"}},{"cmd":"viewport","width":390}]'
+rc=$?
+if [ "$rc" -eq 0 ]; then ok "send with no daemon running boots one and answers the batch — exit 0"; else
+  bad "autostarted send — exit $rc, stderr: $(tail -2 "$W/err")"; fi
+if grep -qF '[1] navigate http://fake.test/people -> HTTP 200' "$W/out"; then
+  ok "the autostarted daemon answered the first command"
+else
+  bad "autostarted batch — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+if grep -qF '[2] console' "$W/out" && grep -qF 'rows is not iterable' "$W/out" \
+   && grep -qF 'boom from the page' "$W/out"; then
+  ok "the console verb returns the page's console output and its uncaught errors"
+else
+  bad "console verb — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 240)"
+fi
+if grep -qF '[3] eval -> {"expression":"location.href","arg":null}' "$W/out"; then
+  ok "eval's string form is unchanged — the expression reaches the page verbatim"
+else
+  bad "eval string form — stdout: $(grep -F '[3]' "$W/out" | head -c 200)"
+fi
+if grep -qF '[4] eval -> {"expression":"a => a.id","arg":{"id":7}}' "$W/out"; then
+  ok "eval's function-object form passes its argument through to the page"
+else
+  bad "eval {fn,arg} form — stdout: $(grep -F '[4]' "$W/out" | head -c 200)"
+fi
+if grep -F '[5] eval ->' "$W/out" | grep -qF '\"url\": (location.href)' \
+   && grep -F '[5] eval ->' "$W/out" | grep -qF '\"title\": (document.title)'; then
+  ok "eval's named-map form answers several questions in one round trip"
+else
+  bad "eval named-map form — stdout: $(grep -F '[5]' "$W/out" | head -c 220)"
+fi
+# The verb deliberately NOT added, and the rejection that has to teach the vocabulary.
+if grep -qF "[6] viewport ERROR: unknown cmd 'viewport'" "$W/out"; then
+  ok "no viewport verb exists — the effective viewport is pinned in the spec, not probed"
+else
+  bad "viewport must stay unknown — stdout: $(grep -F '[6]' "$W/out" | head -c 200)"
+fi
+missing=""
+for verb in $VERBS; do
+  grep -F '[6]' "$W/out" | grep -qF "$verb" || missing="$missing $verb"
+done
+if [ -z "$missing" ]; then
+  ok "the unknown-verb rejection names the full current vocabulary"
+else
+  bad "unknown-verb rejection omits:$missing"
+fi
+
+# A second send reuses the daemon it found — the autostart is a sequencing net, not a per-batch boot.
+probe_send '[{"cmd":"eval","expression":"1"}]'
+rc=$?
+if [ "$rc" -eq 0 ] && ! grep -qF 'starting one first' "$W/err"; then
+  ok "a later send reuses the running daemon rather than starting another"
+else
+  bad "second send — exit $rc, stderr: $(tr '\n' ' ' <"$W/err" | tail -c 160)"
+fi
+( cd "$APP" && env PROBE_SOCK="$SOCK" node "$REPO_ROOT/$S/probe.mjs" close >"$W/out" 2>"$W/err" )
+if [ $? -eq 0 ] && grep -qF 'closing' "$W/out"; then ok "close shuts the autostarted daemon down"; else
+  bad "close — stdout: $(head -c 160 "$W/out")"; fi
 
 echo ""
 echo "  pw-prove scripts: $pass passed, $fail failed"
