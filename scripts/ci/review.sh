@@ -316,6 +316,66 @@ else
   warn "python3 not available; skipped pattern parity check"
 fi
 
+section "Canonical dwell snippet"
+if command -v python3 >/dev/null 2>&1; then
+  if python3 - <<'PY'
+import pathlib
+import re
+import sys
+
+# ONE canonical payoff dwell, defined in clip-fidelity.mjs and carried verbatim by the two prose
+# surfaces that must show it to an agent: SKILL.md Step 5, where the spec is written, and
+# code-rules.md, where the contract is stated. Three near-identical variants used to exist and the
+# field never reached any of them; this check is what stops them growing back.
+errors = []
+audit = pathlib.Path('skills/pw-prove/scripts/clip-fidelity.mjs').read_text(encoding='utf-8')
+m = re.search(r'export const CANONICAL_DWELL = `(.*?)`;', audit, re.S)
+if not m:
+    print('skills/pw-prove/scripts/clip-fidelity.mjs: no CANONICAL_DWELL export to derive from',
+          file=sys.stderr)
+    sys.exit(1)
+canonical = m.group(1).split('\n')
+
+for rel in ('skills/pw-prove/SKILL.md', 'skills/pw-prove/code-rules.md'):
+    lines = pathlib.Path(rel).read_text(encoding='utf-8').split('\n')
+    found = 0
+    for i, line in enumerate(lines):
+        # Every gated wait in these files is a dwell, so every one of them must be the canonical
+        # dwell — wording, duration and all — under whatever indent its snippet sits at.
+        if 'PW_PROVE_CLIP' not in line or 'waitForTimeout' not in line:
+            continue
+        indent = line[: len(line) - len(line.lstrip())]
+        start = i - len(canonical) + 1
+        # A negative start would wrap the slice around the end of the file and compare the wrong
+        # lines, so a wait too near the top of the file is simply not canonical.
+        window = lines[start : i + 1] if start >= 0 else []
+        if window == [indent + c for c in canonical]:
+            found += 1
+        else:
+            errors.append(
+                f"{rel}:{i + 1}: the gated wait here is not the canonical dwell — it must be the "
+                "CANONICAL_DWELL block from clip-fidelity.mjs, verbatim, comment lines included"
+            )
+    if not found:
+        errors.append(
+            f"{rel}: carries no canonical dwell. The snippet must sit INLINE here — a pointer to "
+            "another file is what ten of eleven field sessions never followed"
+        )
+
+if errors:
+    for error in errors:
+        print(error, file=sys.stderr)
+    sys.exit(1)
+PY
+  then
+    ok "one canonical dwell, carried verbatim by the audit, Step 5 and code-rules.md"
+  else
+    err "canonical dwell snippet check failed"
+  fi
+else
+  warn "python3 not available; skipped canonical dwell check"
+fi
+
 section "Framework scope"
 unsupported=$(
   while IFS= read -r path; do

@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # pw-prove
@@ -392,7 +392,23 @@ Follow `code-rules.md`: structure detection (always POM), selector priority, POM
 
 **Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion word-for-word — Step 6 audits it before Step 7.
 
-**Clip fidelity lives in the committed spec** (`code-rules.md` → Clip Fidelity). Take the effective viewport from the Step-4 Assumptions block: on a `pinned:` verdict emit `test.use({ viewport: { width: 1600, height: 900 } })`; on a `deliberate:` verdict emit nothing — the project's own viewport already governs. Then obey the **filming law**: `PW_PROVE_CLIP` may only add time. Centre the element under proof at the moment of the hold (**ungated**), and hold it with the `// JUSTIFIED:`, `PW_PROVE_CLIP`-gated payoff dwell — at the end of the test, or at any beat outside a **race window** (`code-rules.md` → The filming law). All of it is committed, so the proof run and CI render identically by construction.
+**Clip fidelity lives in the committed spec**, so the proof run and CI render identically by construction. Take the effective viewport from the Step-4 Assumptions block: emit the pin on a `pinned:` verdict, nothing on a `deliberate:` one — the project's own viewport already governs. Then obey the **filming law**: `PW_PROVE_CLIP` may only add time. Copy this shape into **every** `test()`; the dwell is the canonical one the Step-6 audit checks for, and it may sit at any beat outside a **race window**, not only at the end (`code-rules.md` → Clip Fidelity):
+
+```typescript
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });  // `pinned:` verdict only — omit on `deliberate:`
+
+test('saves the renamed report', async ({ page }) => {
+  // PROVES: <the acceptance criterion, verbatim>
+  const status = page.getByRole('status');
+  await expect(status).toHaveText('Saved');  // the beat's own assertion
+  await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));  // framing, ungated
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
+  // run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+  // CI never sets it.
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
+});
+```
 
 ### Step 5b: Conventions & Seed (first run on a project)
 
@@ -435,7 +451,7 @@ node <skill>/scripts/clip-fidelity.mjs spec <spec files…> --config <configPath
 
 | Exit | What failed | What to do |
 |---|---|---|
-| `2` | A `test()` has no `PW_PROVE_CLIP`-gated wait, its dwell sits outside the `test()` body, or the dwell has no `// JUSTIFIED:` line above it | Add the framed, justified dwell from `code-rules.md` §Payoff dwell, **inline in each `test()`** — a call to a helper does not count, and one shared dwell would satisfy tests that hold on nothing. This is the originating regression: without a reader, Step 7's `PW_PROVE_CLIP=1` is **inert** and the clip shows nothing. |
+| `2` | A `test()` has no `PW_PROVE_CLIP`-gated wait, its dwell sits outside the `test()` body, or the dwell has no `// JUSTIFIED:` line above it | Add the Step-5 dwell **inline in each `test()`** — a call to a helper does not count, and one shared dwell would satisfy tests that hold on nothing. This is the originating regression: without a reader, Step 7's `PW_PROVE_CLIP=1` is **inert** and the clip shows nothing. |
 | `3` | The verdict is `pinned:` but the spec carries no `test.use({ viewport })` | Add the pin to the **spec** — never to the project config, never only to the proof config. |
 | `4` | The derived verdict disagrees with the declared one | One of the two is wrong. Re-read `code-rules.md` §Viewport pin, then fix the Assumptions line **and** the spec together. |
 | `5` | Config ambiguity — a function-export config, or projects whose `use` blocks resolve differently | It refuses rather than guessing. Resolve by hand: read the config, decide the effective viewport, and state the branch and why in the Assumptions block. |

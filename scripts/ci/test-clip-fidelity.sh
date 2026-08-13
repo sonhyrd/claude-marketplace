@@ -541,6 +541,53 @@ else
 fi
 
 echo ""
+echo "-- one canonical dwell, and the generation step carries it --"
+# The failure text and the two prose surfaces used to hold three near-identical variants. The audit
+# now prints the same string SKILL.md Step 5 and code-rules.md carry, and this proves it end to end:
+# the snippet is lifted out of SKILL.md, run through the audit as a spec, and must pass FIRST TIME.
+CANON="$W/canon.txt"
+python3 - "$REPO_ROOT/$S" "$CANON" <<'PY'
+import pathlib, re, sys
+text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+m = re.search(r'export const CANONICAL_DWELL = `(.*?)`;', text, re.S)
+if not m:
+    sys.exit('clip-fidelity.mjs: no CANONICAL_DWELL template literal to derive from')
+pathlib.Path(sys.argv[2]).write_text(m.group(1) + '\n', encoding='utf-8')
+PY
+if [ -s "$CANON" ]; then
+  ok "clip-fidelity.mjs exports one canonical dwell string"
+  run spec no-dwell.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+  if grep -qF "$(tail -1 "$CANON")" "$W/err"; then
+    ok "the STOP prints the canonical wait line, not a variant of it"
+  else bad "the STOP's dwell snippet is not the canonical one"; fi
+  if grep -qF "$(head -1 "$CANON")" "$W/err"; then
+    ok "the STOP prints the canonical JUSTIFIED wording too"
+  else bad "the STOP's JUSTIFIED wording is not the canonical one"; fi
+else
+  bad "clip-fidelity.mjs exports no canonical dwell string"
+fi
+
+# The acceptance criterion in prose: follow Step 5 and nothing else, and the gate is green.
+python3 - "$REPO_ROOT/skills/pw-prove/SKILL.md" "$W/from-skill.spec.ts" <<'PY'
+import pathlib, re, sys
+text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+step5 = text.split('## Step 5: Generate', 1)
+if len(step5) < 2:
+    sys.exit('SKILL.md: no Step 5 to read the snippet out of')
+blocks = [b for b in re.findall(r'```typescript\n(.*?)```', step5[1], re.S) if 'PW_PROVE_CLIP' in b]
+if not blocks:
+    sys.exit('SKILL.md Step 5: carries no inline PW_PROVE_CLIP snippet — the agent must fetch it')
+pathlib.Path(sys.argv[2]).write_text(blocks[0], encoding='utf-8')
+PY
+if [ -s "$W/from-skill.spec.ts" ]; then
+  ok "Step 5 carries the dwell snippet INLINE (no pointer to another file)"
+  expect 0 "a spec written from the Step-5 snippet alone passes the audit FIRST TIME" \
+    spec from-skill.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+else
+  bad "Step 5 carries no inline snippet to generate a spec from"
+fi
+
+echo ""
 echo "-- telemetry never fails a run --"
 run spec good.spec.ts --config desktop.config.ts --verdict pinned:1600x900
 if [ "$(grep -c '^PWPROVE_RUN ' "$W/out")" = "1" ]; then
