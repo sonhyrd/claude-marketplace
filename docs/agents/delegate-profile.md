@@ -58,6 +58,23 @@ baseline, known-noise test, or environment trap.
      evals and adopters depend on them.
   10. **English-only public surface** — SKILL.md, README and `docs/` are English; CI enforces it.
 
+### Merge-back trap: every parallel pair conflicts on `metadata.version`
+
+Two workers touching the same skill both bump `metadata.version` in its SKILL.md, so the merge
+conflicts on that one line every time — it happened on both of the first two merge-backs (#34 vs
+#36, then #40). This is not a worker mistake; the repo requires the bump. **Resolve it at merge:
+take the highest precedence the combined change earns** — a new shipped script makes it a minor, a
+fix on top of an already-merged minor makes it a patch — and say so in the merge commit. Do not ask
+a worker to skip the bump; the ledger's stale-install detection depends on it moving.
+
+### Dispatch note: `worker-release` does not know low-level dispatches
+
+Workers launched with the engine argv go through `terminal create --command …` plus
+`orchestration dispatch --inject`, not `worker-start`. `worker-release --dispatch <id>` therefore
+returns `dispatch_not_found` for them even though `dispatch-show` reports the dispatch `completed`,
+and `terminal close` returns `runtime_error`. Settled panes stay idle and harmless; do not chase
+them, and never reach for `orchestration reset` to tidy up while other workers are live.
+
 ## Baseline
 
 - **Commit**: `aae5e82` · **Measured**: 2026-08-05
