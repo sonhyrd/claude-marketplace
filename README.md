@@ -69,8 +69,8 @@ Step 8  Deliver                  publish, commit, push, PR comment, completion r
 
 Invoke it with a PR number/URL, a ticket key, a branch, a route, or nothing at all. Shipped scripts
 (`skills/pw-prove/scripts/`, Node stdlib only, nothing installed into the target project):
-`preflight.mjs`, `probe.mjs`, `hermetic.mjs`, `clip-fidelity.mjs`, `publish-proof.mjs`, `clips.mjs`,
-`video.mjs`, `pwprove-run.mjs`.
+`preflight.mjs`, `probe.mjs`, `har-scrub.mjs`, `hermetic.mjs`, `clip-fidelity.mjs`,
+`publish-proof.mjs`, `clips.mjs`, `video.mjs`, `pwprove-run.mjs`.
 
 ## `e2e-reviewer` — static review
 

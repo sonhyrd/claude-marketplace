@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # pw-prove
@@ -764,6 +764,7 @@ All paths are in this directory.
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
 - Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` round-trips the publish credential and probes ffmpeg/Chrome): `scripts/preflight.mjs`
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2) **and the Step-7 warm lead** (`probe.mjs warm <url>` — one-shot unfilmed browser load): `scripts/probe.mjs`
+- HAR scrubber (`node scripts/har-scrub.mjs <file.har>` rewrites every secret to a stable placeholder and canonicalises loopback origins; `--verify` is a read-only residue check that exits 3 and names the location — never the value — so a leaked bearer is caught by a refusal, not by a request that someone confirm; `--origin <baseURL>` re-points a canonical HAR at this run's port): `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`
