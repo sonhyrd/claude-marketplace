@@ -373,6 +373,12 @@ printf '{"log":{"version":"1.2"}}' > "$W/nolog.har"
 code_case "JSON without log.entries" 2 "$W/nolog.har"
 code_case "clean file verifies" 0 "$CLEAN" --verify
 code_case "dirty file refuses" 3 "$DIRTY" --verify
+code_case "--help exits 0" 0 --help
+if node "$S" --help 2>/dev/null | grep -q '6 the recording was destroyed'; then
+  ok "the usage text documents exit 6"
+else
+  bad "exit 6 is undocumented in the usage text"
+fi
 
 echo ""
 echo "-- the leaks a shape-only reading misses (regression fixtures) --"
@@ -565,6 +571,200 @@ if [ "$RC" = "1" ]; then
   ok "bind with no --out is a usage error, never an in-place rewrite of the committed HAR"
 else
   bad "bind without --out exited $RC, wanted 1"
+fi
+
+echo ""
+echo "-- a short cookie value does not shred the recording (issue #50, live-proof §1) --"
+#
+# The observed defect, reproduced. Nuxt i18n sets `i18n_redirected=en`, so the two-character string
+# `en` was learned as a credential and every `en` in a 9.1 MB German recording was replaced —
+# 125,403 substitutions. The fixture therefore surrounds the cookie with prose that CONTAINS `en`,
+# which is the whole point: a scrub that only removes the cookie value passes this, and the one that
+# shipped did not.
+I18N="$W/i18n.har"
+PROSE='0 Bewerbungen sind eingegangen, den Kandidaten wurde geantwortet'
+node -e '
+  const [out, prose, opaque] = process.argv.slice(1);
+  require("fs").writeFileSync(out, JSON.stringify({
+    log: { version: "1.2", entries: [{
+      request: {
+        method: "GET", url: "http://localhost:3000/api/briefing",
+        headers: [
+          { name: "Cookie", value: `i18n_redirected=en; theme=dark; session=${opaque}` },
+          { name: "Accept-Language", value: "de-DE,de;q=0.9,en;q=0.8" },
+        ],
+        cookies: [{ name: "i18n_redirected", value: "en" }, { name: "session", value: opaque }],
+        queryString: [],
+      },
+      response: {
+        status: 200,
+        headers: [{ name: "Content-Type", value: "application/json" }],
+        cookies: [{ name: "i18n_redirected", value: "de" }],
+        content: { mimeType: "application/json",
+                   text: JSON.stringify({ headline: prose, locale: "en", fallback: "de" }) },
+        redirectURL: "",
+      },
+    }] },
+  }, null, 2) + "\n");
+' "$I18N" "$PROSE" "$OPAQUE"
+
+I18N_CLEAN="$W/i18n.clean.har"
+run "$W/i1.out" "$W/i1.err" "$I18N" --out "$I18N_CLEAN"
+if [ "$RC" = "0" ]; then
+  ok "a capture with a two-character locale cookie scrubs cleanly (exit 0)"
+else
+  bad "the locale-cookie capture exited $RC, wanted 0"; sed 's/^/         /' "$W/i1.err" | head -8
+fi
+if grep -qF "$PROSE" "$I18N_CLEAN"; then
+  ok "the surrounding prose survives byte-for-byte — 'en' inside content is not a credential"
+else
+  bad "the recording was shredded: the prose containing 'en' did not survive"
+  grep -o '"headline": "[^"]*"' "$I18N_CLEAN" | sed 's/^/         /'
+fi
+# The cookie value itself is still removed — the floor withholds the GLOBAL sweep, not the redaction.
+if grep -q 'i18n_redirected=__PWPROVE_SECRET_' "$I18N_CLEAN"; then
+  ok "the short cookie value is still placeheld where it was found"
+else
+  bad "the short cookie value was left verbatim in the jar"
+  grep -o 'Cookie[^,]*' "$I18N_CLEAN" | head -2 | sed 's/^/         /'
+fi
+# And it is reported, so a short-but-real secret is a line in the output rather than a silence.
+if grep -q 'i18n_redirected cookie' "$W/i1.err" && grep -q 'NOTE' "$W/i1.err"; then
+  ok "the withheld short value is reported by learn site and length"
+else
+  bad "a short secret was skipped from the global sweep with no report"
+  sed 's/^/         /' "$W/i1.err" | head -8
+fi
+if grep -qE 'len 2$|\(len 2\)' "$W/i1.err"; then
+  ok "the report gives the length, not the value"
+else
+  bad "the short-secret report does not state a length"; sed 's/^/         /' "$W/i1.err" | head -8
+fi
+if grep -qF "$OPAQUE" "$W/i1.err" "$W/i1.out"; then
+  bad "the short-secret report echoed a credential"
+else
+  ok "the short-secret report never prints a value"
+fi
+# The long opaque session value still gets the global sweep it needs.
+if grep -qF "$OPAQUE" "$I18N_CLEAN"; then
+  bad "the floor also blocked the long opaque session value — over-correction"
+else
+  ok "a value that clears the floor is still substituted everywhere"
+fi
+case "$(marker "$W/i1.out")" in
+  *" local="*) ok "the marker line carries the count of locally-placeheld short secrets" ;;
+  *) bad "no local= field on the ok marker: '$(marker "$W/i1.out")'" ;;
+esac
+run "$W/i2.out" "$W/i2.err" "$I18N_CLEAN" --verify
+if [ "$RC" = "0" ]; then
+  ok "the correctly scrubbed locale capture verifies clean"
+else
+  bad "the correctly scrubbed locale capture was refused (exit $RC)"; sed 's/^/         /' "$W/i2.err" | head -8
+fi
+
+# False-positive guard: a value that is genuinely short AND genuinely secret. It must be redacted
+# under its own key, and it must be reported — never silently passed over because it is short.
+node -e '
+  require("fs").writeFileSync(process.argv[1], JSON.stringify({
+    log: { version: "1.2", entries: [{
+      request: { method: "POST", url: "http://localhost:3000/api/login", headers: [], cookies: [],
+                 queryString: [],
+                 postData: { mimeType: "application/json",
+                             text: JSON.stringify({ user: "fixture", password: "s3cr3t", note: "s3cr3t appears in prose too" }) } },
+      response: { status: 200, headers: [], cookies: [], content: {}, redirectURL: "" },
+    }] },
+  }, null, 2) + "\n");
+' "$W/shortpw.har"
+run "$W/p1.out" "$W/p1.err" "$W/shortpw.har" --out "$W/shortpw.clean.har"
+if [ "$RC" = "0" ] && grep -q '\\"password\\":\\"__PWPROVE_SECRET_' "$W/shortpw.clean.har"; then
+  ok "a short but genuinely secret value is redacted under its own key"
+else
+  bad "a short password was not redacted (exit $RC)"
+  grep -o '"text": "[^"]*"' "$W/shortpw.clean.har" | sed 's/^/         /'
+fi
+if grep -q 'password' "$W/p1.err" && grep -q 'NOTE' "$W/p1.err"; then
+  ok "the short password is reported, not silently skipped"
+else
+  bad "a short secret was skipped without a report"; sed 's/^/         /' "$W/p1.err" | head -8
+fi
+if grep -q 's3cr3t appears in prose too' "$W/shortpw.clean.har"; then
+  ok "the same short string elsewhere in the body is left alone (key-scoped, not global)"
+else
+  bad "the short password substitution escaped its key and hit ordinary content"
+fi
+
+echo ""
+echo "-- a destroyed recording is REFUSED, not reported clean (issue #50) --"
+#
+# The second and worse half of the defect: `--verify` reported the shredded 9.1 MB HAR CLEAN, because
+# over-scrub is invisible to a residue check. This fixture is a recording whose scrub already
+# happened and already wrecked it — one entry, one placeholder, far past any plausible count.
+node -e '
+  const out = process.argv[1];
+  const shredded = Array.from({ length: 900 }, (_, i) => `Bewerbung__PWPROVE_SECRET_13__ ${i}`).join(" ");
+  require("fs").writeFileSync(out, JSON.stringify({
+    log: { version: "1.2", entries: [{
+      request: { method: "GET", url: "http://localhost/api/briefing", headers: [], cookies: [],
+                 queryString: [] },
+      response: { status: 200, headers: [], cookies: [],
+                  content: { mimeType: "application/json", text: JSON.stringify({ body: shredded }) },
+                  redirectURL: "" },
+    }] },
+  }, null, 2) + "\n");
+' "$W/wrecked.har"
+run "$W/w1.out" "$W/w1.err" "$W/wrecked.har" --verify
+if [ "$RC" = "6" ]; then
+  ok "--verify on a destroyed recording exits 6 — distinct from residue's 3"
+else
+  bad "--verify on a destroyed recording exited $RC, wanted 6"; sed 's/^/         /' "$W/w1.err" | head -8
+fi
+if grep -q '__PWPROVE_SECRET_13__' "$W/w1.err" && grep -q '900 occurrence' "$W/w1.err"; then
+  ok "the refusal names the placeholder and its count"
+else
+  bad "the refusal does not name the placeholder and count"; sed 's/^/         /' "$W/w1.err" | head -8
+fi
+case "$(marker "$W/w1.out")" in
+  "PWPROVE_SCRUB overscrub file=$W/wrecked.har placeholders="*) ok "marker line reports the over-scrub" ;;
+  *) bad "no 'PWPROVE_SCRUB overscrub' marker line: '$(marker "$W/w1.out")'" ;;
+esac
+# And it must not be confusable with residue: the destroyed file carries no bearer at all, so the
+# pre-fix reading of it was exit 0, "clean".
+if grep -q 'residue' "$W/w1.out"; then
+  bad "the over-scrub refusal was reported as residue — the two must stay distinguishable"
+else
+  ok "over-scrub is its own verdict, not a residue hit"
+fi
+# The scrub path refuses too, and refuses BEFORE writing: without --out the destination is the
+# source, so writing the wreckage would destroy the only copy left to re-scrub.
+cp "$W/wrecked.har" "$W/wrecked-inplace.har"
+BEFORE=$(cksum < "$W/wrecked-inplace.har")
+run "$W/w2.out" "$W/w2.err" "$W/wrecked-inplace.har"
+AFTER=$(cksum < "$W/wrecked-inplace.har")
+if [ "$RC" = "6" ] && [ "$BEFORE" = "$AFTER" ]; then
+  ok "the scrub path refuses (exit 6) and leaves the source file untouched"
+else
+  bad "in-place scrub of a wrecked recording exited $RC and rewrote the source"
+fi
+# False-positive guard: ordinary repetition across many entries must NOT trip the gate.
+node -e '
+  const out = process.argv[1];
+  const entries = Array.from({ length: 40 }, () => ({
+    request: { method: "GET", url: "http://localhost/api/me",
+               headers: [{ name: "Cookie", value: "session=__PWPROVE_SECRET_1__" }],
+               cookies: [{ name: "session", value: "__PWPROVE_SECRET_1__" }], queryString: [] },
+    response: { status: 200,
+                headers: [{ name: "Set-Cookie", value: "session=__PWPROVE_SECRET_1__; Path=/" }],
+                cookies: [{ name: "session", value: "__PWPROVE_SECRET_1__" }],
+                content: {}, redirectURL: "" },
+  }));
+  require("fs").writeFileSync(out, JSON.stringify({ log: { version: "1.2", entries } }, null, 2) + "\n");
+' "$W/busy.har"
+run "$W/w3.out" "$W/w3.err" "$W/busy.har" --verify
+if [ "$RC" = "0" ]; then
+  ok "a session cookie repeated on every entry is plausible, not an over-scrub"
+else
+  bad "the gate refused an ordinary recording (exit $RC) — the limit is too tight"
+  sed 's/^/         /' "$W/w3.err" | head -8
 fi
 
 echo ""
