@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # pw-prove
@@ -435,7 +435,7 @@ node <skill>/scripts/clip-fidelity.mjs spec <spec files…> --config <configPath
 
 | Exit | What failed | What to do |
 |---|---|---|
-| `2` | A `test()` has no `PW_PROVE_CLIP`-gated wait, or its dwell has no `// JUSTIFIED:` line above it | Add the framed, justified dwell from `code-rules.md` §Payoff dwell. This is the originating regression: without a reader, Step 7's `PW_PROVE_CLIP=1` is **inert** and the clip shows nothing. |
+| `2` | A `test()` has no `PW_PROVE_CLIP`-gated wait, its dwell sits outside the `test()` body, or the dwell has no `// JUSTIFIED:` line above it | Add the framed, justified dwell from `code-rules.md` §Payoff dwell, **inline in each `test()`** — a call to a helper does not count, and one shared dwell would satisfy tests that hold on nothing. This is the originating regression: without a reader, Step 7's `PW_PROVE_CLIP=1` is **inert** and the clip shows nothing. |
 | `3` | The verdict is `pinned:` but the spec carries no `test.use({ viewport })` | Add the pin to the **spec** — never to the project config, never only to the proof config. |
 | `4` | The derived verdict disagrees with the declared one | One of the two is wrong. Re-read `code-rules.md` §Viewport pin, then fix the Assumptions line **and** the spec together. |
 | `5` | Config ambiguity — a function-export config, or projects whose `use` blocks resolve differently | It refuses rather than guessing. Resolve by hand: read the config, decide the effective viewport, and state the branch and why in the Assumptions block. |

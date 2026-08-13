@@ -69,7 +69,9 @@ The four properties a Proof clip must have to be usable as evidence: recorded at
 viewport** (never Playwright's 800×800-box downscale), opening on a **warmed** route rather than a
 cold compile, ending on the success signal **held** on screen, and holding it in
 [frame](#framing). Held at authoring time — a committed viewport pin, ungated centering, and a
-`PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell — never by a second run, a measurement
+`PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell **inline in each `test()` body** (a
+dwell hoisted into a helper does not count: one shared dwell would satisfy tests that hold on
+nothing) — never by a second run, a measurement
 gate, or editing the recording. Authoring-time compliance is *checked*, not assumed: `clip-fidelity
 spec` blocks Step 7 on a spec that carries neither. A clip that fails the contract is a defect, not
 a trade-off. What the contract cannot check from the source is caught by the

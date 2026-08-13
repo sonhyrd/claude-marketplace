@@ -180,6 +180,65 @@ test('saves the renamed report', async ({ page }) => {
 });
 SPEC
 
+# THE REGION-RESOLUTION REGRESSION: the gate on one line, the guarded wait on the next, no braces.
+# Eleven field sessions failed the dwell check on first contact and four agents worked around it by
+# joining the two lines; the audit resolved the region to the newline itself and saw zero dwells.
+cat > "$W/wrapped.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+test('saves the renamed report', async ({ page }) => {
+  await expect(page.getByRole('status')).toHaveText('Saved');
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP. CI never sets it.
+  if (process.env.PW_PROVE_CLIP)
+    await page.waitForTimeout(2500);
+});
+SPEC
+
+# The same wrap, braced Allman-style so the opening brace is on its own line: the braced branch
+# already skipped whitespace, and this pins that it still does.
+cat > "$W/braced-wrapped.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+test('saves the renamed report', async ({ page }) => {
+  await expect(page.getByRole('status')).toHaveText('Saved');
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP. CI never sets it.
+  if (process.env.PW_PROVE_CLIP)
+  {
+    await page.waitForTimeout(2500);
+  }
+});
+SPEC
+
+# A gate written without parentheses. The contract is the `if (…)` form; this fixture PINS the
+# rejection so the shape's treatment is defined rather than assumed.
+cat > "$W/paren-free.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+test('saves the renamed report', async ({ page }) => {
+  await expect(page.getByRole('status')).toHaveText('Saved');
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP. CI never sets it.
+  process.env.PW_PROVE_CLIP && (await page.waitForTimeout(2500));
+});
+SPEC
+
+# The dwell hoisted into a helper. It still FAILS — resolving it would need call-graph analysis in a
+# zero-dependency script, and file scope would let one test's dwell satisfy tests that hold on
+# nothing — but the report must name the inline constraint rather than claim there is no dwell.
+cat > "$W/hoisted.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+
+async function payoffHold(page) {
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP. CI never sets it.
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
+}
+
+test('saves the renamed report', async ({ page }) => {
+  await expect(page.getByRole('status')).toHaveText('Saved');
+  await payoffHold(page);
+});
+SPEC
+
 # A justified dwell with an unmarked twin: the twin is still an unexplained fixed wait.
 cat > "$W/unmarked-twin.spec.ts" <<'SPEC'
 import { test, expect } from '@playwright/test';
@@ -244,6 +303,42 @@ expect 2 "a PW_PROVE_CLIP gate on something that is not a wait is not a dwell" \
   spec gated-non-wait.spec.ts --config desktop.config.ts --verdict pinned:1600x900
 expect 0 "FALSE-POSITIVE GUARD: a braced gate is the same construct as the one-liner" \
   spec braced.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+
+echo ""
+echo "-- every dwell shape the contract permits, one fixture each --"
+# The suite that shipped the region-resolution defect held only the single-line shape, so the audit's
+# blindness to every other shape was frozen as correct. One fixture per permitted shape is what stops
+# that recurring.
+expect 0 "single line: the shape code-rules.md prints" \
+  spec good.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+expect 0 "WRAPPED: the gate on one line, the guarded wait on the next" \
+  spec wrapped.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+saw "the wrapped dwell is counted, not reported as absent" "1/1 test() block(s)"
+expect 0 "braced on the gate's line, the wait on the next" \
+  spec braced.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+expect 0 "braced with the opening brace on its own line" \
+  spec braced-wrapped.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+# The `if (…)` form is the contract. This pins the parenthesis-free form's treatment as a REJECTION
+# so it is defined by a fixture rather than by a code comment nothing ever ran.
+expect 2 "a gate written WITHOUT parentheses is not recognised — pinned, not assumed" \
+  spec paren-free.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+
+echo ""
+echo "-- a dwell hoisted into a helper: still a failure, but named correctly --"
+expect 2 "a dwell hoisted out of the test body still FAILS" \
+  spec hoisted.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+saw "the report names the inline-in-test constraint" "must sit INLINE in the test() body"
+saw "it points at the hoisted dwell instead of claiming there is none" "hoisted.spec.ts:6"
+if grep -qF "no PW_PROVE_CLIP-gated wait" "$W/out" "$W/err"; then
+  bad "a visibly present dwell was reported as absent"
+else ok "it does not report a visibly present dwell as absent"; fi
+# The false-positive guard for the new message: a spec with genuinely no dwell must still say so.
+expect 2 "FALSE-POSITIVE GUARD: genuinely no dwell still reports the absence" \
+  spec no-dwell.spec.ts --config desktop.config.ts --verdict pinned:1600x900
+saw "no-dwell keeps the absence wording" "no PW_PROVE_CLIP-gated wait"
+if grep -qF "must sit INLINE" "$W/out" "$W/err"; then
+  bad "a spec with no dwell anywhere was told its dwell is in the wrong place"
+else ok "a spec with no dwell anywhere is not told to move one"; fi
 
 echo ""
 echo "-- the pin --"
