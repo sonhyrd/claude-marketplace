@@ -462,5 +462,137 @@ else
 fi
 
 echo ""
+echo "-- the round trip: scrubbed at capture, committed, re-pointed, REPLAYED (issue #41) --"
+#
+# This is the assertion the whole placeholder design exists to make true, and it is deliberately
+# stated as the equality PLAYWRIGHT actually performs. `HarBackend._harFindResponse` matches with
+# `candidate.request.url !== url` — exact string equality on the full URL, with no port, query or
+# origin tolerance anywhere (verified in playwright-core 1.58.2 and 1.62.1). So a canonical committed
+# HAR cannot replay against a live run on its own: it must be BOUND to this run's origin and this
+# run's credential first, into a gitignored working copy. Asserting that `bind` produced a
+# nice-looking string would prove nothing; the assertion is that the bound string is byte-identical
+# to the URL the live app requests.
+PROJ="$W/proj"
+mkdir -p "$PROJ/.pw-prove"
+git init -q "$PROJ" 2>/dev/null
+printf '.pw-prove/\n' > "$PROJ/.gitignore"
+BOUND="$PROJ/.pw-prove/feature.api.har"
+printf '{"__PWPROVE_SCRUBBED__":"%s"}\n' "$LIVE_JWT" > "$PROJ/.pw-prove/bindings.json"
+
+# Every bind runs from inside the project: `git check-ignore` answers about the repo it is run in,
+# which is exactly the app root the pipeline binds from.
+run_in_proj() {
+  local o="$1" e="$2"; shift 2
+  (cd "$PROJ" && node "$REPO_ROOT/$S" "$@") >"$o" 2>"$e"
+  RC=$?
+}
+run_in_proj "$W/bd.out" "$W/bd.err" bind "$CLEAN" --out .pw-prove/feature.api.har \
+  --origin http://localhost:5173 --bindings .pw-prove/bindings.json
+if [ "$RC" = "0" ]; then
+  ok "bind exits 0 on a committed HAR it can bind"
+else
+  bad "bind exited $RC, wanted 0"; sed 's/^/         /' "$W/bd.err" | head -6
+fi
+BOUND_URL=$(node -e '
+  const har = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(har.log.entries[0].request.url);
+' "$BOUND" 2>/dev/null)
+LIVE_URL="http://localhost:5173/api/me?token=$LIVE_JWT&page=2"
+if [ "$BOUND_URL" = "$LIVE_URL" ]; then
+  ok "the bound entry is byte-identical to the live request URL — replay matches (exact-URL rule)"
+else
+  bad "bound '$BOUND_URL' != live request — routeFromHAR would abort on a call it recorded"
+fi
+SECOND_BOUND=$(node -e '
+  const har = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(har.log.entries[1].request.url);
+' "$BOUND" 2>/dev/null)
+if [ "$SECOND_BOUND" = "http://localhost:5173/api/items" ]; then
+  ok "an entry with no placeholder is re-pointed at this run's port too"
+else
+  bad "second entry did not bind to this run's origin: '$SECOND_BOUND'"
+fi
+# Header, cookie and body placeholders play no part in Playwright's match (url + method + postData),
+# so they are deliberately NOT rebound — a working copy carries the live credential only where
+# replay cannot match without it.
+if grep -q '__PWPROVE_SECRET_' "$BOUND"; then
+  ok "placeholders outside the match key stay placeheld — no credential is re-injected for show"
+else
+  bad "bind re-injected credentials into headers/cookies, which matching never reads"
+fi
+# The committed file is an input to bind, never its victim.
+if grep -qF "$LIVE_JWT" "$CLEAN"; then
+  bad "bind wrote a live credential back into the COMMITTED HAR"
+else
+  ok "the committed HAR is untouched: still canonical, still secret-free"
+fi
+if grep -q 'could not say whether' "$W/bd.err"; then
+  bad "git could not answer the ignore question — the refusal is inert in this environment"
+else
+  ok "the ignore question is answered by git, not assumed"
+fi
+if grep -qF "$LIVE_JWT" "$W/bd.out" "$W/bd.err"; then
+  bad "bind echoed the live credential it substituted"
+else
+  ok "bind never prints the credential it binds"
+fi
+
+echo ""
+echo "-- bind refuses rather than handing replay a HAR it cannot match --"
+# An unbindable placeholder in the match key must be loud AND named. Falling through to
+# notFound:'abort' would read as a broken application instead of an unbindable recording.
+run_in_proj "$W/ub.out" "$W/ub.err" bind "$CLEAN" --out .pw-prove/feature.api.har --origin http://localhost:5173
+if [ "$RC" = "4" ]; then
+  ok "a placeholder with no run-time value exits 4 — never a silent fall-through to abort"
+else
+  bad "unbindable placeholder exited $RC, wanted 4"; sed 's/^/         /' "$W/ub.err" | head -6
+fi
+if grep -q 'entries\[0\].request.url' "$W/ub.err" && grep -q '__PWPROVE_SCRUBBED__' "$W/ub.err"; then
+  ok "the refusal names the entry and the placeholder that cannot be bound"
+else
+  bad "the refusal does not name the unbindable entry"; sed 's/^/         /' "$W/ub.err" | head -6
+fi
+# The working copy carries a live credential. A path git would commit is the wrong place for it.
+run_in_proj "$W/gi.out" "$W/gi.err" bind "$CLEAN" --out feature.api.har --origin http://localhost:5173 \
+  --bindings .pw-prove/bindings.json
+if [ "$RC" = "5" ] && [ ! -e "$PROJ/feature.api.har" ]; then
+  ok "bind refuses (exit 5) to write a live-credential working copy to a committable path"
+else
+  bad "bind wrote the bound HAR to a non-gitignored path (exit $RC)"
+fi
+run_in_proj "$W/bm.out" "$W/bm.err" bind "$CLEAN" --origin http://localhost:5173
+if [ "$RC" = "1" ]; then
+  ok "bind with no --out is a usage error, never an in-place rewrite of the committed HAR"
+else
+  bad "bind without --out exited $RC, wanted 1"
+fi
+
+echo ""
+echo "-- imported, it is a module: no argument parsing, no exit, no ledger record --"
+# The capture-time caller (probe.mjs, issue #41) reaches scrubHar/findResidue by import. If the CLI
+# below the main-guard still runs on import, the importer inherits har-scrub's argument parsing and
+# dies of "no HAR file given" before it can scrub anything.
+IMPORT_LEDGER="$W/import-ledger.jsonl"
+PWPROVE_LEDGER="$IMPORT_LEDGER" node -e '
+  import("./skills/pw-prove/scripts/har-scrub.mjs").then((m) => {
+    const missing = ["scrubHar", "findResidue", "normalizeUrl"].filter((k) => typeof m[k] !== "function");
+    if (missing.length) { console.error("missing exports: " + missing.join(",")); process.exit(9); }
+    process.stdout.write("IMPORT_OK\n");
+  });
+' >"$W/imp.out" 2>"$W/imp.err"
+RC=$?
+if [ "$RC" = "0" ] && grep -q IMPORT_OK "$W/imp.out"; then
+  ok "importing har-scrub.mjs exports the transform and the residue check without running the CLI"
+else
+  bad "importing har-scrub.mjs ran its CLI (exit $RC) — no caller can reach scrubHar this way"
+  sed 's/^/         /' "$W/imp.err" | head -4
+fi
+if [ -s "$IMPORT_LEDGER" ]; then
+  bad "an import wrote a run-ledger record — only a process gets a record"
+else
+  ok "an import writes no run-ledger record (a module is not a run)"
+fi
+
+echo ""
 echo "  har-scrub: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1

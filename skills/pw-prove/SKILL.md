@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.3.1"
+  version: "0.4.0"
 ---
 
 # pw-prove
@@ -287,7 +287,8 @@ Reaching Step 4 in neither state is a **HARD STOP** (see `docs/adr/0004`). Sourc
 
 ```bash
 # start once (background task, app root). STORAGE_STATE seeds a session; RECORD_HAR captures an
-# API-scoped HAR (HAR_URL_FILTER default **/api/**); auth headers are scrubbed before commit.
+# API-scoped HAR (HAR_URL_FILTER default **/api/**), SCRUBBED AT CAPTURE — the raw recording lands
+# in a private staging file and only the scrubbed result reaches the path below.
 BASE_URL="http://localhost:$PORT" RECORD_HAR="$PWD/<testDir>/<feature>.api.har" \
   node <skill-base>/scripts/probe.mjs start
 # ask in batches — one round trip; compact aria + network summaries, never raw DOM dumps
@@ -297,10 +298,10 @@ node <skill-base>/scripts/probe.mjs send '[
   {"cmd":"snapshot"},
   {"cmd":"network-summary"}
 ]'
-node <skill-base>/scripts/probe.mjs close   # flushes the HAR on context close; the idle timeout is the net
+node <skill-base>/scripts/probe.mjs close   # flushes AND scrubs the HAR on context close; the idle timeout is the net
 ```
 
-Commands for the cases a batch runs into: `{"cmd":"wait","ms":6000}` (or `"selector"`) for a settle; `"max"` on `eval` to raise the 2000-char cap; `"out":"<path>"` on `eval` to write the full result to a file; `{"cmd":"storage-state","path":".auth/<slug>.auth.json"}` to save the live session for the deliverable spec to reuse. **The storageState file and the HAR both hold a working bearer — write the storageState only under a gitignored path, and scrub `Authorization`/cookie headers from the HAR before commit.**
+Commands for the cases a batch runs into: `{"cmd":"wait","ms":6000}` (or `"selector"`) for a settle; `"max"` on `eval` to raise the 2000-char cap; `"out":"<path>"` on `eval` to write the full result to a file; `{"cmd":"storage-state","path":".auth/<slug>.auth.json"}` to save the live session for the deliverable spec to reuse. **The storageState file holds a working bearer — write it only under a gitignored path.** The HAR needs no such care and no scrub step of your own: `probe.mjs` scrubs it on context close, so it is never unscrubbed on disk. Read the `probe: HAR written …` line — it reports the byte count and how many secrets were placeheld, and a `probe: REFUSED` line beneath it means residue survived and the recording must not be committed.
 
 1. **Draft selectors from source + the probed live app.** Read the changed component(s) for roles/labels/testids; `snapshot` a big or gated page once through the probe (scope with `"selector"`). Borrow codegen's *draft-then-refine rhythm* — rough sequence first, then a lean POM — but never invoke `codegen` (it needs a human at the browser and reintroduces the throwaway-spec REPL).
 2. **Record the HAR + drive the mutation mock from `network-summary`.** After navigating/interacting through the probe, its aggregation lists the endpoints the surface calls — including proxy (`/api/request?cmd=`) and SSR calls source-reading misses, with observed query suffixes. The reads are captured in `api.har`; the one **mutation under assertion** gets a hand-written `route.fulfill` (per `code-rules.md` › Network Determinism).
@@ -388,7 +389,17 @@ Follow `code-rules.md`: structure detection (always POM), selector priority, POM
 
 **Extend, don't duplicate — match the Step 1 `pomInventory` by route.** Route already has a Page Object → extend that class, never scaffold a second POM for the same route. A duplicate ships only with a stated justification line in the Assumptions block. An uncovered route with no POM still gets a fresh one.
 
-**HAR-first mocking.** Replay read traffic from the committed `api.har` via `page.routeFromHAR('<feature>.api.har', { url: '**/api/**', notFound: 'abort' })` — `notFound: 'abort'` keeps the spec strictly hermetic (an unrecorded call aborts, surfacing as a visible failure rather than a silent live round-trip). Hand-write `route.fulfill` **only** for the mutation under assertion (the stateful write the scenario tests). The HAR is committed, API-scoped, and auth-scrubbed (see `code-rules.md`).
+**HAR-first mocking.** Replay read traffic from the committed `api.har` via `page.routeFromHAR('<feature>.api.har', { url: '**/api/**', notFound: 'abort' })` — `notFound: 'abort'` keeps the spec strictly hermetic (an unrecorded call aborts, surfacing as a visible failure rather than a silent live round-trip). Hand-write `route.fulfill` **only** for the mutation under assertion (the stateful write the scenario tests). The HAR is committed, API-scoped, and already scrubbed — `probe.mjs` scrubbed it at capture, so every secret in it is a stable placeholder and its loopback origins are canonical (`http://localhost`, no port).
+
+**Replay reads a bound working copy, never the committed file directly.** Playwright matches a recorded entry by **exact request-URL string equality** (`harBackend.js`: `candidate.request.url !== url` — verified in playwright-core 1.58.2 and 1.62.1), so a canonical, placeheld HAR can never match a live run: every read would abort under `notFound: 'abort'` and read as a broken application. Step 7 binds it to this run first (`har-scrub.mjs bind`), and the spec reads the bound copy through one env var with the committed file as its default:
+
+```ts
+// The committed HAR is canonical and secret-free; PW_PROVE_HAR points at this run's bound copy.
+await page.routeFromHAR(process.env.PW_PROVE_HAR ?? '<feature>.api.har', {
+  url: '**/api/**',
+  notFound: 'abort',
+});
+```
 
 **Every `test(...)` opens with a `// PROVES: <verbatim AC>` header** quoting the acceptance criterion word-for-word — Step 6 audits it before Step 7.
 
@@ -475,6 +486,26 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 npx --no-install tsc --noEmit -p <e2e/tsconfig.json or tsconfig.json>
 ```
 
+**1b. Bind the HAR to this run** — the committed recording is canonical (no port) and every secret in it is a placeholder, and Playwright's replay matches on exact URL equality, so it must be bound before it can match anything. Bind into a **gitignored** path; the bound copy carries this run's live credential and is never staged:
+
+```bash
+# Exclude it repo-locally rather than editing .gitignore: the bound copy is this run's private
+# working state, and a stray .gitignore diff is churn Step 8 would have to explain.
+mkdir -p .pw-prove
+grep -qxF '.pw-prove/' .git/info/exclude || printf '.pw-prove/\n' >> .git/info/exclude
+node <skill-base>/scripts/har-scrub.mjs bind <testDir>/<feature>.api.har \
+  --out .pw-prove/<feature>.api.har --origin "http://localhost:$PORT"
+export PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har"
+```
+
+Most recordings need nothing more: a credential that travelled only in headers and cookies plays no part in the lookup and stays placeheld. **Exit 4 names each placeholder that does sit in the match key** (a `token=` in a URL, a POST body) and the entry it belongs to — that entry cannot replay as it stands, so add the placeholders it names to a bindings file under the same gitignored directory and bind again with `--bindings .pw-prove/bindings.json`:
+
+```json
+{ "__PWPROVE_SCRUBBED__": "<the token this run's session uses>" }
+```
+
+Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run), exactly like the `Runner origin:` env var — each invocation is a fresh environment. Unset in CI, the spec falls back to the committed HAR by construction.
+
 **2. Proof run — video + trace as byproducts, the project's own config untouched.** There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run (`docs/adr/0008`).
 
 - **Present** (a previous run committed it) → use it as-is. Do **not** rewrite, re-derive or "refresh" it; a per-run diff on this file is the churn it exists to remove.
@@ -556,7 +587,7 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | Selector mismatch | Heal by intent: re-snapshot the live page, find the element the step semantically targets, write a fresh locator at the highest stable tier (role+name > placeholder > testid). Tweaking the old string re-breaks on the next DOM change. |
 | Assertion failure | Fix expected values, add `{ timeout }` for slow elements |
 | Structural | Fix missing `await`, wrong setup, incorrect `beforeEach` |
-| Unrecorded call aborted (`notFound:'abort'`) | The surface calls an endpoint the HAR didn't capture — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
+| Unrecorded call aborted (`notFound:'abort'`) | First check the binding: **every** read aborting means the HAR was not bound to this run (Step 7 item 1b — `PW_PROVE_HAR` unset, or bound to a different port), not that the recording is short. A *particular* call aborting is a genuine miss — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
 | **Every** test times out on its first `page.goto` | Not a spec defect — a saturated dev server. Confirm the origin is alive (`curl -w '%{time_total}'`), then re-run with `--workers=1`. Never "fix" this in the spec with longer timeouts. |
 | **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | Not a spec defect either, and not a slow server: Playwright could not reach `webServer.url`, so it tried to boot a second one. Almost always a loopback-family mismatch (`127.0.0.1` in the config, a dev server bound to `[::1]`). Re-dial that literal URL with `curl`; on refusal, carry the Step-3 `Runner origin:` env var on this invocation. |
 
@@ -729,7 +760,13 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    - **Never delete the kept proof file** (`$KEPT`, i.e. `$TMPDIR/pw-prove-proof.webm`) when the publish came back undelivered. It is the only remaining copy of the evidence and the operator has been told to attach it — sweeping it away deletes the fallback moments after it was created. It is litter only once the run has published (`$PAGE` set) or a gate withheld it, and the script already removes it in the gate case.
    - **Stop the dev server if this run started it** (Step 3), and say so in the report: `Dev server: stopped (port <N>)` — or `left running (pre-existing)` when it was already up. Keep it running only if the user asked.
    - Revert codegen churn (`git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'` on Nuxt-style repos).
-   - **Scrub the HAR:** confirm no `Authorization`/cookie/token value remains in `<feature>.api.har` before it is staged. A leaked bearer in a committed HAR is the same incident as one in a log line.
+   - **Prove the HAR is clean — do not confirm it, run the refusal:**
+
+     ```bash
+     node <skill-base>/scripts/har-scrub.mjs <testDir>/<feature>.api.har --verify
+     ```
+
+     Exit 0 stages it. **Exit 3 is a HARD STOP:** residue survived, the script names each location (never the value), and the HAR must not be staged — re-run `har-scrub.mjs` over the file, then verify again. A leaked bearer in a committed HAR is the same incident as one in a log line, so it is held by a gate here, exactly like the clip audit, the hermetic audit and the publish token grep. The scrub itself already happened at capture; this is the check that it held.
    - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
 4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<share link + AC table + mutation verdict>"`. **The comment carries exactly ONE clips URL — the `/share/<id>` link.** Each AC row names its chapter timestamp as plain text (`M:SS`), which is navigation inside that one recording; do not put a `/embed/<id>?t=` URL in the comment at all. GitHub unfurls a clips `/embed/` URL into a video player, and in a table cell that player inflates every row into a tall black block that overflows the column and buries the AC text. The per-chapter deep links still belong in the **completion report**, where the operator reads them as text. **Copy the per-chapter deep links from the publish log's stderr — never build one by appending `?t=` to the share URL.** They are `/embed/<id>?t=<seconds>`, a different route from `/share/<id>`, because on the share route `t` is the agent-access token and a timestamp appended there is silently discarded: the reviewer lands at 0:00 and reads the wrong footage as the criterion.
@@ -743,7 +780,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
 Generated:
 - <path to POM file> (new | modified)
 - <path to spec file> (new, N scenarios)
-- <path to api.har> (scoped **/api/**, auth-scrubbed)
+- <path to api.har> (scoped **/api/**, scrubbed at capture, --verify clean)
 - <configDir>/playwright.proof.config.ts (new — first run in this repo only; omit the line when reused)
 
 ACs: <N proven> / <M total>          # list each `unproven — gated: <what>` and each `already covered: <test file>` explicitly
@@ -780,7 +817,7 @@ All paths are in this directory.
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
 - Step-3 readiness gate (warmup-aware server-ready poll; STOPs on a dead origin; `PROBE_HOSTING=1` round-trips the publish credential and probes ffmpeg/Chrome): `scripts/preflight.mjs`
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2) **and the Step-7 warm lead** (`probe.mjs warm <url>` — one-shot unfilmed browser load): `scripts/probe.mjs`
-- HAR scrubber (`node scripts/har-scrub.mjs <file.har>` rewrites every secret to a stable placeholder and canonicalises loopback origins; `--verify` is a read-only residue check that exits 3 and names the location — never the value — so a leaked bearer is caught by a refusal, not by a request that someone confirm; `--origin <baseURL>` re-points a canonical HAR at this run's port): `scripts/har-scrub.mjs`
+- HAR scrubber and replay binding (`node scripts/har-scrub.mjs <file.har>` rewrites every secret to a stable placeholder and canonicalises loopback origins — **`probe.mjs` already runs this transform at capture**, so a manual pass is a re-scrub, not the first one; `--verify` is the read-only residue check Step 8 runs before staging, exiting 3 and naming the location — never the value — so a leaked bearer is caught by a refusal, not by a request that someone confirm; `bind … --out <gitignored> --origin <baseURL> --bindings <json>` writes the run-local working copy replay reads, refusing on a placeholder it cannot bind (4) or a committable destination (5)): `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`

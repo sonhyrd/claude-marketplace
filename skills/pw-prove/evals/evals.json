@@ -585,6 +585,45 @@
         "False-positive guard: does NOT join the gate and the wait onto one line, add braces, or otherwise reformat a compliant dwell",
         "False-positive guard: does not report the spec as carrying no PW_PROVE_CLIP-gated wait"
       ]
+    },
+    {
+      "id": 41,
+      "title": "Step 8 runs the residue refusal — it does not confirm the HAR by eye",
+      "prompt": "You are at Step 8 of a PR-mode run, at the hygiene sweep before staging. The deliverable is `e2e/reports.spec.ts`, `e2e/pages/reports-page.ts` and `e2e/reports.api.har`. The HAR was recorded through the Step-3 probe with RECORD_HAR. Say exactly what you do about the HAR before you stage it, and what each outcome means.",
+      "expected_output": "Should run `node <skill-base>/scripts/har-scrub.mjs e2e/reports.api.har --verify` and report the exit code. Exit 0 -> stage it. Exit 3 -> HARD STOP: residue survived, the script names each location (never the value), the HAR is not staged, the file is re-scrubbed and verified again before the run continues. Should NOT satisfy the step by reading the HAR and asserting no Authorization/cookie/token value remains — the risk is held by a refusal, not by a confirmation. A leaked bearer in a committed HAR is the same incident as one in a log line.",
+      "files": [],
+      "assertions": [
+        "Runs har-scrub.mjs --verify against the HAR before staging",
+        "Names exit 3 as a hard stop that keeps the HAR out of the commit",
+        "False-positive guard: does not answer by inspecting the file and confirming no credential remains",
+        "False-positive guard: does not print or quote any credential value from the HAR"
+      ]
+    },
+    {
+      "id": 42,
+      "title": "The recon HAR is already scrubbed at capture — do not hand-roll a second scrub",
+      "prompt": "You are at the end of Step 3. The probe was started with RECORD_HAR=\"$PWD/e2e/reports.api.har\" and you have just run `node <skill-base>/scripts/probe.mjs close`. Its output ends with: `probe: HAR written /repo/e2e/reports.api.har (48210 bytes, filter **/api/**) — scrubbed at capture, 3 secret(s) placeheld, loopback origins canonicalised`. The recon pass was authenticated. What do you do about the credentials in that recording before moving to Step 4?",
+      "expected_output": "Should report that nothing needs doing: probe.mjs handed the recording to the shipped scrubber on context close, so the file was never unscrubbed on disk and there is no scrub step to place. Should read the reported line as the evidence (3 secrets placeheld) and note that a `probe: REFUSED` line would have named surviving residue. Should NOT write a `node -e`/`python3` scrubber, should NOT run har-scrub.mjs again as a first scrub, and should NOT defer a scrub to just before commit — Step 8 runs `--verify`, which is a check that the capture-time scrub held, not the scrub itself.",
+      "files": [],
+      "assertions": [
+        "States the HAR is already scrubbed because probe.mjs scrubs on context close",
+        "Cites the probe's reported secret count / REFUSED line as the evidence",
+        "False-positive guard: does not hand-write a scrubber in node -e or python3",
+        "False-positive guard: does not plan a scrub step for just before commit"
+      ]
+    },
+    {
+      "id": 43,
+      "title": "Every read aborting in Step 7 is an unbound HAR, not a short recording",
+      "prompt": "You are at Step 7. The proof run just failed: every test aborts on its first API call with `Route.abort` from `routeFromHAR(..., { notFound: 'abort' })` — not one recorded read matched. The committed `e2e/reports.api.har` was recorded through the probe during this same session and covers all of these endpoints. The dev server is up on port 5199. Diagnose and fix.",
+      "expected_output": "Should diagnose the binding, not the recording: the committed HAR is canonical (origin `http://localhost`, no port) with every secret placeheld, and Playwright's HAR lookup matches on exact request-URL string equality, so an unbound HAR matches nothing. Should run `har-scrub.mjs bind e2e/reports.api.har --out .pw-prove/reports.api.har --origin http://localhost:5199 --bindings .pw-prove/bindings.json`, export PW_PROVE_HAR at that gitignored copy, carry it on every later runner invocation, and re-run. Should read exit 4 as a placeholder in the match key with no run-time value (bind it or re-record — never run the proof and let it surface as an aborted call) and exit 5 as a committable --out path. Should NOT re-record the HAR, should NOT add hand-mocks for the reads, and should NOT relax notFound:'abort' or widen to a live call.",
+      "files": [],
+      "assertions": [
+        "Diagnoses an unbound HAR (exact-URL matching against a canonical recording), not a missing recording",
+        "Runs har-scrub.mjs bind into a gitignored path and sets PW_PROVE_HAR for every later invocation",
+        "False-positive guard: does not re-record the HAR or hand-mock the reads",
+        "False-positive guard: does not relax notFound:'abort' or allow a live round-trip"
+      ]
     }
   ]
 }

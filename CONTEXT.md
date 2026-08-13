@@ -133,12 +133,20 @@ process and therefore look mocked in a browser trace. The verdict stays with the
 call must appear in a `// CARVE-OUT:` line or the run fails despite being green. See `docs/adr/0010`.
 
 ## HAR fixture
-pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`), auth-scrubbed HAR
-recorded during the probe pass and committed alongside the spec. `routeFromHAR(..., { notFound:
-'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Hand-written
+pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`) HAR recorded during
+the probe pass, **scrubbed at capture** and committed alongside the spec. `routeFromHAR(..., { notFound:
+'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Because
+Playwright matches a recorded entry by exact request-URL equality, a live run replays a **bound
+working copy** (`har-scrub.mjs bind`) — the canonical origin re-pointed at the run's port and each
+placeholder in the match key given the run's own value, written to a gitignored path and never
+staged. Hand-written
 `route.fulfill` remains only for the mutation under assertion. Playwright flushes the recording on
 **context** close, so `probe.mjs` closes the context before the browser and reports the written path
 and byte count — a recorder that cannot be observed recording is indistinguishable from a broken one.
+The same close scrubs it: the raw flush goes to a private staging file that is destroyed in the same
+breath, so the working tree never holds an unscrubbed authenticated capture, and the scrub has no
+placement left to decide. Before commit the hygiene sweep runs `har-scrub.mjs --verify`, whose
+non-zero exit refuses residue rather than asking anyone to confirm its absence.
 See `docs/adr/0011`.
 
 ## Runner origin

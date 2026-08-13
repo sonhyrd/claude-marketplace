@@ -258,12 +258,18 @@ A held filled field reads as well as keystrokes and costs CI nothing.
 
 ## Network Determinism
 
-**Hermetic by default, HAR-first.** Every call the spec triggers is answered from a committed fixture; the only live traffic a spec may carry is a **declared carve-out**. Read traffic replays from an **API-scoped, auth-scrubbed HAR** recorded during the Step-3 probe pass (`RECORD_HAR`); the one **mutation under assertion** is hand-mocked. This keeps generated mock code small (the reads are recorded, not authored) and the spec self-hermetic and CI-durable.
+**Hermetic by default, HAR-first.** Every call the spec triggers is answered from a committed fixture; the only live traffic a spec may carry is a **declared carve-out**. Read traffic replays from an **API-scoped HAR, scrubbed at capture**, recorded during the Step-3 probe pass (`RECORD_HAR`); the one **mutation under assertion** is hand-mocked. This keeps generated mock code small (the reads are recorded, not authored) and the spec self-hermetic and CI-durable.
 
 ```typescript
 // reads: replay the committed HAR. notFound:'abort' makes an unrecorded call FAIL loudly
 // instead of leaking to the live backend — the strict-hermetic default.
-await page.routeFromHAR('<feature>.api.har', { url: '**/api/**', notFound: 'abort' });
+// PW_PROVE_HAR points at this run's bound working copy (Step 7 item 1b); unset — in CI — the
+// committed file is used. Playwright matches on EXACT request-URL equality, so a live run must
+// replay the bound copy or every read aborts.
+await page.routeFromHAR(process.env.PW_PROVE_HAR ?? '<feature>.api.har', {
+  url: '**/api/**',
+  notFound: 'abort',
+});
 // the mutation under assertion: hand-mock it so no write leaves the browser (see below).
 await page.route('**/api/v1/section-config', route => route.fulfill({ status: 200, body: '{}' }));
 ```
@@ -275,7 +281,7 @@ await page.route('**/api/v1/section-config', route => route.fulfill({ status: 20
 | Third-party services | Covered by the HAR's `**/api/**` scope only if first-party; otherwise stub explicitly (also Spec Rules above) |
 | A real round-trip that **IS the acceptance criterion** | **Declared carve-out only** — see below |
 
-**The HAR is a committed deliverable.** Scoped to `**/api/**` (so it stays small — no bundle/asset bytes), auth-scrubbed (`Authorization`/cookie headers removed before commit — a leaked bearer in a committed HAR is the same incident as one in a log line), and refreshed with a `routeFromHAR(..., { update: true })` run when it drifts. Gitignoring it is forbidden: the committed spec must replay hermetically in CI without a live backend, and a HAR-absent run must never fall through to the shared tenant.
+**The HAR is a committed deliverable.** Scoped to `**/api/**` (so it stays small — no bundle/asset bytes), **scrubbed at the moment of capture** — `probe.mjs` hands the recording to `har-scrub.mjs` on context close, so the file is never unscrubbed on disk and there is no scrub step to place, remember or get wrong — and refreshed with a `routeFromHAR(..., { update: true })` run when it drifts. Every secret in it is a stable placeholder (`__PWPROVE_SECRET_<n>__`, or `__PWPROVE_SCRUBBED__` inside a URL) rather than a deletion, so the recording still replays; loopback origins are canonical (`http://localhost`, no port), so a live run cannot replay the committed file directly: Playwright's HAR lookup matches on **exact request-URL string equality** (`harBackend.js`: `candidate.request.url !== url`, verified in playwright-core 1.58.2 and 1.62.1), with no tolerance for port, origin or query. `har-scrub.mjs bind --out <gitignored> --origin "$BASE_URL" --bindings <json>` writes the run-local working copy replay actually reads — this run's origin substituted back, and each placeholder in the match key (request URL, query string, and a POST's body) bound to this run's own value. It refuses on a placeholder it cannot bind rather than letting the entry abort as if the application were broken, and refuses a destination git would commit. The committed file is never rewritten. Before it is staged, Step 8 runs `har-scrub.mjs <file> --verify` and a non-zero exit stops the run — a leaked bearer in a committed HAR is the same incident as one in a log line, so it is held by a refusal, not by a request that someone confirm. Gitignoring it is forbidden: the committed spec must replay hermetically in CI without a live backend, and a HAR-absent run must never fall through to the shared tenant.
 
 **Declared carve-out** — the one sanctioned exception, used only when the real round-trip is itself the behavior under proof (e.g. "the live rate endpoint answers"). It must be:
 

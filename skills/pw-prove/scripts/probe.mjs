@@ -16,7 +16,10 @@
 //   BASE_URL       optional, `start` — context baseURL; `navigate` then accepts relative paths.
 //   STORAGE_STATE  optional, `start` — storageState file for the context (Step 3 auth table).
 //   RECORD_HAR     optional, `start` — path to record an API-scoped HAR of the recon pass, flushed
-//                  on context close; the deliverable spec replays it via routeFromHAR.
+//                  on context close and SCRUBBED IN THE SAME BREATH (har-scrub.mjs): the raw
+//                  recording lands in a private staging file, never at this path, so the working
+//                  tree never holds an unscrubbed authenticated capture. The deliverable spec
+//                  replays the scrubbed file via routeFromHAR.
 //   HAR_URL_FILTER optional, `start` — HAR glob (default `**/api/**`); pairs with RECORD_HAR.
 //   PROBE_IDLE     optional, `start` — idle seconds before self-close (default 300), so no zombie
 //                  browser outlives a session even when the agent forgets to `close`.
@@ -75,6 +78,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { pwproveRun } from './pwprove-run.mjs';
+// The ONE shipped transform. The probe never hand-rolls a scrub: eight audited sessions each wrote
+// their own, six in `node -e`, and seven needed two passes because a header-only scrub under-scrubs.
+import { scrubHar, findResidue } from './har-scrub.mjs';
 
 // Run ledger — registered before validation. The phase splits on the subcommand so the ledger can
 // answer "what did the warm lead cost this run?", which is the whole reason `warm` exists.
@@ -289,13 +295,38 @@ if (MODE === 'start') {
 
     // RECORD_HAR set -> the recon pass ALSO records an API-scoped HAR (HAR_URL_FILTER, default
     // `**/api/**`) that the deliverable spec replays via routeFromHAR — recon and HAR capture happen
-    // in the SAME live pass. Playwright flushes the HAR when the context closes. Auth headers must be
-    // scrubbed before commit.
+    // in the SAME live pass. Playwright flushes the HAR when the context closes.
+    //
+    // The capture is authenticated, so it is SCRUBBED AT CAPTURE, not before commit (issue #41).
+    // Playwright can only flush to a path, so the raw flush goes to a private staging file that this
+    // shutdown scrubs and then destroys; the path the operator named only ever receives the scrubbed
+    // result. That is what makes "the HAR is never unscrubbed on disk" true rather than aspirational,
+    // and it removes the placement decision seven audited sessions each made alone and did not agree
+    // on — one of them scrubbing a recording the final spec never used.
+    //
+    // Staging is a 0700 directory in $TMPDIR, outside the working tree, and it is destroyed on every
+    // exit this process can observe (explicit close, idle self-close, SIGINT, SIGTERM). A SIGKILLed
+    // daemon is the one case that leaves it behind — private, outside the repo, and impossible to
+    // stage by accident, which is the property that matters.
+    const HAR_TARGET = process.env.RECORD_HAR || null;
+    let harStageDir = null;
+    try {
+      if (HAR_TARGET) harStageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pwprove-har-'));
+    } catch (e) {
+      err(
+        `probe: STOP — RECORD_HAR is set but no private staging directory could be created in ` +
+          `${os.tmpdir()} (${e.code ?? e.message}).\n` +
+          '       The recording is not made rather than made unscrubbed. Fix TMPDIR, or unset\n' +
+          '       RECORD_HAR and re-record once it is writable. (exit 2)\n',
+      );
+      process.exit(2);
+    }
+    const harStage = harStageDir ? path.join(harStageDir, 'capture.har') : null;
     const context = await browser.newContext({
       baseURL: process.env.BASE_URL || undefined,
       storageState: process.env.STORAGE_STATE || undefined,
-      ...(process.env.RECORD_HAR
-        ? { recordHar: { path: process.env.RECORD_HAR, urlFilter: process.env.HAR_URL_FILTER || '**/api/**' } }
+      ...(harStage
+        ? { recordHar: { path: harStage, urlFilter: process.env.HAR_URL_FILTER || '**/api/**' } }
         : {}),
     });
     const page = await context.newPage();
@@ -330,6 +361,87 @@ if (MODE === 'start') {
       if (e) e.status = `FAILED ${r.failure()?.errorText ?? ''}`.trim();
     });
 
+    // --- the capture-time scrub ----------------------------------------------------------------
+    // Runs inside shutdown, immediately after the context flushed its recording to the private
+    // staging file: read it, scrub it with the shipped transform, write the operator's path, and
+    // destroy the staging directory on every path out — including the failures, because a capture
+    // this cannot scrub is a capture it must not copy into a working tree.
+    //
+    // It never prints a credential. Residue is reported by location, kind and length only, the same
+    // contract `har-scrub.mjs --verify` holds.
+    function scrubCaptureToTarget() {
+      const filter = process.env.HAR_URL_FILTER || '**/api/**';
+      const drop = () => fs.rmSync(harStageDir, { recursive: true, force: true });
+      const staged = (() => {
+        try {
+          return fs.statSync(harStage).size;
+        } catch {
+          return -1;
+        }
+      })();
+      if (staged <= 0) {
+        drop();
+        err(
+          `probe: WARNING — RECORD_HAR was set but no HAR landed at ${HAR_TARGET}. Nothing matched\n` +
+            `       ${filter}, or the path is unwritable. Do NOT\n` +
+            '       commit a routeFromHAR spec against a HAR that does not exist.\n',
+        );
+        return;
+      }
+      let har;
+      try {
+        har = JSON.parse(fs.readFileSync(harStage, 'utf8'));
+      } catch (e) {
+        drop();
+        err(
+          `probe: STOP — the recorded HAR did not parse (${String(e.message ?? e).split('\n')[0]}).\n` +
+            `       Nothing was written to ${HAR_TARGET}: an unscrubbed capture is never copied into\n` +
+            '       the working tree. Re-run the recon pass.\n',
+        );
+        return;
+      }
+      // Loopback origins are canonicalised in the same pass, so the committed recording is not bound
+      // to the port this run happened to get (`har-scrub.mjs --origin` re-points it before replay).
+      let secrets = 0;
+      try {
+        ({ secrets } = scrubHar(har, {}));
+        fs.mkdirSync(path.dirname(path.resolve(HAR_TARGET)), { recursive: true });
+        fs.writeFileSync(HAR_TARGET, `${JSON.stringify(har, null, 2)}\n`);
+      } catch (e) {
+        err(
+          `probe: STOP — the capture could not be scrubbed to ${HAR_TARGET} ` +
+            `(${e.code ?? String(e.message ?? e).split('\n')[0]}).\n` +
+            '       The raw capture was destroyed rather than written unscrubbed.\n',
+        );
+        return;
+      } finally {
+        drop();
+      }
+      const size = (() => {
+        try {
+          return fs.statSync(HAR_TARGET).size;
+        } catch {
+          return 0;
+        }
+      })();
+      err(
+        `probe: HAR written ${HAR_TARGET} (${size} bytes, filter ${filter}) — ` +
+          `scrubbed at capture, ${secrets} secret(s) placeheld, loopback origins canonicalised\n`,
+      );
+      // The same residue check the pre-commit refusal runs, so the two can never disagree. A scrub
+      // that left something behind must say so HERE, while the recon context is still the thing the
+      // operator is looking at — not six steps later.
+      const left = findResidue(har);
+      if (left.length) {
+        err(`probe: REFUSED — ${left.length} credential residue(s) SURVIVED the scrub in ${HAR_TARGET}\n`);
+        for (const h of left) err(`  ${h.where}  ${h.kind}  (len ${h.len})\n`);
+        err(
+          '       Do NOT commit this HAR. A leaked bearer in a committed HAR is the same incident\n' +
+            '       as one in a log line.\n',
+        );
+      }
+    }
+
     // --- shutdown: explicit close, idle timeout, or signal — all one path ----------------------
     let closing = false;
     const shutdown = async (why) => {
@@ -344,23 +456,7 @@ if (MODE === 'start') {
       } catch {
         /* already gone */
       }
-      if (process.env.RECORD_HAR) {
-        const p = process.env.RECORD_HAR;
-        const size = (() => {
-          try {
-            return fs.statSync(p).size;
-          } catch {
-            return -1;
-          }
-        })();
-        err(
-          size > 0
-            ? `probe: HAR written ${p} (${size} bytes, filter ${process.env.HAR_URL_FILTER || '**/api/**'})\n`
-            : `probe: WARNING — RECORD_HAR was set but no HAR landed at ${p}. Nothing matched\n` +
-              `       ${process.env.HAR_URL_FILTER || '**/api/**'}, or the path is unwritable. Do NOT\n` +
-              `       commit a routeFromHAR spec against a HAR that does not exist.\n`,
-        );
-      }
+      if (HAR_TARGET) scrubCaptureToTarget();
       try {
         await browser.close();
       } catch {
