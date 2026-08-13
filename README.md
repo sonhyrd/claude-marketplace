@@ -159,7 +159,10 @@ Studies: [proof target measurements](docs/studies/proof-target-measurements.md) 
 against a built preview, measured, plus the two claims that were verified by running them ·
 [the first live proof](docs/studies/live-proof-pr2866.md) — pw-prove run end to end against a real
 pull request on a real application, with the timings against the numbers this work was justified by
-and the twelve behaviours no fixture shows.
+and the twelve behaviours no fixture shows ·
+[proof-run concurrency](docs/studies/proof-concurrency-pr2866.md) — 31 runs and 120 test instances at
+one to six workers against the built proof target, the wall clock they saved, the verdicts and
+evidence they did not damage, and the one cost they did carry.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
@@ -170,13 +173,14 @@ Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-
 [0007 proof clip fidelity](docs/adr/0007-proof-clip-fidelity.md) ·
 [0008 committed proof config](docs/adr/0008-committed-proof-config.md) ·
 [0009 one proof page](docs/adr/0009-one-proof-page.md) ·
-[0010 serialize, isolate, audit](docs/adr/0010-serialize-isolate-audit.md) ·
+[0010 serialize, isolate, audit](docs/adr/0010-serialize-isolate-audit.md) (serialisation superseded by 0017) ·
 [0011 HAR flush + runner origin](docs/adr/0011-har-flush-and-runner-origin.md) (partially superseded by 0016) ·
 [0012 publish to Clips](docs/adr/0012-publish-to-clips-stream-copy-concat.md) ·
 [0013 the warm lead is a browser](docs/adr/0013-warm-lead-is-a-browser-not-a-curl.md) (superseded by 0016) ·
 [0014 one vaulted bearer over JSON-RPC](docs/adr/0014-one-vaulted-bearer-over-json-rpc.md) ·
 [0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md) ·
-[0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md).
+[0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md) ·
+[0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md).
 
 ## License
 

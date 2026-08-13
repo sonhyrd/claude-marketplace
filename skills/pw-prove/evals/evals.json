@@ -853,6 +853,49 @@
         "False-positive guard: does NOT rewrite the question into the named-map form, whose values take no argument",
         "False-positive guard: does NOT invent a handle/element-passing capability the probe DSL does not document"
       ]
+    },
+    {
+      "id": 59,
+      "title": "Every scenario times out on its first navigation — serialise once to diagnose, then report the finding",
+      "prompt": "You are in Step 7 of a pw-prove PR-mode run against the built proof target (the app's own build, served by its preview server on a port you allocated). The project's playwright.config.ts has `workers: process.env.CI ? 1 : undefined`, so your proof run took Playwright's default. After 6 minutes ALL FIVE scenarios failed with `page.goto: Test timeout of 120000ms exceeded` at the first navigation of each test. Diagnose and state your next command.",
+      "expected_output": "Should treat 'every test times out at its first navigation' as a whole-run signature rather than a spec defect, confirm the origin is alive with a quick curl, and re-run the SAME spec unchanged with `--workers=1` — as a DIAGNOSTIC that separates a concurrency problem from a spec problem, not as the mandated setting it used to be (docs/adr/0017 retired that). Should state that against a built preview this signature has no known cause — the preview compiles nothing and was measured not to saturate — so if the serialised run passes, that is a finding to report with its evidence, not a box ticked on the way to green. Must NOT heal locators, raise the test timeout, add waits, or count this as one of the 3 auto-fix attempts against the spec.",
+      "files": [],
+      "assertions": [
+        "Re-runs at --workers=1 as a one-command diagnostic rather than editing the spec",
+        "Checks the origin is alive (curl) before re-running",
+        "States that a spec passing only when serialised is a finding to report, not a fix to adopt silently",
+        "False-positive guard: does NOT heal locators or raise timeouts in response to this failure",
+        "False-positive guard: does not pin workers by editing the committed proof config or the project's playwright.config",
+        "False-positive guard: does not diagnose this as a saturated dev server — the proof target is a built preview that compiles nothing"
+      ]
+    },
+    {
+      "id": 60,
+      "title": "The proof run names no worker count",
+      "prompt": "Step 7, PR-mode, against the built proof target. You have a 5-scenario proof spec, a committed playwright.proof.config.ts, an effective viewport of 1600x900, and the preview server answering at http://127.0.0.1:41453. Give the exact proof-run command.",
+      "expected_output": "The command clears test-results/ first, then runs the spec through the proof config with PW_PROVE_CLIP=1 and PW_PROVE_W/PW_PROVE_H carrying the effective viewport, --project=chromium and --reporter=html. It passes NO --workers flag at all: docs/adr/0017 retired the --workers=1 mandate on 31 measured runs, so the scenarios run concurrently at Playwright's default of cores/2. It must not substitute a literal worker count either — the default is a machine fact Playwright already computes, and a number that fits an 8-core box is wrong on the next one. It must not pin workers in the committed proof config or in the project's playwright.config.",
+      "files": [],
+      "assertions": [
+        "Passes no --workers flag on the proof run",
+        "Clears test-results/ before the run and passes PW_PROVE_CLIP=1 with PW_PROVE_W/H from the effective viewport",
+        "False-positive guard: does not pass --workers=1 (the mandate is retired by docs/adr/0017)",
+        "False-positive guard: does not substitute a hard-coded number such as --workers=4",
+        "False-positive guard: does not add `workers` to the committed proof config or edit the project's playwright.config"
+      ]
+    },
+    {
+      "id": 61,
+      "title": "Scenarios that contend over one shared record serialise in the spec, not on the command line",
+      "prompt": "Step 5, PR-mode. Two of your five scenarios edit the SAME job record on a shared staging tenant — one renames it, the other asserts the rename in a list view. Run concurrently they race each other. How do you handle it?",
+      "expected_output": "Should serialise those scenarios in the spec with `test.describe.configure({ mode: 'serial' })` around the describe block that owns them, with a comment naming the shared record as the reason, and leave the rest of the proof running concurrently. Should say why the flag is the wrong place: each test already gets a fresh browser context, so nothing leaks that way — what interferes is two scenarios contending for one record, which is a property of THIS spec, and a global --workers=1 would charge every other proof wall clock for it. Should not reach for --workers=1, retries, waits or sleeps to paper over the race.",
+      "files": [],
+      "assertions": [
+        "Adds test.describe.configure({ mode: 'serial' }) scoped to the contending scenarios",
+        "Comments the reason (the shared record) beside the configure line",
+        "States that a fresh browser context per test is not the issue — shared tenant state is",
+        "False-positive guard: does not fix it with --workers=1 on the command line",
+        "False-positive guard: does not add retries, waitForTimeout or an increased timeout to absorb the race"
+      ]
     }
   ]
 }

@@ -87,8 +87,12 @@ Removal is **staged**, and staged per item rather than wholesale. This record ch
 the bring-up first. The **warm lead of `docs/adr/0013` is now gone** (issue #46), together with the
 browserless `curl` fallback, the boot-heavy-clip reporting, and the runner-origin loopback resolution
 of `docs/adr/0011` — none of which has a job against a target that compiles nothing and answers a
-cold route in 14 ms. The `--workers=1` mandate of `docs/adr/0010` **stays**: it rests on a documented
-five-scenario failure, and it is retired on evidence from real runs against a preview server (issue
-#48), not on the reasoning that its cause is gone. That asymmetry is deliberate — the warm lead's
-premise is measurably absent, while the mandate's is a concurrency behaviour nobody has yet observed
-under the new target.
+cold route in 14 ms. The `--workers=1` mandate of `docs/adr/0010` was held back deliberately, on the
+asymmetry that the warm lead's premise was measurably absent while the mandate's was a concurrency
+behaviour nobody had yet observed under the new target: it rests on a documented five-scenario
+failure, so it was to be retired on evidence from real runs against a preview server, not on the
+reasoning that its cause is gone. **That evidence arrived (issue #48) and the mandate is now
+retired** — 31 runs, 120 test instances, 1.76–1.89× faster concurrent with zero failures and zero
+flaky verdicts, and a preview server that did not saturate even unmocked. See `docs/adr/0017` and
+`docs/studies/proof-concurrency-pr2866.md`. The staging was still the right call: the runs, not the
+reasoning, are what closed it.
