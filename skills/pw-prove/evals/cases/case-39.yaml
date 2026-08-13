@@ -1,0 +1,12 @@
+id: case-39
+title: pw-prove - 39
+description: 'Should read the message as a MISPLACED dwell, not an absent one: the gated wait exists and is marked, but it lives in `payoffHold` rather than inside either test() body. The fix is to inline a framed, `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell into EACH test(), at that test''s own payoff and after the assertion covering it, and to drop the `payoffHold` call (leaving both the helper call and an inline dwell would leave an unmarked-or-duplicated wait). Then re-run `clip-fidelity.mjs spec` until it exits 0. The strict scope is deliberate, not a bug to work around: a single shared dwell would satisfy tests that hold on nothing, which is the silent-always-pass the gate exists to prevent — so the answer is never to relax the audit, edit clip-fidelity.mjs, or argue the helper should count.'
+tag: functional_test
+input:
+    prompt: 'You are at Step 6. `e2e/reports.spec.ts` carries its viewport pin and two test() blocks, each ending in `await payoffHold(page);`. `payoffHold` is a helper declared at the top of the same file: `async function payoffHold(page) { /* JUSTIFIED: proof-clip payoff hold... */ if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500); }`. The clip-fidelity audit exits 2 and says the PW_PROVE_CLIP-gated wait sits OUTSIDE every test() body and must sit INLINE in the test() body it holds. Say what you do next.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

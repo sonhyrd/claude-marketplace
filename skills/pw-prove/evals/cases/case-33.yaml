@@ -1,0 +1,12 @@
+id: case-33
+title: pw-prove - 33
+description: 'Should stop before writing `routeFromHAR` against a file that does not exist — a spec replaying a missing HAR aborts every call under `notFound: ''abort''`, which reads as a broken surface. Should check the probe''s close output, which reports either the written path with a byte count or a warning that no HAR landed. Should then either re-record the pass or state the deviation explicitly (`no api.har — <reason>`) in the Assumptions block and the completion report, and hand-mock only what the scenario needs. A missing HAR is never evidence that the surface makes no API calls.'
+tag: functional_test
+input:
+    prompt: Step 3 ran the probe with RECORD_HAR set and the batches answered normally. In Step 5 you are about to write the spec's network determinism. `ls tests/e2e/<feature>.api.har` shows no such file.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

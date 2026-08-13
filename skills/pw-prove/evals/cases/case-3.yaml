@@ -1,0 +1,16 @@
+id: case-3
+title: pw-prove - 3
+description: 'Should detect no POM directory (no pages/, models/, or page-objects/ used as Page Objects) and that the existing specs are flat. POM is ALWAYS the default with no flat opt-out, so it should still SCAFFOLD a POM for the new coverage — a Page Object class + spec under tests/pages/ — and NOT match the flat siblings. It must NOT rewrite or retro-refactor the existing tests/login.spec.ts (add the POM for new coverage, leave siblings untouched). Should identify login as covered. Should identify home page, signup, dashboard, profile, notifications as coverage gaps from page.tsx links. Note: a Next.js app/ or pages/ ROUTE folder is not a Playwright POM directory and must not be mistaken for one.'
+tag: functional_test
+input:
+    prompt: Analyze the project in evals/files/project-flat/ for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Its existing E2E tests are flat (direct page interactions, no Page Object Model) and there is no POM directory anywhere. Identify the project pattern, coverage gaps, and how new tests should be structured.
+context:
+    files:
+        evals/files/project-flat/playwright.config.ts: evals/files/project-flat/playwright.config.ts
+        evals/files/project-flat/src/app/page.tsx: evals/files/project-flat/src/app/page.tsx
+        evals/files/project-flat/tests/login.spec.ts: evals/files/project-flat/tests/login.spec.ts
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

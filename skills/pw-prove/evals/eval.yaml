@@ -1,0 +1,48 @@
+schema_version: v1alpha1
+
+# Runtime is `none` deliberately. The docker runtime cannot see files the agent writes:
+# `expect.files_exist` and judge-level `files_exist` both report "does not exist" for a file
+# that demonstrably exists and is collected into outputs/workspace/. Every wet case would
+# silently fail. See docs/adr/0018. Do not "fix" this back to docker.
+environment:
+    type: none
+
+skills:
+    - source: local_path
+      path: .
+      include: [SKILL.md, "*.md", "scripts/**"]
+
+engine:
+    name: claude_code
+
+cases:
+    files:
+        # --- first run: the 12 P0 behaviors, judges hand-authored ---
+        - evals/cases/b01-confirmation-gate.yaml
+        - evals/cases/b05-handoff-stale.yaml
+        - evals/cases/b49-untrusted-page-content.yaml
+        - evals/cases/b32-dwell-inline.yaml
+        - evals/cases/case-44.yaml
+        - evals/cases/case-50.yaml
+        - evals/cases/case-48.yaml
+        - evals/cases/case-15.yaml
+        - evals/cases/case-43.yaml
+        - evals/cases/case-60.yaml
+        - evals/cases/case-28.yaml
+        - evals/cases/case-30.yaml
+        # The remaining imported cases stay on disk but OUT of this list until their
+        # placeholder judges are replaced. An unrepaired case reports a vacuous pass.
+    defaults:
+        timeout_seconds: 300
+        max_turns: 10
+    parallelism: 2
+
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6
+    criteria:
+        - Cases define their own judges; this default is never expected to be reached.
+
+report:
+    formats: [json, html]
+    artifacts: [transcript]

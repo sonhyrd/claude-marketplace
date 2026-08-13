@@ -1,0 +1,12 @@
+id: case-27
+title: pw-prove - 27
+description: The mutation run must send its artifacts elsewhere — `--output=/tmp/pw-prove-mutation` — and must not set PW_PROVE_CLIP, so the passing run's clips in test-results/ survive intact. It should target the single guarding test with `-g`, keep `--workers=1`, and after `git checkout --` verify BOTH that the tree matches the pre-state (diff against /tmp/pre.status and /tmp/pre.patch via process substitution) AND that the clip count in test-results/ still equals the scenario count. Should state that publishing a clip recorded against mutated source would be false evidence.
+tag: functional_test
+input:
+    prompt: You are running the Step 7 mutation check in PR-mode. The proof run has passed and test-results/ holds 5 webm clips, one per scenario. Give the exact mutation-run command and the checks you perform after reverting the source.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

@@ -1,0 +1,12 @@
+id: case-8
+title: pw-prove - 8
+description: 'The rest of Step 8 remains: the hygiene sweep (delete test-results/ and playwright-report/ litter and /tmp/pw-prove-mutation, keep playwright.proof.config.ts, stop the dev server this run started, revert auto-imports.d.ts-style codegen churn, scrub the HAR), commit the spec + POM + scrubbed api.har to the PR branch, push, and post the share link as a PR comment via gh pr comment -- all without asking. The report skeleton includes Generated, ACs, Dev server, e2e-reviewer, Tests (hermetic + carve-outs), Mutation, Proof page, Committed, Pushed, and PR comment lines; a report missing any of them is structurally invalid in PR-mode. For the prose-arg run with no PR: create one (push the branch, gh pr create with the AC table as body) and post the comment there.'
+tag: functional_test
+input:
+    prompt: 'A PR-mode run (PR #88, branch feat/consent-banner) has passed Step 7: tests pass hermetically, the mutation check came back RED, and Step 8 item 1 published the recording to https://clips.paulsjob.ai/share/abc123. State exactly what remains before you may emit the Complete report, then produce the report skeleton. Separately: same question for a run whose argument was the prose ''prove this change'' on a branch that has no PR.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

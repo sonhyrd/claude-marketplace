@@ -1,0 +1,19 @@
+id: case-53
+title: pw-prove - 53
+description: 'Should read the autostart as normal sequencing, not a fault to fix or re-run — `send` starts a daemon when none is listening, and the batch it printed is the answer. Should ask the console question with the `console` verb ({"cmd":"console"}, optionally "level":"error") — an authenticated page rendering an empty shell usually said why in the console. Should get both values in ONE eval using the named-map object form, e.g. {"cmd":"eval","expression":{"tenant":"window.__APP__.tenant","url":"location.href"}} (the {"fn":…,"arg":…} form and the plain string form are equally legal; three separate evals are the shape to avoid). Should refuse the viewport request: there is no `viewport` verb, the effective viewport is resolved in Step 4 from the project''s Playwright config and pinned in the committed spec, and recon at a viewport the proof never uses is recon against a different rendering. Should NOT write a throwaway _recon.spec.ts to answer any of the three.'
+tag: functional_test
+input:
+    prompt: |-
+        Step 3 recon. The preview server is up and you have just run, as your first probe command:
+
+        ```
+        node <skill-base>/scripts/probe.mjs send '[{"cmd":"navigate","url":"/people?company_slug=acme"},{"cmd":"snapshot","selector":"[data-testid=people-list]"}]'
+        ```
+
+        It started a daemon first, then answered — and the snapshot shows the list container present but empty. You want three things next: whether the page logged an error, the value of `window.__APP__.tenant` together with `location.href`, and the list at a 390px-wide viewport. Say exactly what you send.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

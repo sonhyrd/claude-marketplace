@@ -1,0 +1,18 @@
+id: case-2
+title: pw-prove - 2
+description: Should propose a CheckoutPage class extending BasePage in tests/pages/checkout-page.ts. Should propose a checkout.spec.ts in tests/. Should include happy path scenario (complete purchase flow). Should include error scenarios (validation errors, payment failure). Should include a Locator Mapping Table. Should reference existing patterns from auth.spec.ts and LoginPage.
+tag: functional_test
+input:
+    prompt: Generate a test plan for the /checkout page based on the project structure in evals/files/project-pom/. The project uses POM pattern with BasePage and LoginPage in tests/pages/. The routes file shows /checkout (show + process) and /checkout/confirmation endpoints. Show what scenarios, locators, and POM structure you would create. Do not write code yet — present the plan for approval.
+context:
+    files:
+        evals/files/project-pom/playwright.config.ts: evals/files/project-pom/playwright.config.ts
+        evals/files/project-pom/src/routes.ts: evals/files/project-pom/src/routes.ts
+        evals/files/project-pom/tests/auth.spec.ts: evals/files/project-pom/tests/auth.spec.ts
+        evals/files/project-pom/tests/pages/base-page.ts: evals/files/project-pom/tests/pages/base-page.ts
+        evals/files/project-pom/tests/pages/login-page.ts: evals/files/project-pom/tests/pages/login-page.ts
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

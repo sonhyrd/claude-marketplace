@@ -1,0 +1,12 @@
+id: case-45
+title: pw-prove - 45
+description: 'Should recognise that `...base` copies `webServer` too, so this proof run would boot the project''s DEVELOPMENT server at 127.0.0.1:3000 (nothing is listening there — the preview is on 4173) and the proof would not run against the built target at all. Should migrate the committed proof config ONCE by adding `webServer: undefined` after the spread, leave everything else untouched, and stage it with this run. Should note that dropping Playwright''s own readiness wait is safe here precisely because pw-prove owns the server lifecycle and preflight.mjs already gated the three bring-up phases. Should NOT edit the project''s own playwright.config.ts, NOT rewrite or regenerate the proof config wholesale, NOT set CI=1 to force the already-in-use error, and NOT move the preview server onto the config''s port as a workaround — that leaves the inheritance in place for the next run.'
+tag: functional_test
+input:
+    prompt: 'Step 7, PR-mode. `<configDir>/playwright.proof.config.ts` already exists from an earlier run and reads `export default defineConfig({ ...base, use: { ...(base.use ?? {}), video: { mode: ''on'', size }, trace: ''on'' } })`. The project''s own playwright.config.ts declares `webServer: { command: ''pnpm dev'', url: ''http://127.0.0.1:3000'', reuseExistingServer: !process.env.CI }`. You built the app and started your preview server on port 4173. What do you do before the proof run?'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

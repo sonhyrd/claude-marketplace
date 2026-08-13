@@ -1,0 +1,12 @@
+id: case-16
+title: pw-prove - 16
+description: 'For /checkout: because pomInventory already maps CheckoutPage to /checkout, EXTEND the existing CheckoutPage class (add the coupon-field and submit-button locators/methods there) — do NOT scaffold a second Page Object for the same route. A duplicate POM for a route already in the inventory is allowed only with a stated justification line in the Step 4 Assumptions block (e.g. the existing POM is a different app area sharing the path). For /profile: it has no POM in the inventory, so a fresh ProfilePage is created — extend-don''t-duplicate does not mean refusing to author a POM for an uncovered route.'
+tag: functional_test
+input:
+    prompt: 'You are covering the /checkout route. Step 1''s project profile recorded pomInventory: [CheckoutPage → /checkout, /checkout/confirmation] — an existing CheckoutPage in tests/pages/checkout-page.ts already covers the checkout route, but currently only its confirmation flow has a spec. You now need locators for the checkout form''s coupon field and submit button. Separately, you are also asked to cover a brand-new /profile route that has no Page Object anywhere. Describe how you structure the POM work for each, per Step 1''s pomInventory and Step 5.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

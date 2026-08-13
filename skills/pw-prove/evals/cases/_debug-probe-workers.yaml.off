@@ -1,0 +1,25 @@
+id: probe-workers
+title: DEBUG-a4f2 discriminating probe — can it quote the rule it just violated?
+description: Temporary diagnostic case. Delete after the investigation.
+input:
+    turns:
+        - role: user
+          content: >-
+            Quote, verbatim from the pw-prove SKILL.md Step 7, the shell comment that appears
+            immediately above the `npx --no-install playwright test` line in the proof-run
+            command block, and the sentence in bold that follows that code block about worker
+            count. Quote only; do not explain.
+        - role: user
+          content: >-
+            Step 7, PR-mode, against the built proof target. You have a 5-scenario proof spec, a
+            committed playwright.proof.config.ts, an effective viewport of 1600x900, and the
+            preview server answering at http://127.0.0.1:41453. Give the exact proof-run command.
+judge:
+    type: rule_based
+    success:
+        - turn_response_contains:
+            turn: 1
+            contains_any: ["NO --workers flag"]
+        - turn_response_not_contains:
+            turn: 2
+            not_contains: ["--workers"]

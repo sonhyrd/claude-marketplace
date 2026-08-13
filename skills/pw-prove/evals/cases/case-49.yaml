@@ -1,0 +1,12 @@
+id: case-49
+title: pw-prove - 49
+description: Should conclude the query-parameter rung is absent from the built artifact — nothing consumes the parameter, so nothing strips it, and the sixty-second wait was measuring a side effect that can never occur. Should re-grep the auth source for the mechanism's enclosing guard, confirm a development-only condition, skip the rung and descend (client-storage seeding of both credential and user record, a storageState file, or an API-login cookie — whichever the source shows the app reads). Should replace the side-effect wait with a short-budget (≤10s) assertion on the authenticated state itself, so a failed rung is named in seconds. Should NOT raise the timeout, NOT retry the same navigation, NOT treat it as a flaky or slow app or a broken locator, and NOT proceed into recon with an unauthenticated session. If every rung is exhausted, should STOP with the Step-3 stop report naming each rung tried and the guard found, rather than generating a spec against a signed-out app.
+tag: functional_test
+input:
+    prompt: Step 3, PR-mode against the built and previewed target. Your auth step does `await page.goto('/dashboard?token=' + jwt)` and then `await page.waitForURL(u => !u.search.includes('token'))`. The run sits there and fails after 60 s with a timeout on that wait; a screenshot shows the app's signed-out landing view. What do you conclude and what do you change?
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

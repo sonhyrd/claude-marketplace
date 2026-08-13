@@ -1,0 +1,12 @@
+id: case-19
+title: pw-prove - 19
+description: Inside the fix loop, run tool calls back-to-back with NO prose narration between them — the diagnosis lands in the fix, not a play-by-play. Write the spec ONCE from the Step 1 pomInventory and the plan's Locator Mapping Table; do not scaffold a throwaway skeleton and then rewrite it. This trims the loop only — the Step 4 plan post, its Assumptions block, and the Step 8 completion report are STILL written in full; the token diet never suppresses the audit trail.
+tag: functional_test
+input:
+    prompt: You are inside Step 7's ≤3-attempt fix loop (a selector healed once, one rerun pending). Describe how you run the tool calls and how you produce the spec, and confirm what output you still write.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

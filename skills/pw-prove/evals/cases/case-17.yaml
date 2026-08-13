@@ -1,0 +1,12 @@
+id: case-17
+title: pw-prove - 17
+description: 'The first test blocks Step 7: it has no `// PROVES:` header and must gain one quoting its AC verbatim (`// PROVES: User can filter people by status`). The second test also blocks Step 7: `// PROVES: validates status input` PARAPHRASES rather than quoting an AC verbatim from the Step 2 table — it must be corrected to the exact AC wording. Both are fixed, then the run proceeds to Step 7. The PeopleListPage POM file is EXEMPT — it carries no ACs and needs no PROVES header; its lack of one is not a finding.'
+tag: functional_test
+input:
+    prompt: 'A PR-mode run reached Step 6. The Step 2 AC table has one row: AC = ''User can filter people by status''. The generated spec has two test blocks: test(''filters people by status'', ...) with no leading comment, and test(''shows an inline error for an invalid status'', ...) headed by the comment `// PROVES: validates status input`. The generated PeopleListPage POM file has no such comment. State the Step 6 PROVES-header verdict for each file/test and what must happen before Step 7.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

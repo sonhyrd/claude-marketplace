@@ -1,0 +1,12 @@
+id: case-20
+title: pw-prove - 20
+description: Before entering the pipeline, recommend the user start a fresh session or dispatch this run to a background agent — the pipeline is long and does better with a clean context. If they decline or do not answer, continue the run INLINE in the current session. Never self-background the run or spawn a background agent on your own; the recommendation is offered once and the user decides.
+tag: functional_test
+input:
+    prompt: 'pw-prove is invoked with ''prove PR #55'' partway through a long, unrelated session that has already spent a large amount of context on other work. What do you do before entering the pipeline, and what happens if the user declines or does not answer the recommendation?'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6

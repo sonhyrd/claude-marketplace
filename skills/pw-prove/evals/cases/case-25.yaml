@@ -1,0 +1,12 @@
+id: case-25
+title: pw-prove - 25
+description: Should build a manifest (title, prUrl, spec, mutation, and a `clips[]` array in AC ORDER, each entry naming the AC verbatim, its scenario title and its webm path) and publish it with ONE `publish-proof.mjs` call whose ONLY argument is the manifest path -- no project folder, no key prefix, because Clips assigns the identifier. The script probes each clip, joins them by stream copy into one recording and turns each AC into a chapter at its cumulative measured offset. BEARER/SCAN must be set on that call. The share URL is read from the `PWPROVE_URL` marker line. The PR comment leads with the single share link and its AC table rows deep-link `<share URL>?t=<seconds>` timestamps. The completion report carries a `Proof page:` line with the share URL and per-AC timestamps -- not five separate .webm URLs.
+tag: functional_test
+input:
+    prompt: 'You are finishing a pw-prove PR-mode run on PR #2974. The Step 7 proof run passed 5 scenarios and left 5 webms under test-results/. The Step 3 PROBE_HOSTING check was green (PUBLISH_READY=yes, VIDEO_TOOLING=yes). Describe Step 8 item 1 exactly: the commands you run, what gets published, and what the PR comment and the completion report look like.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6
