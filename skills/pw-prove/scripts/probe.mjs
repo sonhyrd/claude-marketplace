@@ -52,7 +52,10 @@
 //                                                      "expression" also takes two OBJECT forms:
 //                                                        {"fn":"a => a.id","arg":{...}}  — the
 //                                                          page.evaluate(fn, arg) shape, for a
-//                                                          question that needs an argument
+//                                                          question that needs an argument. "arg"
+//                                                          is JSON-serialised INTO the call, so it
+//                                                          carries data, never a page handle —
+//                                                          select a DOM node inside "fn" instead.
 //                                                        {"url":"location.href","t":"document.title"}
 //                                                          — a map of named expressions, answered
 //                                                          in ONE round trip as one object. Each
@@ -150,19 +153,34 @@ if (!['start', 'send', 'close'].includes(MODE)) {
 // object shapes below are now accepted alongside the string form, which is untouched: 250 recorded
 // calls already use it. Resolved in ONE place, so the client's early rejection and the daemon's
 // execution can never disagree about what a legal eval is.
+// Playwright evaluates a STRING as an EXPRESSION and discards the arguments after it — its client
+// derives `isFunction` from `typeof pageFunction`, which is never 'function' for source text. So
+// handing it arrow-function source produced a function object (serialised over the wire as
+// `undefined`) and silently dropped `arg`. Everything the page must see has to be INSIDE the one
+// expression, so the argument travels as a JSON literal embedded in the call.
+// Every batch arrives through JSON.parse, so `arg` is representable by construction; JSON is a
+// subset of JS expression syntax except for two line terminators it permits raw inside a string.
+const jsLiteral = (v) =>
+  String(JSON.stringify(v)).replace(/[\u2028\u2029]/g, (m) =>
+    m === '\u2028' ? '\\u2028' : '\\u2029',
+  );
+
 function evalPlan(c) {
   const e = c.expression;
-  if (typeof e === 'string') return { source: e, args: [] };
+  if (typeof e === 'string') return { source: e };
   if (e && typeof e === 'object' && !Array.isArray(e)) {
-    // `fn` is the reserved discriminator — page.evaluate(fn, arg), the shape a model mirroring
-    // Playwright itself reaches for. Everything else is read as a map of named expressions.
-    if (typeof e.fn === 'string') return { source: e.fn, args: 'arg' in e ? [e.arg] : [] };
+    // `fn` is the reserved discriminator — the shape a model mirroring page.evaluate(fn, arg)
+    // reaches for, answered by an inlined CALL. Everything else is a map of named expressions.
+    // The trailing newline keeps a source that ends in a `//` comment from swallowing the call.
+    if (typeof e.fn === 'string') {
+      return { source: `(${e.fn}\n)(${'arg' in e ? jsLiteral(e.arg) : ''})` };
+    }
     const names = Object.keys(e);
     if (names.length && names.every((k) => typeof e[k] === 'string')) {
       // One round trip, several answers. Each value is parenthesised so an expression containing a
       // comma or an operator cannot leak into its neighbour.
       const body = names.map((k) => `${JSON.stringify(k)}: (${e[k]})`).join(', ');
-      return { source: `(() => ({${body}}))()`, args: [] };
+      return { source: `(() => ({${body}}))()` };
     }
   }
   throw new Error(
@@ -681,7 +699,10 @@ if (MODE === 'start') {
         case 'eval': {
           // String, {fn, arg} or a named map — one resolver, shared with the client's early check.
           const plan = evalPlan(c);
-          const v = await page.evaluate(plan.source, ...plan.args);
+          // One argument, always: every form resolves to a single self-contained expression, because
+          // that is the only thing Playwright evaluates when handed source text rather than a
+          // function. A second argument here would be accepted and thrown away.
+          const v = await page.evaluate(plan.source);
           let s;
           try {
             s = JSON.stringify(v) ?? String(v);

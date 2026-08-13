@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.13.0"
+  version: "0.14.0"
 ---
 
 # pw-prove
@@ -345,11 +345,11 @@ Commands for the cases a batch runs into: `{"cmd":"wait","ms":6000}` (or `"selec
 
 ```jsonc
 {"cmd":"eval","expression":"location.href"}                              // string — unchanged
-{"cmd":"eval","expression":{"fn":"a => a.dataset.id","arg":{"id":7}}}    // page.evaluate(fn, arg)
+{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}}            // page.evaluate(fn, arg) -> 7
 {"cmd":"eval","expression":{"url":"location.href","t":"document.title"}} // named map — one round trip
 ```
 
-The named map answers several questions in one call and is the reason to prefer it over three separate `eval`s; `fn` is the reserved key that selects the function form. **Every value in a named map must be synchronous** — a promise nested inside the returned object serialises as `{}`; ask an async question through the string or `fn` form, which Playwright awaits. **Prefer the semantic verbs regardless** — `snapshot`, `network-summary` and `console` are compact and stable where a raw `eval` returns whatever the page happens to hold today.
+The named map answers several questions in one call and is the reason to prefer it over three separate `eval`s; `fn` is the reserved key that selects the function form, and `arg` is passed to it and must be JSON-serialisable (it travels inside the expression, not as a page handle — a DOM node cannot be sent this way; select it inside `fn` instead). **Every value in a named map must be synchronous** — a promise nested inside the returned object serialises as `{}`; ask an async question through the string or `fn` form, which Playwright awaits. **Prefer the semantic verbs regardless** — `snapshot`, `network-summary` and `console` are compact and stable where a raw `eval` returns whatever the page happens to hold today.
 
 **A `send` with no daemon running starts one first** rather than failing: the ordering is the probe's problem, not the application's. The autostarted daemon inherits that command's environment, so if `RECORD_HAR`/`BASE_URL`/`STORAGE_STATE` matter, set them on the `send` too — its stderr names what it started with. Exit 2 there is still the browserless refusal; exit 3 now means only that a daemon could not be reached or started. **The storageState file holds a working bearer — write it only under a gitignored path.** The HAR needs no such care and no scrub step of your own: `probe.mjs` scrubs it on context close, so it is never unscrubbed on disk. Read the `probe: HAR written …` line — it reports the byte count and how many secrets were placeheld, and a `probe: REFUSED` line beneath it means residue survived and the recording must not be committed.
 
