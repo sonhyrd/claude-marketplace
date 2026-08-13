@@ -364,23 +364,24 @@
     },
     {
       "id": 26,
-      "title": "Every scenario times out on its first navigation — a saturated dev server, not a broken spec",
-      "prompt": "You are in Step 7 of a pw-prove PR-mode run against a Nuxt app served by `nuxi dev`. The project's playwright.config.ts has `workers: process.env.CI ? 1 : undefined`. You ran the 5-scenario proof spec and after 6 minutes ALL FIVE failed with `page.goto: Test timeout of 180000ms exceeded` at the first navigation of each test. Diagnose and state your next command.",
-      "expected_output": "Should recognize this signature — every test timing out at its first navigation — as dev-server saturation, not a spec defect: with no CI env var the config leaves workers undefined, so Playwright fans N workers at a dev server that compiles routes on demand. Should confirm the origin is alive with a quick curl, then re-run the SAME spec unchanged with `--workers=1`. Must NOT heal locators, raise the test timeout, add waits, or count this as one of the 3 auto-fix attempts against the spec.",
+      "title": "Every scenario times out on its first navigation — serialise once to diagnose, then report the finding",
+      "prompt": "You are in Step 7 of a pw-prove PR-mode run against the built proof target (the app's own build, served by its preview server on a port you allocated). The project's playwright.config.ts has `workers: process.env.CI ? 1 : undefined`, so your proof run took Playwright's default. After 6 minutes ALL FIVE scenarios failed with `page.goto: Test timeout of 120000ms exceeded` at the first navigation of each test. Diagnose and state your next command.",
+      "expected_output": "Should treat 'every test times out at its first navigation' as a whole-run signature rather than a spec defect, confirm the origin is alive with a quick curl, and re-run the SAME spec unchanged with `--workers=1` — as a DIAGNOSTIC that separates a concurrency problem from a spec problem, not as the mandated setting it used to be (docs/adr/0017 retired that). Should state that against a built preview this signature has no known cause — the preview compiles nothing and was measured not to saturate — so if the serialised run passes, that is a finding to report with its evidence, not a box ticked on the way to green. Must NOT heal locators, raise the test timeout, add waits, or count this as one of the 3 auto-fix attempts against the spec.",
       "files": [],
       "assertions": [
-        "Diagnoses dev-server saturation from the all-tests-timeout-at-first-goto signature",
-        "Re-runs with --workers=1 rather than editing the spec",
+        "Re-runs at --workers=1 as a one-command diagnostic rather than editing the spec",
         "Checks the origin is alive (curl) before re-running",
+        "States that a spec passing only when serialised is a finding to report, not a fix to adopt silently",
         "False-positive guard: does NOT heal locators or raise timeouts in response to this failure",
-        "False-positive guard: does not pin workers by editing the committed proof config or the project's playwright.config"
+        "False-positive guard: does not pin workers by editing the committed proof config or the project's playwright.config",
+        "False-positive guard: does not diagnose this as a saturated dev server — the proof target is a built preview that compiles nothing"
       ]
     },
     {
       "id": 27,
       "title": "The mutation check must not overwrite the proof clips",
       "prompt": "You are running the Step 7 mutation check in PR-mode. The proof run has passed and test-results/ holds 5 webm clips, one per scenario. Give the exact mutation-run command and the checks you perform after reverting the source.",
-      "expected_output": "The mutation run must send its artifacts elsewhere — `--output=/tmp/pw-prove-mutation` — and must not set PW_PROVE_CLIP, so the passing run's clips in test-results/ survive intact. It should target the single guarding test with `-g`, keep `--workers=1`, and after `git checkout --` verify BOTH that the tree matches the pre-state (diff against /tmp/pre.status and /tmp/pre.patch via process substitution) AND that the clip count in test-results/ still equals the scenario count. Should state that publishing a clip recorded against mutated source would be false evidence.",
+      "expected_output": "The mutation run must send its artifacts elsewhere — `--output=/tmp/pw-prove-mutation` — and must not set PW_PROVE_CLIP, so the passing run's clips in test-results/ survive intact. It should target the single guarding test with `-g` (which makes the run serial by arithmetic, so no `--workers` flag is needed), and after `git checkout --` verify BOTH that the tree matches the pre-state (diff against /tmp/pre.status and /tmp/pre.patch via process substitution) AND that the clip count in test-results/ still equals the scenario count. Should state that publishing a clip recorded against mutated source would be false evidence.",
       "files": [],
       "assertions": [
         "Passes --output=/tmp/pw-prove-mutation (or another dir outside test-results/) on the mutation run",
@@ -455,14 +456,14 @@
       "id": 32,
       "title": "A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec",
       "prompt": "Step 7. The proof run exits with `Error: Timed out waiting 120000ms from config.webServer.` and the report shows 0 tests run, 0 clips. The dev server you started is still logging requests and answers `curl http://localhost:4000` with 200.",
-      "expected_output": "Should read the failure as Playwright never reaching `webServer.url` — it therefore tried to boot a second server and timed out — rather than as a slow app or a defective spec. Zero tests run is the tell: a broken spec still runs. Should re-dial the config's literal URL, then re-run with the Step-3 Runner-origin env var. Should not raise the webServer timeout, add spec timeouts, or add retries, and should not confuse this with the worker-saturation signature where every test times out on its first `page.goto` (that one is fixed with `--workers=1`).",
+      "expected_output": "Should read the failure as Playwright never reaching `webServer.url` — it therefore tried to boot a second server and timed out — rather than as a slow app or a defective spec. Zero tests run is the tell: a broken spec still runs. Should re-dial the config's literal URL, then re-run with the Step-3 Runner-origin env var. Should not raise the webServer timeout, add spec timeouts, or add retries, and should not confuse this with the every-test-times-out-on-first-`page.goto` signature (that one is diagnosed by one re-run at `--workers=1`, and it is a different failure entirely).",
       "files": [],
       "assertions": [
         "Identifies that Playwright could not reach webServer.url and tried to boot a duplicate server",
         "Re-dials the config's literal URL to confirm, rather than raising the webServer timeout",
         "Carries the Runner-origin env var on the retried invocation",
         "False-positive guard: does not add timeouts to the spec, does not add retries, and does not treat this as a locator or assertion failure",
-        "False-positive guard: does not confuse it with the every-test-times-out-on-first-goto signature (that one is worker saturation and is fixed with --workers=1)"
+        "False-positive guard: does not confuse it with the every-test-times-out-on-first-goto signature (a different failure, diagnosed by one re-run at --workers=1)"
       ]
     },
     {
@@ -824,6 +825,34 @@
         "False-positive guard: does NOT treat a sub-second restart as evidence of a stale server",
         "False-positive guard: does NOT kill the process, restart again, or re-run the serve poll to double-check identity",
         "False-positive guard: does NOT withhold or weaken the RED verdict"
+      ]
+    },
+    {
+      "id": 57,
+      "title": "The proof run names no worker count",
+      "prompt": "Step 7, PR-mode, against the built proof target. You have a 5-scenario proof spec, a committed playwright.proof.config.ts, an effective viewport of 1600x900, and the preview server answering at http://127.0.0.1:41453. Give the exact proof-run command.",
+      "expected_output": "The command clears test-results/ first, then runs the spec through the proof config with PW_PROVE_CLIP=1 and PW_PROVE_W/PW_PROVE_H carrying the effective viewport, --project=chromium and --reporter=html. It passes NO --workers flag at all: docs/adr/0017 retired the --workers=1 mandate on 31 measured runs, so the scenarios run concurrently at Playwright's default of cores/2. It must not substitute a literal worker count either — the default is a machine fact Playwright already computes, and a number that fits an 8-core box is wrong on the next one. It must not pin workers in the committed proof config or in the project's playwright.config.",
+      "files": [],
+      "assertions": [
+        "Passes no --workers flag on the proof run",
+        "Clears test-results/ before the run and passes PW_PROVE_CLIP=1 with PW_PROVE_W/H from the effective viewport",
+        "False-positive guard: does not pass --workers=1 (the mandate is retired by docs/adr/0017)",
+        "False-positive guard: does not substitute a hard-coded number such as --workers=4",
+        "False-positive guard: does not add `workers` to the committed proof config or edit the project's playwright.config"
+      ]
+    },
+    {
+      "id": 58,
+      "title": "Scenarios that contend over one shared record serialise in the spec, not on the command line",
+      "prompt": "Step 5, PR-mode. Two of your five scenarios edit the SAME job record on a shared staging tenant — one renames it, the other asserts the rename in a list view. Run concurrently they race each other. How do you handle it?",
+      "expected_output": "Should serialise those scenarios in the spec with `test.describe.configure({ mode: 'serial' })` around the describe block that owns them, with a comment naming the shared record as the reason, and leave the rest of the proof running concurrently. Should say why the flag is the wrong place: each test already gets a fresh browser context, so nothing leaks that way — what interferes is two scenarios contending for one record, which is a property of THIS spec, and a global --workers=1 would charge every other proof wall clock for it. Should not reach for --workers=1, retries, waits or sleeps to paper over the race.",
+      "files": [],
+      "assertions": [
+        "Adds test.describe.configure({ mode: 'serial' }) scoped to the contending scenarios",
+        "Comments the reason (the shared record) beside the configure line",
+        "States that a fresh browser context per test is not the issue — shared tenant state is",
+        "False-positive guard: does not fix it with --workers=1 on the command line",
+        "False-positive guard: does not add retries, waitForTimeout or an increased timeout to absorb the race"
       ]
     }
   ]

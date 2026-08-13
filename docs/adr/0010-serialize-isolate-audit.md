@@ -1,14 +1,18 @@
 # The proof run is serialized, the mutation run is isolated, and the hermetic audit is a script
 
-> **AMENDED by `docs/adr/0016` (issue #46) — this record is LIVE, not superseded.** `--workers=1`
-> **still binds every proof run.** It rests on a documented five-scenario failure, and 0016 stages its
-> removal deliberately: it is lifted on evidence from real runs against a preview server, by issue
-> **#48**, not on the reasoning that its cause is gone. Mutation-output isolation and `hermetic.mjs`
-> are untouched by the proof-target change. What *is* retired with the development server is the
-> **diagnosis**: the Step-7 failure row reading "every test timing out on its first navigation is a
-> saturated server" is deleted, because the built preview compiles nothing and cannot saturate that
-> way. Against the current target, every test timing out at its first navigation is an ordinary
-> failure to diagnose on its evidence, not a signature with a known cause.
+> **PARTIALLY SUPERSEDED by `docs/adr/0017` (issue #48).** The first decision below —
+> **`--workers=1` on every proof run — no longer binds.** It was staged for removal by 0016 (issue
+> #46) behind evidence from real runs against a preview server, and issue #48 produced it: 31 runs
+> and 120 test instances against a real pull request, 1.76–1.89× faster concurrent, zero failures and
+> zero flaky verdicts at every worker count, and a preview server that did not saturate even with
+> every API call live. Serialisation survives as a **diagnostic**, not a mandate; the measurements are
+> in `docs/studies/proof-concurrency-pr2866.md`. The other two decisions — the mutation run's isolated
+> `--output`, and `hermetic.mjs` as a script — are **LIVE and untouched**.
+>
+> Also retired with the development server (0016, issue #46): the **diagnosis**. The Step-7 failure
+> row reading "every test timing out on its first navigation is a saturated server" is deleted,
+> because the built preview compiles nothing and cannot saturate that way. Against the current target
+> that signature has no known cause, and a run showing it is diagnosed on its own evidence.
 
 A transcript audit of one real 5-AC pw-prove run (57.7 min wall, 155k output tokens) put `playwright test` at 39% of the run — for the first time ahead of model time, which every prior audit in this repo had found to be the dominant cost. Two-thirds of that runner time produced nothing:
 
@@ -18,7 +22,8 @@ A transcript audit of one real 5-AC pw-prove run (57.7 min wall, 155k output tok
 
 Decision (pw-prove only), three changes:
 
-- **`--workers=1` on every proof run**, passed on the command line rather than pinned in the proof config. Parallelism buys nothing for a handful of seconds-long scenarios and costs a false failure indistinguishable from a broken spec. The flag keeps `docs/adr/0008`'s committed config a static artifact the skill never edits, and needs no migration for repos that already committed one. Step 7's failure table now names the signature — *every* test timing out on its first navigation is a saturated server, not a locator problem.
+- **`--workers=1` on every proof run** — *superseded by `docs/adr/0017`; the proof run now takes
+  Playwright's default and serialisation is a diagnostic* — passed on the command line rather than pinned in the proof config. Parallelism buys nothing for a handful of seconds-long scenarios and costs a false failure indistinguishable from a broken spec. The flag keeps `docs/adr/0008`'s committed config a static artifact the skill never edits, and needs no migration for repos that already committed one. Step 7's failure table now names the signature — *every* test timing out on its first navigation is a saturated server, not a locator problem.
 - **The mutation run writes to `--output=/tmp/pw-prove-mutation`** and sets no `PW_PROVE_CLIP`, so `test-results/` keeps the passing run's clips untouched. Step 7 adds a post-revert check that the clip count still matches the scenario count. Evidence recorded against mutated source must be structurally impossible to publish, not merely noticed.
 - **`hermetic.mjs` replaces the hand-rolled audit.** It classifies each request from the run's traces: `serverIPAddress` present means the browser put it on the wire, a `route.fulfill()` response has none, a failure carries `status: -1`. The verdict — matching LIVE calls against the spec's `// CARVE-OUT:` header — deliberately stays with the agent; only the mechanical, repeatedly re-derived half is scripted.
 
