@@ -67,6 +67,16 @@ take the highest precedence the combined change earns** — a new shipped script
 fix on top of an already-merged minor makes it a patch — and say so in the merge commit. Do not ask
 a worker to skip the bump; the ledger's stale-install detection depends on it moving.
 
+**The dangerous case is the one that does NOT conflict.** When two branches independently pick the
+same next version, git auto-merges the line and the second change ships under the first one's
+number — silently, with no conflict to make you look. #42 did exactly this against #41's `0.4.0`.
+**After every merge-back, check that the version actually moved past what is already on the
+integration branch**, whether or not git raised a conflict.
+
+`skills/pw-prove/evals/evals.json` conflicts the same way and needs the opposite resolution: both
+sides append independent evals at the same array slot, so keep BOTH and renumber the incoming ids
+onto the end. Taking one side silently deletes a worker's evals.
+
 ### Dispatch note: `worker-release` does not know low-level dispatches
 
 Workers launched with the engine argv go through `terminal create --command …` plus
