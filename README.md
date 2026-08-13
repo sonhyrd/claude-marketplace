@@ -155,6 +155,9 @@ Agent workflow config: [delegation profile](docs/agents/delegate-profile.md) ·
 
 Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md).
 
+Studies: [proof target measurements](docs/studies/proof-target-measurements.md) — development server
+against a built preview, measured, plus the two claims that were verified by running them.
+
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
 [0003 mock-first with declared carve-out](docs/adr/0003-mock-first-declared-carve-out.md) ·
