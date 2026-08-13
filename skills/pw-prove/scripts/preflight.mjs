@@ -38,6 +38,18 @@
 //                  from it rather than guessed, and it is re-read every poll round because a server
 //                  announces its port when IT is ready. Absent, the poll can only try what you asked
 //                  for, and a failure says so (`SERVE_CAUSE=no-log`) rather than blaming the server.
+//   SERVE_RESTART  optional — set to 1 when the serve poll follows a RESTART of the preview server
+//                  (the Step-7 mutation check restarts it twice). A restart is then proven by a NEW
+//                  announcement in SERVER_LOG, never by an answer on the port: the observed failure
+//                  is a restart that died with EADDRINUSE while the OLD process kept answering, and
+//                  the mutation run that followed failed against an artifact nothing had rebuilt —
+//                  a RED that proved nothing. Requires SERVER_LOG; an unprovable restart is a serve
+//                  failure (`RESTART=unproven`), never `SERVE=ok`.
+//   RESTART_LOG_OFFSET
+//                  optional — the size of SERVER_LOG in bytes at the moment the restart was issued
+//                  (`wc -c < "$SERVER_LOG"`). Only announcements past that mark belong to the new
+//                  process. Default 0, which is right when the restart writes a fresh or truncated
+//                  log and wrong when it appends to the old one — so pass it when you append.
 //   REQUIRED_ENV   optional — comma/space-separated keys the built app must have to boot.
 //   ENV_CONTRACT   optional — path to the app's own declared contract (`.env.example` shape). A key
 //                  declared with no value is REQUIRED; a key declared with a value carries its own
@@ -137,6 +149,18 @@ if (!Number.isFinite(BUILD_TIMEOUT) || BUILD_TIMEOUT <= 0) {
   process.exit(EXIT_USAGE);
 }
 const PROBE_HOSTING = process.env.PROBE_HOSTING === '1';
+const SERVE_RESTART = ['1', 'yes', 'true', 'on'].includes((process.env.SERVE_RESTART ?? '').toLowerCase());
+// Validated, never coerced: `Number('abc')` is NaN and every `at >= NaN` comparison is false, so a
+// typo would quietly count NOTHING as new — which reads as a stale server on a healthy restart. A
+// mark that is not a byte count is a usage error, the same way READY_TIMEOUT is.
+const RESTART_LOG_OFFSET = Number(process.env.RESTART_LOG_OFFSET ?? 0);
+if (SERVE_RESTART && (!Number.isInteger(RESTART_LOG_OFFSET) || RESTART_LOG_OFFSET < 0)) {
+  warn(
+    `preflight.mjs: RESTART_LOG_OFFSET must be the log's size in bytes when the restart was issued ` +
+      `(got '${process.env.RESTART_LOG_OFFSET}'); take it with \`wc -c < "$SERVER_LOG"\`\n`,
+  );
+  process.exit(EXIT_USAGE);
+}
 // One root for every phase. The build runs here, the preview server is started from here by the
 // agent, and the dotenv files the app loads are ITS files — resolving them against the caller's cwd
 // makes a monorepo app's own `.env` invisible and turns phase 1 into the false stop this gate exists
@@ -567,7 +591,60 @@ if (phases.includes('serve')) {
     return list;
   }
 
-  warn(`preflight: waiting for ${BASE_URL} (up to ${READY_TIMEOUT}s)...\n`);
+  // --- restart identity ---------------------------------------------------------------------
+  // An answer on the port is evidence that SOMETHING is listening; after a restart, the thing that
+  // answers is exactly as likely to be the process that was supposed to have died. That happened:
+  // the restart lost the port to its own predecessor, the old process answered, the poll said
+  // SERVE=ok, and the mutation run then failed against an artifact nobody had rebuilt — a RED that
+  // proved nothing. So a restart is proven by the new process's own ANNOUNCEMENT, past the mark the
+  // caller took when it issued the restart, and by nothing else.
+  //
+  // Two things can go wrong and they are not fixed the same way, so they are two causes: the new
+  // process said it could not bind (kill the one holding the port), or it simply never announced
+  // while something answered anyway (the answer is unidentified — do not trust it either way).
+  const BIND_FAILURE = /EADDRINUSE|already in use/gi;
+  // A bind failure followed by an announcement is a port SHIFT, not a failed restart — the framework
+  // said it could not have the port and then told us the one it took. Only an unanswered bind
+  // failure is terminal.
+  function failedToBind(text, mark, newAnnounced) {
+    let at = -1;
+    for (const m of text.matchAll(BIND_FAILURE)) if (m.index >= mark) at = m.index;
+    if (at === -1 || newAnnounced.some((a) => a.at > at)) return undefined;
+    return text.slice(at, text.indexOf('\n', at) === -1 ? undefined : text.indexOf('\n', at)).trim();
+  }
+  // One summary for every way this phase ends badly, so a cause added here cannot ship with a
+  // summary that names a different set of keys than the one the timeout path prints.
+  const serveFailed = (cause, ports = []) => {
+    summary.push('SERVE=failed');
+    summary.push(`SERVE_CAUSE=${cause}`);
+    if (SERVE_RESTART) summary.push('RESTART=unproven');
+    summary.push(`BASE_URL=${BASE_URL}`);
+    summary.push(`REQUESTED_URL=${BASE_URL}`);
+    if (ports.length) summary.push(`ANNOUNCED_PORTS=${[...new Set(ports)].join(',')}`);
+    summary.push('READY=no');
+    finish(EXIT_SERVE, 'serve');
+  };
+  const restartStop = (cause, lines) => {
+    warn(`preflight: STOP - serve FAILED: ${lines[0]}\n`);
+    for (const line of lines.slice(1)) warn(`preflight:   ${line}\n`);
+    serveFailed(cause);
+  };
+  if (SERVE_RESTART && !SERVER_LOG) {
+    // Not a usage error: the run asked for a verdict this invocation cannot reach, and the honest
+    // answer is that the restart is unproven — the same answer a stale process gets, because from
+    // here they are indistinguishable, which is the whole point.
+    restartStop('restart-no-log', [
+      'a restart cannot be proven without the server log.',
+      'SERVE_RESTART=1 requires SERVER_LOG: the restarted process is identified by its own new ' +
+        'announcement, and an answer on the port is exactly what a process that did NOT restart ' +
+        'also produces. Start the preview with a readable log and pass SERVER_LOG=<path>.',
+    ]);
+  }
+
+  warn(
+    `preflight: waiting for ${BASE_URL} (up to ${READY_TIMEOUT}s)` +
+      `${SERVE_RESTART ? `, and for a restart announcement past byte ${RESTART_LOG_OFFSET} of the log` : ''}...\n`,
+  );
   if (!SERVER_LOG) {
     warn(
       'preflight: WARN - no SERVER_LOG given; an automatically shifted port cannot be read back and ' +
@@ -584,14 +661,59 @@ if (phases.includes('serve')) {
   let logText; // re-read every round: a server announces its port when IT is ready, not when we ask
   let announced = [];
   let reached;
+  let unidentified; // answered, but not provably the restarted process
+  let restartPorts = new Set(); // ports announced AFTER the restart mark
+  // The caller's mark is a BYTE count (`wc -c`); every index below is into the decoded string. A
+  // preview server's banner is full of `➜` and `✔`, each three bytes and one character, so comparing
+  // the two directly would put the mark ahead of a genuinely new announcement and report a healthy
+  // restart as stale — the misdiagnosis this mode exists to prevent, wearing its own hat.
+  let restartMark = 0;
+  const markGiven = process.env.RESTART_LOG_OFFSET !== undefined;
+  let markWarned = false;
   let lastCode = '000';
   for (;;) {
     if (SERVER_LOG) {
       try {
-        logText = fs.readFileSync(SERVER_LOG, 'utf8');
+        const bytes = fs.readFileSync(SERVER_LOG);
+        logText = bytes.toString('utf8');
+        restartMark = bytes.subarray(0, Math.min(RESTART_LOG_OFFSET, bytes.length)).toString('utf8').length;
         announced = announcedPorts(logText);
       } catch {
         /* not there yet, or unreadable — neither is a verdict; the poll below still answers */
+      }
+    }
+    if (SERVE_RESTART) {
+      const fresh = announced.filter((a) => a.at >= restartMark);
+      // No mark, and the log ALREADY names an origin on the first round. Either the restart is fast
+      // (fine — the log is fresh and that announcement is its own) or the log appends and this is
+      // the previous process's line, which would prove the restart with the predecessor's own
+      // evidence. The two are indistinguishable from here, so say so once rather than assert either.
+      if (!markGiven && fresh.length && !markWarned) {
+        markWarned = true;
+        warn(
+          `preflight: WARN - no RESTART_LOG_OFFSET given and ${SERVER_LOG} already names an origin. If ` +
+            'this log is fresh or truncated per start, that announcement is the restarted server and ' +
+            'the proof holds; if it APPENDS across restarts, it may be the previous one. Take the mark ' +
+            'before the restart (`wc -c < "$SERVER_LOG"`) to tell them apart.\n',
+        );
+      }
+      restartPorts = new Set(fresh.map((a) => a.port));
+      // The new process's announcements are dialled FIRST: only three announcements are kept as
+      // candidates, and a server that prints Local/Network/API lines can push its own new port out
+      // of that window — which would time out as "announced and unreachable" on a server that is
+      // answering, and answering as itself.
+      announced = [...fresh, ...announced.filter((a) => !fresh.includes(a))];
+      // Stop the moment the new process says it could not bind. Waiting out the budget here buys
+      // nothing — the restart is over — and the run has a stale server to kill before it can retry.
+      const bindLine = failedToBind(logText ?? '', restartMark, fresh);
+      if (bindLine) {
+        restartStop('restart-port-in-use', [
+          `the restarted server never bound — its own log says: ${bindLine}`,
+          'Whatever answers on that port is the PREVIOUS process, still serving the artifact it ' +
+            'started with. Kill it (the port is held by something you did not just start) and ' +
+            'restart, then poll again. Any verdict taken against this server is a verdict about ' +
+            'the old build.',
+        ]);
       }
     }
     for (const c of candidatesFrom(announced)) {
@@ -603,6 +725,15 @@ if (phases.includes('serve')) {
       );
       lastCode = (r.stdout || '').trim() || '000'; // curl prints 000 on refused; '' if curl is absent
       if (!['000', '502', '503', '504'].includes(lastCode)) {
+        // In restart mode an answer is only accepted from a port the NEW process announced. It is
+        // remembered rather than discarded, because "something answered and it is not identifiably
+        // yours" is a different failure from "nothing answered", and the operator does different
+        // things about them. The poll keeps going: a restart that announces a second later is the
+        // ordinary case, and failing on the first round would misread it as stale.
+        if (SERVE_RESTART && !restartPorts.has(c.port)) {
+          unidentified = c;
+          continue;
+        }
         reached = c;
         break;
       }
@@ -616,15 +747,33 @@ if (phases.includes('serve')) {
     if (waited + 2 >= READY_TIMEOUT) {
       // Three answers, not one. A shifted port that WAS found is not a failure at all (above); these
       // are the three ways the phase can still end badly, and their fixes have nothing in common.
-      const cause =
-        logText === undefined ? 'no-log' : announced.length === 0 ? 'no-announcement' : 'announced-unreachable';
+      // A fourth answer, and only in restart mode: something IS serving that origin, and it is not
+      // provably the process just restarted. Ranked first because it is the one that used to pass.
+      const cause = unidentified
+        ? 'restart-unannounced'
+        : logText === undefined
+          ? 'no-log'
+          : announced.length === 0
+            ? 'no-announcement'
+            : 'announced-unreachable';
       const tail = logText === undefined ? [] : logText.trimEnd().split('\n').slice(-15);
       warn(
-        `preflight: STOP - serve FAILED: nothing answered within ${READY_TIMEOUT}s (last HTTP ` +
-          `${lastCode}). A preview server binds in under a second, so this is a broken or absent ` +
-          'server, not a slow one.\n',
+        cause === 'restart-unannounced'
+          ? `preflight: STOP - serve FAILED: ${unidentified.url} answers, but nothing in the log says ` +
+            `the restarted server is what answers. A restart is proven by its own announcement.\n`
+          : `preflight: STOP - serve FAILED: nothing answered within ${READY_TIMEOUT}s (last HTTP ` +
+            `${lastCode}). A preview server binds in under a second, so this is a broken or absent ` +
+            'server, not a slow one.\n',
       );
-      if (cause === 'no-announcement') {
+      if (cause === 'restart-unannounced') {
+        warn(
+          `preflight:   ${SERVER_LOG} announced nothing past byte ${RESTART_LOG_OFFSET} within ` +
+            `${READY_TIMEOUT}s, so the process answering there is as likely to be the one the restart ` +
+            'was meant to replace — serving the artifact it started with. Its last lines are below. ' +
+            'Either the restart never happened, or it appends to a log whose mark you did not pass ' +
+            '(RESTART_LOG_OFFSET). Do not read a verdict off this server.\n',
+        );
+      } else if (cause === 'no-announcement') {
         // Deliberately NOT called "never-started": the log naming no origin is evidence about the
         // LOG. A crash is the common case and its trace is right below, but a server that binds
         // quietly reaches here too, and a confident wrong verdict is the misdiagnosis this phase
@@ -649,13 +798,10 @@ if (phases.includes('serve')) {
         );
       }
       for (const line of tail) warn(`preflight:   | ${line}\n`);
-      summary.push('SERVE=failed');
-      summary.push(`SERVE_CAUSE=${cause}`);
-      summary.push(`BASE_URL=${BASE_URL}`);
-      summary.push(`REQUESTED_URL=${BASE_URL}`);
-      if (announced.length) summary.push(`ANNOUNCED_PORTS=${[...new Set(announced.map((a) => a.port))].join(',')}`);
-      summary.push('READY=no');
-      finish(EXIT_SERVE, 'serve');
+      serveFailed(
+        cause,
+        announced.map((a) => a.port),
+      );
     }
     sleep(2000);
   }
@@ -682,6 +828,10 @@ if (phases.includes('serve')) {
     }
   }
   summary.push('SERVE=ok');
+  // Only ever printed as `proven`: the unproven case never reaches this line, because it is a serve
+  // failure. Downstream (the Step-7 mutation check) reads this rather than inferring identity from
+  // SERVE=ok, which is exactly the inference that produced a false RED.
+  if (SERVE_RESTART) summary.push('RESTART=proven');
   summary.push(`BASE_URL=${reached.url}`);
   summary.push(`REQUESTED_URL=${BASE_URL}`);
   summary.push(`PORT_SOURCE=${reached.source}`);

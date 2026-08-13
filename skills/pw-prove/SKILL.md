@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.12.0"
+  version: "0.13.0"
 ---
 
 # pw-prove
@@ -261,7 +261,16 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
    ```
    The serve phase polls on a **short** budget (20s default), because a preview server binds in under a second and answers its first page in milliseconds; one that is not answering quickly is broken, not slow. On success, **`BASE_URL=` in the summary is the origin that actually answered** — with `PORT_SOURCE` (`announced`/`requested`), `PORT_SHIFTED`, and `ADDRESS_FAMILY` (`ipv4`/`ipv6`/`localhost`) saying how it was learned. When it differs from what you asked for, that origin is the one to carry **everywhere** from here on — the probe, the config the runner reads, the HAR binding, and every runner invocation. Each is a fresh environment; fixing it in one is not fixing it.
 
-   On STOP (exit 3), `SERVE_CAUSE` says which of three failures it was, and they are not fixed the same way: `no-announcement` — the log names no listening origin, so the port could not be read at all; its last lines are printed and a server that died before binding is the common case, but a server that binds quietly lands here too, so read them before touching a port; `announced-unreachable` — it announced a port and nothing answers there on any loopback form, so it bound and stopped, and re-guessing the port is not the fix; `no-log` — no log was read, so a shifted port could not be ruled out, which is a gap in the invocation, not a verdict about the server. **A status code is liveness, not health** — an app that resolves its tenant from a query parameter answers `200` with an empty shell when the parameter is absent, so carry that parameter (`?company_slug=<slug>`-style) on the recon navigation below and confirm real content through the probe, never from the poll alone.
+   **Restarting one? Say so — an answer on the port is not evidence a restart happened.** Whenever you poll a server you have just *restarted* (Step 7 restarts it twice), take the log's size first and pass both:
+   ```bash
+   MARK=$(wc -c < "<the preview task's log>")   # before you kill and restart
+   # ...restart the preview server...
+   SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="http://localhost:$PORT" \
+     SERVER_LOG="<the preview task's log>" node <skill-base>/scripts/preflight.mjs serve
+   ```
+   The restart is then proven by the server's own **new** announcement past that mark, and by nothing else — an origin that answers with no new announcement is `RESTART=unproven` and a serve failure. This is not hypothetical: an observed restart died with `EADDRINUSE`, the *old* process kept answering, the poll said `SERVE=ok`, and the mutation run failed 128s later against an artifact nothing had rebuilt. On success the summary carries `RESTART=proven`. Give the restart a fresh or truncated log and the mark is `0` (the default); if it *appends*, the mark is not optional — without it the previous process's announcement is read as this one's.
+
+   On STOP (exit 3), `SERVE_CAUSE` says which failure it was, and they are not fixed the same way: `no-announcement` — the log names no listening origin, so the port could not be read at all; its last lines are printed and a server that died before binding is the common case, but a server that binds quietly lands here too, so read them before touching a port; `announced-unreachable` — it announced a port and nothing answers there on any loopback form, so it bound and stopped, and re-guessing the port is not the fix; `no-log` — no log was read, so a shifted port could not be ruled out, which is a gap in the invocation, not a verdict about the server; and in restart mode three more: `restart-port-in-use` — the restarted server said it could not bind, so whatever answers is its predecessor serving the *old* artifact (kill the process holding the port, restart, poll again); `restart-unannounced` — something answers but nothing identifies it as the restarted process (either the restart never happened, or its log appends and you passed no `RESTART_LOG_OFFSET`); and `restart-no-log` — `SERVE_RESTART=1` without a `SERVER_LOG`, which is the one thing a restart can be proven by, so the mode refuses rather than falling back to the answer-on-the-port check it replaces. **A status code is liveness, not health** — an app that resolves its tenant from a query parameter answers `200` with an empty shell when the parameter is absent, so carry that parameter (`?company_slug=<slug>`-style) on the recon navigation below and confirm real content through the probe, never from the poll alone.
 5. **Pin the origin *Playwright itself* will dial, and prove that exact string reachable.** The serve phase found *an* origin that answers; the runner dials whatever the config says, which is a different string. `webServer.url` in a scaffolded config is usually the literal `http://127.0.0.1:<port>` — carrying the old port, or the loopback family the server did not bind. Playwright then concludes no server is up, boots a duplicate, and dies on `Timed out waiting 120000ms from config.webServer`, burning the whole proof run. Read `webServer.url` / `use.baseURL` out of the config **after** env overrides, and curl that literal origin:
    ```bash
    curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
@@ -733,19 +742,25 @@ Getting this wrong costs a full extra proof run to regenerate clips — and only
 **The mutation must be in the artifact under test.** The proof target is a *build*, so a mutated source file changes nothing until it is rebuilt — a mutation check run against the standing artifact is green by construction and proves nothing. Rebuild after mutating and again after reverting, forcing the build both times, and restart the preview server on each so it serves the artifact you just made:
 
 ```bash
+MARK=$(wc -c < "<the preview task's log>")   # the restart mark, taken BEFORE you stop the server
 BUILD_REUSE=never BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
   node <skill-base>/scripts/preflight.mjs build
+# ...stop the preview server, start it again on the same port...
+SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
+  SERVER_LOG="<the preview task's log>" node <skill-base>/scripts/preflight.mjs serve
 ```
+
+**`SERVE_RESTART=1` is not decoration, and neither is the mark.** A restart that loses the port to its own predecessor leaves the *old* server answering — serving the pre-mutation artifact, or serving code whose hashed chunks the rebuild has since overwritten. Either way the mutation run fails, and **a failure is exactly the outcome this step is looking for**: an observed run took 128s to a page stuck on its loading splash and would have reported "the spec guards the change" on evidence that proves nothing. (Killing the stale process and re-running gave the genuine RED — a failed assertion on the missing hint — in 18.7s.) So: **exit 3 with a `SERVE_CAUSE` of `restart-port-in-use` or `restart-unannounced` is not a verdict.** Do not read the mutation run's result at all — fix the restart (kill whatever holds the port) and run the mutation again. Only `RESTART=proven` licenses reading Red or Green below.
 
 `BUILD_REUSE=never` is not optional here: the reuse check is what makes a batch cheap, and the mutation check is the one run that must never inherit an artifact. (The mutation moves the fingerprint too, so both belt and braces point the same way.) Budget for it — this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
 
 1. **Record pre-state:** `git status --porcelain > /tmp/pre.status && git diff > /tmp/pre.patch`.
 2. **Mutate** the changed behavior (one line is enough), then **rebuild and restart the preview** as above.
-3. **Run the spec** with the isolated output above — `-g` the one test that should guard it, not the whole spec. Three verdicts, exactly one retry:
+3. **Run the spec** with the isolated output above — `-g` the one test that should guard it, not the whole spec. Only once the restart came back `RESTART=proven`; an unproven one has no verdict to read. Three verdicts, exactly one retry:
    - **Red** → the spec guards the change. Done.
    - **Green** → strengthen the terminal assertion and repeat **once**.
    - **Green again, behavior not isolable at the browser layer** (another layer independently preserves the outcome — e.g. a read-modify-write that re-reads and merges) → **"unguardable at this layer"**. Never a third cycle. State it in the report and PR comment, naming the masking layer.
-4. **Revert exactly** (`git checkout -- <file>`), then **rebuild and restart the preview once more** — leaving the mutated artifact behind means every later step (a re-film, a heal run, the hermetic audit) runs against deliberately broken software.
+4. **Revert exactly** (`git checkout -- <file>`), then **rebuild and restart the preview once more, polling it the same way** (a fresh `MARK`, `SERVE_RESTART=1`) — this restart is the one whose staleness would poison every later step, and it is proven or it is not. Leaving the mutated artifact behind means every later step (a re-film, a heal run, the hermetic audit) runs against deliberately broken software.
 5. **Verify the tree is unchanged** — process substitution on **both** sides so a trailing-newline artifact isn't mistaken for residue:
    ```bash
    diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch

@@ -332,6 +332,153 @@ expect_exit 1 "a BASE_URL that is not a URL is a usage error, not a serve failur
   env BASE_URL=localhost:3000 READY_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs" serve
 
 echo ""
+echo "-- preflight: a RESTART is proven by a new announcement, not by an answer on the port --"
+# The live proof produced a false RED here: the preview restart failed with EADDRINUSE, the OLD
+# process answered the port, the poll said SERVE=ok, and the mutation run failed against an artifact
+# nothing had rebuilt. A restart needs a liveness IDENTITY, not a liveness check — so SERVE_RESTART=1
+# requires an announcement written AFTER the restart mark (RESTART_LOG_OFFSET), and an answer alone
+# proves nothing.
+
+# The stale process: one server that stays up across every case below, exactly as the old preview
+# server did. It answers on 8751 whatever the log says.
+# Started under the EXIT trap, not just killed at the end of the block: every case below needs
+# SOMETHING answering 8751, so a run that dies mid-block must not leave the port held for the next.
+STALE=""
+kill_stale() { [ -n "$STALE" ] && { kill "$STALE" && wait "$STALE"; } 2>/dev/null; STALE=""; }
+trap 'kill_stale; rm -rf "$W"' EXIT
+for _ in $(seq 1 50); do
+  curl -s -o /dev/null --max-time 1 http://127.0.0.1:8751 && break   # a leftover listener: wait it out
+  node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(8751,"127.0.0.1")' 2>/dev/null &
+  STALE=$!
+  sleep 0.2
+  curl -s -o /dev/null --max-time 1 http://127.0.0.1:8751 && break
+done
+
+# 1. Stale process answers — the observed failure verbatim. The restart never bound, said so, and the
+# port still answers. That must be a bring-up failure, and it must be fast: there is nothing to wait
+# for once the new process has told us it could not bind.
+printf 'Listening on http://127.0.0.1:8751\n' >"$W/restart.log"
+MARK=$(wc -c <"$W/restart.log" | tr -d ' ')
+printf 'Error: listen EADDRINUSE: address already in use :::8751\n' >>"$W/restart.log"
+start=$(date +%s)
+expect_exit 3 "a restart that failed with EADDRINUSE is a SERVE failure, though the old process answers" -- \
+  env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/restart.log" RESTART_LOG_OFFSET="$MARK" \
+      SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve
+elapsed=$(( $(date +%s) - start ))
+if grep -q '^SERVE_CAUSE=restart-port-in-use$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out" \
+   && ! grep -q '^SERVE=ok$' "$W/out"; then
+  ok "the stale answer is named — SERVE_CAUSE=restart-port-in-use, RESTART=unproven, never SERVE=ok"
+else
+  bad "stale-process-answers — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+if [ "$elapsed" -le 8 ]; then ok "a bind failure stops at once (${elapsed}s), it is not waited out"; else bad "port-in-use waited ${elapsed}s of a 20s budget"; fi
+
+# 2. Stale process answers with a quiet log — no bind error, just nothing new. The old announcement
+# is BEFORE the mark, so it is not evidence about this restart, and an answer on the port is not
+# either. Distinct cause: something answered, its identity could not be proven.
+printf 'Listening on http://127.0.0.1:8751\n' >"$W/quiet.log"
+MARK=$(wc -c <"$W/quiet.log" | tr -d ' ')
+expect_exit 3 "an answering server with no announcement after the restart mark is unproven, not ok" -- \
+  env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/quiet.log" RESTART_LOG_OFFSET="$MARK" \
+      SERVE_RESTART=1 READY_TIMEOUT=4 node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^SERVE_CAUSE=restart-unannounced$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out"; then
+  ok "an unprovable restart is its own answer — SERVE_CAUSE=restart-unannounced"
+else
+  bad "restart-unannounced cause — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# 3. FALSE-POSITIVE GUARD — a legitimately fast restart. The new process bound and announced before
+# the poll even started, so its announcement is already in the log when the first round reads it.
+# That is the common case and it must pass on the first round, not be misread as the stale one.
+printf 'Listening on http://127.0.0.1:8751\n' >"$W/fast.log"
+MARK=$(wc -c <"$W/fast.log" | tr -d ' ')
+printf 'restarting...\nListening on http://127.0.0.1:8751\n' >>"$W/fast.log"
+start=$(date +%s)
+( cd "$W" && env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/fast.log" RESTART_LOG_OFFSET="$MARK" \
+    SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+elapsed=$(( $(date +%s) - start ))
+if [ "$rc" -eq 0 ] && grep -q '^RESTART=proven$' "$W/out" && grep -q '^SERVE=ok$' "$W/out" && [ "$elapsed" -le 8 ]; then
+  ok "a restart that announced before the poll began is proven at once (${elapsed}s), not read as stale"
+else
+  bad "fast restart false-positive guard — exit $rc, ${elapsed}s, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# 3b. The mark is a BYTE count and the log is full of multi-byte characters — a preview banner is
+# nothing but `➜` and `✔`. Counting the mark in characters would push it PAST the new announcement
+# and report this healthy restart stale, which is the same false verdict from the other side.
+printf '  ➜  Local:   http://127.0.0.1:8751/\n  ➜  Network: use --host to expose\n  ✔  built in 812ms\n' >"$W/utf8.log"
+MARK=$(wc -c <"$W/utf8.log" | tr -d ' ')
+printf '  ➜  Local:   http://127.0.0.1:8751/\n' >>"$W/utf8.log"
+( cd "$W" && env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/utf8.log" RESTART_LOG_OFFSET="$MARK" \
+    SERVE_RESTART=1 READY_TIMEOUT=6 node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+if [ "$rc" -eq 0 ] && grep -q '^RESTART=proven$' "$W/out"; then
+  ok "the restart mark is read as bytes, so a multi-byte banner does not hide the new announcement"
+else
+  bad "utf-8 restart mark — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# 3c. No mark at all. A log written fresh per start makes the default mark of 0 correct, and a log
+# that APPENDS makes it prove the restart with the previous process's own announcement. Nothing here
+# can tell those apart, so the run says so — once — rather than asserting either.
+printf 'Listening on http://127.0.0.1:8751\n' >"$W/nomark.log"
+( cd "$W" && env -u RESTART_LOG_OFFSET BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/nomark.log" \
+    SERVE_RESTART=1 READY_TIMEOUT=6 node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+if [ "$rc" -eq 0 ] && grep -qF 'no RESTART_LOG_OFFSET given' "$W/err" \
+   && [ "$(grep -cF 'no RESTART_LOG_OFFSET given' "$W/err")" = 1 ]; then
+  ok "an unmarked restart against an already-announcing log warns once, and does not pretend to know"
+else
+  bad "unmarked restart warning — exit $rc, stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+fi
+
+# 4. Clean restart — the announcement lands DURING the poll, which is what a restart normally looks
+# like. The poll re-reads the log every round, so the identity arrives when the server is ready.
+printf 'Listening on http://127.0.0.1:8751\n' >"$W/clean.log"
+MARK=$(wc -c <"$W/clean.log" | tr -d ' ')
+( sleep 3; printf 'Listening on http://127.0.0.1:8751\n' >>"$W/clean.log" ) &
+LATE=$!
+( cd "$W" && env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/clean.log" RESTART_LOG_OFFSET="$MARK" \
+    SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+wait $LATE 2>/dev/null
+kill_stale
+if [ "$rc" -eq 0 ] && grep -q '^RESTART=proven$' "$W/out" && grep -q '^SERVE=ok$' "$W/out"; then
+  ok "a clean restart announcing mid-poll is proven when its announcement lands"
+else
+  bad "clean restart — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# 5. The port genuinely free — nothing listening at all. That is still the ordinary absent-server
+# failure, not a restart-identity one: keeping them apart is the difference between "start it" and
+# "kill the one that is already there".
+printf 'restarting...\n' >"$W/free.log"
+expect_exit 3 "a restart onto a genuinely free port is an absent server, not a stale one" -- \
+  env BASE_URL=http://127.0.0.1:1 SERVER_LOG="$W/free.log" SERVE_RESTART=1 READY_TIMEOUT=2 \
+      node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^SERVE_CAUSE=no-announcement$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out"; then
+  ok "nothing answering keeps its own cause — SERVE_CAUSE=no-announcement with RESTART=unproven"
+else
+  bad "free-port restart — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
+# A restart with no log cannot be proven by anything, so it refuses rather than falling back to the
+# answer-on-the-port check the whole mode exists to replace.
+expect_exit 3 "a restart with no SERVER_LOG refuses — identity cannot be read from an answer" -- \
+  env -u SERVER_LOG BASE_URL=http://127.0.0.1:1 SERVE_RESTART=1 READY_TIMEOUT=2 \
+      node "$REPO_ROOT/$S/preflight.mjs" serve
+if grep -q '^SERVE_CAUSE=restart-no-log$' "$W/out"; then
+  ok "a restart without a log says so — SERVE_CAUSE=restart-no-log"
+else
+  bad "restart-no-log cause — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+# A non-numeric mark would silently include the whole log, which is the stale case again.
+expect_exit 1 "a RESTART_LOG_OFFSET that is not a byte count is a usage error" -- \
+  env BASE_URL=http://127.0.0.1:1 SERVER_LOG="$W/free.log" SERVE_RESTART=1 RESTART_LOG_OFFSET=abc \
+      READY_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs" serve
+
+echo ""
 echo "-- probe: browserless refusal + client contract (NO browser in CI) --"
 # The refusal is the CI-provable half of the probe contract: $W has no node_modules anywhere up its
 # tree, so `start` must refuse cleanly (exit 2) BEFORE any launch attempt — never boot a browser,
