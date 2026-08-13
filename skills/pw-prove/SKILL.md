@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # pw-prove
@@ -35,9 +35,9 @@ Step 7  Verify                       (tsc → warm route → proof run [video+tr
 Step 8  Deliver                      (PR-mode: publish ONE chaptered recording → Clips · commit spec+POM+api.har · push · PR comment · report)
 ```
 
-**A PR-mode run ends at Step 8's completion report and nowhere else.** The report is structurally invalid without its `Proof page`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines. The only sanctioned PR-mode stop is a base-merge conflict (Step 3); everything else resolves from the contract with a stated assumption.
+**A PR-mode run ends at Step 8's completion report and nowhere else.** The report is structurally invalid without its `Proof page`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines. PR-mode has exactly **two** sanctioned stops — a base-merge conflict (Step 3) and the **handover stop** (Step 7, the verify loop exhausted); everything else resolves from the contract with a stated assumption.
 
-**Stop reports (target & coverage-gap modes).** A run that cannot legitimately produce coverage (flow absent, dev server won't boot, auth wall with no discoverable credential) STOPs with a report — never a fabricated pass. In order:
+**Stop reports (every mode).** A run that cannot legitimately produce coverage (flow absent, dev server won't boot, auth wall with no discoverable credential) or cannot make its spec pass STOPs with a report — never a fabricated pass. In order:
 
 1. **Verdict + where** — one line ("STOPPED at Step 3 — dev server won't boot").
 2. **Target** — the flow/route/change requested.
@@ -46,7 +46,7 @@ Step 8  Deliver                      (PR-mode: publish ONE chaptered recording �
 5. **What was NOT produced** — state plainly no spec/POM was written; if a prior spec exists, that it was *not* run against the unavailable app and *not* reported green (a "pass" against a dead surface is the silent-always-pass anti-pattern this pipeline exists to avoid).
 6. **How to unblock** — the one action that would let a re-run succeed, plus an offer to re-run.
 
-A stop never emits the Step 8 tail — nothing shipped.
+A stop never emits the Step 8 tail — nothing shipped. In PR-mode the stop report is additionally **delivered as a PR comment**, because a report that only reaches the transcript reaches nobody waiting on the PR (see [handover stop](#the-handover-stop--pr-modes-exit-when-the-loop-is-exhausted)).
 
 ---
 
@@ -225,7 +225,7 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
 **Then sync the base — merge `origin/<default>` before bring-up** (`git fetch origin <default>`, `git merge origin/<default>`); a PR proven against a stale base can go green on code that will never ship that way.
 
 - **Clean merge** → continue: you prove the merged result, and the merge commit rides to the PR branch with the Step 8 push.
-- **Conflict** → `git merge --abort`, STOP, report the conflicting paths. The **only sanctioned PR-mode stop**.
+- **Conflict** → `git merge --abort`, STOP, report the conflicting paths. One of the **two sanctioned PR-mode stops** (the other is the Step-7 handover stop).
 
 1. **Resolve the port — prefer the worktree's configured one** (`baseURL`/`webServer.url` in `playwright.config.*`, or `.env PORT`). Only when nothing is configured, pick a free one:
    ```bash
@@ -578,7 +578,7 @@ Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` carry the St
 
 A non-2xx warm, a `warm-failed:` line, or a browserless fallback to `curl` is all reported the same way — `Proof page: <url> — warm miss, clips are boot-heavy`. The reason is one reason: `curl` warms the document but not the client module graph, so the boot still lands in the recording.
 
-### Failure handling (max 3 auto-fix attempts)
+### Failure handling (max 3 auto-fix attempts, fewer if the failure stops changing)
 
 Per attempt, diagnose the actual failure and apply the matching fix:
 
@@ -595,7 +595,33 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 
 **Token diet.** Inside the fix loop, run tool calls back-to-back — no prose narration between them; the diagnosis lands in the fix. Write the spec **once** from the `pomInventory` + Locator Mapping Table — never scaffold a throwaway skeleton and rewrite it. **Non-deliverable spec probes are forbidden** — no `_recon.spec.ts`, no `zz-debug.spec.ts`: the probe is the recon channel, the test runner is not a REPL.
 
-After 3 failed attempts: **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces). Do not attempt a 4th fix.
+**No-progress checkpoint — the bound is three attempts, but not three retries.** After every failed attempt, record that run's **failure signature**: the **error class** (`TimeoutError`, `expect(locator).toBeVisible` failed, `Route.abort` on an unrecorded call, a `tsc` error code) plus the **failing locator** (the selector Playwright names in the error, or the file:line when no locator is involved). Then:
+
+| Signature vs. the previous attempt | What it means | Do |
+|---|---|---|
+| **Same** error class *and* same failing locator | The fix changed nothing the app can see — a retry, not a fix | **STOP the loop immediately.** Do not spend the remaining attempt. |
+| Different error class **or** different failing locator | The spec is converging — each fix moved the failure | Continue; the budget is the full 3 attempts. |
+
+A raw count cannot tell those apart, which is how one run spent an hour rewriting the same binding three times against one unchanging 30-second timeout. Progressing through three genuinely different failures is the loop working as intended and consumes the whole budget.
+
+When the loop ends without a green run — three attempts spent, or the checkpoint tripped at two — **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces) for the diagnosis. Do not attempt a 4th fix. Then stop: PR-mode takes the handover stop below; target and coverage-gap modes emit the stop report from the Pipeline Overview.
+
+### The handover stop — PR-mode's exit when the loop is exhausted
+
+The second sanctioned PR-mode stop. It exists because the alternatives an agent actually reaches for are all worse: an unbounded loop, silence, or a handover document filed in a repo directory where nobody watching the PR will ever encounter it. The instinct to write a handover is right; only the destination was wrong. **The destination is a PR comment.**
+
+**REQUIRED — post it with `gh pr comment` before ending the run.** The stop is not taken until the comment exists; a handover that only reaches the transcript is a non-delivery. Carrying, in this order:
+
+1. **Verdict + where** — `pw-prove — HANDOVER STOP at Step 7: <N> fix attempts, no green run` (or `… stopped at attempt 2 — unchanged failure signature`).
+2. **The spec, verbatim** — the generated spec and POM in fenced blocks, so the next agent inherits the work instead of rewriting it. This is the *only* place they land; see below.
+3. **The failure, verbatim** — the runner's own output for the last attempt (error class, locator, stack, attempt/retry counts), never paraphrased or summarised.
+4. **The diagnosis** — `playwright-debugger`'s F-code verdict and its named cause, plus each fix already attempted and why it did not move the failure. This is what saves the next run the hour: one non-delivery was redone from scratch in 55 minutes the next day because nothing was handed over.
+5. **What was NOT produced** — no green spec, nothing committed, nothing pushed, no proof page.
+6. **How to unblock** — the one change (usually in the app, not the spec) that would let a re-run pass.
+
+**Nothing is committed to the branch, and nothing is pushed.** A knowingly-failing spec on the branch is precisely the defect this pipeline exists to prevent, so the spec travels in the comment body rather than in a commit. Run the Step-8 hygiene beats that release resources — stop a dev server this run started, sweep `test-results/` — and nothing else from Step 8.
+
+**The handover stop never emits the delivery tail.** No `Proof page`, `Mutation`, `Committed`, `Pushed` or `PR comment: <proof link>` lines: the completion report's shape is what distinguishes a delivered proof from a reported non-delivery, and a stop that borrows the tail is indistinguishable from a proof that shipped.
 
 A **flaky verdict** (passed only on retry) is not clean — diagnose once. If the nondeterminism is app-inherent (the app races its own state), remove the scenario on this evidence and report its AC as `unproven — gated: nondeterministic (<cause>)`.
 
