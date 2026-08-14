@@ -17,9 +17,9 @@ mandate in the same change on exactly that reasoning. 0016 deliberately did not:
 rests on an observed failure and reasoning does not retire an observation. A decision record wrongly
 superseded is worse than one left standing — the next agent trusts it.
 
-The evidence now exists. **31 runs and 120 test instances** against a real open pull request on a
-real application, at `--workers` from 1 to 6, hermetic and non-hermetic, filmed —
-`docs/studies/proof-concurrency-pr2866.md` holds all of it. The three numbers that decide this:
+The evidence now exists, and it is recorded here rather than in a separate study: **31 runs and 120
+test instances** against a real open pull request on a real application, at `--workers` from 1 to 6,
+hermetic and non-hermetic, filmed. The three numbers that decide this:
 
 - **Wall clock falls by 1.76×** on the three-scenario proof shape (median 46.4 s serialised against
   26.4 s at Playwright's default of 4 workers) and by **1.89×** on the six-instance shape that
@@ -36,6 +36,66 @@ Evidence integrity was checked rather than assumed, because the clips and traces
 across the 25 hermetic runs, all **102 clips and 102 traces** were present, complete and decodable;
 `hermetic.mjs` returned an **identical** LIVE/MOCKED classification at 1 and 4 workers on the same run
 shape; and the payoff frame at `--workers=6` is the same legible beat as at `--workers=1`.
+
+## The measurements
+
+The application, the pull request and the bring-up are the ones in `docs/studies/live-proof-pr2866.md`:
+a Nuxt 4 / Nitro / Vite (Rolldown) multi-tenant recruiting product, the pull request adding a
+flag-gated compensation section to the job editor, three scenarios (the section renders; `min > max`
+warns; a negative amount warns), replayed hermetically from a `**/api/**` HAR and filmed with
+`PW_PROVE_CLIP=1` at 1600×900 through the committed proof config, in a throwaway `git worktree`.
+
+Three axes, each varying only the worker count, run **round-robin rather than blocked** so drifting
+machine load falls on every condition. This is a shared machine; the one-minute load average beside
+each run ranged from **1.7 to 19.5** on 8 cores, which makes every number below conservative for
+concurrency rather than generous to it.
+
+**Axis A — the proof shape.** 3 scenarios, hermetic, filmed, n=4 per cell. Median, with range, and
+speed-up against one worker:
+
+| Workers | Median | Range | Speed-up |
+|---|---|---|---|
+| 1 | **46.4 s** | 39.5 – 60.4 | — |
+| 2 | **35.1 s** | 29.8 – 46.0 | 1.32× |
+| 3 | **29.6 s** | 22.7 – 36.1 | 1.57× |
+| 4 (Playwright's default here) | **26.4 s** | 24.7 – 29.8 | **1.76×** |
+
+**Axis B — the mandate's shape.** The same spec at `--repeat-each=2`, so **6** test instances, which
+is the concurrency the original five-scenario failure had; n=3 per cell:
+
+| Workers | Median | Range | Speed-up |
+|---|---|---|---|
+| 1 | **75.5 s** | 70.4 – 77.1 | — |
+| 4 | **39.9 s** | 38.9 – 49.5 | **1.89×** |
+| 6 | **37.4 s** | 34.9 – 42.5 | 2.02× |
+
+**Axis C — the load control.** The same 3 scenarios with the HAR replay **removed**, so every call —
+the document, 262 asset requests and 24 API calls per browser — traverses the preview server's Nitro
+proxy; n=2 per cell. This is the shape that would starve a server if concurrency were going to starve
+one, and it is the axis that answers the mandate directly:
+
+| Workers | Runs | Speed-up |
+|---|---|---|
+| 1 | 39.5 s, 40.5 s | — |
+| 3 | 23.0 s, 23.6 s | 1.72× |
+| 6 | 22.4 s, 24.7 s | 1.71× |
+
+Two shapes of the result are worth separating. The gain is **real but bounded** — most of it is
+bought by the second and third worker, and past four there is nothing left to buy on a three-scenario
+proof. And the **variance narrows** as workers go up: the serialised cell has the widest spread in
+both hermetic axes (39.5–60.4 s), because a serial run pays every scenario's page load end to end and
+each one is exposed to whatever else the machine is doing.
+
+Verdict stability, across all 31 runs: 16 / 9 / 6 runs and 48 / 54 / 18 test instances on axes A / B /
+C; **31 of 31 runs passed every test; 0 failed tests; 0 flaky tests.** Evidence integrity across the
+25 hermetic runs: exactly one `video.webm` and one `trace.zip` per test instance with none missing,
+duplicated or truncated; every `trace.zip` passed `unzip -t`; every `video.webm` decoded with far more
+than a trivial frame count. `hermetic.mjs` classified the same **23 endpoints as MOCKED (131 requests)
+and the same 2 as LIVE** (the declared Intercom carve-out) at one worker and at four, per test —
+concurrency does not move an endpoint across that line. The `min > max` payoff frame, extracted at
+duration − 0.5 s by `clip-fidelity.mjs frames`, is pixel-for-pixel the same beat at one worker and at
+six: the Create Job sheet centred, Minimum `5000`, Maximum `100`, and *Minimum can't be greater than
+maximum.* in red beneath them, nothing occluded and nothing mid-transition.
 
 **Decision, three parts:**
 
@@ -70,7 +130,22 @@ buys nothing and spends reviewer attention. **Keeping the mandate** was a live o
 is what 31 runs were there to test; it is retired because the runs refuted its premise on this target,
 not because its cause was argued away.
 
-**What this does not establish**, and the study says at more length: one application, one spec, one
-preview server, on a contended machine. A framework whose preview is single-threaded and CPU-bound per
-request could still starve, and nothing here rules that out for a target nobody has measured. The
-diagnostic in part two is what remains pointed at that case.
+**What this does not establish.** Stated plainly, because the next agent will be tempted to read
+further than the runs go.
+
+1. **One application, one spec.** Three scenarios (six instances) on one Nuxt/Nitro preview. A
+   framework whose preview server is single-threaded and CPU-bound per request could still starve;
+   nothing here rules that out for a target that has not been measured. The diagnostic in part two is
+   what remains pointed at that case.
+2. **This spec has no shared state.** It asserts client-side validation, never submits the form and
+   writes nothing to the tenant. Playwright gives each test a fresh browser context, so nothing leaked
+   between the concurrent tests here — but that is a property of *this spec*, not of the proof target.
+   A spec whose scenarios contend over one record on a shared tenant will interfere under concurrency
+   no matter what serves it, and that is a spec defect (`#19`, module-level mutable state, is the
+   scanner's name for one shape of it), not a bring-up setting.
+3. **A contended machine.** Load ran from 1.7 to 19.5 throughout. Round-robin ordering spreads that
+   across conditions and the direction of the bias is conservative — a quieter box would show a
+   *larger* speed-up, not a smaller one — but no cell here is a clean-room number.
+4. **`--repeat-each=2` is not six distinct scenarios.** Axis B runs the same three tests twice to
+   reach the six-instance concurrency the mandate's original failure had. It loads the runner and the
+   server the same way; it does not exercise six different surfaces.
