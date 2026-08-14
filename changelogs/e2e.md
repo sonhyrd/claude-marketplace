@@ -2,7 +2,8 @@
 
 All notable changes to the e2e plugin in this marketplace will be documented in this file.
 
-> Installed as **`e2e`**, so its skills invoke as `/e2e:pw-prove` and `/e2e:e2e-reviewer`.
+> Installed as **`e2e`**, so its skills invoke as `/e2e:pw-prove`, `/e2e:e2e-reviewer` and
+> `/e2e:playwright-debugger`.
 > The plugin directory is `plugins/e2e-skills/` — that path is a `git subtree` prefix and renaming
 > it would break both `git subtree pull` and `git subtree push`.
 >
@@ -10,6 +11,29 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 > then `git subtree push --prefix=plugins/e2e-skills e2e-fork main`.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [1.2.0] - Unreleased
+
+### Added
+
+- `playwright-debugger` — root-cause diagnosis of a failed Playwright run from `playwright-report/`,
+  traces and screenshots, classifying each failure into the stable `F1`–`F15` taxonomy. It shipped
+  in the subtree from the 1.0.0 graft onward and Claude Code always exposed it, because an explicit
+  `skills` array is *additive* to the default `./skills/` scan rather than a whitelist. Naming it in
+  the manifest ends a two-skill story that three manifests and this changelog were all telling.
+
+### Changed
+
+- Plugin, marketplace-entry and Codex-manifest descriptions now name all three skills. The Codex
+  manifest already pointed at `./skills/` wholesale, so only its description undercounted.
+
+## [1.1.0] - Unreleased
+
+### Changed
+
+- Plugin version moved off `1.0.0` for the first time since the graft. The plugin cache is a
+  version-keyed file copy, so a version that never moves means a stale cache no metadata refresh
+  can dislodge — this one had been serving `pw-prove` 0.1.0 across 14 skill versions.
 
 ## [1.0.0] - Unreleased
 
