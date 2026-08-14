@@ -1,9 +1,14 @@
 id: case-21
+shape: behavior
 title: pw-prove - 21
 description: 'Should resolve the effective viewport as a scaffold default (no explicit `viewport:` key in the config) and pin 1600x900 in the COMMITTED spec via `test.use({ viewport: { width: 1600, height: 900 } })`. Should write `playwright.proof.config.ts` next to the project config as a STATIC file — `video: { mode: ''on'', size }` with size read from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, no per-run literal substituted into the file — and pass `PW_PROVE_W=1600 PW_PROVE_H=900` on the proof command so the clip is never left at Playwright''s 800x800-box downscale. Should set PW_PROVE_CLIP=1 on the proof run only, and generate a `// JUSTIFIED:`-marked, PW_PROVE_CLIP-gated dwell in every test, placed after the assertion covering the beat it holds (never between an action and that assertion), with an UNGATED `scrollIntoView({ block: ''center'' })` framing the held element immediately before it. Should not edit the committed playwright.config, should not pin the viewport only in the proof config, and should stage (not delete) the proof config in Step 8.'
 tag: functional_test
 input:
-    prompt: 'You are running pw-prove in PR-mode against the project in evals/files/project-flat/. The Playwright config declares no explicit `viewport:` key anywhere and there is no proof config in the repo yet. Generate the proof spec and describe the Step 7 proof run: the proof config, the commands, and anything you do before filming. State the effective viewport you resolved and where the pin lives.'
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are running pw-prove in
+        PR-mode against the project in evals/files/project-flat/. The Playwright config declares no explicit
+        `viewport:` key anywhere and there is no proof config in the repo yet. Generate the proof spec
+        and describe the Step 7 proof run: the proof config, the commands, and anything you do before
+        filming. State the effective viewport you resolved and where the pin lives.'
 context:
     files:
         evals/files/project-flat/playwright.config.ts: evals/files/project-flat/playwright.config.ts

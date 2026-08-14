@@ -152,10 +152,11 @@ node skills/e2e-reviewer/scripts/scan.mjs testbed/cal.diy
 
 `ci-local.sh` runs all of the above and must be green before you commit.
 
-One suite is deliberately **outside** that list, and must stay outside it:
+Two suites are deliberately **outside** that list, and must stay outside it:
 
 ```bash
 bash scripts/ci/test-eval-judges.sh  # eval judge scripts: fixture in, exit code + printed verdict out
+bash scripts/ci/test-case-shapes.sh  # every case classified trigger|behavior, and its prompt matches
 ```
 
 A judge fixture is a `.txt` (fed as `$EVAL_FINAL_MESSAGE`) or a `.jsonl` (fed as
@@ -172,18 +173,22 @@ correct answer naming the forbidden thing in order to reject it*, which is the o
 rule from `tests/pattern-corpus/` applied to judges. That twin is what catches the bare-substring
 judge, the defect behind seven of the nine failures in the 2026-08-13 run.
 
+`test-case-shapes.sh` stays out for the same reason, and holds the prompt-shape rule described under
+*The Eval Suite* below. Run it by name whenever you add or edit a case prompt.
+
 ## The Eval Suite
 
 **pw-prove is evaluated by the `skill-up` CLI, and that suite is the skill's eval
 surface.** There is exactly one eval format for this skill; the `evals.json` predecessor
-was mined and retired in #61. The surface is five things:
+was mined and retired in #61. The surface is six things:
 
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 61 on disk, 12 active — the rest are inventory, not coverage |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 62 on disk, 13 active — the rest are inventory, not coverage |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.txt` |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against |
+| `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
 | `skills/pw-prove/.skill-up.yaml` | User config for the run (e.g. the agent-under-test's effort level) |
 
 ### Running the eval suite
@@ -214,7 +219,15 @@ whatever its own judge said; the gate makes that visible, and non-invocation sta
 Note skill-up's config discovery is `$PWD`-only, so `.skill-up.yaml` is ignored without complaint
 unless you are in `skills/pw-prove/` or pass it as `--config`. The runner handles this for you.
 
-Four things to know before you touch any of it:
+Five things to know before you touch any of it:
+
+- **Every case declares a `shape:`, and the shape decides what a prompt may say.** A `trigger` case
+  carries a realistic top-of-task request and never names the skill — whether pw-prove loads is the
+  measurement, and a failure there is a defect in the `description:` frontmatter, *recorded* rather
+  than repaired by editing the prompt. A `behavior` case presupposes mid-run context (a step, an exit
+  code, a pasted log), which would never trip the trigger, so it opens with the placement line
+  ("Load the pw-prove skill with the Skill tool and follow it.") and its failures are about the body.
+  Read `skills/pw-prove/evals/prompt-shapes.md`, and run `bash scripts/ci/test-case-shapes.sh`.
 
 - **`environment.type: none` is fixed, and it is not a sandbox.** `docker` cannot see the files the
   run produces, so every wet case would fail for a reason that reads as a skill defect; `none` means

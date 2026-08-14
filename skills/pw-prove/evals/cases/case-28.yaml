@@ -1,9 +1,14 @@
 id: case-28
+shape: behavior
 title: pw-prove - 28
 description: 'Should run `node <skill-base>/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts` rather than writing an ad-hoc node script to parse trace.zip / *.network files. Must pass --spec, and must treat the reported IN-SPEC LIVE ROUND-TRIPS (the route.fetch call sites) as live traffic requiring a declared carve-out, even though those requests appear under MOCKED in the trace — a trace records the browser, not the Playwright process. The verdict is the agent''s: every LIVE line and every in-spec round-trip must be named in a CARVE-OUT line, otherwise the run FAILS despite being green.'
 tag: functional_test
 input:
-    prompt: The Step 7 proof run passed and left traces under test-results/. Perform the hermetic audit on tests/e2e/checkout.spec.ts. The spec mocks the section GET by patching it in flight (`const response = await route.fetch()` then `route.fulfill`), and its header declares one CARVE-OUT for the live auth bootstrap. Show the command and how you reach a verdict.
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. The Step 7 proof run passed and
+        left traces under test-results/. Perform the hermetic audit on tests/e2e/checkout.spec.ts. The
+        spec mocks the section GET by patching it in flight (`const response = await route.fetch()` then
+        `route.fulfill`), and its header declares one CARVE-OUT for the live auth bootstrap. Show the
+        command and how you reach a verdict.
 context: {}
 constraints: {}
 expect: {}

@@ -1,4 +1,5 @@
 id: case-2
+shape: trigger
 title: pw-prove - 2
 description: Should propose a CheckoutPage class extending BasePage in tests/pages/checkout-page.ts. Should propose a checkout.spec.ts in tests/. Should include happy path scenario (complete purchase flow). Should include error scenarios (validation errors, payment failure). Should include a Locator Mapping Table. Should reference existing patterns from auth.spec.ts and LoginPage.
 tag: functional_test

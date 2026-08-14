@@ -1,9 +1,15 @@
 id: case-9
+shape: behavior
 title: pw-prove - 9
 description: 'Run A FAILS despite the green spec: an undeclared live call is a run failure — mock the endpoint (or declare a carve-out only if the real round-trip is genuinely the AC) and re-run; additionally the live POST is a WRITE to a shared staging tenant, which must be called out as data pollution. Run B passes: the declared read-only carve-out is sanctioned, and the report''s Tests line carries ''hermetic (carve-outs: GET /api/v2/exchange-rates)''.'
 tag: functional_test
 input:
-    prompt: 'Step 7 hermetic audit of two PR-mode runs. Run A: the spec passes, but the request log shows a POST to https://staging.example.com/api/v2/documents that no page.route answered, and the spec header declares no carve-outs. Run B: a different spec''s header carries ''// CARVE-OUT: GET /api/v2/exchange-rates — live round-trip IS the AC — restore: read-only'' and its log shows exactly that GET (and nothing else) going live. State the verdict for each run and what happens next.'
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. Step 7 hermetic audit of two
+        PR-mode runs. Run A: the spec passes, but the request log shows a POST to https://staging.example.com/api/v2/documents
+        that no page.route answered, and the spec header declares no carve-outs. Run B: a different spec''s
+        header carries ''// CARVE-OUT: GET /api/v2/exchange-rates — live round-trip IS the AC — restore:
+        read-only'' and its log shows exactly that GET (and nothing else) going live. State the verdict
+        for each run and what happens next.'
 context: {}
 constraints: {}
 expect: {}

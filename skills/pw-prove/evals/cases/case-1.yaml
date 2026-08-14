@@ -1,4 +1,5 @@
 id: case-1
+shape: trigger
 title: pw-prove - 1
 description: Should detect POM pattern (tests/pages/ directory with BasePage and LoginPage). Should identify /login as covered via auth.spec.ts. Should identify /dashboard, /dashboard/analytics, /settings, /settings/notifications, /settings/security, /profile, /checkout, /checkout/confirmation as uncovered routes. Should flag auth-related paths as already covered. Should flag /checkout as high priority (form-heavy). Should recommend new tests follow the existing POM pattern with classes extending BasePage.
 tag: functional_test
