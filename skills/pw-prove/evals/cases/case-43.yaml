@@ -1,9 +1,14 @@
 id: case-43
+shape: behavior
 title: pw-prove - 43
 description: 'Should diagnose the binding, not the recording: the committed HAR is canonical (origin `http://localhost`, no port) with every secret placeheld, and Playwright''s HAR lookup matches on exact request-URL string equality, so an unbound HAR matches nothing. Should run `har-scrub.mjs bind e2e/reports.api.har --out .pw-prove/reports.api.har --origin http://localhost:5199 --bindings .pw-prove/bindings.json`, export PW_PROVE_HAR at that gitignored copy, carry it on every later runner invocation, and re-run. Should read exit 4 as a placeholder in the match key with no run-time value (bind it or re-record — never run the proof and let it surface as an aborted call) and exit 5 as a committable --out path. Should NOT re-record the HAR, should NOT add hand-mocks for the reads, and should NOT relax notFound:''abort'' or widen to a live call.'
 tag: functional_test
 input:
-    prompt: 'You are at Step 7. The proof run just failed: every test aborts on its first API call with `Route.abort` from `routeFromHAR(..., { notFound: ''abort'' })` — not one recorded read matched. The committed `e2e/reports.api.har` was recorded through the probe during this same session and covers all of these endpoints. The dev server is up on port 5199. Diagnose and fix.'
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are at Step 7. The proof
+        run just failed: every test aborts on its first API call with `Route.abort` from `routeFromHAR(...,
+        { notFound: ''abort'' })` — not one recorded read matched. The committed `e2e/reports.api.har`
+        was recorded through the probe during this same session and covers all of these endpoints. The
+        dev server is up on port 5199. Diagnose and fix.'
 context: {}
 constraints: {}
 expect: {}

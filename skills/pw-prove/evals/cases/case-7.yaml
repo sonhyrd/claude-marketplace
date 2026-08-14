@@ -1,9 +1,15 @@
 id: case-7
+shape: behavior
 title: pw-prove - 7
 description: 'PR-mode: posts the plan to the conversation as the audit trail — including an Assumptions block that states POM-always (despite flat siblings), the stash-and-restore of the dirty tree, and getByPlaceholder for the label-less input — and continues immediately to Step 5. Silence is consent; it does not wait for a reply, does not enter plan mode, and asks zero questions. Coverage-gap: presents the plan and stops for explicit user approval before writing any code.'
 tag: functional_test
 input:
-    prompt: 'You are at Step 4 of pw-prove in PR-mode (invoked with PR #412). The scenario plan is written: two scenarios plus a locator mapping table. Context: the repo''s existing specs are all flat (no POM anywhere), the worktree had uncommitted changes that Step 3 stashed, and one input on the form is label-less (placeholder only). Describe exactly what you do next, including anything you would ask the user. Then answer the same question for a coverage-gap run (no argument).'
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are at Step 4 of pw-prove
+        in PR-mode (invoked with PR #412). The scenario plan is written: two scenarios plus a locator
+        mapping table. Context: the repo''s existing specs are all flat (no POM anywhere), the worktree
+        had uncommitted changes that Step 3 stashed, and one input on the form is label-less (placeholder
+        only). Describe exactly what you do next, including anything you would ask the user. Then answer
+        the same question for a coverage-gap run (no argument).'
 context: {}
 constraints: {}
 expect: {}

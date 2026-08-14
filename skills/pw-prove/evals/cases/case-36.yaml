@@ -1,9 +1,14 @@
 id: case-36
+shape: behavior
 title: pw-prove - 36
 description: 'Should run `clip-fidelity.mjs spec <spec> --config playwright.config.ts --verdict "deliberate:1440x810"`. The script re-derives `deliberate` from the config text — an explicit `viewport:` key is a project decision, and it outranks the `...devices[''Desktop Chrome'']` spread sitting beside it — agrees with the declared verdict, and exits 0. The absent `test.use({ viewport })` is CORRECT here: code-rules.md §Viewport pin says a deliberate viewport is respected and never pinned over, so adding a 1600x900 pin would make the proof run and the mutation check render at a size the project never uses. Should proceed to Step 7 and size the recording (PW_PROVE_W/PW_PROVE_H) to 1440x810, the effective viewport, not to the 1600x900 pin default.'
 tag: functional_test
 input:
-    prompt: 'You are at Step 6. The project''s `playwright.config.ts` contains `use: { ...devices[''Desktop Chrome''], viewport: { width: 1440, height: 810 } }`. Step 4''s Assumptions block recorded `Effective viewport: deliberate: 1440x810`. The generated spec has no `test.use({ viewport })` and every test() carries a framed, `// JUSTIFIED:`, PW_PROVE_CLIP-gated dwell. Run the clip-fidelity audit and say what happens next.'
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are at Step 6. The project''s
+        `playwright.config.ts` contains `use: { ...devices[''Desktop Chrome''], viewport: { width: 1440,
+        height: 810 } }`. Step 4''s Assumptions block recorded `Effective viewport: deliberate: 1440x810`.
+        The generated spec has no `test.use({ viewport })` and every test() carries a framed, `// JUSTIFIED:`,
+        PW_PROVE_CLIP-gated dwell. Run the clip-fidelity audit and say what happens next.'
 context: {}
 constraints: {}
 expect: {}

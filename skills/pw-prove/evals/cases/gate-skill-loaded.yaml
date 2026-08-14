@@ -1,4 +1,5 @@
 id: gate-skill-loaded
+shape: trigger
 title: The version under test reaches the model, and no marketplace plugin does
 description: >-
   The runtime gate, in band. Every other case is graded on what the model answered; this one is
@@ -14,10 +15,8 @@ description: >-
   plugin copy (so it was not measuring THIS version).
 
 input:
-    prompt: >-
-      You are pw-prove. The repo is a Nuxt app on branch `feat/reports-filter` with an open PR
-      #2866 that changes the reports filter. Begin.
-
+    prompt: 'PR #2866 is open against this Nuxt app on branch `feat/reports-filter`; it changes the reports
+        filter. Prove that change end to end with a Playwright test before I merge it.'
 judge:
     type: script
     script_path: evals/judges/skill-loaded.mjs

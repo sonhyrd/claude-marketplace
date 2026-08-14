@@ -1,9 +1,13 @@
 id: case-32
+shape: behavior
 title: pw-prove - 32
 description: 'Should read the failure as Playwright never reaching `webServer.url` — it therefore tried to boot a second server and timed out — rather than as a slow app or a defective spec. Zero tests run is the tell: a broken spec still runs. Should re-dial the config''s literal URL, then re-run with the Step-3 Runner-origin env var. Should not raise the webServer timeout, add spec timeouts, or add retries, and should not confuse this with the worker-saturation signature where every test times out on its first `page.goto` (that one is fixed with `--workers=1`).'
 tag: functional_test
 input:
-    prompt: 'Step 7. The proof run exits with `Error: Timed out waiting 120000ms from config.webServer.` and the report shows 0 tests run, 0 clips. The dev server you started is still logging requests and answers `curl http://localhost:4000` with 200.'
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. Step 7. The proof run exits
+        with `Error: Timed out waiting 120000ms from config.webServer.` and the report shows 0 tests run,
+        0 clips. The dev server you started is still logging requests and answers `curl http://localhost:4000`
+        with 200.'
 context: {}
 constraints: {}
 expect: {}

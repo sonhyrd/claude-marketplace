@@ -1,9 +1,13 @@
 id: case-58
+shape: behavior
 title: pw-prove - 58
 description: 'Should reject that batch: `arg` is JSON data serialised into the call, so a selector string arrives as the STRING itself and `getComputedStyle` would be handed text, and a real DOM node cannot be sent through JSON at all. Should do the selection inside `fn` and pass only data — `{"fn":"(sel) => getComputedStyle(document.querySelector(sel)).backgroundColor","arg":"tr[data-id=\"7\"]"}` — or ask the whole question as one string expression. Should NOT abandon the {fn, arg} form (it does pass its argument and does return the function''s value), NOT switch to the named-map form for this (its values are plain expressions and take no argument), and NOT introduce a page-handle concept the probe does not have.'
 tag: functional_test
 input:
-    prompt: Step 4 recon. You want the computed background colour of the row your previous `snapshot` showed. You plan to send `{"cmd":"eval","expression":{"fn":"(el) => getComputedStyle(el).backgroundColor","arg":"document.querySelector('tr[data-id=\"7\"]')"}}`, passing the element as the argument. Is that the right batch?
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. Step 4 recon. You want the computed
+        background colour of the row your previous `snapshot` showed. You plan to send `{"cmd":"eval","expression":{"fn":"(el)
+        => getComputedStyle(el).backgroundColor","arg":"document.querySelector('tr[data-id=\"7\"]')"}}`,
+        passing the element as the argument. Is that the right batch?
 context: {}
 constraints: {}
 expect: {}

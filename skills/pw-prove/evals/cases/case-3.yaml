@@ -1,4 +1,5 @@
 id: case-3
+shape: trigger
 title: pw-prove - 3
 description: 'Should detect no POM directory (no pages/, models/, or page-objects/ used as Page Objects) and that the existing specs are flat. POM is ALWAYS the default with no flat opt-out, so it should still SCAFFOLD a POM for the new coverage — a Page Object class + spec under tests/pages/ — and NOT match the flat siblings. It must NOT rewrite or retro-refactor the existing tests/login.spec.ts (add the POM for new coverage, leave siblings untouched). Should identify login as covered. Should identify home page, signup, dashboard, profile, notifications as coverage gaps from page.tsx links. Note: a Next.js app/ or pages/ ROUTE folder is not a Playwright POM directory and must not be mistaken for one.'
 tag: functional_test

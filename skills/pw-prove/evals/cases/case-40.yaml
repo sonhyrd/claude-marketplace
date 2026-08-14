@@ -1,9 +1,13 @@
 id: case-40
+shape: behavior
 title: pw-prove - 40
 description: 'Should run `clip-fidelity.mjs spec <spec> --config <configPath> --verdict "<the Assumptions block''s line verbatim>"` and report it exits 0: the gate and the guarded wait need not share a line, and brace style and line wrapping are not part of the Clip Fidelity contract (code-rules.md §Payoff dwell). The dwell is framed, marked and gated, so the contract is satisfied and Step 7 may film. Nothing about the spec needs changing — in particular the two lines must not be joined, re-braced or rewritten, and the audit must not be re-run against a reformatted copy to ''make it pass''.'
 tag: functional_test
 input:
-    prompt: You are at Step 6. Every test() in `e2e/reports.spec.ts` ends with the ungated centring, a `// JUSTIFIED:` comment, then `if (process.env.PW_PROVE_CLIP)` on one line and `  await page.waitForTimeout(2500);` on the next. The viewport pin is committed and matches the Assumptions block. Run the clip-fidelity audit and say what happens next.
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. You are at Step 6. Every test()
+        in `e2e/reports.spec.ts` ends with the ungated centring, a `// JUSTIFIED:` comment, then `if (process.env.PW_PROVE_CLIP)`
+        on one line and `  await page.waitForTimeout(2500);` on the next. The viewport pin is committed
+        and matches the Assumptions block. Run the clip-fidelity audit and say what happens next.
 context: {}
 constraints: {}
 expect: {}

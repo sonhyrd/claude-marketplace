@@ -1,9 +1,14 @@
 id: case-13
+shape: behavior
 title: pw-prove - 13
 description: 'Should obtain the session by calling the real login endpoint (POST /api/login with the discovered credential) and seeding the cookie it RETURNS (read Set-Cookie, pass that exact name+value to context.addCookies) — or drive the app''s own login. Should NOT hand-author a guessed cookie literal like context.addCookies([{name:''ptg_auth'', value:''1''}]) without calling login: that passes only because this backend does not validate the token, and against a real signed/rotating session cookie it would silently bypass auth or fail. Since the credential is discoverable and the login endpoint is reachable, the API-login path is required; hand-seeding a static literal is sanctioned only for a documented static dev flag with no login path.'
 tag: functional_test
 input:
-    prompt: An app gates /settings behind middleware that redirects to /login unless a `ptg_auth` cookie is present. The cookie is minted only by POST /api/login, which validates the password (discoverable in source as 'secret'). You need an authenticated session to test the settings page. How do you seed auth in the generated spec?
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. An app gates /settings behind
+        middleware that redirects to /login unless a `ptg_auth` cookie is present. The cookie is minted
+        only by POST /api/login, which validates the password (discoverable in source as 'secret'). You
+        need an authenticated session to test the settings page. How do you seed auth in the generated
+        spec?
 context: {}
 constraints: {}
 expect: {}

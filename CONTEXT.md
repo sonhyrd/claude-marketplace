@@ -276,6 +276,28 @@ of the **instrument that measures the skill** — the skill-up suite under `skil
 Nothing here describes pw-prove's behaviour, and nothing above is an eval concept. `docs/adr/0018`
 records the runtime the instrument runs on, and why it is not a container.
 
+## Trigger case
+An eval case whose prompt is a **realistic top-of-task request** — the job asked for the way a user
+asks for it, naming no skill. Whether pw-prove loads at all is the measurement, so a case that fails
+to load is a defect in the skill's `description:` frontmatter, *recorded* as one. Its prompt is never
+edited until it loads: that deletes the only signal the case produces. The complement of a
+[behavior case](#behavior-case); every case file declares which it is in `shape:`, and
+`skills/pw-prove/evals/prompt-shapes.md` carries the classification.
+
+## Behavior case
+An eval case whose prompt presupposes **mid-run context** — a step number, a preflight exit code, a
+pasted server log. Nothing about such a prompt would ever trip the skill's trigger, so it opens with
+the [placement line](#placement-line) and a failure is about the body rather than the frontmatter.
+The bulk of the suite: 58 of 62 case files.
+
+## Placement line
+The one sentence that puts a [behavior case](#behavior-case)'s agent inside the skill — *"Load the
+`pw-prove` skill with the Skill tool and follow it."* — leading the first thing the agent is handed.
+One wording, so the mechanism is greppable and no case invents a weaker one. **Role injection is not
+placement**: asserting a persona ("You are pw-prove.") puts no line of the body in context, which is
+what `evals/judges/skill-loaded.mjs` reads, and `b01` carried exactly that through two runs while
+reading NOT LOADED in both.
+
 ## Wet case
 An eval case that runs pw-prove against a repository fixture and judges what the run **did** — the
 files it wrote, the server it brought up — rather than what it said. The expensive tier, scoped

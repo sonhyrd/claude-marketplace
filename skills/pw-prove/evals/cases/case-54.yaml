@@ -1,9 +1,14 @@
 id: case-54
+shape: behavior
 title: pw-prove - 54
 description: 'Should read exit 6 as its own verdict — the recording was DESTROYED by its own scrub, not leaking a credential — and must not treat it as residue (exit 3) or re-run the scrubber to clear it, which cannot help because nothing leaked. The cause is a learned secret short enough to occur inside ordinary content (a locale cookie such as `i18n_redirected=en`), whose substitution replaced the application''s own text. The fix is to RE-RECORD the recon pass, or narrow what the capture treats as a secret; the HAR must not be staged. Hand-substituting the placeholders back is explicitly wrong: it rebinds only what the reader happens to notice and leaves a recording nobody can tell apart from a safe one. Should also state why the earlier `--verify` said clean: a residue check asks whether a credential survived, and over-scrub leaves no credential behind, so it is invisible to that question — which is exactly why the count gate is a separate exit code.'
 tag: functional_test
 input:
-    prompt: Step 8's hygiene sweep runs `har-scrub.mjs tests/e2e/briefing.api.har --verify`. It exits 6 and prints `__PWPROVE_SECRET_13__  125403 occurrence(s)  (limit 1240 over 155 entries)`. Opening the HAR, response bodies read `Bewerbung__PWPROVE_SECRET_13__ sind eingegang__PWPROVE_SECRET_13__`. A previous `--verify` on this same file reported it clean. State what happened and what you do next.
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. Step 8's hygiene sweep runs `har-scrub.mjs
+        tests/e2e/briefing.api.har --verify`. It exits 6 and prints `__PWPROVE_SECRET_13__  125403 occurrence(s)  (limit
+        1240 over 155 entries)`. Opening the HAR, response bodies read `Bewerbung__PWPROVE_SECRET_13__
+        sind eingegang__PWPROVE_SECRET_13__`. A previous `--verify` on this same file reported it clean.
+        State what happened and what you do next.
 context: {}
 constraints: {}
 expect: {}
