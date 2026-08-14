@@ -145,6 +145,15 @@ cases:
         # staging silently breaks again. Its numbers, and the judge repair that preceded them, are
         # in evals/REGISTRY.md.
         - evals/cases/case-22.yaml
+        # --- admitted by #77, once its judge read the table instead of the scenario titles ---
+        # `case-29` was 0/3 for three runs and the skill was right in all of them: the judge matched
+        # scenario TITLES, and the one scenario that survives a fold is supposed to name the
+        # behaviour, because "the UI reaches the function and its output leaves on the wire" IS
+        # trimming, seen at the browser layer. The repaired judge reads the AC table's Proven-by
+        # column, where a folded AC says `already covered: <test file>`. 3/3, `+1`. Its baseline
+        # failed by refusing to produce a plan at all rather than by folding wrongly — REGISTRY.md
+        # says what that does and does not license.
+        - evals/cases/case-29.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those

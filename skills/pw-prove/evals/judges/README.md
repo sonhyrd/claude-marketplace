@@ -158,6 +158,44 @@ Audited at #71, and the standing inventory — every judge that touches `$EVAL_T
 Every other judge reads `$EVAL_FINAL_MESSAGE` alone, which is one turn by construction and cannot
 carry this defect. A judge that grows a second turn joins the table above.
 
+### A fold is a table fact, not a sentence fact
+
+Some rules are settled by a **table**, and for those the unit is a row — the seventh appearance of
+the same family, and the one where the forbidden string is the correct answer's own subject rather
+than a rejection of it (#77). SKILL.md Step 2 item 6 says a folded AC "keeps its row with `already
+covered: <test file>` in the Proven-by column". A folded answer and an unfolded one are therefore the
+same English: both name trimming, dropping empty locales and key removal. They differ only in what
+each AC's row carries in **Proven-by**. `unit-proven-acs-folded.mjs` used to fire on scenario
+**titles** (`/\bscenario\b[^\n]{0,60}\btrim\w*/i` and friends) and so red-flagged `case-29` three
+times out of three in the 2026-08-14 run: the surviving wiring scenario is *supposed* to name the
+behaviour, because "the UI reaches the function and its output leaves on the wire" is trimming,
+observed at the browser layer. A heading states the subject; the table two lines below settles it.
+
+The repair was not a wider phrase list — two rounds of that had already landed on this judge in #64,
+and a third against the same three transcripts fits a judge to its fixtures instead of to its rule.
+It parses the pipe table, finds the Proven-by column by its header, looks each unit-proven behaviour
+up in the AC column, and reads the verdict out of that row. Three rules keep the reader honest:
+
+- **A continuation row is the same AC.** SKILL.md's own worked example wraps a Proven-by cell across
+  two table lines — `already covered:` on one, the test file on the next, every other cell blank.
+  A row with a single non-empty cell merges upward, or the file name reads as an AC with no
+  Proven-by, which is the #64 line-wrap defect one layer down.
+- **Count behaviours, not rows.** An answer may fold the three bullets into three rows or into one
+  row naming the whole matrix. Both are folds, so the assertion is per behaviour — "is there an AC
+  row for it, and does that row say `already covered:`" — never "are there three such rows".
+- **A silent deletion is not a fold, and a total fold is not one either.** A behaviour with no row
+  at all fails, and so does a table where no row is left proven by a browser scenario: the fold
+  exists to keep the ONE scenario that proves the wiring.
+
+The must-FAIL twin this shape needs is the mirror of the standard one: an answer whose **prose**
+says every right word — it names the test file, says "fold", writes `already covered:
+tests/unit/customScripts.test.ts` in a sentence — over a table that gives each pure-function AC its
+own browser scenario. The pre-#77 judge passed exactly that input.
+
+| Judge | What it treats as its unit | Verdict |
+|---|---|---|
+| `unit-proven-acs-folded.mjs` | one AC table row, decided on its Proven-by cell | fixed at #77; was a phrase match over scenario titles |
+
 ### A mark the prompt supplied is not contact with the body
 
 `skill-loaded.mjs` fingerprints long lines of the SKILL.md under test and looks for them in the

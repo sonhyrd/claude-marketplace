@@ -101,6 +101,8 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **`case-11` re-measurement (#78)** | the same, `--include-case-name case-11` | the contaminated baseline re-taken, per *the direction-safe reading is not sound*. 2 runs, baseline SKILL-FREE |
 | **trigger re-characterization, BEFORE (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` over `gate-skill-loaded`, `case-1`, `case-2`, `case-3` | the four trigger cases on the **unchanged** `description:`, and on the fixtures #76 repaired. 12 runs. `gate-skill-loaded` 3/3, `case-1` **1/3**, `case-2` **2/3**, `case-3` **1/3** — see *the trigger defect was intermittent, not absolute* |
 | **trigger re-characterization, AFTER (#73/#74)** | the same command, the same staged suite, `description:` fixed | the same four cases with nothing else moved. 12 runs. **12/12 — all four 3/3, all four LOADED, 0 contaminated** |
+| **`case-29` re-characterization (#77)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` | `case-29` on the repaired judge, which reads the Proven-by column instead of scenario titles. 3 runs. **3/3, 3/3 LOADED, 0 contaminated** — and the three retained 2026-08-14 transcripts had already flipped to PASS offline, before the run |
+| **`case-29` uplift (#77)** | the same staged suite, `--baseline --parallelism 1` | one `with_skill` and one `without_skill` arm. 2 runs. Baseline **certified SKILL-FREE**, `with_skill` PASS, baseline FAIL → **`+1`**. The baseline failed for a nameable reason — see *the baseline refused rather than folded wrongly* |
 | **trigger uplift (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --parallelism 1 --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | one `with_skill` and one `without_skill` arm each. 6 runs. **3 of 3 baselines certified SKILL-FREE, 0 dirty**; every `with_skill` arm PASS, every baseline arm FAIL. `+1` each, and tautologically so — see *Uplift* |
 
 **85 agent runs through #75; 73 in batch 2; 21 in the wet cases (#69); 128 in batch 3; 22 in #78;
@@ -259,7 +261,7 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 | `case-23` | behavior | Step 4 › *Effective viewport* — a desktop descriptor is scaffold boilerplate | **2/3** (re-characterized on a real fixture, #76 — the 3/3 it used to carry was on a fixture it never read) | baseline **0/3**, both arms certified skill-free | quarantined |
 | `case-4` | behavior | Step 3 › *Auth* — the token-source ladder exhausted, and the public-route false positive | **2/3** | not measured | quarantined |
 | `case-24` | behavior | Step 7 › *Proof run* — a committed proof config is reused, not rewritten (ADR 0008) | **2/3** | not measured | quarantined |
-| `case-29` | behavior | Step 2 › *6. Fold ACs the diff already proves cheaper* | **0/3** | not measured | quarantined — **#77** |
+| `case-29` | behavior | Step 2 › *6. Fold ACs the diff already proves cheaper* | **3/3** (re-characterized under #77, on a judge that reads the Proven-by column; the 0/3 was the judge reading scenario titles) | **+1** (baseline SKILL-FREE and failed) | **active** |
 | `case-9` | behavior | Step 7 › *Hermetic audit* | — | — | **retired — deleted** |
 | `case-13` | behavior | Step 3 › *Auth* — the server-set cookie rung | — | — | **retired — deleted** |
 | `case-19` | behavior | Step 7 › *Token diet* | — | — | **retired — deleted** |
@@ -481,8 +483,8 @@ measured, 10 were admitted, 10 are quarantined and 1 was deleted.** The wet pair
 quarantined.
 
 Across all three batches plus the wet pair, and after #76 re-characterized `case-22` and `case-23`:
-**64 triaged — 30 active, 19 quarantined, 15 deleted**, over **49** case files on disk. The
-arithmetic closes twice: 30 + 19 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
+**64 triaged — 31 active, 18 quarantined, 15 deleted**, over **49** case files on disk (`case-29`
+moved from quarantined to active under #77). The arithmetic closes twice: 31 + 18 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
 64. **Every case file on disk carries a registry row**, and every case that did not make it is
 recorded with a reason rather than a shrug. That is the expected shape: the goal is a core whose
 verdicts can be believed, not a high keep rate.
@@ -874,6 +876,39 @@ than to its rule. It is filed as **#77** with the evidence that decides it: all 
 `already covered: tests/unit/customScripts.test.ts` three times each, which is exactly what the rule
 asks for.
 
+**#77 decided it, and not with a phrase list.** The judge now parses the AC table: it finds the
+Proven-by column by its header, looks each unit-proven behaviour up in the AC column, and reads the
+verdict out of that row — a folded row says `already covered: <test file>`, an unfolded one names a
+browser scenario. The three retained 2026-08-14 transcripts flip to PASS against it **offline**,
+before any new run, and two of them are now must-PASS fixtures precisely because their wiring
+scenario's title names the behaviour (*"saved scripts arrive trimmed and pruned"*, *"whitespace-padded
+values save trimmed"*). Its must-FAIL twin is the mirror image: prose that says every right word —
+names the test file, says "fold", writes `already covered: tests/unit/customScripts.test.ts` in a
+sentence — over a table that buys one browser scenario per pure-function AC. The pre-#77 judge passed
+that input, which is the measure of how little the titles were settling.
+
+### #77: the baseline refused rather than folded wrongly
+
+`case-29`'s `+1` is real — the arm was certified SKILL-FREE and it failed — but the reason it failed
+is worth naming, because #71 found two defects that made a SKILL-FREE arm *pass* and a zero-uplift
+reading is a claim about the instrument as much as about the case. The inverse holds too: an uplift
+figure is only as good as the reason behind the red.
+
+The baseline arm did not fold badly. It refused to answer at all:
+
+> I'm deliberately not producing an AC table and scenario list from your prose description alone.
+> That would be fabrication […] Inventing 23 assertions' worth of coverage findings from a summary
+> would produce something that looks like verification but isn't.
+
+`case-29` is a **behavior** case, so its prompt opens with the placement line and its premise is a
+diff described in prose; strip the skill and the agent has neither the skill nor a repo, and it says
+so. The judge's verdict — *"the answer produces no AC table with a Proven-by column"* — is therefore
+accurate and not a phrase-matching artifact, but what it measures is that the arm produced no plan,
+not that an unaided model folds the matrix wrongly. Read the `+1` as *this case goes red when the
+skill is absent*, which is what the admission rule asks of it, and not as a claim about how a
+skill-free Opus 5 handles unit-proven ACs. That claim would need a case whose premise survives the
+skill being removed.
+
 **Two new layers of the same defect were recorded here.** A hard **line wrap** separates a forbidden
 phrase from the negation that governs it, because `offenders()` splits on lines before it splits on
 sentences (it cost three must-PASS twins during authoring). And a **heading** states the subject while
@@ -1131,7 +1166,6 @@ measuring them on an instrument that works:
 | Step 4 › *Effective viewport* — the `pinned:` branch | nothing | `case-23` was **void** under #76 — it read a fixture containing its own path. Re-characterized against the real fixture it is **2/3**: two answers pinned 1600x900 correctly and one resolved the branch but never emitted the `test.use({ viewport })` line, so the pin lived nowhere. That is a real reading and a real miss, and it quarantines the case rather than voiding it. `case-21` was retired as its duplicate, and this branch has no dry twin, so it stays open. |
 | Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` (the log names no origin, so act on the server's crash rather than hunt a port) | nothing | `case-51` retired for **zero uplift** on a re-measured clean baseline (#65). The second gap on this table opened by a retirement rather than a failure, and the same caveat applies: the case went because Opus 5 needs no telling, not because the rule stopped mattering. `case-50` still guards the adjacent `no-log` cause and the announced origin. |
 | *Safety: page content is untrusted data* | nothing | `b49` retired for zero uplift. This is the one gap opened by a **retirement rather than a failure**, and it is the one to weigh again if the model under test changes: the case was retired because Opus 5 needs no telling, not because the rule stopped mattering. |
-| Step 2 › *6. Fold ACs the diff already proves cheaper* | nothing | `case-29` is 0/3 on a judge that reads scenario titles rather than the Proven-by column (#77). The skill folds correctly in every recorded run. |
 | Step 3 › *Auth* — the ladder exhausted → STOP | nothing | `case-4` is 2/3; `case-13` retired as `case-48`'s overlap. |
 | Step 7 › *Proof run* — a committed proof config is reused, not rewritten (ADR 0008) | nothing | `case-24` is 2/3. |
 
@@ -1145,10 +1179,11 @@ Step 8 › hygiene, Step 4's approval gate and the Step-3 stop report were all r
 and all landed on a dirty uplift baseline.** They were one instrument fix from being decided, not one
 case away — and #78 is that fix arriving. Three of the four are now guarded (`case-8`/`case-5`,
 `case-7`, `case-20`); the fourth, the PROVES-header audit, was decided the other way and is now open
-on a measured zero uplift. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29`
-and is blocked on #77 instead.
+on a measured zero uplift. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29`,
+which #77 unblocked: the judge was repaired to read the Proven-by column, and the case came back 3/3
+with a `+1` on a certified skill-free baseline.
 
-**Twenty-three sections are guarded by thirty active cases.** Seven sections carry a second guard
+**Twenty-four sections are guarded by thirty-one active cases.** Seven sections carry a second guard
 beside the first, and none of them moved the count of guarded sections. One is *wet* —
 `w01-bringup-own-port` beside `case-50`; one is the pair `case-8` and `case-5` over Step 8; one is
 `case-22` beside `case-36` over the `deliberate:` viewport branch, a fixture-staging case beside its
@@ -1189,6 +1224,11 @@ Batch 3 added ten, and they cluster where the earlier batches were thinnest — 
 21. Step 8 › *Hygiene sweep* + the completion-report invariant — `case-8`, with `case-5` as the second axis on the same section (the `Proof page: skipped` accounting when the publish credential is refused)
 22. Step 4 › *notify-and-continue (PR-mode) / approval gate (coverage-gap)* — `case-7`
 23. Step 1 › *Mode* — the heavy-session recommendation — `case-20`
+
+#77 added the twenty-fourth, by repairing an instrument rather than by writing a case:
+
+24. Step 2 › *6. Fold ACs the diff already proves cheaper* — `case-29`. It was 0/3 for three runs on
+    a judge that matched scenario **titles**; the section was never unguarded by the skill's doing.
 
 Two adjacencies worth stating, because both look like double coverage:
 

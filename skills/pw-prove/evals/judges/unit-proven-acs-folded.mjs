@@ -3,8 +3,16 @@
 //
 // SKILL.md Step 2 item 6: "read the test files in it ... Fold those into the ONE scenario that proves
 // the wiring ... Folding is never silent. The folded AC keeps its row with 'already covered: <test
-// file>' in the Proven-by column." The correct answer names the three behaviours in order to fold
-// them, so a substring rule on "trim" cannot tell a folded row from a browser scenario.
+// file>' in the Proven-by column."
+//
+// THE UNIT IS A TABLE ROW, NOT A SENTENCE (#77). A folded AC and an unfolded one are the same
+// English: both name trimming, dropping empty locales and key removal. They differ only in what the
+// AC's row carries in the **Proven-by** column — `already covered: <test file>` or an E2E scenario.
+// The previous rule fired on scenario TITLES (`/\bscenario\b[^\n]{0,60}\btrim\w*/i` and friends) and
+// so red-flagged the correct answer three times out of three in the 2026-08-14 run: the surviving
+// wiring scenario is *supposed* to name the behaviour, because "the UI reaches the function and its
+// output leaves on the wire" is trimming, observed at the browser layer. A heading states the
+// subject; the table two lines below settles the question. So this judge reads the table.
 //
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
@@ -15,66 +23,121 @@ if (!text.trim()) {
   process.exit(1);
 }
 
-function commitments(t) {
-  return t
-    .replace(/```[^\n]*\n[\s\S]*?```/g, '\n')
-    .replace(/^\s*>.*$/gm, '')
-    .replace(/`[^`\n]*`/g, ' ')
-    // Double quotes only. An apostrophe is not a quote delimiter in English prose: pairing
-    // "doesn't" with "you're" swallowed the negation between them and turned a correct answer red.
-    .replace(/[“"]([^"“”\n]{0,400})[”"]/g, ' ');
-}
-const NEGATED = /\b(?:would|risks?|worse|out of scope|not|never|no|nothing|none|nor|neither|don't|doesn't|didn't|cannot|can't|won't|wouldn't|shouldn't|rather than|instead of|without|avoid\w*|refus\w*|reject\w*|rule[ds]? out|forbidden|unnecessary|pointless|wrong)\b/i;
-// A markdown list inherits the negation of the header that introduces it. "What I explicitly do
-// **not** do:" over bare items ("Re-allocate a fresh free port and restart.") carries the negation in
-// the header alone, so judging each item on its own reads a correct answer's rejection list as its
-// plan. That is the #59 defect in list form, and it failed a recorded 2026-08-14 answer that was
-// right in every particular. A non-item line re-decides the scope; a blank line does not end a list.
-//
-// REJECTION_HEADER is deliberately NARROWER than NEGATED, and inverts that filter's bias on purpose:
-// NEGATED is broad because it excuses one sentence, while a header excuses every item beneath it, so
-// an incidental negation ("Nothing answers on 3000, so here is the plan:") must not open the scope.
-// It wants an explicit refusal — "do not do", "won't", "ruled out" — and tolerates the markdown
-// emphasis a model puts between the verb and its negation ("do **not** do").
-const REJECTION_HEADER = /\b(?:do|does|did|will|would|shall|should|can|could|must|am|are|is)\b[\s*_~]{0,4}\bnot\b|\b(?:do|does|did|wo|would|should|could|can|must)n['\u2019]?t\b|\bnever\b|\bavoid\w*|\brefus\w*|\breject\w*|\brul(?:e|ed|ing)s? out\b|\bforbidden\b|\bout of scope\b|\brather than\b|\binstead of\b/i;
-function offenders(t, phrases) {
+// --- the table reader -----------------------------------------------------------------------------
+// A pipe table is a run of consecutive `|`-led lines. Cells lose their inline code and emphasis, so
+// `already covered: \`tests/unit/customScripts.test.ts\`` and its unbackticked twin are one fact.
+const cells = (line) =>
+  line
+    .replace(/^\s*\|/, '')
+    .replace(/\|\s*$/, '')
+    .split('|')
+    .map((c) => c.replace(/[`*_~]/g, ' ').replace(/\s+/g, ' ').trim());
+
+function tables(t) {
   const out = [];
-  let underRejectionHeader = false;
-  for (const raw of commitments(t).split(/\n/)) {
+  let cur = null;
+  for (const raw of t.split(/\n/)) {
     const line = raw.trim();
-    if (!line) continue;
-    const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
-    else if (underRejectionHeader) continue;
-    for (const s of line.split(/(?<=[.!?;])\s+/)) {
-      const sentence = s.trim();
-      if (!sentence || NEGATED.test(sentence)) continue;
-      for (const p of phrases) if (p.test(sentence)) out.push(sentence);
+    if (line.startsWith('|')) {
+      (cur ??= []).push(line);
+      continue;
     }
+    if (cur) { out.push(cur); cur = null; }
   }
-  return [...new Set(out)];
+  if (cur) out.push(cur);
+  return out;
 }
 
-const bad = offenders(text, [
-  /\bscenario\b[^\n]{0,60}\btrim\w*/i,
-  /\btrim\w*[^\n]{0,60}\bscenario\b/i,
-  /\bscenario\b[^\n]{0,60}\bdrop\w*\b[^\n]{0,20}\bempty\b/i,
-  /\bscenario\b[^\n]{0,60}\bkey removal\b/i,
-]);
-if (bad.length) {
-  console.error('FAIL: the answer buys a browser scenario for a matrix the unit test already proves:');
-  for (const s of bad.slice(0, 3)) console.error('   ' + s);
+const isSeparator = (row) => row.every((c) => /^:?-{2,}:?$/.test(c) || c === '');
+
+// SKILL.md's own worked example wraps a Proven-by cell across two table lines — `already covered:` on
+// one, the test file on the next, every other cell blank. That continuation row is the SAME AC, so a
+// reader that treats it as a row of its own reads the file name as an AC with no Proven-by (the #64
+// line-wrap defect, one layer down). Rows carrying a single non-empty cell are merged upward.
+function rowsOf(lines) {
+  const parsed = lines.map(cells).filter((r) => !isSeparator(r));
+  if (parsed.length < 2) return null;
+  const header = parsed[0];
+  const provenBy = header.findIndex((h) => /proven\s*[-\s]?by/i.test(h));
+  if (provenBy < 0) return null;
+  let ac = header.findIndex((h) => /^ac\b|acceptance/i.test(h));
+  if (ac < 0) ac = 0;
+  const rows = [];
+  for (const row of parsed.slice(1)) {
+    const filled = row.filter((c) => c !== '').length;
+    if (filled === 1 && rows.length) {
+      const prev = rows[rows.length - 1];
+      row.forEach((c, i) => { if (c) prev.cells[i] = (prev.cells[i] + ' ' + c).trim(); });
+      prev.ac = prev.cells[ac] ?? '';
+      prev.proven = prev.cells[provenBy] ?? '';
+      continue;
+    }
+    if (!filled) continue;
+    rows.push({ cells: row.slice(), ac: row[ac] ?? '', proven: row[provenBy] ?? '' });
+  }
+  return rows.length ? rows : null;
+}
+
+const acRows = tables(text).map(rowsOf).filter(Boolean).flat();
+if (!acRows.length) {
+  console.error('FAIL: the answer produces no AC table with a Proven-by column, so whether an AC was folded cannot be read off the table at all');
   process.exit(1);
 }
 
+const FOLDED = /already covered/i;
+const COVERING_TEST = /customScripts\.test\.ts/i;
+const BROWSER = /\b(?:e2e|scenario)\b/i;
+
+// The three behaviours the diff's unit test proves. Each is looked up in the AC column; the verdict
+// is taken from that row's Proven-by cell, never from a scenario title or any other prose.
+const MATRIX = [
+  ['whitespace is trimmed', /\btrim\w*|whitespace|padd\w+/i],
+  ['empty locales are dropped', /(?:drop|remov|exclud|omit|prun|strip)\w*[^\n]{0,60}(?:empt|blank)|(?:empt|blank)\w*[^\n]{0,60}(?:drop|remov|exclud|omit|prun|strip)/i],
+  ['an all-empty key is removed', /\bkeys?\b[^\n]{0,60}(?:remov|drop|delet|prun)|(?:remov|drop|delet|prun)\w*[^\n]{0,60}\bkeys?\b/i],
+];
+
+const failures = [];
+for (const [name, re] of MATRIX) {
+  const matching = acRows.filter((r) => re.test(r.ac));
+  if (!matching.length) {
+    failures.push(`the AC table has no row for ${name} — deleting a row is not folding`);
+    continue;
+  }
+  const folded = matching.filter((r) => FOLDED.test(r.proven));
+  if (!folded.length) {
+    const proven = matching.map((r) => r.proven).filter(Boolean).join(' / ') || '(empty)';
+    failures.push(
+      BROWSER.test(proven)
+        ? `${name} keeps a browser scenario in the Proven-by column [${proven}] instead of \`already covered:\` — a unit test already proves that matrix`
+        : `no AC row for ${name} carries \`already covered:\` in the Proven-by column [${proven}], so the fold is silent`,
+    );
+    continue;
+  }
+  if (!folded.some((r) => COVERING_TEST.test(r.proven))) {
+    failures.push(`the folded row for ${name} never names the test file that covers it in the Proven-by column`);
+  }
+}
+
+// Everything folded and nothing left is the opposite failure: the fold exists to keep the ONE
+// scenario that proves the wiring, so the table must still buy at least one browser scenario.
+if (!acRows.some((r) => BROWSER.test(r.proven))) {
+  failures.push('no AC row is proven by a browser scenario, so nothing is left to prove the wiring');
+}
+
+if (failures.length) {
+  console.error('FAIL: the AC table does not fold the unit-proven matrix:');
+  for (const f of failures) console.error('   ' + f);
+  process.exit(1);
+}
+
+// The table settles the fold. These say the answer reached it by reading the diff rather than by
+// luck, and that the browser-layer behaviours were named as the things that stay.
 const checks = [
-  [/customScripts\.test\.ts/, "the answer never reads the unit test file the diff ships"],
-  [/\bfold\w*/i, "the answer never folds the unit-proven ACs"],
-  [/already covered/i, "the folded rows never carry `already covered:` in the Proven-by column, so the fold is silent"],
-  [/already covered[^\n]{0,60}customScripts\.test\.ts/i, "the `already covered:` marker never names the test file that covers the folded ACs"],
-  [/buildUpsert/, "the answer never names the pure function whose matrix is folded"],
-  [/\bwir\w+/i, "the answer never keeps the one scenario that proves the wiring"],
-  [/\b(?:request|wire|network|payload|persist\w*|flag|DOM)\b/i, "the answer never keeps the browser-layer behaviours a unit test cannot see as their own scenarios"],
+  [/customScripts\.test\.ts/, 'the answer never reads the unit test file the diff ships'],
+  [/\bfold\w*/i, 'the answer never says it folds the unit-proven ACs'],
+  [/buildUpsert/, 'the answer never names the pure function whose matrix is folded'],
+  [/\bwir\w+/i, 'the answer never keeps the one scenario that proves the wiring'],
+  [/\b(?:request|wire|network|payload|persist\w*|flag|DOM)\b/i, 'the answer never keeps the browser-layer behaviours a unit test cannot see as their own scenarios'],
 ];
 const missing = checks.filter(([re]) => !re.test(text));
 if (missing.length) {
@@ -82,4 +145,4 @@ if (missing.length) {
   process.exit(1);
 }
 
-console.log('PASS: the unit-proven matrix is folded into the wiring scenario, its rows kept and marked already covered');
+console.log(`PASS: every unit-proven AC row carries \`already covered:\` in the Proven-by column, over ${acRows.length} AC rows, with the wiring scenario kept`);

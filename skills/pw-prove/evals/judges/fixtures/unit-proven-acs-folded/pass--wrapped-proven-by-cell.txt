@@ -1,0 +1,38 @@
+## Step 2 — AC table
+
+The diff ships `tests/unit/customScripts.test.ts` (+51 lines, 23 assertions), and I read it before
+touching the scenario list. Trimming, dropping empty locales and removing an all-empty key are
+`buildUpsert()`'s input→output matrix — pure-function behaviour, already proven there. Re-running
+that matrix through an authenticated page load buys no new guarantee, so all three **fold** into the
+one scenario that proves the wiring: the component reaches `buildUpsert()` and its return value is
+what leaves the browser on the wire.
+
+| AC | Source | Touched surface | Changed files | Proven by |
+|---|---|---|---|---|
+| Saving the editor sends the built upsert payload on the wire | diff-inferred | /settings/scripts | `composables/customScripts.ts`, `CustomScripts.vue` | E2E scenario 1 |
+| The saved scripts survive a reload | diff-inferred | /settings/scripts | `CustomScripts.vue` | E2E scenario 2 |
+| Leading/trailing whitespace is trimmed from every value | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: |
+| | | | | `tests/unit/customScripts.test.ts` |
+| Locales whose value is empty are dropped from the payload | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+| A top-level key whose locales are all empty is removed entirely | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+
+## Step 4 — scenarios
+
+### Scenario 1: saved scripts arrive trimmed and pruned
+- **Given:** the custom-scripts editor with one padded value, one whitespace-only locale and one populated locale
+- **When:** the user saves
+- **Then:** the intercepted upsert request body is exactly what `buildUpsert()` returned — trimmed, blank locales absent
+
+### Scenario 2: the saved scripts survive a reload
+- **Given:** the scripts saved in scenario 1
+- **When:** the page is reloaded
+- **Then:** the persisted values render
+
+Scenario 1 is the wiring scenario and its title names trimming on purpose: trimming is what a reader
+sees on the wire when the component reaches the new function. It is not a matrix scenario — the
+matrix itself is folded, and its three ACs keep their rows above.
+
+What did not fold: the request the browser actually sends, DOM state, feature-flag gating and
+persistence across a reload. None of those is visible to a unit test on a pure function, so each
+stays browser-layer work. The completion report lists the three folded ACs with their
+`already covered:` marker so a reader can see they were considered and where they live.
