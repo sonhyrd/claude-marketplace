@@ -73,6 +73,45 @@ operated:
   for the run, asserted by the shared judge). Do not read a green isolation check as evidence about
   the runtime, or this decision as the cause of that contamination.
 
+## The second price: the baseline arm can read the skill off the host
+
+Recorded beside the first because it is the same line of the same decision, and because it was paid
+before anyone noticed. **Under `none` there is no filesystem boundary, so every checkout, worktree,
+clone and plugin cache of this repository on the machine is a copy of the body under test that a
+case can `find` and `cat`.** The `without_skill` arm of an uplift run is the one place where that is
+not merely untidy but fatal: uplift is the difference between a run that has the skill and a run that
+does not, and an arm that read `SKILL.md` off a second checkout is not a run that does not.
+
+It happened. In the 2026-08-14 uplift run, three of ten baseline arms (`case-15`, `case-28`,
+`case-48`) reached another checkout on the host after the Skill tool answered `Unknown skill:
+pw-prove`, and two of them were about to be retired for zero uplift on a baseline that still had the
+skill. One of thirty-nine *with-skill* runs reached a marketplace plugin path the same way, by
+search rather than by injection — so this is a property of the runtime, not of the baseline arm.
+
+Two things follow, and neither is optional:
+
+- **Reduce, then assert.** `scripts/run-evals-isolated.sh` censuses the host copies and writes one
+  Claude Code deny rule per copy into the isolated home. Deny rules are enforced under
+  `--permission-mode=bypassPermissions` — that is what makes them worth writing — and they cover
+  Read, Grep and Glob and **not** Bash, which no prefix list can cover. So the deny rules are a
+  reduction, and the assertion is the post-run sweep: every `without_skill` transcript is judged with
+  the load question inverted, and a body line in that arm fails the run.
+- **A run's own working directory is part of the price.** The workspace used to sit inside
+  `skills/pw-prove/`, which put a checkout of the body three `cd ..`s from the agent's cwd. It now
+  defaults outside every checkout, and the runner refuses a workspace inside one.
+- **The run creates copies of its own, and a census cannot see them.** skill-up installs the skill
+  into each `with_skill` case's `/tmp/skill-up-<n>/.claude/skills/pw-prove/`, which exists only while
+  the run does. On the first sealed re-measurement `case-48`'s baseline arm was refused the plugin
+  cache and every checkout by the deny rules, kept looking, and read the body out of a **concurrent
+  case's install**. That path cannot be denied — it is the other agent's own working directory — so a
+  `--baseline` run is serialised instead, and the sweep is what proves it worked.
+
+This does not reopen the decision. `docker` still cannot see the files a wet case writes, and a
+sandbox that hides the outputs is not an improvement over a runtime that hides nothing. What changes
+is that the exposure is now enumerated before each run and asserted after it, rather than assumed
+away. **If a future runtime does give the suite a real filesystem boundary, the census and the sweep
+stay** — they are what tells you the boundary held.
+
 ## Alternatives weighed
 
 - **`docker` for dry cases, `none` for wet cases.** Rejected. `environment` is one key for one
