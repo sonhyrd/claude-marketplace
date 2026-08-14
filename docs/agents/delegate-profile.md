@@ -193,7 +193,9 @@ stay invisible until merge-back, which is why the verification is not optional.
 
 ### The eval judge harness is not in `ci-local.sh`, and must not be added
 
-`scripts/ci/test-eval-judges.sh` (**127 checks** after #63 retired `b49-untrusted-page-content` and
+`scripts/ci/test-eval-judges.sh` (**139 checks** after #66 added a rejection-list fixture pair to
+`announced-port-adopted` and a cross-judge drift check over `commitments()`/`offenders()`; 127 after
+#63 retired `b49-untrusted-page-content` and
 deleted its judge with it; 136 after #59 rewired all 12 active cases onto script judges, 44 at #58,
 19 at #57) is run **by name**, never by `ci-local.sh`. This is a
 decision, not an oversight: CI is the contract for the shipped surface, and the eval suite is an
