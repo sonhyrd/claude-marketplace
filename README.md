@@ -18,7 +18,7 @@ exceptions — see [Distribution](#distribution).
 
 ## Distribution
 
-The repo is grafted into `~/SonDev/claude-marketplace` as an editable git subtree at
+The repo is grafted into `~/work/claude-marketplace` as an editable git subtree at
 `plugins/e2e-skills`. The marketplace's own `.claude-plugin/plugin.json` names the shipped skills
 (`pw-prove`, `e2e-reviewer`) and carries the version. Nothing here is installed by any other route.
 

@@ -19,7 +19,7 @@ Guidance for AI coding agents working in this repository.
 ### Distribution: subtree out, nothing in
 
 This repo is not independently installable and will not be made so. It is grafted into the private
-local marketplace (`~/SonDev/claude-marketplace`) as an editable git subtree at
+local marketplace (`~/work/claude-marketplace`) as an editable git subtree at
 `plugins/e2e-skills`; **that** repo owns the plugin manifests, the version, and the shipped-skill
 list. This repo is the source of truth for skill *content* only, and propagation is one-directional:
 
