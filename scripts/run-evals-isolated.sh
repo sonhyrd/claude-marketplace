@@ -10,9 +10,10 @@
 # property of the runtime, not of the current contents of a cache.
 #
 # So: a fresh HOME per run, carrying the credentials and skill-up's own user config, and no agent
-# state at all. No plugins directory, no user-level skills, no host settings.json. Claude Code and skill-up agree on where the session
-# transcript lives because they read the same HOME, which is why this isolates by HOME rather than
-# by CLAUDE_CONFIG_DIR — the latter moves the transcript out from under skill-up's feet.
+# state at all. No plugins directory, no user-level skills, no host settings.json, and no plugin
+# `bin` left on PATH. Claude Code and skill-up agree on where the session transcript lives because
+# they read the same HOME, which is why this isolates by HOME rather than by CLAUDE_CONFIG_DIR —
+# the latter moves the transcript out from under skill-up's feet.
 #
 # Isolation is then PROVEN rather than assumed: after the run, every retained transcript goes
 # through skills/pw-prove/evals/judges/skill-loaded.mjs, which fails the sweep if any transcript
@@ -50,6 +51,15 @@ elif [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"
   exit 0
 fi
+
+# --- PATH ------------------------------------------------------------------------------------------
+# A fresh HOME is not the only way a plugin reaches the run. Every installed plugin puts its `bin`
+# on PATH, and the agent inherits it: the first full run flagged a case whose transcript carried the
+# operator's PATH verbatim, marketplace entries and all. Isolation that stops at $HOME leaves the
+# plugin one `command -v` away.
+scrub_path() {
+  printf '%s' "$1" | tr ':' '\n' | grep -vE '/\.claude/plugins/|claude-marketplace/plugins/' | paste -sd: -
+}
 
 # --- the sweep ------------------------------------------------------------------------------------
 # One gate invocation per case transcript. The gate's exit code is three-valued: 0 LOADED,
@@ -138,6 +148,16 @@ if [ "$MODE" = "self-test" ]; then
     echo "  [FAIL] a case with no transcript did not read as unjudgeable"; fail=1
   fi
   echo ""
+  echo "-- PATH carries no marketplace plugin into the run --"
+  # Built rather than written out: a literal home path here is a security-gate blocker.
+  h="$T/fake-home"
+  scrubbed="$(scrub_path "/usr/bin:$h/.claude/plugins/cache/m/p/1.0.0/bin:$h/work/claude-marketplace/plugins/e2e-skills/bin:/usr/local/bin")"
+  if [ "$scrubbed" = "/usr/bin:/usr/local/bin" ]; then
+    echo "  [PASS] plugin bin directories are dropped, everything else survives"
+  else
+    echo "  [FAIL] scrub_path returned '$scrubbed'"; fail=1
+  fi
+  echo ""
   [ "$fail" -eq 0 ] && echo "  run-evals-isolated self-test: green" || echo "  run-evals-isolated self-test: RED"
   exit "$fail"
 fi
@@ -189,7 +209,10 @@ for leak in .claude/plugins .claude/skills .claude/settings.json; do
   fi
 done
 
+ISO_PATH="$(scrub_path "$PATH")"
+dropped=$(( $(printf '%s' "$PATH" | tr ':' '\n' | wc -l) - $(printf '%s' "$ISO_PATH" | tr ':' '\n' | wc -l) ))
 echo "-- isolated home: $ISO (no plugins, no user skills, no host settings) --"
+echo "-- PATH: $dropped marketplace plugin entr(ies) dropped --"
 
 # --config and --output-dir are passed explicitly: skill-up discovers .skill-up.yaml from $PWD only
 # (it carries the reasoning effort the model under test is meant to run at), and the default
@@ -197,7 +220,7 @@ echo "-- isolated home: $ISO (no plugins, no user skills, no host settings) --"
 # CLAUDE_CONFIG_DIR is UNSET rather than emptied: Claude Code reads it as set-but-empty and then
 # looks for credentials in a directory that is not $ISO/.claude, which surfaces as "Not logged in ·
 # Please run /login" on every case.
-env -u CLAUDE_CONFIG_DIR HOME="$ISO" skill-up run "$EVAL_YAML" \
+env -u CLAUDE_CONFIG_DIR HOME="$ISO" PATH="$ISO_PATH" skill-up run "$EVAL_YAML" \
   --config "$SKILL_DIR/.skill-up.yaml" --output-dir "$WORKSPACE" "$@"
 run_rc=$?
 echo ""
