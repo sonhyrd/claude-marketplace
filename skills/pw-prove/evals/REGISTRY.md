@@ -12,12 +12,14 @@ Nothing in CI reads this file, by decision (#54). It is maintained by hand, by w
 | Status | Means | Admission evidence |
 |---|---|---|
 | `active` | listed in `eval.yaml`, believed | **3/3** over three iterations, and non-zero uplift |
-| `quarantined` | on disk, **not** in `eval.yaml` | between 1/3 and 2/3 — a guard that emits a coinflip verdict |
+| `quarantined` | on disk, **not** in `eval.yaml` | anything that is not an admitted 3/3: a coinflip pass rate (1/3, 2/3), a 0/3 whose defect is ticketed and not yet fixed, or a 3/3 whose uplift could not be validly measured |
 | `retired` | **deleted** from the repo | automatic (ADR / duplicate / overlap), or zero uplift, or unrepairable |
 
 The admission rule is strict on purpose. **3/3 admits a guard. 0/3 admits a confirmed defect**, filed
-as its own ticket and the case quarantined until the defect is fixed. **Anything in between is
-quarantined and is never left active.** A guard whose pass rate is a coinflip is what caused a
+as its own ticket. **Anything in between is quarantined and is never left active.** A 0/3 case is
+quarantined too, for the reason the spec gives: *"a case that reliably fails becomes a ticket and is
+then fixed or retired; it does not sit in the active list as a permanent red."* So `quarantined` is
+the status of everything not admitted, and the pass-rate column says which kind it is. A guard whose pass rate is a coinflip is what caused a
 shipped fix to be committed and then reverted (`d717e05` / `2b04ade`); this rule exists to stop a
 repeat. Retiring is a valid and expected outcome — the goal is a trusted core, not a high keep rate.
 
@@ -29,6 +31,11 @@ Uplift is the case's verdict with the skill **installed** minus its verdict with
 **removed**, measured **once, at admission**. `+1` means the case goes red when pw-prove is not
 there; `0` means Opus 5 answers it correctly without the skill, so the case cannot detect a
 regression in the skill and is retired.
+
+**A case that is not admitted has no uplift row, and that is the rule rather than a hole.** Uplift is
+measured *at admission*; measuring it for a case whose pass rate already disqualifies it would spend
+a run to learn nothing. `case-44`, `case-2`, `b32`, `case-43`, `case-1` and `case-3` therefore read
+`not measured`, and each is re-measured when its ticket is fixed and it is put back up for admission.
 
 It is only sound under isolation. skill-up's own `benchmark.enabled` baseline skips its **own**
 install and not an ambient marketplace plugin, so every baseline taken before #58 measured a
@@ -68,7 +75,7 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 |---|---|---|
 | **n=3 characterization** | `bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3` | the pass rate of the 13 cases that were active before this batch. 39 runs. **39/39 LOADED**, 1 CONTAMINATED (see below) |
 | **n=3, trigger cases** | the same, `--include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | the pass rate of the three trigger cases #63 repaired and activated. 9 runs |
-| **uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` | one `with_skill` and one `without_skill` arm per case, over the 10 cases still active at that point. 20 runs |
+| **uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` | one `with_skill` and one `without_skill` arm per case, over the 10 cases still active at that point — the 13 that started the batch, minus `b32` (0/3), `case-43` (0/3) and `case-44` (2/3), which the characterization run had already disqualified. 20 runs |
 
 68 agent runs in total.
 
@@ -84,6 +91,20 @@ returns `Unknown skill: pw-prove`, the baseline agent goes looking for the skill
 the ten baseline arms (`case-15`, `case-28`, `case-48`) it found *another checkout of this
 repository on the host* and read `SKILL.md` out of it. Every uplift figure below is annotated with
 whether its baseline was clean.
+
+**A dirty baseline is not automatically a void reading, and the difference decides three rows.** What
+matters is which way the contamination could have pushed the verdict:
+
+- The baseline **had the skill and failed anyway** → the case still goes red without pw-prove, because
+  a genuinely skill-free run has strictly less to work with and cannot do better. The `+1` stands,
+  and the reading is conservative rather than wrong. That is `case-15`, which stays **active**.
+- The baseline **had the skill and passed** → we learned nothing. The pass may be the model's own
+  capability or may be the body it just read, and there is no way to tell them apart from this run.
+  The reading is **void**, so the case can be neither admitted nor retired for zero uplift. That is
+  `case-28` and `case-48`, both **quarantined** pending #75.
+
+Recorded here rather than left implicit, because on its face the three rows look like the same
+evidence treated two different ways.
 
 ## Registry
 
@@ -105,7 +126,7 @@ skill-free.
 | `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** | **+1** (clean) | **active** |
 | `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
 | `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
-| `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | 0 — but both arms failed, so the reading says nothing | quarantined |
+| `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
 | `case-2` | trigger | frontmatter `description:` — a "plan the tests for this route" request | **2/3** | not measured | quarantined |
 | `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** | not measured | quarantined — **#71** |
@@ -123,8 +144,10 @@ skill-free.
 
 `gate-skill-loaded`, `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`.
 That is what `eval.yaml`'s active list holds, and every one of them is 3/3 with a non-zero uplift.
-Nine of the fifteen non-automatic cases did not make it, which is the expected shape: the goal is a
-core whose verdicts can be believed, not a high keep rate.
+
+Of the 21 cases triaged, 5 were automatic retirements. **Of the 16 that were actually measured, 6
+were admitted, 9 are quarantined and 1 was deleted** — so ten of sixteen did not make it. That is the
+expected shape: the goal is a core whose verdicts can be believed, not a high keep rate.
 
 ### The retirements, each with its reason
 

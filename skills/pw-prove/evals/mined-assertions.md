@@ -21,8 +21,8 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 
 ## Index
 
-- 57 entries, 365 assertions recovered. **This file is unchanged as a record** — every entry below, including the five whose case files #63 deleted, is kept verbatim. The mining is the recovery; deleting a case does not un-recover it.
-- Status as of #63 (batch 1 triage): **3 are in `eval.yaml`'s active list** (`case-15`, `case-50`, `case-60`), **11 are quarantined** — on disk, out of the active list, each with a recorded pass rate in `REGISTRY.md` — **5 are retired** (their case files are deleted: `case-26`, `case-27`, `case-39`, `case-40`, `case-49`), and **38 remain dormant**.
+- 57 entries, 365 assertions recovered. **The recovered material is immutable** — every assertion below, including those of the five entries whose case files #63 deleted, is kept verbatim. The mining is the recovery; deleting a case does not un-recover it. Only the Status column moves, and it is a pointer: `REGISTRY.md` owns pass rate, uplift and status, and wins any disagreement.
+- Status as of #63 (batch 1 triage), over the 57 mined entries: **3 active** (`case-15`, `case-50`, `case-60`), **8 quarantined** (`case-1`, `case-2`, `case-3`, `case-28`, `case-30`, `case-43`, `case-44`, `case-48` — on disk, out of the active list, each with a recorded pass rate in `REGISTRY.md`), **5 retired** (case files deleted: `case-26`, `case-27`, `case-39`, `case-40`, `case-49`), and **41 dormant**. 3 + 8 + 5 + 41 = 57.
 - A dormant entry is `judge.type: agent_judge` with no `criteria:` key, which `skill-up validate` rejects outright. A dormant case is a hard config error, not a vacuous pass.
 - These counts cover entries mined from `evals.json` only. `eval.yaml`'s active list also carries `gate-skill-loaded`, `b01-confirmation-gate` and `b05-handoff-stale`, which have no legacy entry here; `b32-dwell-inline` is quarantined and `b49-untrusted-page-content` was deleted for zero uplift.
 

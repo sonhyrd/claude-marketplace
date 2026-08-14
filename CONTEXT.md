@@ -288,7 +288,7 @@ edited until it loads: that deletes the only signal the case produces. The compl
 An eval case whose prompt presupposes **mid-run context** — a step number, a preflight exit code, a
 pasted server log. Nothing about such a prompt would ever trip the skill's trigger, so it opens with
 the [placement line](#placement-line) and a failure is about the body rather than the frontmatter.
-The bulk of the suite: 58 of 62 case files.
+The bulk of the suite: 52 of 56 case files.
 
 ## Placement line
 The one sentence that puts a [behavior case](#behavior-case)'s agent inside the skill — *"Load the
@@ -316,10 +316,11 @@ behaviour — a green dry case is not evidence that a run performs it, which is 
 ## Trusted core
 The set of cases whose verdicts may be **acted on**: each carries a recorded pass rate from
 [characterization](#characterization), a recorded uplift over running with no skill, and a named
-SKILL.md section it guards. Membership is earned at admission and recorded in the **registry** — the
-one file listing every case with its pass rate, uplift, guarded section and status, enforced by
-nothing. A case file sitting on disk is inventory, not coverage: 49 of the 61 are dormant, and a case
-outside the core is not a weaker guard but no guard at all.
+SKILL.md section it guards. Membership is earned at admission and recorded in the **registry**
+(`skills/pw-prove/evals/REGISTRY.md`) — the one file listing every case with its pass rate, uplift,
+guarded section and status, enforced by nothing. A case file sitting on disk is inventory, not
+coverage: after the first batch of triage the core is **six** cases of 56 on disk, and a case outside
+the core is not a weaker guard but no guard at all.
 
 ## Characterization
 The measurement that decides whether a case joins the [trusted core](#trusted-core): three runs of

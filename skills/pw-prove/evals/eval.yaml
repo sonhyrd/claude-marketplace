@@ -30,11 +30,11 @@ cases:
         - evals/cases/gate-skill-loaded.yaml
         #
         # `case-1`, `case-2` and `case-3` were repaired onto this same judge by #63 and characterized
-        # beside it, and they are NOT in this list: they scored 0/3, 2/3 and 0/3. A realistic
-        # "analyse this project's coverage gaps" request does not trip the trigger, because the
-        # `description:` frontmatter advertises nothing about the Coverage-gap mode the body
-        # implements. That is a defect against the frontmatter (#73, #74) and is never repaired by
-        # editing a trigger prompt. Their case files stay on disk, quarantined, until it is fixed.
+        # beside it, and they are NOT in this list. A realistic "analyse this project's coverage gaps"
+        # request does not trip the trigger, because the `description:` frontmatter advertises nothing
+        # about the Coverage-gap mode the body implements. That is a defect against the frontmatter
+        # (#73, #74) and is never repaired by editing a trigger prompt — their case files stay on
+        # disk, quarantined, until it is fixed. evals/REGISTRY.md has their pass rates.
         # --- the admitted P0 behaviors ---
         # Every one is judged by a script under evals/judges/, and every one of those scripts is
         # covered by a must-PASS / must-FAIL fixture pair in scripts/ci/test-eval-judges.sh. They
@@ -43,20 +43,17 @@ cases:
         # failures in the 2026-08-13 run. Do not reintroduce one over discursive output.
         #
         # Every case in this list is admitted on evidence — 3/3 over three iterations AND a non-zero
-        # uplift measured against a baseline that was genuinely skill-free. REGISTRY.md carries both
-        # numbers per case and the reason for every case that is not here. #63 took SIX cases out of
-        # this list rather than leave one as a permanent red or an unproven guard:
+        # uplift measured against a baseline that was genuinely skill-free.
         #
-        #   b32-dwell-inline  0/3 (#71)  case-43  0/3 (#72)  case-44  2/3
-        #   case-30           3/4 across all with-skill samples, and its uplift arm failed too
-        #   case-28, case-48  3/3, but their uplift reading is VOID (#75) — the baseline agent found
-        #                     another checkout of this repo on the host and read the body out of it
+        # evals/REGISTRY.md is the source of truth for every number: pass rate, uplift, the SKILL.md
+        # section each case guards, and the reason for every case that is NOT here. Do not restate a
+        # figure in this file; a number in two places drifts. #63 took six cases out of this list —
+        # b32-dwell-inline, case-43, case-44, case-30, case-28 and case-48 — rather than leave one as
+        # a permanent red or an unproven guard, and DELETED b49-untrusted-page-content outright for
+        # zero uplift. The registry says which reason applies to which.
         #
-        # and DELETED `b49-untrusted-page-content` outright: its baseline was genuinely skill-free
-        # and passed anyway, so its uplift is zero and it cannot go red when the skill regresses.
-        #
-        # Do not re-add one without re-characterizing it. A guard whose pass rate is a coinflip is
-        # what caused a shipped fix to be committed and then reverted.
+        # Do not re-add one without re-characterizing it and updating its row. A guard whose pass
+        # rate is a coinflip is what caused a shipped fix to be committed and then reverted.
         - evals/cases/b01-confirmation-gate.yaml
         - evals/cases/b05-handoff-stale.yaml
         - evals/cases/case-50.yaml

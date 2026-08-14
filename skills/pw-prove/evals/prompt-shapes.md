@@ -157,11 +157,18 @@ gate would not.
   act was paid — each took `skill-loaded.mjs` as its judge, which is the only judge shape that rule
   admits for an active trigger case.
 
-## Measured
+## Measured — #60's single-iteration run, superseded
 
 Every run goes through `scripts/run-evals-isolated.sh`, never bare `skill-up run`.
 See `docs/adr/0018` before running the suite, and `docs/agents/delegate-profile.md` for how runs are
 operated.
+
+> **This table is a historical record, not the current state of the suite.** It is one iteration of
+> the 13 cases that were active when #60 landed, and it is what that change measured. #63 then
+> characterized every one of them at **n=3**, which is the reading to act on: five of the thirteen
+> are no longer active, `b49-untrusted-page-content` no longer exists, and three trigger cases have
+> been added and quarantined since. **`REGISTRY.md` is the current state**; the value of the table
+> below is that it shows what one iteration looked like before anyone had a pass rate.
 
 **2026-08-14, after this change** — the whole active suite, so the claim rests on every active case
 rather than on the ones the rule was designed against.
