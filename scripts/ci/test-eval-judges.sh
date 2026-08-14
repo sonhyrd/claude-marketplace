@@ -36,7 +36,9 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
-SELF="$REPO_ROOT/scripts/ci/test-eval-judges.sh"
+# The self-test re-invokes THIS file, not the committed path of the same name — so an edit under
+# review is what goes red, rather than whatever happens to be checked in beside it.
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")" || exit 1
 cd "$REPO_ROOT" || exit 1
 
 EVALS_ROOT="$REPO_ROOT/skills/pw-prove/evals"
@@ -45,7 +47,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --evals-root) EVALS_ROOT="$2"; shift 2 ;;
     --no-self-test) SELF_TEST=0; shift ;;
-    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    # Print the header block, however long it grows. A hard line range drifts into live code.
+    -h|--help) awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; exit 0 ;;
     *) echo "test-eval-judges.sh: unknown argument '$1'" >&2; exit 1 ;;
   esac
 done
@@ -186,8 +189,12 @@ for n in "${judge_names[@]}"; do
     # that refuses everything for one wrong reason passes every must-FAIL fixture.
     expect="$d/$base.expect"
     if [ -f "$expect" ]; then
-      while IFS= read -r want; do
+      wanted=0
+      # `|| [ -n "$want" ]` so a final line with no trailing newline is still read. Without it a
+      # one-line .expect asserts nothing and still prints green — a check that cannot fail.
+      while IFS= read -r want || [ -n "$want" ]; do
         [ -z "$want" ] && continue
+        wanted=$((wanted + 1))
         if grep -qF -- "$want" "$W/out" "$W/err"; then
           ok "$n/$base — verdict names '$want'"
         else
@@ -195,6 +202,9 @@ for n in "${judge_names[@]}"; do
           sed 's/^/         /' "$W/err" | head -4
         fi
       done < "$expect"
+      if [ "$wanted" -eq 0 ]; then
+        bad "$n/$base.expect is empty — an .expect that asserts nothing reads as a passing check"
+      fi
     fi
   done < <(find "$d" -maxdepth 1 -name '*.txt' -type f 2>/dev/null | sort)
 done
@@ -220,63 +230,67 @@ if [ "$SELF_TEST" = "1" ]; then
   echo ""
   echo "-- the seam is real: broken judges make THIS harness fail --"
 
-  # The bare-substring judge, reconstructed. This is the defect verbatim: it refuses any answer
-  # containing the string `--workers` anywhere, so it passes every must-FAIL fixture and red-flags
-  # the correct answer that names the flag in order to explain its absence. It is the exact shape
-  # that produced seven false failures, and the must-PASS twin is what catches it.
-  mk_root() {
-    local root="$1"
-    mkdir -p "$root/judges/fixtures" "$root/cases"
-    cp -R "$FIXTURES/no-workers-in-command" "$root/judges/fixtures/broken" 2>/dev/null
+  # A scratch evals root holding one deliberately broken judge, under the real fixture set. The copy
+  # is not allowed to fail quietly: if it did, every case below would degrade into the weaker
+  # "judge with no fixtures" case and still look green.
+  st_n=0
+  broken_root() {
+    local root="$W/self-$1" fixtures="${2:-$FIXTURES/no-workers-in-command}"
+    mkdir -p "$root/judges/fixtures" "$root/cases" || return 1
+    if [ -d "$fixtures" ]; then
+      cp -R "$fixtures" "$root/judges/fixtures/broken" || return 1
+    fi
+    cat > "$root/judges/broken.mjs" || return 1
+    printf '%s' "$root"
   }
 
-  SUBSTR="$W/substring"
-  mk_root "$SUBSTR"
-  cat > "$SUBSTR/judges/broken.mjs" <<'JUDGE'
+  # usage: expect_red <label> <root> <reason-substring>
+  # The reason matters as much as the exit code: a self-test that only asserts "it went red" is
+  # satisfied by a harness that is broken in some entirely different way.
+  expect_red() {
+    local label="$1" root="$2" reason="$3" log
+    st_n=$((st_n + 1)); log="$W/self-$st_n.log"
+    if bash "$SELF" --evals-root "$root" --no-self-test >"$log" 2>&1; then
+      bad "$label — the harness stayed GREEN against a broken judge"
+      return
+    fi
+    ok "$label — the harness goes red"
+    if grep -q "$reason" "$log"; then
+      ok "$label — and it fails for the right reason ('$reason')"
+    else
+      bad "$label — it failed, but never for '$reason'"
+      sed 's/^/         /' "$log" | tail -12
+    fi
+  }
+
+  # 1. The bare-substring judge, reconstructed — the defect verbatim. It refuses any answer
+  #    containing `--workers` anywhere, so it passes every must-FAIL fixture and red-flags the
+  #    correct answer that names the flag in order to explain its absence. Only the must-PASS twin
+  #    can see it, which is why every fixture set is required to carry one.
+  R=$(broken_root substring <<'JUDGE'
 const text = process.env.EVAL_FINAL_MESSAGE ?? '';
+if (!text.trim()) { console.error('FAIL: no input'); process.exit(1); }
 if (text.includes('--workers')) { console.error('FAIL: output_contains --workers'); process.exit(1); }
 console.log('PASS');
 JUDGE
-  if bash "$SELF" --evals-root "$SUBSTR" --no-self-test >"$W/st1.out" 2>&1; then
-    bad "a bare-substring judge passed the harness — the must-PASS twin is not load-bearing"
-  else
-    ok "a bare-substring judge is caught (it red-flags a correct answer that names the flag)"
-  fi
-  if grep -q 'CORRECT answer and the judge red-flagged it' "$W/st1.out"; then
-    ok "the failure names the false-positive twin as the reason"
-  else
-    bad "the harness failed for some other reason than the false-positive twin"
-    sed 's/^/         /' "$W/st1.out" | tail -12
-  fi
+  ) && expect_red "bare-substring judge" "$R" 'CORRECT answer and the judge red-flagged it' \
+    || bad "could not build the bare-substring self-test root"
 
-  # The opposite defect: a judge that cannot go red. It passes every must-PASS fixture, so only the
-  # must-FAIL half sees it.
-  ALWAYS="$W/always-pass"
-  mk_root "$ALWAYS"
-  cat > "$ALWAYS/judges/broken.mjs" <<'JUDGE'
+  # 2. The opposite defect: a judge that cannot go red at all. Every must-PASS fixture is happy with
+  #    it, so only the must-FAIL half sees it.
+  R=$(broken_root always-pass <<'JUDGE'
 console.log('PASS: looks fine to me');
 JUDGE
-  if bash "$SELF" --evals-root "$ALWAYS" --no-self-test >"$W/st2.out" 2>&1; then
-    bad "an always-pass judge passed the harness — the must-FAIL half is not load-bearing"
-  else
-    ok "an always-pass judge is caught by the must-FAIL half"
-  fi
-  if grep -q 'cannot see the defect it exists to catch' "$W/st2.out"; then
-    ok "the failure names the must-FAIL fixture the judge could not refuse"
-  else
-    bad "the always-pass failure did not name a must-FAIL fixture"
-    sed 's/^/         /' "$W/st2.out" | tail -12
-  fi
+  ) && expect_red "always-pass judge" "$R" 'cannot see the defect it exists to catch' \
+    || bad "could not build the always-pass self-test root"
 
-  # And a judge with no fixtures at all must not be silently skipped.
-  BARE="$W/bare"
-  mkdir -p "$BARE/judges" "$BARE/cases"
-  cp "$JUDGES/no-workers-in-command.mjs" "$BARE/judges/"
-  if bash "$SELF" --evals-root "$BARE" --no-self-test >"$W/st3.out" 2>&1; then
-    bad "a judge with no fixtures passed the harness"
-  else
-    ok "a judge with no fixture set is a failure, not a skip"
-  fi
+  # 3. A judge with no fixture set at all must be a failure, not a silent skip — otherwise #59 can
+  #    add a judge and this harness will say nothing about it.
+  R=$(broken_root no-fixtures /nonexistent <<'JUDGE'
+console.log('PASS');
+JUDGE
+  ) && expect_red "judge with no fixtures" "$R" 'no fixture directory at' \
+    || bad "could not build the no-fixtures self-test root"
 fi
 
 echo ""

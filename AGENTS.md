@@ -68,6 +68,7 @@ docs orphan check, language,
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
 │   │   ├── evals/evals.json
+│   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
 │   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
@@ -149,6 +150,20 @@ node skills/e2e-reviewer/scripts/scan.mjs testbed/cal.diy
 ```
 
 `ci-local.sh` runs all of the above and must be green before you commit.
+
+One suite is deliberately **outside** that list, and must stay outside it:
+
+```bash
+bash scripts/ci/test-eval-judges.sh  # eval judge scripts: fixture in, exit code + printed verdict out
+```
+
+CI is the contract for the shipped surface; the eval suite is an instrument operated by hand, so
+wiring this into `ci-local.sh` would give CI an eval dependency it should not have. Run it by name
+whenever you add or change a judge under `skills/pw-prove/evals/judges/`. Every judge needs a
+fixture directory carrying both halves — a must-FAIL input, and a must-PASS input that is *a
+correct answer naming the forbidden thing in order to reject it*, which is the one-hit-one-JUSTIFIED-twin
+rule from `tests/pattern-corpus/` applied to judges. That twin is what catches the bare-substring
+judge, the defect behind seven of the nine failures in the 2026-08-13 run.
 
 ## When You Edit Skills
 
