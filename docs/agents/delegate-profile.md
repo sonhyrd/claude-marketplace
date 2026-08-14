@@ -110,6 +110,26 @@ git -C <worktree> log --oneline <integration-head>..HEAD
 Note the pane text is at `result.terminal.tail`, **not** `result.lines` — reading the wrong key
 returns empty and looks exactly like a dead worker.
 
+### Coordinator note: a dispatched worker does not receive mail it never checks for
+
+`orchestration send --to dispatch:<id>` succeeds and returns `ok: true` the moment the message is
+**queued**. A low-level dispatched worker only reads it when it calls `orchestration check`, and a
+worker head-down in a long task may never call it. **A sent message is not a delivered one, and
+`ok: true` is not receipt.**
+
+This cost a real re-measurement (#78): #64 was told to rebase once #75 merged, never checked its
+mail, and measured 16 uplift arms on the superseded runner. Seven of eight came back contaminated.
+
+So: **do not let a dispatched worker's correctness depend on mail you send mid-flight.** If a merge
+invalidates a live worker's premise, either
+
+- verify receipt before relying on it — `terminal read` the pane and look for the worker acting on
+  it, not merely for the send returning `ok`; or
+- accept the branch as-is and re-do the affected work afterwards, which is usually cheaper than it
+  sounds because static triage and pass rates often survive when only one measurement axis is void.
+
+Choosing the second is legitimate. Assuming the first happened is not.
+
 ### Coordinator note: `check --wait` replays unacked mail, and prints more than one JSON object
 
 `check --wait` returns every delivery that has not been acknowledged, so a coordinator that
