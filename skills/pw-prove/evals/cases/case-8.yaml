@@ -1,7 +1,7 @@
 id: case-8
 shape: behavior
 title: pw-prove - 8
-description: 'The rest of Step 8 remains: the hygiene sweep (delete test-results/ and playwright-report/ litter and /tmp/pw-prove-mutation, keep playwright.proof.config.ts, stop the dev server this run started, revert auto-imports.d.ts-style codegen churn, scrub the HAR), commit the spec + POM + scrubbed api.har to the PR branch, push, and post the share link as a PR comment via gh pr comment -- all without asking. The report skeleton includes Generated, ACs, Dev server, e2e-reviewer, Tests (hermetic + carve-outs), Mutation, Proof page, Committed, Pushed, and PR comment lines; a report missing any of them is structurally invalid in PR-mode. For the prose-arg run with no PR: create one (push the branch, gh pr create with the AC table as body) and post the comment there.'
+description: 'The rest of Step 8 remains: the hygiene sweep (delete test-results/ and playwright-report/ litter and /tmp/pw-prove-mutation, keep playwright.proof.config.ts, stop the dev server this run started, revert auto-imports.d.ts-style codegen churn, scrub the HAR), commit the spec + POM + scrubbed api.har to the PR branch, push, and post the share link as a PR comment via gh pr comment -- all without asking. The report skeleton includes Generated, ACs, Preview server, e2e-reviewer, Tests (hermetic + carve-outs), Mutation, Clips, Proof page, Committed, Pushed, and PR comment lines; a report missing any of them is structurally invalid in PR-mode. For the prose-arg run with no PR: create one (push the branch, gh pr create with the AC table as body) and post the comment there.'
 tag: functional_test
 input:
     prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. A PR-mode run (PR #88, branch
@@ -14,5 +14,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: agent_judge
-    model: anthropic/claude-sonnet-4-6
+    type: script
+    script_path: evals/judges/step8-tail-complete.mjs
+    timeout_seconds: 30

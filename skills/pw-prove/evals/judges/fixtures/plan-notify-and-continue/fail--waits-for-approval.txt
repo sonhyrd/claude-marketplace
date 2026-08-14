@@ -1,0 +1,10 @@
+I have the plan ready: two scenarios plus the locator mapping table.
+
+Before I write any code I will post it and wait for the user to confirm. I have a few questions
+first: should the new spec use a Page Object or match the flat siblings? The existing specs are all
+flat, so I will follow flat unless you say otherwise. Should I stash the dirty worktree, and is
+getByPlaceholder acceptable for the label-less input?
+
+I will enter plan mode and await your reply before continuing to Step 5.
+
+For a coverage-gap run I would do the same thing and continue immediately once the plan is posted.

@@ -1,0 +1,35 @@
+I read `tests/unit/customScripts.test.ts` in the diff before touching the scenario list — 51 added
+lines, 23 assertions, covering exactly the trim / drop-empty-locales / key-removal matrix that
+`buildUpsert()` implements. That is pure-function behaviour, already proven at a fraction of the
+cost.
+
+So those three ACs are **folded** into the one scenario that proves the wiring: the UI reaches
+`buildUpsert` and its output is what leaves on the wire. A browser scenario re-running that matrix
+through a full authenticated page load buys no new guarantee.
+
+Folding is not deletion — each folded AC keeps its row:
+
+| AC | Source | Touched surface | Changed files | Proven by |
+|---|---|---|---|---|
+| Custom script values are trimmed | PR body bullet | (pure fn) | composables/customScripts.ts | already covered: tests/unit/customScripts.test.ts |
+| Empty locales are dropped | PR body bullet | (pure fn) | composables/customScripts.ts | already covered: tests/unit/customScripts.test.ts |
+| The key is removed when all locales are empty | PR body bullet | (pure fn) | composables/customScripts.ts | already covered: tests/unit/customScripts.test.ts |
+| Saving sends the built payload to the API | diff-inferred | /settings/scripts | CustomScripts.vue | E2E scenario 1 |
+| The saved values persist across a reload | diff-inferred | /settings/scripts | CustomScripts.vue | E2E scenario 2 |
+
+**Scenarios**
+
+## Scenario 1: saving sends the built upsert payload
+- Given: the custom-scripts settings page with two locales filled and one blank
+- When: the user saves
+- Then: the request the browser sends carries the trimmed, blank-dropped payload
+
+## Scenario 2: the saved custom scripts survive a reload
+- Given: scripts saved in scenario 1
+- When: the page is reloaded
+- Then: the persisted values render
+
+The behaviours a unit test cannot see stay their own scenarios: the request the browser actually
+sends, the DOM state, feature-flag gating and persistence across a reload. The completion report
+lists the three folded ACs explicitly with their `already covered:` marker, so a reader can see
+they were considered and where they live.

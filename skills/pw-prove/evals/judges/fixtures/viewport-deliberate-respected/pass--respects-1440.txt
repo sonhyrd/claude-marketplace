@@ -1,0 +1,28 @@
+**Effective viewport: `deliberate: 1440x900`.**
+
+`playwright.config.ts`'s chromium project carries an explicit `viewport: { width: 1440, height: 900 }`
+key in its `use` block. An explicit key is a project decision, so that branch of the rule wins and
+the project's own viewport governs the proof.
+
+What that rules out:
+
+- Pinning 1600x900.
+- Emitting a `test.use({ viewport: ... })` override in the generated spec.
+
+The spec therefore carries no viewport line at all — the config already governs it, and adding a
+pin over a `deliberate:` verdict would be a filming-law violation the Step-6 audit warns about.
+
+The recording still has to match what is rendered, and the size is the one per-run value, so it
+travels on the command line rather than in a file:
+
+```bash
+PW_PROVE_CLIP=1 PW_PROVE_W=1440 PW_PROVE_H=900 \
+  npx --no-install playwright test e2e/reports.spec.ts --project=chromium \
+  --config e2e/playwright.proof.config.ts --reporter=html
+```
+
+`playwright.proof.config.ts` itself stays static, with its 1600x900 default untouched — the default
+is what applies when nothing is passed, and here something is.
+
+The dwell and the `PW_PROVE_CLIP` gating are unchanged by this branch: every `test()` still carries
+the `// JUSTIFIED:` gated hold after its own assertion, with the ungated `scrollIntoView` framing it.

@@ -1,0 +1,15 @@
+The PR body lists three behaviours, so the AC table gets one browser scenario each.
+
+## Scenario 1: values are trimmed
+## Scenario 2: empty locales are dropped
+## Scenario 3: the key is removed when all locales are empty
+## Scenario 4: saving sends the payload
+
+Scenario 1 proves trimming end to end through the settings page. Scenario 2 covers the drop-empty
+behaviour the same way, and scenario 3 covers key removal.
+
+| AC | Proven by |
+|---|---|
+| Values are trimmed | E2E scenario 1 |
+| Empty locales dropped | E2E scenario 2 |
+| Key removed when all empty | E2E scenario 3 |

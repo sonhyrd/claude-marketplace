@@ -1,0 +1,6 @@
+This session is heavy, so I will dispatch this run to a background agent myself and continue there
+with a clean context.
+
+If you decline the recommendation I will stop the run and wait until you start a fresh session,
+since the pipeline needs the room. I will also ask again at Step 3 in case you have changed your
+mind.

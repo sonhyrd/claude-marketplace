@@ -1,0 +1,28 @@
+**Step 7 — the proof config already exists, so I reuse it verbatim.**
+
+`e2e/playwright.proof.config.ts` was committed by a previous pw-prove run and already spreads the
+project config, sets `video: { mode: 'on', size }` from `PW_PROVE_W`/`PW_PROVE_H` (default
+1600x900) and `trace: 'on'`. That is exactly the file this run wants, so I use it as-is and this
+run's commit carries no diff on it.
+
+What I do **not** do to it:
+
+- Rewrite it.
+- Regenerate it from the template.
+- Refresh or re-derive it against this run's numbers.
+
+A per-run diff on that file is precisely the churn it exists to remove.
+
+```bash
+rm -rf test-results
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
+  npx --no-install playwright test e2e/reports.spec.ts --project=chromium \
+  --config e2e/playwright.proof.config.ts --reporter=html
+```
+
+**Step 8 hygiene.** The sweep deletes the `test-results/` and `playwright-report/` litter and
+`/tmp/pw-prove-mutation`, plus any legacy `.pw-prove.proof.config.*` throwaway from an older run.
+The committed proof config is a deliverable, not litter, and it survives the sweep untouched.
+
+**Completion report.** The `Generated` block does not list the proof config — I omit that line,
+because this run did not create it. Listing a file the run reused would read as a new artifact.

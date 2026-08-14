@@ -1,0 +1,23 @@
+**Step 6 PROVES-header audit — two findings, both blocking Step 7.**
+
+| File / test | Verdict |
+|---|---|
+| `test('filters people by status')` | **BLOCKS** — no leading `// PROVES:` comment at all |
+| `test('shows an inline error for an invalid status')` | **BLOCKS** — the header paraphrases |
+| `PeopleListPage` POM file | exempt — no finding |
+
+The first test has no header. It gains one quoting the AC word-for-word from the Step 2 table:
+
+```ts
+// PROVES: User can filter people by status
+```
+
+The second test does have a header — `// PROVES: validates status input` — and that is the subtler
+failure. It is a paraphrase, not a quote, and the audit wants the acceptance criterion verbatim
+from the Step 2 AC table. So it is corrected to the exact AC wording rather than left as prose that
+gestures at it.
+
+The `PeopleListPage` Page Object is **exempt**. POM files carry no acceptance criteria, so its
+lack of a `// PROVES:` comment is not a finding and I am not adding one there.
+
+Both header fixes land, then the run proceeds to Step 7.

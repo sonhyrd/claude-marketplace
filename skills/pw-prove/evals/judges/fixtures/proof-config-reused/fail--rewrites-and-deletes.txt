@@ -1,0 +1,12 @@
+There is an existing e2e/playwright.proof.config.ts. I will regenerate it from the canonical
+template so it matches the current shape, then run the proof:
+
+```bash
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 npx --no-install playwright test \
+  --config e2e/playwright.proof.config.ts
+```
+
+In Step 8 hygiene I delete test-results/, playwright-report/ and e2e/playwright.proof.config.ts,
+since the proof config is a per-run artifact.
+
+The Generated block lists e2e/playwright.proof.config.ts (modified).

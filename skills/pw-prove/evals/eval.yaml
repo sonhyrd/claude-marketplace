@@ -59,6 +59,16 @@ cases:
         - evals/cases/case-50.yaml
         - evals/cases/case-15.yaml
         - evals/cases/case-60.yaml
+        # --- admitted by batch 2 (#64) ---
+        # Thirteen cases were measured; these two are what survived. Both are 3/3 at n=3 with a
+        # non-zero uplift, and both close a coverage gap batch 1 recorded as unreached.
+        #
+        # The other eleven are quarantined and stay OUT of this list. Six of them are 3/3 and would
+        # look admissible from the pass rate alone — their uplift baselines read the skill body off
+        # the host (#75), so there is no difference to read. evals/REGISTRY.md says which reason
+        # applies to which; do not re-add one on the strength of its pass rate.
+        - evals/cases/case-11.yaml
+        - evals/cases/case-16.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those
