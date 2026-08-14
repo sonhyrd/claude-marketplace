@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": "We are adding a QA gate. Which pages and flows in this app have no end-to-end test at all, and how should the missing ones be structured?"}, "sessionId": "fixture", "cwd": "/repo"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Here is a coverage table I wrote from reading the repository myself."}]}, "sessionId": "fixture", "cwd": "/repo"}

@@ -161,33 +161,45 @@ for cid, (path, case) in cases.items():
         staged.append(f'{path.name}: trigger case carries role injection — its prompt is not a top-of-task request')
 report_all('every trigger case keeps a realistic top-of-task prompt', staged)
 
-# 4. The active list resolves, and every active case is classified.
+# 4. Every suite's active list resolves, and every active case is classified.
+#    There is more than one suite since #81: `eval.yaml` is the single-skill suite, and
+#    `eval.collision.yaml` installs pw-prove AND e2e-reviewer to ask which of the two a request
+#    reaches. A suite whose list is unchecked is a suite that can carry a case file that is not
+#    there, so every eval*.yaml beside the main one is read the same way.
 active = []
-if eval_yaml.is_file():
+suites = sorted(root.glob('eval*.yaml'))
+if eval_yaml not in suites:
+    report(False, f'no eval.yaml at {eval_yaml}')
+for suite_path in suites:
     try:
-        suite = yaml.safe_load(eval_yaml.read_text(encoding='utf-8')) or {}
+        suite = yaml.safe_load(suite_path.read_text(encoding='utf-8')) or {}
     except Exception:
         suite = {}
-        report(False, 'eval.yaml does not parse as YAML')
+        report(False, f'{suite_path.name} does not parse as YAML')
+    listed = 0
     for rel in ((suite.get('cases') or {}).get('files') or []):
         stem = pathlib.PurePosixPath(str(rel)).stem
         if stem in cases:
-            active.append(stem)
+            listed += 1
+            if stem not in active:
+                active.append(stem)
         else:
-            report(False, f'eval.yaml lists {rel}, which is not a case file on disk')
-    report(bool(active), f'every case in the active list resolves to a case file ({len(active)} active)')
-else:
-    report(False, f'no eval.yaml at {eval_yaml}')
+            report(False, f'{suite_path.name} lists {rel}, which is not a case file on disk')
+    report(bool(listed), f'every case in {suite_path.name} resolves to a case file ({listed} active)')
 
 # 5. An ACTIVE trigger case asserts loading — otherwise nothing reads the signal it exists to make.
 #    Dormant trigger cases are inventory; their judges are repaired with the case (#54, #59).
+#    A `routes-to-*` judge asserts loading too, and asserts something the single-skill gate cannot:
+#    WHICH of two installed skills a request reached (#81). Either judge satisfies this check; an
+#    agent_judge over a trigger prompt still does not.
 unasserted = []
 for cid in active:
     path, case = cases[cid]
     if case.get('shape') != 'trigger':
         continue
     judge = case.get('judge') or {}
-    if judge.get('type') != 'script' or 'skill-loaded' not in str(judge.get('script_path', '')):
+    script = str(judge.get('script_path', ''))
+    if judge.get('type') != 'script' or not ('skill-loaded' in script or 'routes-to-' in script):
         unasserted.append(f'{path.name}: active trigger case does not assert loading (judge is {judge.get("type")!r})')
 report_all('every active trigger case asserts loading', unasserted)
 
