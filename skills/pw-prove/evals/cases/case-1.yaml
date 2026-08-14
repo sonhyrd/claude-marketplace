@@ -1,7 +1,22 @@
 id: case-1
 shape: trigger
-title: pw-prove - 1
-description: Should detect POM pattern (tests/pages/ directory with BasePage and LoginPage). Should identify /login as covered via auth.spec.ts. Should identify /dashboard, /dashboard/analytics, /settings, /settings/notifications, /settings/security, /profile, /checkout, /checkout/confirmation as uncovered routes. Should flag auth-related paths as already covered. Should flag /checkout as high priority (form-heavy). Should recommend new tests follow the existing POM pattern with classes extending BasePage.
+title: A coverage-gap request in a user's words trips the trigger
+description: >-
+    Trigger case. The prompt is a realistic top-of-task request for coverage analysis over a POM
+    project, and it names no skill. What is graded is whether the `description:` frontmatter fired —
+    NOT LOADED here is a defect in that frontmatter, recorded as such and never repaired by editing
+    this prompt.
+
+    The judge is `skill-loaded.mjs`, the same gate the post-run sweep runs. Under the rule in
+    `evals/prompt-shapes.md` an ACTIVE trigger case asserts loading and nothing else, so the fourteen
+    content assertions this case carried before #63 are NOT graded here; they are preserved in
+    `evals/mined-assertions.md` and the registry records them as an unmeasured coverage gap against
+    SKILL.md Step 2 -> Coverage-gap mode.
+
+    This case widens trigger coverage rather than duplicating `gate-skill-loaded`: that one asks for a
+    PR to be proven, this one asks for a coverage analysis, and a `description:` can fire on one
+    phrasing and not the other.
+
 tag: functional_test
 input:
     prompt: Analyze the project in evals/files/project-pom/ and identify coverage gaps. The project has routes defined in src/routes.ts including /login, /dashboard, /dashboard/analytics, /settings, /settings/notifications, /settings/security, /profile, /checkout, and /checkout/confirmation. Currently only auth tests exist in tests/auth.spec.ts. Identify what is covered, what is not, and how new tests should be structured.
@@ -15,5 +30,6 @@ context:
 constraints: {}
 expect: {}
 judge:
-    type: agent_judge
-    model: anthropic/claude-sonnet-4-6
+    type: script
+    script_path: evals/judges/skill-loaded.mjs
+    timeout_seconds: 30

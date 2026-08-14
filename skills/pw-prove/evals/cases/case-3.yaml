@@ -1,7 +1,22 @@
 id: case-3
 shape: trigger
-title: pw-prove - 3
-description: 'Should detect no POM directory (no pages/, models/, or page-objects/ used as Page Objects) and that the existing specs are flat. POM is ALWAYS the default with no flat opt-out, so it should still SCAFFOLD a POM for the new coverage — a Page Object class + spec under tests/pages/ — and NOT match the flat siblings. It must NOT rewrite or retro-refactor the existing tests/login.spec.ts (add the POM for new coverage, leave siblings untouched). Should identify login as covered. Should identify home page, signup, dashboard, profile, notifications as coverage gaps from page.tsx links. Note: a Next.js app/ or pages/ ROUTE folder is not a Playwright POM directory and must not be mistaken for one.'
+title: A coverage request against a flat-spec repo trips the trigger
+description: >-
+    Trigger case. The prompt is a realistic top-of-task request for coverage analysis over a Next.js
+    project whose existing specs are flat, and it names no skill. What is graded is whether the
+    `description:` frontmatter fired; NOT LOADED is a defect in that frontmatter, recorded as such and
+    never repaired by editing this prompt.
+
+    The judge is `skill-loaded.mjs`. Per `evals/prompt-shapes.md` an ACTIVE trigger case asserts
+    loading and nothing else, so the thirteen content assertions this case carried before #63 — the
+    POM-always rule, the no-retro-refactor guard, and the trap that a Next.js `app/` route folder is
+    not a Playwright POM directory — are not graded here. They survive in
+    `evals/mined-assertions.md` and the registry records them as an unmeasured coverage gap against
+    SKILL.md Step 4 -> Locator Mapping Table (POM always).
+
+    It widens trigger coverage against a repo shape the other trigger cases do not use: flat specs,
+    no POM directory anywhere.
+
 tag: functional_test
 input:
     prompt: Analyze the project in evals/files/project-flat/ for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Its existing E2E tests are flat (direct page interactions, no Page Object Model) and there is no POM directory anywhere. Identify the project pattern, coverage gaps, and how new tests should be structured.
@@ -13,5 +28,6 @@ context:
 constraints: {}
 expect: {}
 judge:
-    type: agent_judge
-    model: anthropic/claude-sonnet-4-6
+    type: script
+    script_path: evals/judges/skill-loaded.mjs
+    timeout_seconds: 30
