@@ -15,3 +15,4 @@ judge:
     type: script
     script_path: evals/judges/fresh-context-recommended-once.mjs
     timeout_seconds: 30
+derived_from_prompt: 515bd900b466

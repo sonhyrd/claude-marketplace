@@ -21,3 +21,4 @@ judge:
     type: script
     script_path: evals/judges/announced-port-adopted.mjs
     timeout_seconds: 30
+derived_from_prompt: 51cbfda37c2c

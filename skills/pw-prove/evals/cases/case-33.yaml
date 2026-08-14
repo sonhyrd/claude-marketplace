@@ -14,3 +14,4 @@ judge:
     type: script
     script_path: evals/judges/missing-har-is-declared-not-silent.mjs
     timeout_seconds: 30
+derived_from_prompt: b34a1b231cdc

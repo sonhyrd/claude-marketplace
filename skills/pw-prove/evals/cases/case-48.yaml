@@ -17,3 +17,4 @@ judge:
     type: script
     script_path: evals/judges/dev-guarded-rung-skipped.mjs
     timeout_seconds: 30
+derived_from_prompt: c73b2f32c079

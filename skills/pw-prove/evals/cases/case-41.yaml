@@ -15,3 +15,4 @@ judge:
     type: script
     script_path: evals/judges/har-residue-refusal-not-eyeball.mjs
     timeout_seconds: 30
+derived_from_prompt: a8ff632c0473

@@ -18,3 +18,4 @@ judge:
     type: script
     script_path: evals/judges/har-bound-not-rerecorded.mjs
     timeout_seconds: 30
+derived_from_prompt: 331cc3b1a139

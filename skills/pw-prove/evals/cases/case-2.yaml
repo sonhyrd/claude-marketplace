@@ -26,3 +26,4 @@ judge:
     type: script
     script_path: evals/judges/skill-loaded.mjs
     timeout_seconds: 30
+derived_from_prompt: b583249f5df5

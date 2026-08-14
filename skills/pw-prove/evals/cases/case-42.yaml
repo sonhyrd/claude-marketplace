@@ -17,3 +17,4 @@ judge:
     type: script
     script_path: evals/judges/capture-time-scrub-is-trusted.mjs
     timeout_seconds: 30
+derived_from_prompt: 3cf64f0bb26d

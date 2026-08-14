@@ -287,3 +287,21 @@ Two things to carry into writing such a fixture, both learned the expensive way:
   says "your current working directory" and never names a path no run creates.
   `context.files` is `{workspace_path: INLINE CONTENT}` and is the wrong key for a directory (#76).
   `scripts/ci/test-case-shapes.sh` fails on both mistakes.
+
+## A prompt repair is a judge repair
+
+Every case carries a `derived_from_prompt:` digest of the prompt its judge's assertions were written
+against, and `scripts/ci/test-case-shapes.sh` goes red when the prompt moves and the digest does
+not. Re-stamp with `python3 scripts/ci/derive-stamp.py <case-id>` — after re-reading the judge, not
+instead of it.
+
+The rule it enforces: **when a prompt changes, the judge's assertions are re-derived from the new
+prompt rather than inherited.** #80 repaired `case-61`'s premise to state the cause outright and left
+an assertion that the answer "rules out browser-context leakage" — real under the old prompt, which
+named no cause, and unreachable under the new one, which answers it for free. The case scored 0/3
+across three answers that were right in every particular. #79 did the same thing one degree milder to
+`case-53`: its repaired prompt settles the environment question, and the judge kept demanding the
+answer *say* the autostart was normal, which is the premise restated.
+
+Both are the same shape, and it is the reason a prompt repair cannot be judged local. The digest
+records the occasion; only a reader can do the derivation.

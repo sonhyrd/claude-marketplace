@@ -16,3 +16,4 @@ judge:
     type: script
     script_path: evals/judges/proven-restart-is-the-red.mjs
     timeout_seconds: 30
+derived_from_prompt: 3e034f3610c7

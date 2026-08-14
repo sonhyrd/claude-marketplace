@@ -19,3 +19,4 @@ judge:
     type: script
     script_path: evals/judges/gate-before-any-action.mjs
     timeout_seconds: 30
+derived_from_prompt: 26d5c40fa153

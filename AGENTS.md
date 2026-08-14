@@ -195,11 +195,19 @@ rule from `tests/pattern-corpus/` applied to judges. That twin is what catches t
 judge, the defect behind seven of the nine failures in the 2026-08-13 run.
 
 `test-case-shapes.sh` stays out for the same reason, and holds the prompt-shape rule described under
-*The Eval Suite* below, plus the fixture-staging checks from #76. Run it by name whenever you add or
-edit a case prompt or a case's `context:`. It is the one hand-run suite that is *also* wired
-somewhere: `run-evals-isolated.sh` calls it as a pre-run gate and refuses the run when it is red,
-because the #76 defect is silent in the run itself and the run is what pays for it.
-`PWPROVE_SKIP_STAGING_GATE=1` bypasses that gate and says so out loud.
+*The Eval Suite* below, plus the fixture-staging checks from #76 and the re-derivation record from
+#82. Run it by name whenever you add or edit a case prompt or a case's `context:`. It is the one
+hand-run suite that is *also* wired somewhere: `run-evals-isolated.sh` calls it as a pre-run gate and
+refuses the run when it is red, because the #76 defect is silent in the run itself and the run is
+what pays for it. `PWPROVE_SKIP_STAGING_GATE=1` bypasses that gate and says so out loud.
+
+**A prompt repair is a judge repair.** Every case carries a `derived_from_prompt:` digest of the
+prompt its judge's assertions were written against, and check 9 goes red when the prompt moves and
+the digest does not. Re-stamp with `python3 scripts/ci/derive-stamp.py <case-id>` **after** re-reading
+the judge against the new prompt — some assertions become unreachable and some become free. #80
+repaired `case-61`'s premise and left an assertion the repair had made meaningless, which scored the
+case 0/3 across three correct answers; #79 did the milder version of it to `case-53`. The check
+records the occasion, not the derivation: it can only make somebody look.
 
 ## The Eval Suite
 
@@ -210,7 +218,7 @@ was mined and retired in #61. The surface is seven things:
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **49 on disk, 32 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **49 on disk, 33 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`, which copies the directory's **contents** to the workspace **root** — so a prompt says "your current working directory", never "evals/files/x/". **`context.files` is `{workspace_path: INLINE CONTENT}`** (established from skill-up's `internal/evaluator/fixtures.go`, #76): the value is written verbatim as the file's body, so `p: p` stages a one-line file containing its own path and the case answers a different question. `scripts/ci/test-case-shapes.sh` fails on all three mistakes. Note also that a fixture written in a didactic voice is read by the skill-free baseline arm too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |

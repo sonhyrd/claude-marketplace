@@ -17,3 +17,4 @@ judge:
     type: script
     script_path: evals/judges/proof-config-reused.mjs
     timeout_seconds: 30
+derived_from_prompt: 6a388d88f5ae

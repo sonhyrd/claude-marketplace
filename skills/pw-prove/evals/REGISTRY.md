@@ -324,8 +324,8 @@ must-FAIL fixture pair before it could run at all.
 | `case-41` | behavior | Step 8 › *Hygiene sweep* — the residue refusal, not an eyeball confirmation | **1/3** | not measured | quarantined |
 | `case-42` | behavior | Step 3 › the capture-time scrub is trusted, not repeated | **1/3** | not measured | quarantined |
 | `case-56` | behavior | Step 7 › *Mutation check* — a proven restart is proven | **1/3** | not measured | quarantined |
-| `case-53` | behavior | Step 3 › *Recon* — the probe's verb surface | **2/3** (#79, after the **premise** was repaired — 0/3 before) | **+1** — baseline 0/3, all three arms certified SKILL-FREE | quarantined — **#79**, short of 3/3 |
-| `case-61` | behavior | Step 5 › *Generate* — serialisation belongs in the spec, not the command line | **0/3** (#80, after the premise was repaired — the *disagreement* is gone, one vestigial judge clause is not) | not measured — both arms failed | quarantined — **#80** |
+| `case-53` | behavior | Step 3 › *Recon* — the probe's verb surface | **3/3** (#82, after the **judge** was repaired — 2/3 at #79, 0/3 before that; 3/3 again on an independent n=3 in #82) | **+3** — baseline 0/3, all three arms certified SKILL-FREE (#79 run) | **active** — admitted **#82** |
+| `case-61` | behavior | Step 5 › *Generate* — serialisation belongs in the spec, not the command line | **2/3** (#82, after the vestigial judge clause was removed — 0/3 at #80; 3/3 on the #79-run responses replayed through the same final judge) | **+2** — baseline 0/3, all three arms certified SKILL-FREE | quarantined — **#82**, short of 3/3 on the fresh run |
 
 ### Why batch 3 retired nothing, and why that is the expected shape
 
@@ -490,9 +490,9 @@ measured, 10 were admitted, 10 are quarantined and 1 was deleted.** The wet pair
 quarantined.
 
 Across all three batches plus the wet pair, and after #76 re-characterized `case-22` and `case-23`:
-**64 triaged — 32 active, 17 quarantined, 15 deleted**, over **49** case files on disk (#72 moved
-`case-43` and #77 moved `case-29` from quarantined to active). The arithmetic closes twice:
-32 + 17 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
+**64 triaged — 33 active, 16 quarantined, 15 deleted**, over **49** case files on disk (#72 moved
+`case-43`, #77 moved `case-29` and #82 moved `case-53` from quarantined to active). The arithmetic
+closes twice: 33 + 16 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
 64. **Every case file on disk carries a registry row**, and every case that did not make it is
 recorded with a reason rather than a shrug. That is the expected shape: the goal is a core whose
 verdicts can be believed, not a high keep rate.
@@ -840,6 +840,67 @@ stated it. The clause demonstrably reached the model: the post-repair answer ope
 settled, so the contention is the residue that survives the hermetic question," which is the new
 sentence's language. That also means `case-61`'s post-repair behaviour cannot be attributed to the
 prompt repair alone, and it is recorded here as both.
+
+### `case-53` and `case-61` were the judge, and one of its clauses had outlived its prompt (#82)
+
+#79 and #80 were forbidden from repairing a judge against the transcripts they were reading — the
+#77 rule — so both left the instrument defects named and the cases quarantined. This ticket owned
+the repairs. It found **five**, where the ticket named three, and all five red-flagged answers that
+were right in every particular.
+
+**`probe-vocabulary-one-batch.mjs` — three.** `window.__APP__?.tenant` did not match
+`/__APP__\.tenant/`: optional chaining is the same value, and on a shell that may not have booted
+the global it is the *better* probe. `/(?:\??\.|\['tenant'\])/` now covers all three spellings of
+one read. The refusal pattern was anchored on the word *viewport* sitting near the word *no*, which
+reads one word order out of three — three recorded answers refused correctly as "there is
+deliberately no `viewport` among them", "the 390px viewport question I'm not sending", and "the
+390px viewport is not sent", and only the first matched. The unit is now the **line**, which is what
+makes it about the viewport request, and within the line the test is order-free. And a third,
+unnamed by the ticket: the answer had to *say* the autostart was "normal" or "expected". That one was
+**deleted rather than widened** — see below.
+
+**`serial-in-the-spec-not-on-the-command-line.mjs` — two.** The vestigial clause the ticket names,
+and one more of the same family: *"a global override would make every future proof on this repo pay
+for this spec's carve-out"* is exactly the fact the *"why the command line is the wrong place"* check
+is about, and it matched neither `globally` nor `every other proof`.
+
+**Both deletions are one lesson: an assertion is re-derived from the prompt it is about.** #80
+repaired `case-61`'s premise to state the cause outright and left an assertion that the answer
+"rules out browser-context leakage" — real under the old prompt, which named no cause, and
+unreachable under the new one. #79 did the milder version of it to `case-53`: its repaired prompt
+says "nothing about the environment is in question", so an answer that *labels* the autostart is
+restating the premise, while what is actually measurable — that it does not re-run — was already the
+first `offenders()` pattern and is untouched. Both clauses are gone, both cases carry a must-FAIL
+fixture for the behaviour that remains, and `scripts/ci/test-case-shapes.sh` now records a
+`derived_from_prompt:` digest per case so the next prompt repair announces itself.
+
+**Measurement.** Two independent n=3 runs, both read through the **final** judge (#77's method — a
+number an earlier draft produced is not a number the shipped judge produces):
+
+| | #79/#80 run, replayed | #82 run, fresh |
+|---|---|---|
+| `case-53` with skill | **3/3** | **3/3** |
+| `case-53` baseline | 0/3, all SKILL-FREE | 0/3, all **CONTAMINATED** |
+| `case-61` with skill | **3/3** | **2/3** |
+| `case-61` baseline | 0/3, all SKILL-FREE | 0/3, all SKILL-FREE |
+
+`case-53` is **admitted**: 6/6 with the skill across two independent runs, `+3` against a baseline
+whose three arms are certified SKILL-FREE. The fresh run's own baseline is unusable — all three arms
+invoked the marketplace plugin as `e2e:pw-prove`, a Skill-tool route the isolated home's deny rules
+do not close — but it fails in the safe direction: a contaminated baseline that read a *newer* copy
+of the body and still scored 0/3 bounds a clean one at 0/3, and the certified run agrees.
+
+`case-61` **stays quarantined at 2/3**, and the reason for the red is not the instrument. The
+iteration-1 answer serialises correctly, scopes the describe block, comments the shared record as the
+reason, keeps the other three concurrent, and refuses `-j 1` and a `workers` pin by name — and never
+says *why* the command line is the wrong place. The cost argument ("a global pin charges every other
+proof") is the half of the rule it does not volunteer, and that is a candidate finding against
+SKILL.md Step 5, not against the judge. It is 5/6 across both runs; one more clean n=3 decides it.
+
+**Do not re-repair this judge against the #82 transcripts.** Two of the five repairs above were
+occasioned by reading iteration-1 of the run this ticket took, and both were justified from the
+*prompt* rather than from the answer — deletions, not widenings. A third widening against the same
+three transcripts is what the #77 rule forbids.
 
 ### `case-43` was the premise, not the body (#72)
 

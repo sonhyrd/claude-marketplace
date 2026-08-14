@@ -15,3 +15,4 @@ judge:
     type: script
     script_path: evals/judges/frames-skip-is-not-a-failure.mjs
     timeout_seconds: 30
+derived_from_prompt: 78bd903cbb8d
