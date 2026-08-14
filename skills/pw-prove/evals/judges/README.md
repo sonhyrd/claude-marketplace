@@ -216,6 +216,84 @@ own browser scenario. The pre-#77 judge passed exactly that input.
 |---|---|---|
 | `unit-proven-acs-folded.mjs` | one AC table row, decided on its Proven-by cell | fixed at #77; was a phrase match over scenario titles |
 
+### There is no shared matching primitive, and the reason is recorded here
+
+#82 asked the question this family had earned after ten-plus instances: **is a shared matching
+primitive worth building for the judges that carry `offenders()`/`commitments()` verbatim, or is
+per-judge repair still cheaper?** The answer is **no primitive**, and the evidence is below so
+nobody re-proposes it from the instance count alone.
+
+**The family is three families, and only one of them lives in a shared surface.**
+
+| Sub-family | Instances | Where it lives | Already shared? |
+|---|---|---|---|
+| **Negation scope** — a forbidden thing named in order to reject it | #59, #63, #66, #71 (provenance) | `commitments()` / `NEGATED` / `offenders()` | **Yes.** One text across 39 judges, held verbatim by `test-eval-judges.sh`. #66 repaired eight copies at once. |
+| **Wrong unit** — the judge reads the wrong span | #64 (line wrap), #71 (block vs turn), #77 (title vs table row) | each judge's reader | **No, and it should not be.** The right unit is a property of the case's answer shape. #77's repair was to *stop* widening phrases and parse the table; three instances, three different units, no common one. |
+| **Wrong spelling of the right value** — the value is correct and the characters are not | #72 (×3), #82 (×5) | each judge's `checks[]` | **No — see below.** |
+
+The first sub-family is the one a primitive would have served, and **the primitive already exists**.
+Counting all ten-plus instances as one missing abstraction reads the shared surface's own successes
+as failures: `offenders()` is the abstraction, and its repairs propagated exactly as an abstraction's
+should.
+
+**Why the third sub-family does not extract.** Judges cannot import — skill-up copies a judge to a
+temp directory before running it, so a relative import of a sibling resolves to nothing. "Shared"
+here can only mean *duplicated verbatim into every judge and policed by the drift check*. So the
+cost of a primitive is not one function; it is a mandatory preamble every judge carries whether or
+not its case needs it. This repo has already decided that question once, in the other direction:
+`NEGATED` is **deliberately excluded** from the drift check because its tail is per-case vocabulary,
+and one text there "would force a judge to carry words its case never uses". The 231 entries across
+the judges' `checks[]` arrays are *entirely* per-case vocabulary. A shared matcher over them is
+`NEGATED` one layer up, and it fails for the same recorded reason.
+
+Auditing #82's own five repairs against the proposal is the sharpest version of the argument. Only
+one of them — the optional-chaining one — is a fact about JavaScript rather than a fact about a
+case. Two are one case's vocabulary for one case's idea ("the autostart was fine", "the command line
+is the wrong place"). One is a co-occurrence with a scope, whose *shape* generalises but whose two
+terms do not. And one is not a matching defect at all: a stale assertion, which no matcher can see.
+**A primitive built for this family would have prevented one of the five.**
+
+And it could not have been shown to be right. A widening matcher is verdict-neutral on every
+retained fixture by construction — every must-PASS already passes, and the must-FAILs are caught by
+`offenders()` before `checks[]` runs. So "prove verdict-for-verdict equality on the retained
+fixtures", the safety condition such a change would have to meet, is satisfied *trivially* and
+proves nothing. Evidence that a widening is correct only ever arrives as the next transcript, which
+is the same place per-judge repair gets it, at eight times the blast radius.
+
+**What actually finds this family, measured.** 26 of 47 judges carry a must-PASS fixture taken from
+a recorded answer rather than hand-authored. For **25 of those 26**, the commit that added the
+recorded fixture also edited the judge — adding a real answer forced a repair, first time, almost
+every time. That is not a coincidence to note; it is the mechanism. #82's five defects were all
+invisible to a fixture set that had been green for weeks and all five went red the moment three
+recorded answers were dropped in.
+
+So the cheap lever is not a matcher. **It is the recorded must-PASS fixture, and 21 of 47 judges do
+not have one yet** — that is the population where the next instance of this family is, and it is
+findable today, offline, without a run. Prefer a real answer from a retained transcript whenever one
+exists (as *Fixtures* above already says), and when you take a measurement, keep the workspace: its
+`with_skill` responses are next quarter's fixtures.
+
+### An assertion is re-derived from the prompt it is about, never inherited across a repair
+
+The third #82 defect is not a matching bug and belongs in its own entry. `case-61`'s judge asserted
+that the answer "rules out browser-context leakage". That was a real assertion under the **old**
+prompt, which named no cause: ruling out the wrong one was evidence the model had diagnosed rather
+than guessed. #80 then repaired the premise to state the cause outright — two scenarios over one
+pre-existing record under a declared carve-out — and the assertion became **unreachable by
+construction**: the answer has nothing left to rule out. It scored the case 0/3 across three answers
+that were right in every particular.
+
+A prompt repair is therefore not a local change. **When a case's `prompt` moves, every assertion in
+its judge is re-derived from the new prompt, not inherited** — some become unreachable, some become
+free, and a judge that keeps asking the old question measures the old case.
+
+`scripts/ci/test-case-shapes.sh` now checks the *occasion* for that re-derivation, though it cannot
+check the derivation itself. Each case records a `judge.derived_from_prompt` digest of the prompt its
+judge's assertions were written against; the check recomputes it and goes red when the prompt has
+moved and the digest has not. It would have caught #80. What it cannot do is tell a re-derived
+assertion from an inherited one — only that somebody was made to look. That limit is the check, not
+a gap in it; a stronger version would have to read the judge's intent, and nothing here can.
+
 ### A mark the prompt supplied is not contact with the body
 
 `skill-loaded.mjs` fingerprints long lines of the SKILL.md under test and looks for them in the

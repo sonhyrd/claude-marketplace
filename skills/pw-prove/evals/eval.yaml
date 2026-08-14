@@ -166,6 +166,18 @@ cases:
         # failed by refusing to produce a plan at all rather than by folding wrongly — REGISTRY.md
         # says what that does and does not license.
         - evals/cases/case-29.yaml
+        # --- admitted by #82, once its judge stopped grading spelling ---
+        # `case-53` guards Step 3 › Recon's verb surface and was 0/3, then 2/3 after #79 repaired
+        # its premise. The residue was three judge patterns, all of the bare-substring family in its
+        # "the value is right and the characters are not" form: `window.__APP__?.tenant` did not
+        # match a literal dot, a correct refusal did not match a pattern anchored on the word
+        # *viewport* being near the word *no*, and the answer had to SAY the autostart was "normal"
+        # — which the repaired prompt already states, so that clause was deleted rather than
+        # widened. 3/3 on the #79 run replayed through the final judge AND 3/3 on an independent
+        # n=3, `+3` against three certified SKILL-FREE arms. Its sibling `case-61` came out of the
+        # same ticket at 2/3 and stays quarantined; REGISTRY.md says why, and why that red is a
+        # candidate finding against the body rather than the instrument.
+        - evals/cases/case-53.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those

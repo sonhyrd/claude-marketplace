@@ -1,0 +1,34 @@
+Answer: **serialise the two, in the spec, and nowhere else** — then make the ordering carry the round-trip.
+
+## The mechanism
+
+`test.describe.configure({ mode: 'serial' })` on a describe block containing *only* those two scenarios. The other three stay concurrent — serial mode is per-describe, so I'm not charging the whole spec for one record's contention, and I'm certainly not pinning `workers` in the proof config or appending `-j 1` to the proof run. Step 7's `-j 1` is a diagnostic for an unexplained all-scenarios-timeout; it never enters a committed artifact, and a global override would make every future proof on this repo pay for this spec's carve-out.
+
+```ts
+// CARVE-OUT: <the shared-tenant job record, as already declared>
+// Serial because these two scenarios contend over that ONE record: scenario A performs the
+// rename, scenario B asserts it in the list view. The live round-trip IS the AC (rename
+// persists across views), so a fixtured response would be the thing making B pass — mocking
+// is not available here. Ordering is the dependency, not a scheduling preference.
+test.describe.configure({ mode: 'serial' });
+test.describe('job rename persists across views', () => { … });
+```
+
+The reason lives beside the code because that's where the next reader meets the constraint.
+
+## The ordering, which serialisation alone doesn't give you
+
+Serial mode buys you sequence; it doesn't decide *where the restore goes*. If A renames→restores and then B asserts, B asserts against a restored record and fails — correctly, and confusingly. So:
+
+- **A** renames. No restore.
+- **B** asserts the rename in the list view, then exercises the restore and asserts the record is back — that keeps the restore call in the spec's assertions rather than demoting it to teardown-only.
+- **`afterAll`** on that describe restores defensively (idempotent, unasserted). In serial mode a failure in A *skips* B, so without this the record is left renamed for the next run; `afterAll` still runs after a skip, which is exactly the property needed here.
+
+Serial mode also means a failure in A skips B rather than reporting two failures — that's desirable: B's result is meaningless if the write never landed, and one honest failure beats two.
+
+## Two things I'd add on top
+
+- **Run-scoped rename value**, not a fixed literal — `Renamed by pw-prove <short-sha>-<worker/run marker>`. It doesn't make the record unshared (nothing can; that's the carve-out's stated cost), but it makes B's assertion specific to *this* run's write, so a sibling worktree or a CI run touching the same staging record produces a visible mismatch instead of a false green on someone else's rename.
+- **Cross-machine contention stays a stated risk, not a solved one.** Serialising fixes the intra-run race, which is the whole of what's in my control. Two `pw-prove` runs against the same staging tenant at the same time still collide, and I'll say that plainly in the Step-4 Assumptions block next to the carve-out line rather than let serialisation read as though it made the record safe.
+
+Nothing here reopens the mocking decision — the carve-out is the premise, and serialisation is the residue-handling the skill prescribes *after* that question has been answered.

@@ -5,9 +5,9 @@
 // scenarios editing one record on a shared staging tenant — so it is fixed with
 // test.describe.configure({ mode: 'serial' }) around the describe block that owns them, commented with
 // the shared record as the reason, leaving the rest of the proof concurrent. A global --workers=1 would
-// charge every other proof wall clock for one spec's data contention. Each test already gets a fresh
-// browser context, so nothing leaks that way; what interferes is two scenarios contending for one
-// record. Retries, waits and sleeps paper over the race rather than removing it.
+// charge every other proof wall clock for one spec's data contention. What interferes is two
+// scenarios contending for one record — the prompt says so, so the answer is not asked to diagnose
+// it. Retries, waits and sleeps paper over the race rather than removing it.
 //
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
@@ -74,9 +74,18 @@ const checks = [
   [/mode:\s*['"]serial/, "the configure call never sets mode: 'serial'"],
   [/\/\/|comment|because|reason/i, "the reason is never recorded beside the configure line"],
   [/shared|same (?:job )?record|contend|contention/i, "the answer never names the shared record as the thing being contended for"],
-  [/fresh (?:browser )?context|new context|context per test|isolated context|per-context/i, "the answer never rules out browser-context leakage, which is what makes this look like a concurrency bug"],
-  [/rest of|other (?:three|3|scenarios)|remain\w* concurrent|still (?:run )?concurrent|full concurrency|at concurrency/i, "the answer never keeps the rest of the proof concurrent"],
-  [/wall clock|every other proof|globally|whole (?:run|suite)/i, "the answer never says why the command line is the wrong place"],
+  // There was a "rules out browser-context leakage" check here until #82, and it is gone rather than
+  // widened. It existed because the OLD prompt named no cause, so ruling out the wrong one was
+  // evidence the answer had diagnosed rather than guessed. #80's repaired premise states the cause
+  // outright — two scenarios over one pre-existing record under a declared carve-out — which leaves
+  // the answer nothing to rule out. It is an assertion that outlived its prompt, and it scored
+  // case-61 0/3 across three answers that were right in every particular. See judges/README.md,
+  // *An assertion is re-derived from the prompt it is about, never inherited across a repair*.
+  [/rest of|other (?:three|3|scenarios)|remain\w* concurrent|still (?:run )?concurrent|full concurrency|at concurrency|keep\w* full parallelism|stay outside it/i, "the answer never keeps the rest of the proof concurrent"],
+  // "a global override would make every future proof on this repo pay for this spec's carve-out" is
+  // this fact, stated. It matched neither `globally` nor `every other proof`, which is the same
+  // bare-substring family: the check was written against one answer's spelling of a shared idea.
+  [/wall clock|every (?:other|future) (?:proof|spec|run)|\bglobal(?:ly)?\b|whole (?:run|suite|repo)|every other/i, "the answer never says why the command line is the wrong place"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));
 if (missing.length) {
