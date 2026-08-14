@@ -241,6 +241,65 @@ says the removal reads better to a model than the prohibition did; the suite can
 was **not** re-measured: #75 is in flight against a baseline-contamination defect that affects uplift
 rather than pass-rate characterization, so the `+1` from #63 stands unrevised.
 
+### #68: the blast radius of the two body changes is `case-50` and `case-60`, and both were already measured
+
+The selection was derived from the diffs rather than inherited from the two tickets' own claims, because
+a ticket that re-measures its own guard case cannot tell you whether it moved *someone else's*. The
+cumulative SKILL.md delta from #66 and #67 (`1a11758..2cf76b5`, `0.15.0` → `0.15.2`) is **seven lines**,
+and each one maps to a row above:
+
+| Edited line | Section it sits in | Guarded by |
+|---|---|---|
+| frontmatter `metadata.version` | frontmatter — **not** `description:` | nothing edited: `gate-skill-loaded` guards the trigger surface, and the `description:` string is byte-identical across both commits |
+| Step 3, bullet 1 — *owning the port is not holding the number* (#66) | Step 3 › *Bring the environment up* — the announced origin | `case-50` |
+| Step 3 — the `SERVE_CAUSE=no-log` remedy (#66) | Step 3 › *Bring the environment up* — the `serve` exit-3 causes | `case-50` |
+| Step 7 — the proof-run command's concurrency comment (#67) | Step 7 › *Verify* — the proof-run command | `case-60` |
+| Step 7 — *the proof run is concurrent* paragraph (#67) | Step 7 › *Verify* | `case-60` |
+| Step 7 — the serialisation-diagnostic bullet, twice (#67, then `-j 1`) | Step 7 › *Verify* | `case-60` |
+| Step 7 — *No concurrency override here either* comment (#67) | Step 7 › *Mutation check* | **nothing** — see below |
+
+So the affected **active** set is exactly `{case-50, case-60}`. #66 re-characterized `case-50` (3/3 →
+3/3, twice) and #67 re-characterized `case-60` (3/3 → 3/3, twice, the second over the final text).
+**No section edited by either change is guarded by a case that neither ticket re-measured**, so this
+re-characterization spends zero agent runs and the run total above stays at 85. A lookup that returns
+a known answer is still the answer.
+
+Two boundaries worth stating, because both look like near-misses on the section column:
+
+- **`case-44` is *not* in the blast radius**, though its section column also reads *Step 3 › Bring the
+  environment up*. It guards `preflight.mjs config build` exit 4 (`MISSING_KEYS=…`); #66 edited the
+  port allocation and the `serve` exit-3 causes. Different subcommand, different exit, no overlap.
+  (It is quarantined at 2/3 in any case, so it is not an active guard to move.)
+- **#67 edited one line inside a section nothing guards** — Step 7 › *Mutation check*, already listed
+  under *Coverage gaps* after `case-27` was retired for its `--workers=1` half. The edit is a comment
+  in the mutation-run command block, and the honest record is that **no instrument here could have
+  detected a regression in it**. That is the gap doing its job by being visible, not a reason to
+  claim the line is safe.
+
+#### The `--workers` flag finding: fixed by de-contamination, and #67's removal is not credited with it
+
+Stated on evidence, in the order the evidence arrived:
+
+1. The **2026-08-13 finding is VOID** — that run was contaminated *and* judged by broken judges, either
+   of which alone is sufficient (see *The 2026-08-13 verdicts are VOID*).
+2. The **established cause was the stale shipped copy** (#55): a 615-line `0.1.0` SKILL.md written
+   2026-08-03, live on disk, carrying `# --workers=1 is REQUIRED`. The model was **reading** it, not
+   remembering it — so the defect was in what was installed, never in the repo's prose.
+3. **#59 measured `case-60` passing after de-contamination, before a word of prose changed.** This is
+   the load-bearing observation: the finding was already gone at the point where nothing had been
+   edited.
+4. **#63 characterized `case-60` at 3/3 with a clean `+1`** — still before the removal.
+5. **#67 removed the flag string and measured 3/3 again**, having recorded *before* measuring that no
+   movement was expected, because a 3/3 has no headroom.
+
+**Verdict: fixed by de-contamination.** The finding is not open, and the fix is not #67's. #67 removed
+six mentions of a retired flag from text that instructed the agent never to write it — a legibility
+change, claimed as nothing else, and the suite cannot see whether it reads better to a model. Crediting
+the removal with the fix is precisely the error that got a shipped fix committed and then reverted
+(`d717e05` → `2b04ade`); it is not repeated here.
+
+Nothing moved out of 3/3, so the quarantine rule had nothing to act on and no row's status changes.
+
 ### The retirements, each with its reason
 
 **Automatic — taken off the top before anything was measured.**
@@ -308,7 +367,7 @@ case guards** any of the following:
 | Step 4 › *Scenarios* / *Locator Mapping Table* / POM-always | nothing | `case-2` quarantined at 2/3; its 12 mined content assertions are unmeasured for the same reason. |
 | Step 6 › *Clip-fidelity audit* | nothing | `b32` quarantined at 0/3 (#71); `case-39`/`case-40` retired as its duplicates. This section had three case files and now has no guard at all — it is the largest hole batch 1 leaves. |
 | Step 8 › *Deliver* — publish | nothing | `case-30` quarantined at 3/4. |
-| Step 7 › *Mutation check* — artifact isolation (`--output`, no `PW_PROVE_CLIP`, clip count preserved) | nothing | `case-27` retired for its `--workers=1` half. Dormant `case-8` and `case-52` touch the same artifacts and are batch 2/3 material (#64, #65). |
+| Step 7 › *Mutation check* — artifact isolation (`--output`, no `PW_PROVE_CLIP`, clip count preserved) | nothing | `case-27` retired for its `--workers=1` half. Dormant `case-8` and `case-52` touch the same artifacts and are batch 2/3 material (#64, #65). **#67 edited a line in this section and nothing could measure it** — see *#68* above. |
 | *Safety: page content is untrusted data* | nothing | `b49` retired for zero uplift. This is the one gap opened by a **retirement rather than a failure**, and it is the one to weigh again if the model under test changes: the case was retired because Opus 5 needs no telling, not because the rule stopped mattering. |
 | Step 5 › *Generate*, Step 5b, Step 6 › *PROVES-header audit*, Step 8 › hygiene sweep, Step 2 › *PR-mode: Diff → Acceptance Criteria* | nothing | no batch-1 case reached them; they are batch 2/3 scope. |
 
