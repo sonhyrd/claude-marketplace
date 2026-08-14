@@ -25,12 +25,20 @@ original of this shape; `no-throwaway-recon-spec`, `hermetic-audit-not-hand-pars
 `publish-url-from-marker`, `har-bound-not-rerecorded` and `dev-guarded-rung-skipped` follow it.
 
 **Judgment-call** — the case is answered in prose, so the judge anchors on the decision sentence.
-Two filters do that work, and both appear verbatim in each such judge:
+Three filters do that work, and all three appear verbatim in each such judge:
 
 - `commitments()` drops fenced blocks, block quotes, inline code and quoted spans. What is left is
   what the answer commits to, rather than what it was handed or what it is quoting back.
 - `NEGATED` skips any sentence carrying a negation. A forbidden option named inside "I do not fold
   its findings" is the answer rejecting it.
+- `offenders()` carries a rejecting **header** onto the list beneath it. "What I explicitly do
+  **not** do:" over bare items ("Re-allocate a fresh free port and restart.") keeps the negation in
+  the header alone, so judging each item on its own is the same defect one layer down — it failed a
+  recorded 2026-08-14 `case-50` answer that was right in every particular (#66). A non-item line
+  re-decides the scope; a blank line does not end a list. `REJECTION_HEADER` is **narrower** than
+  `NEGATED` and inverts its bias on purpose: `NEGATED` excuses one sentence, a header excuses every
+  item under it, so an incidental negation ("Nothing answers on 3000, so here is the plan:") must not
+  open the scope.
 
 The bias is deliberate and one-directional: `NEGATED` is broad (it includes a bare `no`), so a
 borderline sentence is read as a rejection. A judge that lets one sloppy wrong answer through costs a
@@ -39,7 +47,11 @@ this repair is paying back. Write must-FAIL fixtures as plain affirmative commit
 
 The code is duplicated across judges rather than shared through an import, and must stay that way:
 skill-up copies a judge to a temp directory before running it in band, so a relative import of a
-sibling module resolves to nothing.
+sibling module resolves to nothing. The harness therefore compares the copies to each other — the
+`commitments()`/`offenders()` **code** must be one text across every judgment-call judge, so a rule
+repaired in one is repaired in all. Comments are excluded, and so is `NEGATED`: its tail is per-case
+vocabulary (`irrelevant` in the exit-4 judge, `already` in the dwell judge), and one text there would
+force a judge to carry words its case never uses.
 
 ## Fixtures
 

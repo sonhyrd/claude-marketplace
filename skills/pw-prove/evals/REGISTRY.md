@@ -76,8 +76,9 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **n=3 characterization** | `bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3` | the pass rate of the 13 cases that were active before this batch. 39 runs. **39/39 LOADED**, 1 CONTAMINATED (see below) |
 | **n=3, trigger cases** | the same, `--include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | the pass rate of the three trigger cases #63 repaired and activated. 9 runs |
 | **uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` | one `with_skill` and one `without_skill` arm per case, over the 10 cases still active at that point — the 13 that started the batch, minus `b32` (0/3), `case-43` (0/3) and `case-44` (2/3), which the characterization run had already disqualified. 20 runs |
+| **#66 re-characterization** | `bash scripts/run-evals-isolated.sh --include-case-name case-50 --iteration 3`, run twice | `case-50` after the announced-port co-location. **2/3 against the judge as it stood, then 3/3 against the repaired judge.** 6 runs, 6/6 LOADED. See *#66: the rate did not move, and the one red was the judge* |
 
-68 agent runs in total.
+74 agent runs in total.
 
 **The gate held, with one exception.** Across the 39 characterization runs the skill under test
 reached the model every time (`LOADED via skill-tool, skill-body`), 0 not loaded. **One run was
@@ -122,7 +123,7 @@ skill-free.
 | `b01-confirmation-gate` | behavior | Step 1 › *Confirmation gate — model-invoked runs only* | **3/3** | **+1** (clean) | **active** |
 | `b05-handoff-stale` | behavior | Step 4 › *Assumptions* › the Handoff line (and the Step-2 handoff verdict it reports) | **3/3** | **+1** (clean) | **active** |
 | `case-15` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (baseline read the body and failed anyway — direction safe, reading not clean; #75) | **active** |
-| `case-50` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** | **+1** (clean) | **active** |
+| `case-50` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** → **3/3** after #66 (see below) | **+1** (clean) | **active** |
 | `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** | **+1** (clean) | **active** |
 | `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
 | `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
@@ -148,6 +149,36 @@ That is what `eval.yaml`'s active list holds, and every one of them is 3/3 with 
 Of the 21 cases triaged, 5 were automatic retirements. **Of the 16 that were actually measured, 6
 were admitted, 9 are quarantined and 1 was deleted** — so ten of sixteen did not make it. That is the
 expected shape: the goal is a core whose verdicts can be believed, not a high keep rate.
+
+### #66: the rate did not move, and the one red was the judge
+
+`case-50` was **3/3 before** the change and is **3/3 after** it. That is recorded as the finding, not
+explained away: the ticket was written when a single #59 measurement had `case-50` failing, #63 then
+characterized it at 3/3, and a case with no headroom cannot show a prose edit working. **The
+co-location in #66 is a legibility change and is claimed as nothing else.** Nothing here says the
+announced-port bullets read better to a model than they did; the suite cannot see that, and the
+honest record is that it could not.
+
+The first re-characterization scored **2/3**, and the red was an instrument defect rather than a
+skill one. The failing answer is retained as
+`judges/fixtures/announced-port-adopted/pass--recorded-2026-08-14-rejection-list.txt`: it adopts 3001,
+re-runs with `SERVER_LOG`, carries the `[::1]` family, and lists what it refuses to do under a
+heading — *"What I explicitly do **not** do:"* — with the negation in the header and bare items
+beneath it (*"Re-allocate a fresh free port and restart."*). `offenders()` judged each item on its
+own and read the rejection list as the plan. **This is the #59 bare-substring defect in list form**,
+and it was live in all eight judgment-call judges, which carry that function verbatim. All eight now
+carry a header-scope rule instead. The recorded answer is the must-PASS twin that pins it, a
+must-FAIL twin pins the other direction (an incidental negation in a *plan* header must not excuse
+the list under it), and because only one of the eight copies has a fixture that can see the rule, the
+harness now compares the `commitments()`/`offenders()` code across all eight — one copy quietly
+keeping an older rule is the failure mode duplication invites. `scripts/ci/test-eval-judges.sh` is
+139 checks. The three passing answers were re-judged by the final judge and still pass, so the 3/3 is
+the repaired instrument's reading rather than an intermediate one's.
+
+Worth holding on to: the SKILL.md edit is what produced the phrasing that tripped the judge — the new
+sentence *"a shifted port it announced is still your server"* came back in the model's own rejection
+list. A prose change can move a pass rate through the judge rather than through the skill, and the
+2/3 would have read as "the co-location made it worse" to anyone who did not open the transcript.
 
 ### The retirements, each with its reason
 

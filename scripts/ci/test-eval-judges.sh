@@ -261,6 +261,42 @@ for n in "${judge_names[@]}"; do
   fi
 done
 
+# --- the shared prose filters are one text, copied ------------------------------------------------
+# `commitments()` and `offenders()` are duplicated into every judgment-call judge rather than
+# imported, and must stay that way: skill-up copies a judge to a temp directory before running it, so
+# a relative import of a sibling resolves to nothing (judges/README.md). Duplication with no check is
+# how one copy silently keeps an old rule — #66 fixed a header-scope defect in eight copies at once,
+# and only one of them has a fixture that can see it. So the copies are compared to each other: a
+# fixture proves the behaviour once, this proves every judge carries that same behaviour.
+#
+# `NEGATED` is deliberately EXCLUDED. Its tail is per-case vocabulary — `irrelevant` in the exit-4
+# judge, `decline`/`already` in the dwell judge — so demanding one text there would force a judge to
+# carry words its case never uses, or lose the ones it needs.
+echo ""
+echo "-- commitments()/offenders() are verbatim across the judgment-call judges --"
+# Comment lines are dropped with it: the judges already annotate the same code differently, and a
+# note a judge writes for its own case is not drift. What must not differ is the code.
+filters_of() { awk '/^function commitments/ { p = 1 } p && !/^const NEGATED/ && !/^[[:space:]]*\/\// { print } /^function offenders/ { f = 1 } f && /^}$/ { exit }' "$1"; }
+filter_ref=""; filter_ref_name=""; filter_carriers=0
+for n in "${judge_names[@]}"; do
+  grep -q '^function offenders' "$JUDGES/$n.mjs" || continue
+  filter_carriers=$((filter_carriers + 1))
+  sum="$(filters_of "$JUDGES/$n.mjs" | md5sum | cut -d' ' -f1)"
+  if [ -z "$filter_ref" ]; then
+    filter_ref="$sum"; filter_ref_name="$n"
+    ok "$n carries the filters (reference copy)"
+  elif [ "$sum" = "$filter_ref" ]; then
+    ok "$n carries them verbatim"
+  else
+    bad "$n's commitments()/offenders() code has drifted from $filter_ref_name's — one copy is judging by an older rule"
+  fi
+done
+if [ "$filter_carriers" -lt 2 ]; then
+  bad "found $filter_carriers judgment-call judge(s) carrying offenders() — the extraction has stopped matching, so this check is proving nothing"
+else
+  ok "$filter_carriers judgment-call judges compared"
+fi
+
 # --- the harness must be able to go red -----------------------------------------------------------
 if [ "$SELF_TEST" = "1" ]; then
   echo ""
