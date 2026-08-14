@@ -15,7 +15,7 @@ failures in the 2026-08-13 run — `b32` failed on the phrase "nothing to reform
 correctly refusing a prompt injection, because the refusal quoted the injection.
 
 A negative assertion over discursive output is therefore **positional, not lexical**, and there is no
-rule_based form of that. Two shapes carry it:
+rule_based form of that. Three shapes carry it:
 
 **Artifact-shaped** — the case is answered with a command or a config block, so the judge extracts
 the fenced block and asserts on that block alone. Prose is out of scope by construction. The fenced
@@ -53,6 +53,11 @@ the summary `preflight.mjs serve` printed; `auth-code-drives-app-entry.mjs` read
 - **An absent input is still never a pass.** The artifacts are the evidence, but `$EVAL_FINAL_MESSAGE`
   or `$EVAL_TRANSCRIPT_PATH` is the proof there was a run at all, so a workspace judge refuses when
   it has neither.
+- **Every must-FAIL workspace holds one defect and nothing else.** The `assumptions.md` in the
+  `auth-code-drives-app-entry` fixtures is byte-identical across four `ws-*` directories on purpose:
+  only the emitted code differs, so a red verdict names the code rather than whichever of two files
+  the judge happened to read first. `ws-token-rung-attempted` therefore carries a correct
+  `assumptions.md` beside code that contradicts it, which is the point.
 - **The negative checks read code with its comments stripped.** The #59 defect arrives in a source
   file as a comment: a correct `auth.setup.ts` names `?token=` and `localStorage.setItem` to say why
   it took neither. Its must-PASS fixture is exactly that file.
@@ -69,6 +74,11 @@ sibling module resolves to nothing. The harness therefore compares the copies to
 repaired in one is repaired in all. Comments are excluded, and so is `NEGATED`: its tail is per-case
 vocabulary (`irrelevant` in the exit-4 judge, `already` in the dwell judge), and one text there would
 force a judge to carry words its case never uses.
+
+The **workspace preamble** — the refusal on an absent input, `$PWPROVE_JUDGE_ROOT` or cwd, the
+`read()` helper — is duplicated across the wet judges for the same reason and held to the same rule:
+`test-eval-judges.sh` compares those copies too. Unpoliced duplication is how one copy quietly keeps
+an older rule.
 
 ## Fixtures
 

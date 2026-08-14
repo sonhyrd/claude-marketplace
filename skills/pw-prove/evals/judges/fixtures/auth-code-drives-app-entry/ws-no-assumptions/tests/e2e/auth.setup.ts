@@ -5,7 +5,7 @@ import { test as setup, expect, request } from '@playwright/test'
 //                         production build folds to false, so page.goto('/reports?token=<jwt>')
 //                         would never be consumed. Not attempted.
 //   storageState file  -- none in the repo.
-//   server-set cookie  -- THIS. `server/api/auth-login.post.ts` mints `app_session` server-side,
+//   server-set cookie  -- THIS. `server/api/auth/login.post.ts` mints `app_session` server-side,
 //                         so the value cannot be hand-authored: no { name: 'app_session', value: '<jwt>' }.
 //   localStorage seed  -- the app reads no auth key from localStorage; a localStorage.setItem seed
 //                         here would render an authenticated-looking shell with no session at all.

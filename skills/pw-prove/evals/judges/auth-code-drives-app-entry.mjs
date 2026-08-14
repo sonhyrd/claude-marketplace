@@ -47,7 +47,10 @@ const executable = stripComments(code);
 const bad = [
   [/\.goto\s*\([^)]{0,120}\btoken=/i, 'it navigates to a `?token=` URL — that rung is dev-guarded and compiled out of the built artifact'],
   [/\blocalStorage\.setItem\s*\(/, 'it seeds `localStorage` directly — a blind seed on an app whose session is a server-set cookie'],
-  [/\bvalue\s*:\s*['"`][^'"`\n]+['"`]/, 'it hand-authors a cookie value instead of reusing the one the login response returned'],
+  // Scoped to the addCookies() argument. A bare `value:` string literal anywhere in the file is a
+  // form field or a header as often as it is a cookie, and red-flagging a correct answer for one is
+  // the cost this whole judges/ directory was rewritten to stop paying.
+  [/\baddCookies\s*\([^)]{0,400}?\bvalue\s*:\s*['"`][^'"`\n]+['"`]/s, 'it hand-authors a cookie value instead of reusing the one the login response returned'],
   [/\bimport\.meta\.dev\s*=|NODE_ENV\s*=\s*['"`]development/, "it re-enables the dev-only path instead of descending the ladder"],
 ];
 for (const [re, why] of bad) {
@@ -57,7 +60,11 @@ for (const [re, why] of bad) {
   }
 }
 
-if (!/\/api\/auth\/login/.test(executable)) {
+// Either spelling of the fixture's login route. Nuxt maps `server/api/auth/login.post.ts` to
+// `/api/auth/login`; a run that read the handler's filename before that file was renamed could
+// reasonably have written `/api/auth-login`, and failing a correct answer over a fixture's own
+// inconsistency is the defect this directory exists to stop repeating.
+if (!/\/api\/auth[/-]login/.test(executable)) {
   console.error(`FAIL: ${AUTH_FILE} never reaches the app's own login endpoint (/api/auth/login)`);
   process.exit(1);
 }

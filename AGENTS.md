@@ -190,7 +190,7 @@ was mined and retired in #61. The surface is seven things:
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 58 on disk, 10 active — the rest are quarantined or inventory, not coverage. Two of the ten are [wet](CONTEXT.md#wet-case) (`w01`, `w02`); the other eight are dry |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 58 on disk, 9 active — the rest are quarantined or inventory, not coverage. One of the nine is [wet](CONTEXT.md#wet-case) (`w01`); the other eight are dry, and `w02` is the wet case quarantined for an unstable uplift |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture` |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |

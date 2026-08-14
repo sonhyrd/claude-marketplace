@@ -7,7 +7,7 @@ description: >-
     `?token=` rung. This one grades the file the run left on disk. The fixture
     `evals/files/app-nuxt-ssr` is staged as the working directory and carries both halves of the
     ladder in real source: `app/composables/useAuth.ts` reads `route.query.token` under an
-    `import.meta.dev` guard the production build folds away, and `server/api/auth-login.post.ts`
+    `import.meta.dev` guard the production build folds away, and `server/api/auth/login.post.ts`
     mints the `app_session` cookie server-side, so its value cannot be hand-authored.
 
     Should record the `?token=` rung as ABSENT with its guard named in the Assumptions block, and

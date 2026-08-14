@@ -1,6 +1,6 @@
 ## Assumptions
 
-- **Auth rung: server-set cookie.** `server/api/auth-login.post.ts` mints `app_session` server-side,
+- **Auth rung: server-set cookie.** `server/api/auth/login.post.ts` mints `app_session` server-side,
   so the spec API-logs in and reuses the `Set-Cookie` the app returns.
 - **Skipped rung: the `?token=` bootstrap, guard `import.meta.dev`.** `app/composables/useAuth.ts`
   reads `route.query.token` only under `import.meta.dev`, which the production build folds to
