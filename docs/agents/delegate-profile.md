@@ -223,6 +223,30 @@ stay invisible until merge-back, which is why the verification is not optional.
 - **Commit**: `fbb1ff0` · **Measured**: 2026-08-14 (after the #55 + #57 merge-backs)
 - `ci-local.sh` — **GREEN**, all checks passed. · `pre-push-security.sh` — **GREEN**, 7 passed.
 
+### Dispatch trap: two eval measurements cannot run on this host at once
+
+`scripts/run-evals-isolated.sh` censuses every readable copy of the pw-prove body and **refuses to
+start** when it finds one it cannot account for. A live `skill-up` install under `/tmp/skill-up-*`
+is such a copy, so a second worker taking a measurement is blocked by the first worker's run — the
+directory name even changes between attempts as skill-up cycles installs per arm, which reads like a
+race and is really a neighbour.
+
+The refusal is correct and must not be worked around by narrowing the census: a live install is a
+readable body whoever put it there. **So never schedule two measurement tickets in the same
+frontier.** Pair a measurement ticket with a judge-repair, docs, or triage ticket instead.
+
+When it happens anyway, the fix is ordering rather than waiting: the blocked worker does the whole
+ticket except the run — repair, fixtures, harness green, verified red on revert — and replays the
+recorded transcripts through the repaired judge offline, which predicts most of the measurement for
+free. Then it takes the run once the host is clear.
+
+Tell workers to **ask before deleting anything outside their worktree**, and mean it. `rm -rf
+/tmp/skill-up-*` is the obvious unblock and it destroys a sibling's in-flight measurement. Two
+workers stopped to ask here (#72 on a stale `mkt/` clone, #77 on a live install); one was safe to
+delete and one was not, and neither could have known without the coordinator's view of the frontier.
+
+- **Measured**: 2026-08-14, dispatching #72 and #77 together.
+
 ### The eval judge harness is not in `ci-local.sh`, and must not be added
 
 `scripts/ci/test-eval-judges.sh` (**392 checks** after #65 added twenty-one judges and their fixture
