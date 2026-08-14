@@ -69,6 +69,7 @@ docs orphan check, language,
 │   │   ├── code-rules.md
 │   │   ├── evals/          # NOT shipped — skill-up suite: eval.yaml + cases/*.yaml
 │   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
+│   │   ├── evals/files/    # NOT shipped — repo fixtures the wet cases run pw-prove against
 │   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
@@ -162,6 +163,51 @@ fixture directory carrying both halves — a must-FAIL input, and a must-PASS in
 correct answer naming the forbidden thing in order to reject it*, which is the one-hit-one-JUSTIFIED-twin
 rule from `tests/pattern-corpus/` applied to judges. That twin is what catches the bare-substring
 judge, the defect behind seven of the nine failures in the 2026-08-13 run.
+
+## The Eval Suite
+
+**pw-prove is evaluated by the `skill-up` CLI, and that suite is the skill's eval
+surface.** There is exactly one eval format for this skill; the `evals.json` predecessor
+was mined and retired in #61. The surface is five things:
+
+| Path | What it is |
+|---|---|
+| `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 61 on disk, 12 active — the rest are inventory, not coverage |
+| `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.txt` |
+| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against |
+| `skills/pw-prove/.skill-up.yaml` | User config for the run (e.g. the agent-under-test's effort level) |
+
+Run it by hand, from the skill directory — skill-up's config discovery is `$PWD`-only, so from
+anywhere else `.skill-up.yaml` is ignored without complaint unless you pass it as `--config`:
+
+```bash
+cd skills/pw-prove
+skill-up validate evals/eval.yaml
+skill-up run evals/eval.yaml --output-dir /tmp/pwprove-run
+```
+
+Four things to know before you touch any of it:
+
+- **`environment.type: none` is fixed, and it is not a sandbox.** `docker` cannot see the files the
+  run produces, so every wet case would fail for a reason that reads as a skill defect; `none` means
+  the agent runs `--permission-mode=bypassPermissions` against the **real host filesystem**. Read
+  `docs/adr/0018` before running the suite, and do not "fix" the runtime back to `docker`.
+- **No CI check reads the eval suite, in any skill, by decision** (#54). Nothing will catch a broken
+  case, a reverted runtime, or a case list that drifted. `scripts/ci/test-eval-judges.sh` covers the
+  judge scripts only, and is run by name — see the section above for why it stays out of
+  `ci-local.sh`.
+- **`evals/` and `.skill-up.yaml` are eval-engine material, not the shipped instruction surface**, so
+  neither triggers the `Skill version bump` check. Do not add a bump to pay a toll that is not owed.
+- **Before hand-authoring a judge for a dormant case, read
+  `skills/pw-prove/evals/mined-assertions.md`** — it holds the assertions the migration to case files
+  dropped, so repairing a case is recovery rather than invention.
+
+The vocabulary — **wet case, dry case, trusted core, characterization, blast radius** — is defined
+once in `CONTEXT.md` under *Eval vocabulary*. Use those words for those things.
+
+`e2e-reviewer` and `playwright-debugger` are unaffected: they still carry the older
+`evals/evals.json` array format, and nothing here applies to them.
 
 ## When You Edit Skills
 
