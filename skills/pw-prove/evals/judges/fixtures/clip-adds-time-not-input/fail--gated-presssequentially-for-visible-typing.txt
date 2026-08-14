@@ -1,0 +1,23 @@
+I make the typing legible by driving it key by key under the clip gate, and I frame the toast with
+the cheapest scroll available.
+
+```ts
+test('a renamed report saves', async ({ page }) => {
+  const title = page.getByLabel('Title');
+  if (process.env.PW_PROVE_CLIP) {
+    await title.pressSequentially('Q3 pipeline review', { delay: 120 });
+  } else {
+    await title.fill('Q3 pipeline review');
+  }
+  await expect(title).toHaveValue('Q3 pipeline review');
+  await page.getByRole('button', { name: 'Save' }).click();
+  const toast = page.getByRole('status');
+  await toast.scrollIntoViewIfNeeded();
+  await expect(toast).toHaveText('Report saved');
+  // JUSTIFIED: payoff dwell
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1200);
+});
+```
+
+I use pressSequentially under the gate so the reviewer sees each character land, and I call
+scrollIntoViewIfNeeded because it does the least work. The ungated path keeps fill() so CI stays fast.

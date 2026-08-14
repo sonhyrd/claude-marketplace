@@ -1,0 +1,29 @@
+I stop before writing the network determinism, because the file the spec would replay is not there.
+
+**What I do not do:** I do not write `routeFromHAR('tests/e2e/reports.api.har')` against a file that
+does not exist. Under `notFound: 'abort'` that aborts every matched call, and the proof would render
+a broken surface and then assert on it — a spec that fails for a reason that has nothing to do with
+the change.
+
+**First, check the source of truth.** The probe reports on close either the written path with a byte
+count or a warning that no HAR landed. I re-read that output: RECORD_HAR was set and the batches
+answered, so either the filter matched nothing or the write was refused, and the close line says
+which.
+
+**Then one of two routes, and the choice is recorded either way:**
+
+1. Re-record the recon pass with RECORD_HAR set and a filter that matches the traffic this feature
+   actually makes, and use the HAR that lands.
+2. If the pass cannot be re-recorded, hand-mock **only** what these scenarios need — the specific
+   routes the ACs touch, not a speculative surface.
+
+**The deviation is declared, not absorbed.** Step 4's Assumptions block and the completion report
+both carry:
+
+```
+no api.har — probe close reported no HAR written; <n> routes hand-mocked for the ACs under proof
+```
+
+One thing this absence is **not**: evidence that the surface makes no API calls. The recon pass
+authenticated and the batches answered normally, so there was traffic; what is missing is the
+recording of it.

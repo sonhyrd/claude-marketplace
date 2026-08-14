@@ -57,35 +57,35 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-30.yaml`](cases/case-30.yaml) | `script` | **quarantined #63** | 7 | Publish URL is read from the PWPROVE_URL marker, not stdout line 1 |
 | `case-31.yaml` (deleted) | `agent_judge` | **retired #64** | 5 | The runner's origin is proven reachable before the proof run, not inferred from a healthy localhost |
 | `case-32.yaml` (deleted) | `agent_judge` | **retired #64** | 5 | A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec |
-| [`case-33.yaml`](cases/case-33.yaml) | `agent_judge` | dormant | 5 | A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks |
-| [`case-34.yaml`](cases/case-34.yaml) | `agent_judge` | dormant | 10 | The filming law: a legible clip is bought with time only, never with a different input path |
-| [`case-35.yaml`](cases/case-35.yaml) | `agent_judge` | dormant | 6 | Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader |
-| [`case-36.yaml`](cases/case-36.yaml) | `agent_judge` | dormant | 7 | A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin |
-| [`case-37.yaml`](cases/case-37.yaml) | `agent_judge` | dormant | 7 | Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film |
-| [`case-38.yaml`](cases/case-38.yaml) | `agent_judge` | dormant | 5 | Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip |
+| [`case-33.yaml`](cases/case-33.yaml) | `script` | **active #65** | 5 | A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks |
+| [`case-34.yaml`](cases/case-34.yaml) | `script` | **active #65** | 10 | The filming law: a legible clip is bought with time only, never with a different input path |
+| [`case-35.yaml`](cases/case-35.yaml) | `script` | **active #65** | 6 | Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader |
+| [`case-36.yaml`](cases/case-36.yaml) | `script` | **active #65** | 7 | A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin |
+| [`case-37.yaml`](cases/case-37.yaml) | `script` | **active #65** | 7 | Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film |
+| [`case-38.yaml`](cases/case-38.yaml) | `script` | **active #65** | 5 | Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip |
 | `case-39.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | Step 6 exit 2 on a dwell hoisted into a helper — inline it, do not conclude there is none |
 | `case-40.yaml` (deleted) | `agent_judge` | **retired #63** | 4 | A dwell wrapped across two lines already satisfies Step 6 — do not reformat it to appease the audit |
-| [`case-41.yaml`](cases/case-41.yaml) | `agent_judge` | dormant | 4 | Step 8 runs the residue refusal — it does not confirm the HAR by eye |
-| [`case-42.yaml`](cases/case-42.yaml) | `agent_judge` | dormant | 4 | The recon HAR is already scrubbed at capture — do not hand-roll a second scrub |
+| [`case-41.yaml`](cases/case-41.yaml) | `script` | **quarantined #65** | 4 | Step 8 runs the residue refusal — it does not confirm the HAR by eye |
+| [`case-42.yaml`](cases/case-42.yaml) | `script` | **quarantined #65** | 4 | The recon HAR is already scrubbed at capture — do not hand-roll a second scrub |
 | [`case-43.yaml`](cases/case-43.yaml) | `script` | **quarantined #63** | 4 | Every read aborting in Step 7 is an unbound HAR, not a short recording |
 | [`case-44.yaml`](cases/case-44.yaml) | `script` | **quarantined #63** | 6 | A missing configuration key is a configuration failure, named in seconds — not a slow server |
-| [`case-45.yaml`](cases/case-45.yaml) | `agent_judge` | dormant | 6 | The committed proof config must not inherit the project's development webServer |
-| [`case-46.yaml`](cases/case-46.yaml) | `agent_judge` | dormant | 7 | Two attempts with the same failure signature take the handover stop, not a third try |
-| [`case-47.yaml`](cases/case-47.yaml) | `agent_judge` | dormant | 5 | Genuinely different failures are a converging run — spend the full budget of three |
+| [`case-45.yaml`](cases/case-45.yaml) | `script` | **active #65** | 6 | The committed proof config must not inherit the project's development webServer |
+| [`case-46.yaml`](cases/case-46.yaml) | `script` | **active #65** | 7 | Two attempts with the same failure signature take the handover stop, not a third try |
+| [`case-47.yaml`](cases/case-47.yaml) | `script` | **quarantined #65** | 5 | Genuinely different failures are a converging run — spend the full budget of three |
 | [`case-48.yaml`](cases/case-48.yaml) | `script` | **quarantined #63** | 9 | A dev-guarded session bootstrap does not exist in the built target — descend the ladder |
 | `case-49.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | An unestablished session fails loudly in seconds, not at a sixty-second timeout |
 | [`case-50.yaml`](cases/case-50.yaml) | `script` | **active #63** | 7 | The server announced a shifted port — poll what it said, not what you asked for |
-| [`case-51.yaml`](cases/case-51.yaml) | `agent_judge` | dormant | 6 | A server whose log names no origin is not a port mismatch |
-| [`case-52.yaml`](cases/case-52.yaml) | `agent_judge` | dormant | 6 | A batch pays for one build, and the mutation check pays for its own |
-| [`case-53.yaml`](cases/case-53.yaml) | `agent_judge` | dormant | 6 | The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure |
-| [`case-54.yaml`](cases/case-54.yaml) | `agent_judge` | dormant | 7 | A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3 |
-| [`case-55.yaml`](cases/case-55.yaml) | `agent_judge` | dormant | 7 | A mutation-check restart that cannot be proven has no verdict to read |
-| [`case-56.yaml`](cases/case-56.yaml) | `agent_judge` | dormant | 6 | A proven restart is proven — do not re-litigate a fast one |
-| [`case-57.yaml`](cases/case-57.yaml) | `agent_judge` | dormant | 5 | A probe question that needs an argument uses the {fn, arg} form, and its answer is the value |
-| [`case-58.yaml`](cases/case-58.yaml) | `agent_judge` | dormant | 5 | The eval argument carries data, not a page handle |
-| [`case-59.yaml`](cases/case-59.yaml) | `agent_judge` | dormant | 6 | Every scenario times out on its first navigation — serialise once to diagnose, then report the finding |
+| `case-51.yaml` (deleted) | `script` | **retired #65** | 6 | A server whose log names no origin is not a port mismatch |
+| [`case-52.yaml`](cases/case-52.yaml) | `script` | **active #65** | 6 | A batch pays for one build, and the mutation check pays for its own |
+| [`case-53.yaml`](cases/case-53.yaml) | `script` | **quarantined #65** | 6 | The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure |
+| [`case-54.yaml`](cases/case-54.yaml) | `script` | **quarantined #65** | 7 | A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3 |
+| [`case-55.yaml`](cases/case-55.yaml) | `script` | **quarantined #65** | 7 | A mutation-check restart that cannot be proven has no verdict to read |
+| [`case-56.yaml`](cases/case-56.yaml) | `script` | **quarantined #65** | 6 | A proven restart is proven — do not re-litigate a fast one |
+| [`case-57.yaml`](cases/case-57.yaml) | `script` | **active #65** | 5 | A probe question that needs an argument uses the {fn, arg} form, and its answer is the value |
+| [`case-58.yaml`](cases/case-58.yaml) | `script` | **quarantined #65** | 5 | The eval argument carries data, not a page handle |
+| [`case-59.yaml`](cases/case-59.yaml) | `script` | **quarantined #65** | 6 | Every scenario times out on its first navigation — serialise once to diagnose, then report the finding |
 | [`case-60.yaml`](cases/case-60.yaml) | `script` | **active #63** | 5 | The proof run names no worker count |
-| [`case-61.yaml`](cases/case-61.yaml) | `agent_judge` | dormant | 5 | Scenarios that contend over one shared record serialise in the spec, not on the command line |
+| [`case-61.yaml`](cases/case-61.yaml) | `script` | **quarantined #65** | 5 | Scenarios that contend over one shared record serialise in the spec, not on the command line |
 
 ## Per-case detail
 
@@ -525,7 +525,7 @@ Dropped assertions:
 
 ### `case-33.yaml` — A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks
 
-Legacy id `33` · judge `agent_judge` · dormant · 5 assertions.
+Legacy id `33` · judge `script` · **active #65** · 5 assertions.
 
 Dropped assertions:
 
@@ -537,7 +537,7 @@ Dropped assertions:
 
 ### `case-34.yaml` — The filming law: a legible clip is bought with time only, never with a different input path
 
-Legacy id `34` · judge `agent_judge` · dormant · 10 assertions.
+Legacy id `34` · judge `script` · **active #65** · 10 assertions.
 
 Dropped assertions:
 
@@ -554,7 +554,7 @@ Dropped assertions:
 
 ### `case-35.yaml` — Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader
 
-Legacy id `35` · judge `agent_judge` · dormant · 6 assertions.
+Legacy id `35` · judge `script` · **active #65** · 6 assertions.
 
 Dropped assertions:
 
@@ -567,7 +567,7 @@ Dropped assertions:
 
 ### `case-36.yaml` — A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin
 
-Legacy id `36` · judge `agent_judge` · dormant · 7 assertions.
+Legacy id `36` · judge `script` · **active #65** · 7 assertions.
 
 Dropped assertions:
 
@@ -581,7 +581,7 @@ Dropped assertions:
 
 ### `case-37.yaml` — Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film
 
-Legacy id `37` · judge `agent_judge` · dormant · 7 assertions.
+Legacy id `37` · judge `script` · **active #65** · 7 assertions.
 
 Dropped assertions:
 
@@ -595,7 +595,7 @@ Dropped assertions:
 
 ### `case-38.yaml` — Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip
 
-Legacy id `38` · judge `agent_judge` · dormant · 5 assertions.
+Legacy id `38` · judge `script` · **active #65** · 5 assertions.
 
 Dropped assertions:
 
@@ -631,7 +631,7 @@ Dropped assertions:
 
 ### `case-41.yaml` — Step 8 runs the residue refusal — it does not confirm the HAR by eye
 
-Legacy id `41` · judge `agent_judge` · dormant · 4 assertions.
+Legacy id `41` · judge `script` · **quarantined #65** · 4 assertions.
 
 Dropped assertions:
 
@@ -642,7 +642,7 @@ Dropped assertions:
 
 ### `case-42.yaml` — The recon HAR is already scrubbed at capture — do not hand-roll a second scrub
 
-Legacy id `42` · judge `agent_judge` · dormant · 4 assertions.
+Legacy id `42` · judge `script` · **quarantined #65** · 4 assertions.
 
 Dropped assertions:
 
@@ -677,7 +677,7 @@ Dropped assertions:
 
 ### `case-45.yaml` — The committed proof config must not inherit the project's development webServer
 
-Legacy id `45` · judge `agent_judge` · dormant · 6 assertions.
+Legacy id `45` · judge `script` · **active #65** · 6 assertions.
 
 Dropped assertions:
 
@@ -690,7 +690,7 @@ Dropped assertions:
 
 ### `case-46.yaml` — Two attempts with the same failure signature take the handover stop, not a third try
 
-Legacy id `46` · judge `agent_judge` · dormant · 7 assertions.
+Legacy id `46` · judge `script` · **active #65** · 7 assertions.
 
 Dropped assertions:
 
@@ -704,7 +704,7 @@ Dropped assertions:
 
 ### `case-47.yaml` — Genuinely different failures are a converging run — spend the full budget of three
 
-Legacy id `47` · judge `agent_judge` · dormant · 5 assertions.
+Legacy id `47` · judge `script` · **quarantined #65** · 5 assertions.
 
 Dropped assertions:
 
@@ -759,7 +759,7 @@ Dropped assertions:
 
 ### `case-51.yaml` — A server whose log names no origin is not a port mismatch
 
-Legacy id `51` · judge `agent_judge` · dormant · 6 assertions.
+Legacy id `51` · judge `script` · **retired #65** — 3/3 at n=3, then a re-measured **zero uplift** on a certified skill-free baseline · 6 assertions.
 
 Dropped assertions:
 
@@ -772,7 +772,7 @@ Dropped assertions:
 
 ### `case-52.yaml` — A batch pays for one build, and the mutation check pays for its own
 
-Legacy id `52` · judge `agent_judge` · dormant · 6 assertions.
+Legacy id `52` · judge `script` · **active #65** · 6 assertions.
 
 Dropped assertions:
 
@@ -785,7 +785,7 @@ Dropped assertions:
 
 ### `case-53.yaml` — The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure
 
-Legacy id `53` · judge `agent_judge` · dormant · 6 assertions.
+Legacy id `53` · judge `script` · **quarantined #65** · 6 assertions.
 
 Dropped assertions:
 
@@ -798,7 +798,7 @@ Dropped assertions:
 
 ### `case-54.yaml` — A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3
 
-Legacy id `54` · judge `agent_judge` · dormant · 7 assertions.
+Legacy id `54` · judge `script` · **quarantined #65** · 7 assertions.
 
 Dropped assertions:
 
@@ -812,7 +812,7 @@ Dropped assertions:
 
 ### `case-55.yaml` — A mutation-check restart that cannot be proven has no verdict to read
 
-Legacy id `55` · judge `agent_judge` · dormant · 7 assertions.
+Legacy id `55` · judge `script` · **quarantined #65** · 7 assertions.
 
 Dropped assertions:
 
@@ -826,7 +826,7 @@ Dropped assertions:
 
 ### `case-56.yaml` — A proven restart is proven — do not re-litigate a fast one
 
-Legacy id `56` · judge `agent_judge` · dormant · 6 assertions.
+Legacy id `56` · judge `script` · **quarantined #65** · 6 assertions.
 
 Dropped assertions:
 
@@ -839,7 +839,7 @@ Dropped assertions:
 
 ### `case-57.yaml` — A probe question that needs an argument uses the {fn, arg} form, and its answer is the value
 
-Legacy id `57` · judge `agent_judge` · dormant · 5 assertions.
+Legacy id `57` · judge `script` · **active #65** · 5 assertions.
 
 Dropped assertions:
 
@@ -851,7 +851,7 @@ Dropped assertions:
 
 ### `case-58.yaml` — The eval argument carries data, not a page handle
 
-Legacy id `58` · judge `agent_judge` · dormant · 5 assertions.
+Legacy id `58` · judge `script` · **quarantined #65** · 5 assertions.
 
 Dropped assertions:
 
@@ -863,7 +863,7 @@ Dropped assertions:
 
 ### `case-59.yaml` — Every scenario times out on its first navigation — serialise once to diagnose, then report the finding
 
-Legacy id `59` · judge `agent_judge` · dormant · 6 assertions.
+Legacy id `59` · judge `script` · **quarantined #65** · 6 assertions.
 
 Dropped assertions:
 
@@ -888,7 +888,7 @@ Dropped assertions:
 
 ### `case-61.yaml` — Scenarios that contend over one shared record serialise in the spec, not on the command line
 
-Legacy id `61` · judge `agent_judge` · dormant · 5 assertions.
+Legacy id `61` · judge `script` · **quarantined #65** · 5 assertions.
 
 Dropped assertions:
 

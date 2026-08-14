@@ -1,0 +1,26 @@
+I run the Step-6 audits and read all four verdicts, not just the three that are green.
+
+```bash
+node <skill>/scripts/clip-fidelity.mjs spec e2e/reports.spec.ts \
+  --config playwright.config.ts --verdict "pinned:1600x900"
+```
+
+It exits **2**: no test() carries a PW_PROVE_CLIP-gated wait.
+
+**That blocks Step 7.** The clean YAGNI audit, the clean PROVES headers and the zero-P0
+e2e-reviewer report are not sufficient — three green gates over a recording that shows nothing is
+exactly the regression this audit exists for. If I went to the proof run now I would pass
+PW_PROVE_CLIP=1 into a spec with no reader: the flag would be inert, the dwell would never happen,
+and every gate would stay green over a film of nothing. So I do not proceed, and I do not treat
+exit 2 as a warning I can note and move past.
+
+What I do instead — add the payoff dwell from code-rules.md § Payoff dwell to **each** test(),
+framed and marked:
+
+```ts
+await el.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }));
+// JUSTIFIED: payoff dwell — holds the asserted end state long enough to read in the clip.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1200);
+```
+
+Then I re-run the same audit command and repeat until it **exits 0**. Only then does Step 7 open.

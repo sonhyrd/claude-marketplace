@@ -1,0 +1,35 @@
+## The race is a symptom, not the problem
+
+Framing this as "two concurrent scenarios collide" leads to the wrong fix (serialise them). In PR-mode the spec should never be touching that shared job record in the first place — the skill's Network Determinism rule is explicit: *"a generated test never mutates real shared backend data"* (`code-rules.md:10`, and the Writes row of the traffic table at `code-rules.md:279`). Two scenarios racing on a live staging record means the spec is non-hermetic, and Step 7's hermetic audit would fail the run anyway — green or not — on the undeclared live write.
+
+## What I'd actually generate
+
+**Scenario A (the rename)** — hand-mock the mutation under assertion. That's the one endpoint that gets an authored `route.fulfill`; everything else replays from the HAR:
+
+```ts
+await page.routeFromHAR(process.env.PW_PROVE_HAR ?? 'jobs.api.har', {
+  url: '**/api/**',
+  notFound: 'abort',
+});
+// the mutation under assertion — query-tolerant path glob, from the probe's network-summary
+await page.route('**/api/v1/jobs/*', async (route) => {
+  if (route.request().method() !== 'PATCH') return route.fallback();
+  await route.fulfill({ status: 200, body: JSON.stringify({ id: JOB_ID, name: NEW_NAME }) });
+});
+```
+
+**Scenario B (the list view asserts the rename)** — this one never needed a live write. Its input is a *list response containing the renamed job*, which is a read: record it from the probe pass with the renamed state and replay it from the HAR. B is not "the assertion half of A's write" — it's an independent scenario over a fixture.
+
+Once both are fixtured, the shared record is out of the picture entirely: each test gets a fresh browser context, the mocks are per-context, and the two can run at full concurrency with nothing to contend over. That matters — `docs/adr/0017` measured 1.76–1.89× less wall clock from concurrency, and serialising to route around a self-inflicted race pays that cost for nothing.
+
+## What I would *not* do
+
+**`test.describe.configure({ mode: 'serial' })`** — the skill does sanction this for genuine shared-state contention, with the reason in a comment beside it. But it only makes the race *less likely*, not impossible: another agent's proof run, CI, or a human clicking around staging can rename that job mid-assertion. Serialising a live write is a flake reduction dressed as a fix, and it leaves the data pollution untouched.
+
+**A carve-out.** Available in principle, but it fails its own preconditions here: writes need a *proven* restore exercised in the spec, and a carve-out **never creates or mutates data on a shared tenant** (`code-rules.md:294`). A rename on shared staging is exactly the excluded case. The only version that would qualify is if the round-trip itself were the AC — "the rename endpoint persists" — and even then, not on a shared tenant.
+
+## The one case that changes my answer
+
+If the diff's actual AC is *cross-view persistence* — rename in one view, the new name survives a real reload in the list — then mocking both sides proves nothing, because the mock is what makes the assertion pass. That's a real coverage question, and it resolves in the plan rather than in the code: prove the wiring hermetically (the PATCH leaves the browser with the right payload; the list renders whatever the server returns) and record the persistence AC as `unproven — gated: requires isolated tenant data` in the Step-4 plan and the Step-8 `ACs` line. Visible and honest beats silently proven against a record that another run is renaming underneath you.
+
+The Step-4 Assumptions block gets one line stating the mutation is hand-mocked and no write reaches the tenant — resolved from the contract, not asked.

@@ -52,8 +52,10 @@ it is noise.
 
 ## The classification
 
-51 case files: **4 trigger, 47 behavior.** 11 are active in `eval.yaml`; the rest are inventory, not
-coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
+50 case files: **4 trigger, 46 behavior.** 21 are active in `eval.yaml`; the other 29 are
+quarantined. **None of them is inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every
+file on disk, and #69's two wet cases carry rows of their own, so every file has a status and the
+evidence behind it.
 
 > Counts updated by #63, which deleted six cases in triage — `case-26`, `case-27`, `case-39`,
 > `case-40` and `case-49` automatically, and `b49-untrusted-page-content` on a measured zero uplift.
@@ -63,6 +65,12 @@ coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
 > `case-21`, `case-25`, `case-31` and `case-32`, each an ADR contradiction or an overlap with a case
 > already in the registry — and admitted `case-11` and `case-16`. Before it: 56 files, 4 trigger /
 > 52 behavior, 6 active. `REGISTRY.md` carries the reason per case.
+>
+> Updated again by #65, which triaged the last 21 files (`case-33` onward), all of them **behavior**,
+> admitted ten and deleted one — `case-51`, on a re-measured zero uplift. It retired **nothing on
+> static triage**, because the earlier batches had already removed every duplicate, overlap and ADR
+> contradiction; what was left was the residue that survived two passes of exactly that filter. The
+> file count moved 49 → 48 and the active count 8 → 20.
 
 **Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3` (quarantined).
 
@@ -91,7 +99,7 @@ entire job is to report whether the trigger fired. It now reads as a request:
 Its judge is unchanged: `skill-loaded.mjs`, the same gate the post-run sweep runs. Loading is the
 assertion.
 
-**Behavior (52)** — every other case file. All of them presuppose a step, an exit code, an artifact
+**Behavior (44)** — every other case file. All of them presuppose a step, an exit code, an artifact
 on disk, or a run already in progress; all of them now open with the placement line.
 
 ## Findings

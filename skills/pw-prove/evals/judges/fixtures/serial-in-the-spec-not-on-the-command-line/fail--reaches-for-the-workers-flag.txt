@@ -1,0 +1,9 @@
+The two scenarios race, so I run the proof serially. I pass --workers=1 on the proof run command
+so nothing overlaps:
+
+```bash
+npx playwright test e2e/reports.spec.ts --config playwright.proof.config.ts --workers=1
+```
+
+I also add retries: 2 to the proof config so a lost race recovers on its own, and I insert a
+`waitForTimeout(2000)` between the rename and the list assertion to give the write time to land.

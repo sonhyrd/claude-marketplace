@@ -703,6 +703,22 @@ else
   warn "python3 not available; skipped language check"
 fi
 
+# --- Unresolved merge-conflict markers ---------------------------------------------------------
+# A committed conflict marker is invisible to every other check here: the parity, link, orphan and
+# language checks all read the file happily with `<<<<<<< HEAD` in it, and one shipped through two
+# merges into AGENTS.md and CONTEXT.md before a worker noticed. Tracked files only, and anchored to
+# column 0 so prose about conflict markers (this comment included) does not trip it.
+echo ""
+echo "-- Unresolved merge-conflict markers --"
+conflict_hits=$(git grep -n -E '^(<<<<<<< |>>>>>>> |={7}$)' -- \
+  '*.md' '*.sh' '*.mjs' '*.js' '*.json' '*.yaml' '*.yml' '*.ts' 2>/dev/null || true)
+if [ -z "$conflict_hits" ]; then
+  ok "no unresolved merge-conflict markers in tracked files"
+else
+  err "unresolved merge-conflict markers found:"
+  echo "$conflict_hits" >&2
+fi
+
 echo ""
 echo "========================================"
 echo "  Review: $PASSED passed, $WARNINGS warnings, $ERRORS errors"

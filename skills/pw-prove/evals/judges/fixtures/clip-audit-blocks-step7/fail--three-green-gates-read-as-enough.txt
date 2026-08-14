@@ -1,0 +1,7 @@
+I ran the Step-6 audits. The YAGNI audit is clean, every test() carries its PROVES header, and
+e2e-reviewer reports no P0. The clip-fidelity audit exits 2 because nothing in the spec reads
+PW_PROVE_CLIP.
+
+Exit 2 here is advisory — it is telling me the clips will be short, not that the spec is wrong. The
+three substantive gates are sufficient, so I proceed to Step 7 and run the proof with
+PW_PROVE_CLIP=1 set; the recording will simply be tighter than usual.

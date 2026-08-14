@@ -190,21 +190,9 @@ was mined and retired in #61. The surface is seven things:
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-<<<<<<< HEAD
-<<<<<<< HEAD
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 56 on disk, 8 active — the rest are quarantined or inventory, not coverage |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **50 on disk, 21 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
-| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against |
-=======
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 49 on disk, 8 active — the rest are quarantined or inventory, not coverage |
-| `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.txt` |
-| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against — **but see #76: `context.files` currently stages each fixture's PATH as its CONTENT, so every wet case reads a one-line file and answers a different question. Do not read a wet case's verdict until that lands.** |
->>>>>>> sonhyrd/ticket-64-batch2-triage
-=======
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 58 on disk, 9 active — the rest are quarantined or inventory, not coverage. One of the nine is [wet](CONTEXT.md#wet-case) (`w01`); the other eight are dry, and `w02` is the wet case quarantined for an unstable uplift |
-| `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
-| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture` |
->>>>>>> sonhyrd/ticket-69-wet-cases
+| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`. **Do not use `context.files`: it stages each fixture's PATH as its CONTENT (#76), so the case reads a one-line file and answers a different question.** Note also that these fixtures are written in a didactic voice a skill-free baseline arm reads too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
 | `skills/pw-prove/evals/REGISTRY.md` | **The registry.** One row per triaged case: pass rate, uplift, the SKILL.md section it guards, and status (active / quarantined / retired). It is also the case → section map that makes a blast-radius re-characterization a lookup |
 | `skills/pw-prove/.skill-up.yaml` | User config for the run (e.g. the agent-under-test's effort level) |
