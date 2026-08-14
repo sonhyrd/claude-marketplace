@@ -1,7 +1,7 @@
 {
   "name": "e2e",
-  "version": "1.1.0",
-  "description": "End-to-end test agent skills. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing.",
+  "version": "1.2.0",
+  "description": "End-to-end test agent skills. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. playwright-debugger: root-cause diagnosis of failed Playwright runs from reports, traces and screenshots.",
   "author": {
     "name": "voidmatcha"
   },
@@ -17,6 +17,7 @@
   ],
   "skills": [
     "./skills/pw-prove",
-    "./skills/e2e-reviewer"
+    "./skills/e2e-reviewer",
+    "./skills/playwright-debugger"
   ]
 }
