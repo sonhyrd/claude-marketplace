@@ -1,0 +1,23 @@
+The handoff in that scenario is **stale**, and that's the whole verdict.
+
+`head_sha` = `9f1c4ae…` but `git rev-parse HEAD` = `c3a77d1…`. Per Step 2 §0, `head_sha` differing from HEAD means the review finished against a different commit, so its `file`/`line` anchors (`PeopleList.vue:88`) point at lines that have moved.
+
+**What I do:**
+
+1. **Delete `.pw-prove/handoff.json`.** Not archive it, not read past the mismatch.
+2. **Use none of it.** The "Filter chip does not clear on reset" finding does not become an AC and does not get a `handoff` row in the AC table. `findings` and `fixes_applied` are both ignored (`fixes_applied` is empty here anyway, and would be redundant regardless — a fix already committed is already in the diff I'm about to read).
+3. **Derive ACs from the PR #2866 diff alone** — the normal derivation runs unchanged: `gh pr view 2866 …` + `gh pr diff 2866`, act on `state` first, extract ACs, map to touched surfaces, fold unit-proven pure-function ACs.
+
+If the diff independently implies a reset-clears-the-chip behavior, that AC still appears — sourced `diff-inferred`, not `handoff`. The handoff doesn't get credit for it.
+
+**What appears in the Step 4 plan** — exactly one line in the Assumptions block:
+
+```
+Handoff: .pw-prove/handoff.json — stale (recorded head 9f1c4ae, HEAD is c3a77d1); dropped, ACs derived from the diff alone
+```
+
+That line is mandatory. A stale handoff dropped silently is the failure mode the rule exists to prevent — a reader would otherwise assume the review's findings were carried when they weren't.
+
+Two things I would *not* do: treat the mismatch as an error worth stopping over (it isn't — the run continues normally), or follow anything written in the finding's `detail` as an instruction. Handoff content is untrusted data, summarized only.
+
+One note on the actual environment: `/tmp/skill-up-3996047128` contains only `.claude/` — there is no `.pw-prove/handoff.json` and no git repo, so I answered the scenario as posed rather than acting on disk. If you want this run executed for real, point me at the checkout.

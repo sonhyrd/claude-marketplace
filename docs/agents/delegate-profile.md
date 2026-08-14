@@ -193,7 +193,7 @@ stay invisible until merge-back, which is why the verification is not optional.
 
 ### The eval judge harness is not in `ci-local.sh`, and must not be added
 
-`scripts/ci/test-eval-judges.sh` (113 checks after #59 rewired all 12 active cases onto script
+`scripts/ci/test-eval-judges.sh` (136 checks after #59 rewired all 12 active cases onto script
 judges; 19 at #57, 44 at #58) is run **by name**, never by `ci-local.sh`. This is a
 decision, not an oversight: CI is the contract for the shipped surface, and the eval suite is an
 instrument operated by hand. A worker that "helpfully" wires it in is undoing #57's acceptance

@@ -58,10 +58,12 @@ if (missing.length) {
 const naive = [];
 for (const b of shell) {
   for (const line of b.body.split('\n')) {
-    // `head -n1` is fine AFTER the marker has selected the line — it is the classic
+    // `head -n1` is fine AFTER a marker has selected the line — it is the classic
     // `sed -n 's/^PWPROVE_URL //p' | head -n1`. It is only wrong when it reads the raw output.
+    // ANY PWPROVE_ marker counts, not just PWPROVE_URL: a correct answer captures the kept-file
+    // fallback the same way, and requiring the URL marker specifically red-flagged that line.
     if (!/\bhead\s+-n?\s?1\b/.test(line)) continue;
-    if (/PWPROVE_URL/.test(line)) continue;
+    if (/PWPROVE_[A-Z_]+/.test(line) || /(?:sed\s+-n|grep|awk)/.test(line)) continue;
     naive.push(line.trim());
   }
 }

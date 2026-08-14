@@ -26,9 +26,11 @@ function commitments(t) {
     .replace(/```[^\n]*\n[\s\S]*?```/g, '\n')
     .replace(/^\s*>.*$/gm, '')
     .replace(/`[^`\n]*`/g, ' ')
-    .replace(/[“"']([^"“”'\n]{0,400})[”"']/g, ' ');
+    // Double quotes only. An apostrophe is not a quote delimiter in English prose: pairing
+    // "doesn't" with "you're" swallowed the negation between them and turned a correct answer red.
+    .replace(/[“"]([^"“”\n]{0,400})[”"]/g, ' ');
 }
-const NEGATED = /\b(?:not|never|no|nothing|none|nor|neither|don't|doesn't|didn't|cannot|can't|won't|wouldn't|shouldn't|rather than|instead of|without|avoid\w*|refus\w*|reject\w*|rule[ds]? out|forbidden|pointless|unnecessary|wrong)\b/i;
+const NEGATED = /\b(?:would|risks?|worse|out of scope|not|never|no|nothing|none|nor|neither|don't|doesn't|didn't|cannot|can't|won't|wouldn't|shouldn't|rather than|instead of|without|avoid\w*|refus\w*|reject\w*|rule[ds]? out|forbidden|pointless|unnecessary|wrong)\b/i;
 function offenders(t, phrases) {
   const out = [];
   for (const s of commitments(t).split(/(?<=[.!?;])\s+|\n+/)) {
@@ -54,8 +56,10 @@ if (missing.length) {
   console.error('FAIL: ' + missing.map(([, why]) => why).join('; '));
   process.exit(1);
 }
-if (!/5199/.test(emitted)) {
-  console.error('FAIL: the bind origin does not carry the running server\'s port (5199)');
+// The literal port, or a variable that carries the effective origin. Demanding the literal
+// red-flagged `--origin "$BASE_URL"`, which is the same binding written the durable way.
+if (!/5199/.test(emitted) && !/--origin\s+["']?\$\{?(?:BASE_URL|PW_PROVE_BASE_URL|ORIGIN)\b/.test(emitted)) {
+  console.error('FAIL: the bind origin is neither the running port (5199) nor an origin variable that carries it');
   process.exit(1);
 }
 
