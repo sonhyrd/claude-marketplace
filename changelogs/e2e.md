@@ -12,6 +12,21 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.1] - Unreleased
+
+### Changed
+
+- `pw-prove` moves 0.15.0 → **0.15.2**: the announced port is now stated where the bring-up step
+  reads it (skill 0.15.1), and the retired `--workers=1` mandate is gone from the shipped body
+  (skill 0.15.2, following `docs/adr/0017`). A patch bump, not a minor: no skill is added or
+  removed and no interface changes — only the instruction bodies two audit tickets edited.
+- The subtree was pulled from the branch that actually carries the content rather than from the
+  fork's `main`, which is why `AGENTS.md` and `README.md` in the plugin now name the marketplace at
+  `~/work/claude-marketplace`. The 1.1.0 pull took `main` and left the old `~/SonDev` path behind.
+- Serving surface: `--workers` no longer appears anywhere under `plugins/e2e-skills/skills/`. The
+  string surviving in a version-keyed cache copy is what the audit that produced these two skill
+  versions was built around, so it is checked after propagation, not assumed.
+
 ## [1.2.0] - Unreleased
 
 ### Added
