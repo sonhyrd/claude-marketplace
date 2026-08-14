@@ -52,7 +52,7 @@ it is noise.
 
 ## The classification
 
-49 case files: **4 trigger, 45 behavior.** 29 are active in `eval.yaml`; the other 20 are
+49 case files: **4 trigger, 45 behavior.** 31 are active in `eval.yaml`; the other 18 are
 quarantined. **None of them is inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every
 file on disk, and #69's two wet cases carry rows of their own, so every file has a status and the
 evidence behind it.
