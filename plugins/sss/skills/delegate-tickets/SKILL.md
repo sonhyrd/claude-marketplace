@@ -1,7 +1,6 @@
 ---
 name: delegate-tickets
-description: Delegate an approved ticket tree to parallel Orca workers — one child worktree per ticket, dispatched in DAG order and merged back as each finishes.
-disable-model-invocation: true
+description: Delegate an approved ticket tree to parallel Orca workers — one child worktree per ticket, dispatched in DAG order and merged back as each finishes. Use when the user asks to delegate tickets, dispatch a ticket tree to workers, run tickets in parallel worktrees, or fan an approved plan out to Orca child worktrees.
 ---
 
 # Delegate Tickets
@@ -15,6 +14,30 @@ The tickets' **blocking edges ARE the dependency DAG** — use them as-is, never
 > [references/quickstart.md](references/quickstart.md).
 
 ## 1. Resolve the repo profile
+
+### Confirmation gate — model-invoked runs only
+
+**This is the first thing step 1 does.** Nothing above it reads a profile, creates a worktree, or starts a terminal.
+
+| How this run started | Gate |
+|---|---|
+| The user typed `/sss:delegate-tickets …`, or their message named the skill | **None.** The request *is* the consent — go straight to the profile. |
+| Another skill or an agent launched it through the Skill tool, with no user instruction naming it | **Stop and ask once, before any profile work.** |
+
+The gate is what makes this skill safe to chain. A run cuts a git worktree per ticket, fires each repo's setup hook, launches autonomous agents with `--dangerously-skip-permissions`, and merges their branches back into the user's current branch — none of which a user who never asked for it can take back. It replaces the `disable-model-invocation: true` pin that used to make chaining impossible at all.
+
+> `delegate-tickets` will dispatch the ticket tree for `<argument>` to parallel Orca workers — one
+> child worktree per ticket, agents running unattended, branches merged back into
+> `<current-branch>`. Run it?
+
+The ticket count isn't known yet — the tree resolves in step 2, and resolving it first would mean reading the repo's profile and writing one if absent. Ask on the shape of the run, not on a number.
+
+- **Yes** → continue. Ask nothing else that the profile already answers.
+- **No, or no answer** → stop with one line: `delegate-tickets — declined at the confirmation gate; nothing was run.` Never a partial run, never "just the DAG then dispatch".
+
+Once per run. A confirmed run does not re-ask at any later step.
+
+### Profile
 
 Read the target repo's `docs/agents/delegate-profile.md`. It supplies every repo-specific value the steps below reference: branch prefix, post-merge check, commit policy, prohibitions, conventions. Ticket location is **not** a profile field — that comes from `issue-tracker.md` in step 2.
 
