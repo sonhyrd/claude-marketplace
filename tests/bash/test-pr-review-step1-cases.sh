@@ -1,25 +1,21 @@
 #!/usr/bin/env bash
 #
-# Tests that sss:pr-review's Step 1 still resolves refs the way it was decided
-# to, in issue #22 off the friction log in #19.
+# Tests that sss:pr-review's Step 1 still handles refs and the working tree the
+# way it was decided to. Revision THREE of one decision; all three, and why each
+# replaced the last, are in
+# docs/adr/0007-pr-review-acquires-the-tree-in-step-1.md.
 #
-# Step 1 used to run `git checkout <headRefName>`, which fails outright when the
-# PR branch is live in another worktree — the normal Orca case, and 3 of the 8
-# logged runs. The fix was to stop naming branches at all: resolve two SHAs off
-# remote refs, diff between them, and never mutate git state. Everything the old
-# recipe used a checkout for is now either unnecessary (the read stage works from
-# any tree) or a declared degrade (the write stages are absent when the tree is
-# not at the PR head).
+# What this file guards INVERTED at revision 3. It used to assert Step 1 held no
+# `git checkout`; it now asserts the checkout is guarded and the fallback is
+# present. The fallback is the half at risk: on a machine where the checkout
+# always works it reads like dead prose, and deleting it puts back a failure that
+# cost a recovery detour in 3 of 8 logged runs.
 #
 # That decision lives as prose in a SKILL.md — there is no script to exercise, so
 # this test asserts the prose still says it. Deliberately: the alternative was
 # shipping an executable resolver, and item 3 of the same friction log is a skill
 # failing to locate its own shipped file under the plugin-cache layout. A grep is
 # a weaker assertion than a run, but it cannot be defeated by a path resolver.
-#
-# What it guards is regression by helpfulness: a later edit "simplifying" Step 1
-# back to a checkout, or dropping the provenance line as noise, reintroduces a
-# failure that cost a recovery detour in three separate runs.
 
 set -euo pipefail
 
@@ -89,14 +85,37 @@ if [ -z "$STEP1" ]; then
     exit 1
 fi
 
-# --- the mechanism: SHAs off remote refs, no git state mutated ---------------
+# --- the mechanism: SHAs off remote refs, then a guarded checkout ------------
 
-must_not_match "Step 1 does not check out a branch" '^[^#]*git checkout'
-must_not_match "Step 1 does not pull" 'git pull'
+# Anchored at the start of a line, so it forbids `git pull` as a command in the
+# recipe rather than the prose that says the recipe has no pull in it. The old
+# unanchored pattern forbade the word, which the explanation itself now trips.
+must_not_match "Step 1 runs no pull" '^[[:space:]]*git pull'
+# shellcheck disable=SC2016  # a grep pattern: expansion is exactly what must not happen
+must_match "and says it does not pull" 'no `git pull`'
 must_match "resolves HEAD_SHA from the remote head ref" 'HEAD_SHA=.*rev-parse.*origin/'
 must_match "BASE is a merge-base against the remote base ref" 'BASE=.*merge-base.*origin/'
 must_match "the diff runs between the two resolved SHAs" 'git diff .*BASE.*\.\.\..*HEAD_SHA'
-must_match "says the tree is left alone" 'tree is left where it stands'
+must_match "resolves both SHAs before the tree moves" 'resolve to SHAs before the tree moves|before the tree moves'
+
+# --- the acquisition, and the three guards that make it safe -----------------
+#
+# The checkout is a branch and not a detached HEAD because Steps 4e/6c commit and
+# push; each guard answers one way the move can destroy something.
+
+# shellcheck disable=SC2016  # a grep pattern: expansion is exactly what must not happen
+must_match "acquires the tree with switch -C at the resolved SHA" 'git switch -C <headRefName> "\$HEAD_SHA"'
+must_match "guard 1: refuses a dirty tree" 'git status --porcelain'
+must_match "guard 2: checks no other worktree holds the branch" 'git worktree list --porcelain'
+must_match "guard 3: local branch tip must already be on the remote" 'git rev-list --count origin/'
+must_match "says why a branch and not a detached HEAD" '[Dd]etach'
+must_match "refuses to stash rather than owning the state" '[Ss]tash'
+
+# --- the fallback: a failed guard costs the fixes, never the report ----------
+
+must_match "a failed guard falls back rather than aborting" 'fallback, not an abort'
+must_match "names the read-only run" '[Rr]ead-only run'
+must_match "the fallback still reads between the two SHAs" 'from any working tree'
 
 # --- the three cases the ticket requires it to name -------------------------
 
