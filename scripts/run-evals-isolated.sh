@@ -9,8 +9,8 @@
 # does not fix the next one, because the next reinstall puts a plugin copy back. Isolation is a
 # property of the runtime, not of the current contents of a cache.
 #
-# So: a fresh HOME per run, carrying credentials and nothing else. No plugins directory, no
-# user-level skills, no host settings.json. Claude Code and skill-up agree on where the session
+# So: a fresh HOME per run, carrying the credentials and skill-up's own user config, and no agent
+# state at all. No plugins directory, no user-level skills, no host settings.json. Claude Code and skill-up agree on where the session
 # transcript lives because they read the same HOME, which is why this isolates by HOME rather than
 # by CLAUDE_CONFIG_DIR — the latter moves the transcript out from under skill-up's feet.
 #
@@ -56,7 +56,7 @@ fi
 # 1 NOT LOADED (or no readable transcript), 2 CONTAMINATED.
 sweep() {
   local root="$1" iter case_dir case_id transcript rc verdict
-  local loaded=0 notloaded=0 dirty=0 seen=0
+  local loaded=0 notloaded=0 dirty=0 unseen=0 seen=0
 
   if [ ! -d "$root" ]; then
     echo "  no run workspace at $root — nothing to judge" >&2
@@ -73,15 +73,18 @@ sweep() {
     case_id="$(basename "$case_dir")"
     transcript="$(find "$case_dir" -name '*.jsonl' -type f -size +0 2>/dev/null | sort | head -1)"
     seen=$((seen + 1))
+    # A case the gate could not see is its own outcome. Tallying it as NOT LOADED would read as a
+    # finding about the skill when it is a finding about the instrument.
     if [ -z "$transcript" ]; then
       printf '  %-34s %s\n' "$case_id" "NO TRANSCRIPT — the gate cannot see this case"
-      notloaded=$((notloaded + 1))
+      unseen=$((unseen + 1))
       continue
     fi
     verdict="$(EVAL_TRANSCRIPT_PATH="$transcript" node "$GATE" 2>&1)"
     rc=$?
     case "$rc" in
-      0) loaded=$((loaded + 1)); printf '  %-34s %s\n' "$case_id" "LOADED   $(printf '%s' "$verdict" | head -1 | sed 's/^PASS: LOADED via /via /')" ;;
+      0) loaded=$((loaded + 1)); printf '  %-34s %s\n' "$case_id" "LOADED"
+         printf '%s\n' "$verdict" | head -1 | sed 's/^/      /' ;;
       2) dirty=$((dirty + 1)); printf '  %-34s %s\n' "$case_id" "CONTAMINATED"
          printf '%s\n' "$verdict" | sed 's/^/      /' ;;
       *) notloaded=$((notloaded + 1)); printf '  %-34s %s\n' "$case_id" "NOT LOADED"
@@ -90,13 +93,14 @@ sweep() {
   done < <(find "$iter" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 
   echo ""
-  echo "  skill-loaded gate: $loaded loaded, $notloaded not loaded, $dirty contaminated (of $seen case(s))"
+  echo "  skill-loaded gate: $loaded loaded, $notloaded not loaded, $dirty contaminated, $unseen unjudgeable (of $seen case(s))"
   if [ "$seen" -eq 0 ]; then
     echo "  no case directories under $iter — the sweep proved nothing" >&2
     return 1
   fi
-  [ "$dirty" -eq 0 ] || return 1
-  return 0
+  # Contamination is a verdict; an unjudgeable case is a broken instrument. Both fail the sweep,
+  # because either one means this run does not prove the thing the sweep exists to prove.
+  [ "$dirty" -eq 0 ] && [ "$unseen" -eq 0 ]
 }
 
 # --- self-test ------------------------------------------------------------------------------------
@@ -120,11 +124,19 @@ if [ "$MODE" = "self-test" ]; then
   check 'loaded-case .*LOADED' 'a case that loaded the skill reads LOADED'
   check 'blind-case .*NOT LOADED' 'a case that never touched the skill reads NOT LOADED'
   check 'dirty-case .*CONTAMINATED' 'a case that reached the plugin cache reads CONTAMINATED'
-  check '1 loaded, 1 not loaded, 1 contaminated' 'the tally counts all three'
+  check '1 loaded, 1 not loaded, 1 contaminated, 0 unjudgeable' 'the tally counts each verdict once'
   if [ "$rc" -ne 0 ]; then echo "  [PASS] a contaminated case fails the sweep"; else echo "  [FAIL] the sweep stayed green with a contaminated case"; fail=1; fi
-  # A sweep with nothing to judge must never read as success.
+  # A sweep with nothing to judge must never read as success — neither an empty workspace nor a
+  # case directory that retained no transcript.
   mkdir -p "$T/empty"
   if sweep "$T/empty" >/dev/null 2>&1; then echo "  [FAIL] an empty workspace passed the sweep"; fail=1; else echo "  [PASS] an empty workspace fails rather than passes vacuously"; fi
+  mkdir -p "$T/no-transcript/iteration-1/silent-case/with_skill"
+  out2="$(sweep "$T/no-transcript" 2>&1)"; rc2=$?
+  if [ "$rc2" -ne 0 ] && printf '%s' "$out2" | grep -q '0 loaded, 0 not loaded, 0 contaminated, 1 unjudgeable'; then
+    echo "  [PASS] a case with no transcript is unjudgeable, not 'not loaded'"
+  else
+    echo "  [FAIL] a case with no transcript did not read as unjudgeable"; fail=1
+  fi
   echo ""
   [ "$fail" -eq 0 ] && echo "  run-evals-isolated self-test: green" || echo "  run-evals-isolated self-test: RED"
   exit "$fail"
@@ -139,7 +151,13 @@ fi
 command -v skill-up >/dev/null 2>&1 || { echo "run-evals-isolated.sh: skill-up is not on PATH" >&2; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "run-evals-isolated.sh: node is not on PATH" >&2; exit 1; }
 
-ISO="${PWPROVE_EVAL_HOME:-$(mktemp -d -t pwprove-eval-home-XXXXXX)}" || exit 1
+ISO="${PWPROVE_EVAL_HOME:-}"
+if [ -z "$ISO" ]; then
+  ISO="$(mktemp -d -t pwprove-eval-home-XXXXXX)" || exit 1
+  # A copy of the operator's credentials lives in here for the length of the run and must not
+  # outlive it. Set $PWPROVE_EVAL_HOME to keep one around while debugging the runtime itself.
+  trap 'rm -rf "$ISO"' EXIT
+fi
 mkdir -p "$ISO/.claude" || exit 1
 
 # Credentials, and nothing else, cross the boundary. Never printed, never logged.

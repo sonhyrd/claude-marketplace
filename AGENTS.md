@@ -75,6 +75,7 @@ docs orphan check, language,
 │   └── playwright-debugger/
 ├── scripts/                # NOT shipped — repo CI tooling, stays shell
 │   ├── ci/                 # parity, security, corpus golden, per-script process-boundary suites
+│   ├── run-evals-isolated.sh # eval runs: isolated $HOME + the per-case skill-loaded sweep
 │   ├── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
 │   └── validate-evals.sh
 ├── tests/pattern-corpus/   # one hit + one JUSTIFIED twin per check, and the golden
@@ -141,6 +142,7 @@ bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; t
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
 bash scripts/validate-evals.sh      # eval JSON schema
+bash scripts/run-evals-isolated.sh --self-test # the eval runtime's own seam (no API calls)
 bash scripts/ci/pre-push-security.sh
 node skills/e2e-reviewer/scripts/scan.mjs path/to/tests   # standalone scanner
 

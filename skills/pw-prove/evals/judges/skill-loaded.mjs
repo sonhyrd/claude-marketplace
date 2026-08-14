@@ -13,8 +13,10 @@
 // them all.
 //
 // Input: $EVAL_TRANSCRIPT_PATH, which skill-up hands a `script` judge under `environment.type:
-// none` (a path argument works too, for the post-run sweep in scripts/run-evals-isolated.sh).
-// $PWPROVE_SKILL_MD overrides the body under test; it defaults to this repo's skills/pw-prove.
+// none`. A path argument does the same job when triaging one transcript by hand, matching the
+// argv convention of the other judge in this directory.
+// $PWPROVE_SKILL_MD names the body under test; without it the gate searches for pw-prove's
+// SKILL.md (see findSkillMd below) and refuses rather than guessing if it finds none.
 //
 // Exit codes are three-valued on purpose — "the case was contaminated" and "the case never loaded
 // the skill" call for different repairs:
@@ -28,10 +30,40 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_SKILL_MD = resolve(HERE, '../../SKILL.md');
+
+// In band, skill-up copies the judge to a temp directory before running it, so this file's own
+// location says nothing about where the skill lives — `../../SKILL.md` resolved to `/SKILL.md` on
+// the first real run. So: walk up from the judge AND from the working directory, and accept only a
+// SKILL.md whose frontmatter actually names pw-prove. $PWPROVE_SKILL_MD skips the search.
+const SEARCHED = [];
+function findSkillMd(fromTranscript) {
+  if (process.env.PWPROVE_SKILL_MD) return process.env.PWPROVE_SKILL_MD;
+  const searched = [];
+  // The transcript is the most reliable root of the three: in band the judge is copied to
+  // /tmp/skill-up-judge-*/ and run from there, so neither this file nor the working directory is
+  // anywhere near the skill, while the retained transcript sits inside the run's output tree.
+  for (const start of [fromTranscript, HERE, process.cwd()].filter(Boolean)) {
+    let dir = resolve(start);
+    for (;;) {
+      // `.claude/skills/pw-prove/SKILL.md` first: in band the working directory IS the case
+      // workspace, and that copy is literally the version skill-up installed for this case.
+      for (const rel of ['.claude/skills/pw-prove/SKILL.md', 'skills/pw-prove/SKILL.md', 'SKILL.md']) {
+        const candidate = resolve(dir, rel);
+        if (searched.includes(candidate)) continue;
+        searched.push(candidate);
+        if (!existsSync(candidate)) continue;
+        if (/^---\n[\s\S]*?^name:\s*pw-prove\s*$/m.test(readFileSync(candidate, 'utf8'))) return candidate;
+      }
+      const up = dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+  }
+  SEARCHED.push(...searched);
+  return '';
+}
 
 const transcriptPath = process.env.EVAL_TRANSCRIPT_PATH || process.argv[2] || '';
-const skillMdPath = process.env.PWPROVE_SKILL_MD || DEFAULT_SKILL_MD;
 
 // An absent transcript is never a pass. skill-up only WARNS when it has none to hand over
 // ("ScriptJudge.TranscriptPath is empty; EVAL_TRANSCRIPT_PATH will be unset"), so a judge that
@@ -44,8 +76,12 @@ if (!existsSync(transcriptPath)) {
   console.error(`FAIL: transcript does not exist: ${transcriptPath}`);
   process.exit(1);
 }
-if (!existsSync(skillMdPath)) {
-  console.error(`FAIL: no SKILL.md to fingerprint at ${skillMdPath}`);
+const skillMdPath = findSkillMd(dirname(resolve(transcriptPath)));
+if (!skillMdPath || !existsSync(skillMdPath)) {
+  console.error(`FAIL: no SKILL.md to fingerprint${skillMdPath ? ` at ${skillMdPath}` : ''}`);
+  console.error(`   transcript: ${transcriptPath}`);
+  console.error('   set $PWPROVE_SKILL_MD; searched, from the transcript, this judge, and the working directory:');
+  for (const s of SEARCHED.slice(0, 6)) console.error(`   ${s}`);
   process.exit(1);
 }
 
@@ -81,6 +117,12 @@ if (marks.length === 0) {
 // results — is `structural`. The split matters for one specific verdict: an answer that NAMES the
 // plugin cache path in order to reject it is a correct answer, not a contaminated run. Only a
 // plugin path in the structural half means the run actually reached the plugin copy.
+//
+// The case PROMPT is structural, not prose, and that is the deliberate side of the trade: a skill
+// injection also arrives as non-assistant content, so exempting everything the assistant did not
+// write would blind the gate to the very route contamination takes. The cost is that a case prompt
+// naming a plugin path would read as contaminated. No case prompt does; an injected plugin body is
+// the thing we cannot afford to miss.
 const prose = [];
 const structural = [];
 
@@ -90,9 +132,27 @@ function collect(node, sink) {
   if (node && typeof node === 'object') { for (const v of Object.values(node)) collect(v, sink); }
 }
 
+// Two transcript shapes reach this judge, and it reads both. In band skill-up hands over its own
+// serialization — one JSON array of {role, content, turn}. The post-run sweep hands over the raw
+// Claude Code session `.jsonl` the run retained, which is the richer of the two: it carries the
+// tool calls and the injected body that skill-up's array flattens away. Anything the in-band shape
+// cannot show, the sweep still sees.
+const rawTranscript = readFileSync(transcriptPath, 'utf8');
+let lines;
+if (rawTranscript.trimStart().startsWith('[')) {
+  try {
+    lines = JSON.parse(rawTranscript).map((m) => JSON.stringify({ message: m }));
+  } catch {
+    console.error(`FAIL: ${transcriptPath} starts as a JSON array but does not parse`);
+    process.exit(1);
+  }
+} else {
+  lines = rawTranscript.split('\n');
+}
+
 const toolUses = [];
 let records = 0;
-for (const line of readFileSync(transcriptPath, 'utf8').split('\n')) {
+for (const line of lines) {
   if (!line.trim()) continue;
   let rec;
   try { rec = JSON.parse(line); } catch { structural.push(line); continue; }
@@ -100,7 +160,11 @@ for (const line of readFileSync(transcriptPath, 'utf8').split('\n')) {
 
   const msg = rec?.message;
   const content = msg?.content;
-  if (msg?.role === 'assistant' && Array.isArray(content)) {
+  if (msg?.role === 'assistant' && typeof content === 'string') {
+    // skill-up's own serialization: the assistant's turn arrives as one flat string, and all of it
+    // is prose the assistant wrote.
+    prose.push(content);
+  } else if (msg?.role === 'assistant' && Array.isArray(content)) {
     for (const block of content) {
       if (block?.type === 'text' || block?.type === 'thinking') collect(block, prose);
       else collect(block, structural);
@@ -156,13 +220,16 @@ const routes = [];
 if (toolUses.some((t) => t?.name === 'Skill' && String(t?.input?.skill ?? '') === 'pw-prove')) {
   routes.push('skill-tool');
 }
+// The body itself, wherever it came from: the Skill tool's result, an injection, or a plain Read of
+// the file. Deliberately NOT "a tool argument mentioned pw-prove/SKILL.md" — a Read that errored, or
+// a grep whose pattern names the path, mentions it without a single line of the body reaching the
+// model, and reporting that as LOADED is the same over-count this gate exists to end.
 const hit = marks.find((m) => all.some((s) => s.includes(m)));
 if (hit) routes.push('skill-body');
-if (structural.some((s) => /pw-prove\/SKILL\.md/.test(s))) routes.push('skill-file');
 
 if (routes.length === 0) {
   console.error('FAIL: NOT LOADED — the SKILL.md under test never reached the model in this case');
-  console.error('   no Skill tool call, no body in context, no read of pw-prove/SKILL.md');
+  console.error('   no Skill tool call, and no line of the body under test anywhere in the transcript');
   console.error(`   (fingerprinted ${marks.length} line(s) of ${skillMdPath} against ${records} transcript record(s))`);
   process.exit(1);
 }

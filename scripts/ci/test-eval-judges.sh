@@ -338,6 +338,18 @@ console.log('PASS: no transcript in sight');
 JUDGE
   ) && expect_red "judge blind to \$EVAL_TRANSCRIPT_PATH" "$R" 'CORRECT answer and the judge red-flagged it' \
     || bad "could not build the transcript-wiring self-test root"
+
+  # The gate is only half the instrument: the other half is the post-run sweep that carries its
+  # verdict per case. That suite costs nothing to run — no API calls, no skill-up — so it runs from
+  # here rather than being reachable by memory alone.
+  echo ""
+  echo "-- the post-run sweep over a run's transcripts --"
+  if bash "$REPO_ROOT/scripts/run-evals-isolated.sh" --self-test >"$W/sweep.log" 2>&1; then
+    ok "run-evals-isolated.sh --self-test"
+  else
+    bad "run-evals-isolated.sh --self-test went red"
+    sed 's/^/         /' "$W/sweep.log" | tail -12
+  fi
 fi
 
 echo ""
