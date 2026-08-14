@@ -1,0 +1,27 @@
+**What happened.** Exit 6 is not exit 3. Exit 3 says a credential **survived** the scrub; exit 6 says
+the scrub **destroyed the recording**. `__PWPROVE_SECRET_13__` appearing 125,403 times against a
+limit of 1,240 over 155 entries is not a leak — it is a substitution that ran away.
+
+The cause is visible in the bodies: `Bewerbung__PWPROVE_SECRET_13__ sind eingegang__PWPROVE_SECRET_13__`.
+The scrubber learned a secret short enough to occur inside ordinary content — a locale cookie like
+`i18n_redirected=en` — and every `en` inside German prose got replaced along with it. Nothing
+leaked here; the application's own text was overwritten.
+
+**Why the earlier `--verify` said clean.** A residue check asks one question: did a credential
+survive? Over-scrub leaves no credential behind, so it is invisible to that question. That is exactly
+why the count gate is a **separate exit code** rather than another residue finding.
+
+**What I do next.**
+
+- **Re-record the recon pass**, or narrow what the capture treats as a secret so a two-letter locale
+  value is not learned as one. Either produces a recording that is both scrubbed and intact.
+- The HAR is **not staged**. It is not a safe file that reads oddly; it is a file whose contents no
+  longer match what the server sent.
+
+**What I do not do:**
+
+- I do not re-run the scrubber to clear it. Nothing leaked, so there is nothing for another pass to
+  remove — it would re-scrub already-destroyed text.
+- I do not hand-substitute the placeholders back. That rebinds only what I happen to notice, and it
+  leaves a recording nobody can tell apart from a safe one — the worst of the three outcomes, because
+  it looks repaired.

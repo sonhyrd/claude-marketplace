@@ -1,0 +1,28 @@
+No — that batch is wrong, though the form is right.
+
+`arg` is **JSON data serialised into the call**. So
+`"document.querySelector('tr[data-id=\"7\"]')"` does not run anywhere: it arrives inside `fn` as
+that **string**, and `getComputedStyle` would be handed a piece of text rather than an element. And
+there is no way to fix it by sending the element itself — a real DOM node cannot travel through JSON
+at all.
+
+The fix is to do the selection **inside `fn`** and pass only data:
+
+```
+{"cmd":"eval","expression":{"fn":"(sel) => getComputedStyle(document.querySelector(sel)).backgroundColor","arg":"tr[data-id=\"7\"]"}}
+```
+
+Or ask the whole question as one self-contained string expression:
+
+```
+{"cmd":"eval","expression":"getComputedStyle(document.querySelector('tr[data-id=\"7\"]')).backgroundColor"}
+```
+
+Three things I am **not** doing:
+
+- I am not abandoning the `{fn, arg}` form. It does pass its argument and it does return the
+  function's value — the defect was in what I put in `arg`, not in the form.
+- I am not switching to the named-map form for this. Its values are plain expressions and take no
+  argument, so it cannot express a parameterised question.
+- I am not reaching for a page-handle or element-handle concept. The probe does not have one, and
+  inventing it would mean writing recon against an API that does not exist.

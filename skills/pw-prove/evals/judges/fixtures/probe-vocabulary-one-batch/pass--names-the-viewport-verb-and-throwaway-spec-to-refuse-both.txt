@@ -1,0 +1,30 @@
+First, the autostart. `send` starts a daemon when none is listening — that is normal sequencing, not
+a fault, and the batch it printed afterwards **is** the answer. There is nothing to re-run.
+
+Two commands, not three.
+
+**1. The console question.** An authenticated page rendering an empty shell has usually said why:
+
+```bash
+node <skill-base>/scripts/probe.mjs send '[{"cmd":"console","level":"error"}]'
+```
+
+**2. Both values in one eval**, using the named-map object form:
+
+```bash
+node <skill-base>/scripts/probe.mjs send '[{"cmd":"eval","expression":{"tenant":"window.__APP__.tenant","url":"location.href"}}]'
+```
+
+One round trip returns both. Three separate evals would be the shape to avoid here — the
+`{"fn":…,"arg":…}` form and the plain string form are equally legal, but neither buys anything when
+the questions are two independent expressions.
+
+**3. The viewport request I refuse.** There is no `viewport` verb on the probe, and I do not want
+one. The effective viewport is resolved in **Step 4** from the project's Playwright config and pinned
+in the committed spec; recon taken at 390px when the proof will render at the project's own size is
+recon against a **different rendering**, and any finding from it may not hold in the run that matters.
+If the mobile rendering is genuinely part of what is under proof, that belongs in the effective
+viewport decision at Step 4, not in an ad-hoc recon resize.
+
+I do not write a throwaway `_recon.spec.ts` to answer any of the three. The probe is the question
+channel; the test run is the validator.

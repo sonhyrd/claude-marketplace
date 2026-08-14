@@ -1,0 +1,21 @@
+```bash
+node <skill>/scripts/clip-fidelity.mjs spec e2e/reports.spec.ts \
+  --config playwright.config.ts --verdict "deliberate:1440x810"
+```
+
+It **exits 0**. The script re-derives the verdict from the config text and agrees with the one Step 4
+recorded: the explicit `viewport: { width: 1440, height: 810 }` key is a project decision, and it
+outranks the `...devices['Desktop Chrome']` spread sitting beside it in the same `use` block.
+
+**The absent `test.use({ viewport })` is correct here, not an omission.** A deliberate viewport is
+respected and never pinned over. Adding the usual 1600x900 pin would make both the proof run and the
+Step-7 mutation check render at a size this project never uses, which is a proof about a rendering
+nobody ships.
+
+So Step 6 is clean and Step 7 opens. I size the recording to the **effective** viewport rather than
+to the pin default:
+
+```bash
+PW_PROVE_CLIP=1 PW_PROVE_W=1440 PW_PROVE_H=810 \
+  npx playwright test e2e/reports.spec.ts --config playwright.proof.config.ts
+```

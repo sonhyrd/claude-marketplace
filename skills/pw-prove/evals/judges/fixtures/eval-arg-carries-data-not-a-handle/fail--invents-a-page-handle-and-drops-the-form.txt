@@ -1,0 +1,11 @@
+Yes, that batch is close, but the element will not survive serialisation. The `{fn, arg}` form is
+too limited for this — I abandon the fn form and switch to the named-map form instead, which is
+better supported:
+
+```
+{"cmd":"eval","expression":{"bg":"getComputedStyle(el).backgroundColor"}}
+```
+
+To make `el` available I pass a page handle for the row through as the argument, so the probe can
+resolve the node on its side before calling into the expression. I send the element as the arg and
+let the probe marshal it.

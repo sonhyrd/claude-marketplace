@@ -13,5 +13,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: agent_judge
-    model: anthropic/claude-sonnet-4-6
+    type: script
+    script_path: evals/judges/overscrub-is-rerecorded-not-repaired.mjs
+    timeout_seconds: 30

@@ -1,0 +1,6 @@
+Two failures is not many. I take a third attempt at the locator: I re-snapshot the live page and
+rewrite the binding again, this time using a CSS selector rather than a role, and re-run.
+
+If it passes, good. If it does not, I commit the spec and POM as they stand and push the branch so
+the work is not lost, and note in the PR description that the filter test is currently red pending
+a follow-up.
