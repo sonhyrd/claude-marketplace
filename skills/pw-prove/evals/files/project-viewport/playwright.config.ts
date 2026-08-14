@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
-// Deliberate-viewport fixture: an explicit `viewport:` key, no device descriptor.
-// pw-prove must respect this and must NOT pin 1600x900 over it.
+// 1440x900 is the supported desktop breakpoint: the /reports grid drops to two
+// columns below 1440, so runs are pinned to it rather than to a device descriptor.
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,

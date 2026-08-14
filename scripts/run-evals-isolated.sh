@@ -223,6 +223,25 @@ assert_workspace_outside() {
   return 0
 }
 
+# usage: assert_no_stale_tmp_installs <copy>...
+# A copy under $TMPDIR at census time is a PREVIOUS run's per-case install that skill-up did not
+# remove. The deny rules cover it on the Read route and cannot cover it on the Bash route, and a
+# baseline arm that `cat`s one voids the uplift the run was taken for — which is what happened to
+# `case-23`'s baseline in the #76 re-characterization run. Deleting it here would be a `rm -rf` this
+# script has no business performing unasked, so it refuses and names the trees instead.
+assert_no_stale_tmp_installs() {
+  local tmp="${TMPDIR:-/tmp}" copy stale=()
+  for copy in "$@"; do
+    case "$copy" in "$tmp"/*) stale+=("$(bundle_of "$copy")") ;; esac
+  done
+  [ "${#stale[@]}" -eq 0 ] && return 0
+  echo "run-evals-isolated.sh: a previous run left ${#stale[@]} install(s) of the body under \$TMPDIR:" >&2
+  printf '  %s\n' "${stale[@]}" >&2
+  echo "  A baseline arm can read these with Bash, which no deny rule closes, so the uplift would be void (#75)." >&2
+  echo "  Remove them and re-run:  rm -rf $tmp/skill-up-*" >&2
+  return 1
+}
+
 # --- the sweep ------------------------------------------------------------------------------------
 # One gate invocation per case ARM. `--baseline` writes a `with_skill/` and a `without_skill/`
 # directory per case, and the two arms ask opposite questions of the same judge: the version under
@@ -319,6 +338,24 @@ sweep() {
   # measurement the run was taken for. All three fail the sweep, because each one means this run does
   # not prove the thing the sweep exists to prove.
   [ "$dirty" -eq 0 ] && [ "$unseen" -eq 0 ] && [ "$dirtybase" -eq 0 ]
+}
+
+# --- the staging gate -------------------------------------------------------------------------------
+# `context.files` is {workspace_path: INLINE CONTENT}: skill-up writes the right-hand string verbatim
+# as the file's body, so a case migrated in the shape `p: p` stages a 40-byte file whose content is
+# its own path (#76). The agent then answers a different question and PASSES — `case-23` was 3/3 on a
+# premise it never read. Nothing in the run reports that: the staged workspace is not among the
+# artifacts skill-up retains, so no post-run sweep can see it. The check is therefore static, and it
+# runs before the run rather than only when someone remembers the script's name, because the run that
+# pays for the defect is this one. `scripts/ci/test-case-shapes.sh` holds the checks themselves.
+# usage: run_staging_gate <eval.yaml>
+run_staging_gate() {
+  local suite="$1" shapes="$REPO_ROOT/scripts/ci/test-case-shapes.sh" out
+  [ -f "$shapes" ] || { echo "run-evals-isolated.sh: $shapes is missing — refusing to run an unchecked suite" >&2; return 1; }
+  out="$(PWPROVE_EVALS_ROOT="$(dirname "$suite")" PWPROVE_CASE_SHAPES_SELFTEST=0 bash "$shapes" 2>&1)" && return 0
+  printf '%s\n' "$out" | sed 's/^/  /'
+  echo "run-evals-isolated.sh: the case suite does not pass its shape and staging checks — refusing to spend a run on it" >&2
+  return 1
 }
 
 # --- a baseline run is serial -----------------------------------------------------------------------
@@ -453,6 +490,57 @@ if [ "$MODE" = "self-test" ]; then
     echo "  [FAIL] a case with no transcript did not read as unjudgeable"; fail=1
   fi
   echo ""
+  echo "-- a previous run's install left under \$TMPDIR is refused, not merely denied --"
+  # The Bash route no deny rule closes. The fixture stands in for $TMPDIR by setting it.
+  st="$T/stale-tmp"
+  mk_stale() { mkdir -p "$(dirname "$1")"; printf -- '---\nname: pw-prove\ndescription: fixture\n---\n\nbody\n' > "$1"; }
+  mk_stale "$st/skill-up-99/.claude/skills/pw-prove/SKILL.md"
+  if TMPDIR="$st" assert_no_stale_tmp_installs "$st/skill-up-99/.claude/skills/pw-prove/SKILL.md" 2>/dev/null; then
+    echo "  [FAIL] a stale \$TMPDIR install was accepted"; fail=1
+  else
+    echo "  [PASS] a stale \$TMPDIR install is refused, and named"
+  fi
+  if TMPDIR="$st" assert_no_stale_tmp_installs "$T/host/checkout-a/skills/pw-prove/SKILL.md" 2>/dev/null; then
+    echo "  [PASS] a copy outside \$TMPDIR is left to the deny rules"
+  else
+    echo "  [FAIL] a copy outside \$TMPDIR was refused as a stale install"; fail=1
+  fi
+
+  echo ""
+  echo "-- a suite that stages a fixture as its own path is refused before the spend (#76) --"
+  # The real suite must pass its own gate, and a suite carrying the #76 defect must not — otherwise
+  # the gate is a line that runs rather than a check that reads.
+  if run_staging_gate "$SKILL_DIR/evals/eval.yaml" >/dev/null 2>&1; then
+    echo "  [PASS] the committed suite passes the staging gate"
+  else
+    echo "  [FAIL] the committed suite does not pass its own staging gate"; fail=1
+  fi
+  mkdir -p "$T/bad-suite/cases"
+  cat > "$T/bad-suite/eval.yaml" <<'YAML'
+cases:
+    files:
+        - evals/cases/only.yaml
+YAML
+  cat > "$T/bad-suite/cases/only.yaml" <<'YAML'
+id: only
+title: only
+shape: behavior
+input:
+    prompt: >-
+      Load the `pw-prove` skill with the Skill tool and follow it. Step 3.
+context:
+    files:
+        src/routes.ts: src/routes.ts
+judge:
+    type: rule_based
+YAML
+  if run_staging_gate "$T/bad-suite/eval.yaml" >/dev/null 2>&1; then
+    echo "  [FAIL] a suite staging a fixture as its own path was accepted"; fail=1
+  else
+    echo "  [PASS] a suite staging a fixture as its own path is refused"
+  fi
+
+  echo ""
   echo "-- PATH carries no marketplace plugin into the run --"
   # Built rather than written out: a literal home path here is a security-gate blocker.
   h="$T/fake-home"
@@ -552,6 +640,14 @@ if [ "$MODE" = "sweep" ]; then
   exit $?
 fi
 
+# --- the staging gate, before a token is spent ------------------------------------------------------
+if [ "${PWPROVE_SKIP_STAGING_GATE:-0}" = "1" ]; then
+  echo "-- staging gate: SKIPPED by \$PWPROVE_SKIP_STAGING_GATE — a fixture staged as its own path will not be reported --"
+else
+  run_staging_gate "$EVAL_YAML" || exit 1
+  echo "-- staging gate: every case stages the fixture it names (#76) --"
+fi
+
 # --- the isolated home ----------------------------------------------------------------------------
 command -v skill-up >/dev/null 2>&1 || { echo "run-evals-isolated.sh: skill-up is not on PATH" >&2; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "run-evals-isolated.sh: node is not on PATH" >&2; exit 1; }
@@ -597,6 +693,8 @@ done
 # The census runs AFTER that check and writes the settings.json the check just proved absent. The
 # order is the point: what must not be here is the operator's file; what must be here is ours.
 run_census || exit 1
+# Not part of run_census, so `--census` still prints its inventory instead of refusing to.
+assert_no_stale_tmp_installs ${COPIES[@]+"${COPIES[@]}"} || exit 1
 printf '%s\n' ${RULES[@]+"${RULES[@]}"} | write_deny_settings "$ISO/.claude/settings.json"
 node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$ISO/.claude/settings.json" || {
   echo "run-evals-isolated.sh: the generated settings.json does not parse — refusing to run behind a rule set the agent would ignore" >&2

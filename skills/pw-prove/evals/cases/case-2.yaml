@@ -17,14 +17,9 @@ description: >-
 
 tag: functional_test
 input:
-    prompt: Generate a test plan for the /checkout page based on the project structure in evals/files/project-pom/. The project uses POM pattern with BasePage and LoginPage in tests/pages/. The routes file shows /checkout (show + process) and /checkout/confirmation endpoints. Show what scenarios, locators, and POM structure you would create. Do not write code yet — present the plan for approval.
+    prompt: Generate a test plan for the /checkout page based on this project's structure. The project uses POM pattern with BasePage and LoginPage in tests/pages/. The routes file shows /checkout (show + process) and /checkout/confirmation endpoints. Show what scenarios, locators, and POM structure you would create. Do not write code yet — present the plan for approval.
 context:
-    files:
-        evals/files/project-pom/playwright.config.ts: evals/files/project-pom/playwright.config.ts
-        evals/files/project-pom/src/routes.ts: evals/files/project-pom/src/routes.ts
-        evals/files/project-pom/tests/auth.spec.ts: evals/files/project-pom/tests/auth.spec.ts
-        evals/files/project-pom/tests/pages/base-page.ts: evals/files/project-pom/tests/pages/base-page.ts
-        evals/files/project-pom/tests/pages/login-page.ts: evals/files/project-pom/tests/pages/login-page.ts
+    repo_fixture: evals/files/project-pom
 constraints: {}
 expect: {}
 judge:

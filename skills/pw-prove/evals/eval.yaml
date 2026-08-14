@@ -116,6 +116,14 @@ cases:
         - evals/cases/case-46.yaml
         - evals/cases/case-52.yaml
         - evals/cases/case-57.yaml
+        # --- admitted by #76, once it was staging its fixture instead of the fixture's path ---
+        # `context.files` is {path: INLINE CONTENT}, so this case had been reading a 49-byte file
+        # containing its own path and answering a different question. It guards the same rule as
+        # `case-36` and is kept beside it for one reason: its premise is a config it has to open,
+        # not a config the prompt describes, so it is also the only case that goes red if fixture
+        # staging silently breaks again. Its numbers, and the judge repair that preceded them, are
+        # in evals/REGISTRY.md.
+        - evals/cases/case-22.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those
