@@ -159,10 +159,7 @@ Studies: [proof target measurements](docs/studies/proof-target-measurements.md) 
 against a built preview, measured, plus the two claims that were verified by running them ·
 [the first live proof](docs/studies/live-proof-pr2866.md) — pw-prove run end to end against a real
 pull request on a real application, with the timings against the numbers this work was justified by
-and the twelve behaviours no fixture shows ·
-[proof-run concurrency](docs/studies/proof-concurrency-pr2866.md) — 31 runs and 120 test instances at
-one to six workers against the built proof target, the wall clock they saved, the verdicts and
-evidence they did not damage, and the one cost they did carry.
+and the twelve behaviours no fixture shows.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·

@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.15.1"
+  version: "0.15.2"
 ---
 
 # pw-prove
@@ -607,19 +607,19 @@ rm -rf test-results
 # Run the proof spec through the proof config. video records ONE webm per test (per AC);
 # trace:'on' leaves a per-test trace.zip for healing + the playwright-debugger handoff.
 # PW_PROVE_W/H carry the run's EFFECTIVE viewport — always pass them, never a fixed literal.
-# NO --workers flag: the scenarios run concurrently at Playwright's default — see below.
+# Concurrency is Playwright's to choose: override nothing and the scenarios run together — see below.
 PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
   npx --no-install playwright test <spec> --project=chromium \
   --config <configDir>/playwright.proof.config.ts --reporter=html
 # webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
 ```
 
-**Pass no `--workers` flag — the proof run is concurrent** (`docs/adr/0017`, which retires the `--workers=1` mandate of `docs/adr/0010`). Scaffolded configs leave `workers` undefined off CI (`workers: process.env.CI ? 1 : undefined`), so the run takes Playwright's default of `cores/2` and the scenarios go together. Measured on a real pull request over 31 runs and 120 test instances: **1.76–1.89× less wall clock**, **zero failures and zero flaky verdicts at every worker count from 1 to 6**, identical `hermetic.mjs` classification, every clip and trace intact, and a preview server that did not saturate even with the HAR replay removed and every API call live (`docs/studies/proof-concurrency-pr2866.md`). Do **not** name a number: `--workers=4` was right on one 8-core machine and is wrong on the next, and Playwright already computes it.
+**The proof run is concurrent — leave the worker count to Playwright** (`docs/adr/0017`, which supersedes the serialised proof run of `docs/adr/0010`). Scaffolded configs leave `workers` undefined off CI (`workers: process.env.CI ? 1 : undefined`), so the run takes Playwright's default of `cores/2` and the scenarios go together. Measured on a real pull request over 31 runs and 120 test instances: **1.76–1.89× less wall clock**, **zero failures and zero flaky verdicts at every concurrency from 1 to 6**, identical `hermetic.mjs` classification, every clip and trace intact, and a preview server that did not saturate even with the HAR replay removed and every API call live. So the run command carries no concurrency override, and none is pinned in the committed proof config or in the project's `playwright.config` either. Do **not** substitute a literal count: four was right on one 8-core machine and is wrong on the next, and Playwright already computes `cores/2`.
 
 Two things this does not license:
 
 - **A spec whose scenarios contend over shared state still has to serialise, in the spec** — `test.describe.configure({ mode: 'serial' })`, with the reason in a comment beside it. Each test gets a fresh browser context, so nothing leaks that way; what interferes is scenarios racing for one record on a shared tenant. That is a property of the spec, and it belongs where the code is, never in a global flag that charges every other proof for it.
-- **Serialisation is now a diagnostic, not a fix.** If *every* scenario times out at its first navigation, one re-run at `--workers=1` separates a concurrency problem from a spec problem in a single command. But against the built target that signature has **no known cause** — a preview compiles nothing — so a spec that then passes serialised is a **finding to report with its evidence**, not a box ticked on the way to green. The one measured cost of concurrency is clip length: N browsers share the machine, so each test is slower and its recording longer (12–15 s per clip serialised, 18–20 s at four workers, 31–33 s at six). That is lead-in before the payoff, and it is why nothing here asks for more workers than the default.
+- **Serialisation is now a diagnostic, not a fix.** If *every* scenario times out at its first navigation, re-run the same spec **unchanged** with `-j 1` appended — one command, one worker, that run only — and it separates a concurrency problem from a spec problem. This is the one place a concurrency override belongs; it never enters the proof run, a config, or the committed spec. But against the built target that signature has **no known cause** — a preview compiles nothing — so a spec that then passes serialised is a **finding to report with its evidence**, not a box ticked on the way to green. The one measured cost of concurrency is clip length: N browsers share the machine, so each test is slower and its recording longer (12–15 s per clip serialised, 18–20 s at four workers, 31–33 s at six). That is lead-in before the payoff, and it is why nothing here asks for more workers than the default.
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
@@ -737,7 +737,7 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 
 ```bash
 # --output moves ALL of this run's artifacts; no PW_PROVE_CLIP, so no dwell is paid either.
-# No --workers flag here either: -g scopes this to ONE test, so it is serial by arithmetic.
+# No concurrency override here either: -g scopes this to ONE test, so it is serial by arithmetic.
 npx --no-install playwright test <spec> --project=chromium \
   --config <configDir>/playwright.proof.config.ts -g "<the guarding test>" \
   --output=/tmp/pw-prove-mutation --reporter=line
