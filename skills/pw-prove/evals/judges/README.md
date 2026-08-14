@@ -40,6 +40,23 @@ Three filters do that work, and all three appear verbatim in each such judge:
   item under it, so an incidental negation ("Nothing answers on 3000, so here is the plan:") must not
   open the scope.
 
+**Workspace-shaped** — the case is [wet](../../../../CONTEXT.md#wet-case), so the answer is not the
+evidence: the run's own artifacts are. A workspace judge reads files out of the case workspace and
+asserts on them. `served-on-allocated-port.mjs` reads the `serve.log` a real preview server wrote and
+the summary `preflight.mjs serve` printed; `auth-code-drives-app-entry.mjs` reads the
+`tests/e2e/auth.setup.ts` the run left on disk. Three rules keep them honest:
+
+- **The workspace root is the judge's cwd** — skill-up runs a `script` judge in the case workspace —
+  and `$PWPROVE_JUDGE_ROOT` overrides it. That override is how the fixtures work: a `<slug>.env`
+  points the judge at a recorded workspace under `fixtures/<judge>/ws-<slug>/`, since the harness
+  runs from the repo root.
+- **An absent input is still never a pass.** The artifacts are the evidence, but `$EVAL_FINAL_MESSAGE`
+  or `$EVAL_TRANSCRIPT_PATH` is the proof there was a run at all, so a workspace judge refuses when
+  it has neither.
+- **The negative checks read code with its comments stripped.** The #59 defect arrives in a source
+  file as a comment: a correct `auth.setup.ts` names `?token=` and `localStorage.setItem` to say why
+  it took neither. Its must-PASS fixture is exactly that file.
+
 The bias is deliberate and one-directional: `NEGATED` is broad (it includes a bare `no`), so a
 borderline sentence is read as a rejection. A judge that lets one sloppy wrong answer through costs a
 missed finding; a judge that red-flags correct answers costs the suite its credibility, which is what
@@ -61,6 +78,8 @@ Every judge needs both halves, and the harness fails a judge that carries only o
 fixtures/<judge>/pass--<slug>.txt      must exit 0     (or .jsonl, fed as $EVAL_TRANSCRIPT_PATH)
 fixtures/<judge>/fail--<slug>.txt      must exit non-zero
 fixtures/<judge>/<slug>.expect         optional: substrings the verdict must name
+fixtures/<judge>/<slug>.env            optional: env for this fixture only ($EVAL_FIXTURE_DIR is set)
+fixtures/<judge>/ws-<slug>/            a workspace judge's recorded artifacts, reached via that .env
 ```
 
 The must-PASS fixture is the load-bearing one: it has to be **a correct answer that names the
@@ -69,6 +88,13 @@ forbidden thing in order to reject it**. That is the one-hit-one-JUSTIFIED-twin 
 whole directory was rewritten for. Prefer a real answer from a retained run transcript where one
 exists; the fixtures added in #59 are hand-authored against the phrasings the 2026-08-13 run
 recorded, because that run's workspace was not retained.
+
+**Hand-authored fixtures are tidier than real data, and that tidiness hides defects.** Every
+`skill-loaded` transcript fixture was written with `t1`-shaped tool ids; a real one is 30 characters
+(`toolu_01EngPMVf8ECsBeRkp4DaUD3`), which was long enough to defeat that judge's refusal discount and
+fail a whole baseline run (#69). A real Claude Code record also mirrors its tool result at the record
+level in `toolUseResult`, which no hand-authored fixture had. When you copy a shape from a run, copy
+its scaffolding too.
 
 Run the harness by name — it is deliberately **not** in `ci-local.sh`:
 
