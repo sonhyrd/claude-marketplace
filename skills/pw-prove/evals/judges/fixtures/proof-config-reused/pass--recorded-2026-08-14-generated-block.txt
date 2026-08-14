@@ -1,0 +1,39 @@
+No repo present at `/tmp/skill-up-718840649` (no `e2e/`), so this is the description of what the run would do, not a live run.
+
+## Step 1 — what the profile records
+
+`configPath = e2e/playwright.config.ts` → `configDir = e2e/`. The proof config at `e2e/playwright.proof.config.ts` is **present**, so it is a previous run's committed deliverable: reuse untouched. It is not re-derived, not "refreshed", and it produces no diff in this run's commit — that's the whole point of it being static and committed (`docs/adr/0008`).
+
+## Step 7 — what I do with it
+
+**1. Read it once, for exactly one thing: `webServer`.** The description you gave — spreads the project config, sets `video: { mode: 'on', size }` from `PW_PROVE_W`/`PW_PROVE_H` defaulting to 1600x900, and `trace: 'on'` — does not mention `webServer: undefined`. The spread copies *every* top-level key of `e2e/playwright.config.ts`, `webServer` among them, so if that line is absent this config will boot the project's **development** server the moment nothing answers at that config's own URL — a shifted port or a loopback-family mismatch is enough — and the built-target proof is defeated silently. So:
+
+- **`webServer: undefined` already there** → touch nothing. Zero edits to this file all run.
+- **Absent** → the one sanctioned in-place migration: add that single line with its comment, keep everything else byte-for-byte, and stage it in Step 8 as `modified`. One-time migration, not a per-run rewrite.
+
+That is the only reason I open the file. The other sanctioned edit — a structural mismatch (function-export project config, per-project `use` that must win) — doesn't apply to a spread-friendly config like this one.
+
+**2. I do not put the viewport in it.** The effective viewport resolves to `pinned: 1600x900`, and a `pinned:` verdict writes `test.use({ viewport: { width: 1600, height: 900 } })` into the **committed spec** — never into the proof config, never into `e2e/playwright.config.ts`. The proof config deliberately never sets `viewport`: a viewport that exists only while filming means healing, the hermetic audit and the mutation check all ran against a rendering CI never produces. `clip-fidelity.mjs spec … --config e2e/playwright.config.ts --verdict "pinned:1600x900"` must exit 0 in Step 6 before I film; exit 3 there means I add the pin to the spec, not to this config.
+
+**3. The per-run value arrives on the command line, not in the file.** `PW_PROVE_W=1600 PW_PROVE_H=900` are passed explicitly even though they equal the config's defaults — the config stays static precisely because size is the one per-run parameter and it belongs in the environment. Same for `PW_PROVE_CLIP=1` (this run only) and `PW_PROVE_HAR` (the bound copy from item 1b), plus whatever base-URL env var the config interpolates:
+
+```bash
+rm -rf test-results
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
+  npx --no-install playwright test <spec> --project=chromium \
+  --config e2e/playwright.proof.config.ts --reporter=html
+```
+
+No `-j`/`workers` override — Playwright picks `cores/2`. If a re-film is needed after an illegible frame, it's the same command against the same config; the *fix* goes in the spec.
+
+**4. The mutation run uses the same config, redirected.** `--config e2e/playwright.proof.config.ts -g "<the guarding test>" --output=/tmp/pw-prove-mutation --reporter=line`, and no `PW_PROVE_CLIP` — the config is unchanged, only the output path and the env differ, so the passing run's clips in `test-results/` are never overwritten with footage of deliberately broken software.
+
+**5. One failure signature points back here.** Zero tests ran with `Timed out waiting 120000ms from config.webServer` = the inherited `webServer` survived; the fix is the migration in (1), not a heal attempt on the spec.
+
+## Step 8 — hygiene
+
+**`e2e/playwright.proof.config.ts` is a deliverable, not litter — it is never swept.** The sweep deletes `test-results/`, `playwright-report/`, `/tmp/pw-prove-mutation`, and any *legacy throwaway* `.pw-prove.proof.config.*` an older run left behind — and it runs **after** the publish, since the clips live in `test-results/`.
+
+**Staging:** because this run did not create the file, it is **not staged** and gets **no line** in the `Generated` block. The staged set is exactly spec + POM + scrubbed `e2e/<feature>.api.har` (+ a shared helper if written). The single exception is the `webServer: undefined` migration — if I made that edit, the file *is* staged with this run and appears as `e2e/playwright.proof.config.ts (modified — webServer: undefined migration)`.
+
+Also not swept and not staged: `.pw-prove/<feature>.api.har`, the bound working copy, which stays under the `.git/info/exclude`'d `.pw-prove/` directory because it carries this run's live credential.

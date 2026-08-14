@@ -1,0 +1,39 @@
+The working directory has no repo in it (`/tmp/skill-up-1512253078` contains only `.claude`), so there's no diff, PR, or `.pw-prove/handoff.json` to read and no app to probe. What follows is the Step 2 derivation and Step 4 scenario list from the change description you gave — not from a read diff. The pipeline can't proceed past this to Steps 3/5–8 without the repo.
+
+## Step 2 — AC table
+
+| AC | Source | Touched surface | Changed files | Proven by |
+|---|---|---|---|---|
+| Saving the custom-scripts editor sends the built upsert payload on the wire — the component reaches `buildUpsert()` and its output is what leaves the browser | diff-inferred (component call site) | custom-scripts editor route | `composables/customScripts.ts`, calling component | E2E scenario 1 |
+| Emptying every locale for a key removes that key from the editor's rendered state after save | diff-inferred (key-removal is user-observable in the list) | custom-scripts editor route | `composables/customScripts.ts`, calling component | E2E scenario 2 |
+| Leading/trailing whitespace is trimmed from every value | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+| Locales whose value is empty are dropped from the payload | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+| A top-level key whose locales are all empty is removed entirely | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+
+**The folding call.** Your three PR bullets are three names for one thing: `buildUpsert()`'s input→output matrix. It's a pure function, and the diff ships 23 assertions over exactly those three behaviors in `tests/unit/customScripts.test.ts`. Re-running that matrix through an authenticated page load buys no new guarantee and costs one page load per case — so all three fold into scenario 1, which proves the part the unit test structurally cannot see: that the component actually calls the new function and that its return value is what hits the network.
+
+What did *not* fold: the request the browser sends (scenario 1) and the DOM consequence of key removal (scenario 2). Neither is visible to a unit test on a pure function.
+
+## Step 4 — scenarios
+
+### Scenario 1: saved payload is the built upsert
+- **Given:** the custom-scripts editor is open with a key that has one padded value (`"  alert(1)  "`), one whitespace-only locale, and one populated locale
+- **When:** the user saves
+- **Then:** the intercepted upsert request body contains the trimmed value, carries no entry for the whitespace-only locale, and the editor shows its saved state
+
+### Scenario 2: emptying every locale removes the key
+- **Given:** the editor is open with a key that has values in two locales
+- **When:** the user clears both values and saves
+- **Then:** the upsert request body contains no entry for that key, and the key no longer appears in the editor's key list
+
+One happy path, one edge case; every AC not marked `already covered` has a scenario.
+
+## Assumptions this plan would carry
+
+- **Structure:** POM always — `<testDir>/pages/CustomScriptsPage.ts`.
+- **Network:** hermetic. Reads replay from a recorded `api.har`; the upsert mutation gets a hand-written `route.fulfill`, and its request body is what both scenarios assert on.
+- **Locale floor: not triggered.** The diff's "locales" are custom-script data keys, not i18n message files (`locales/**`, `messages.*.json`). No non-default-locale scenario is required. If the repo turns out to store these under a path the floor matches, scenario 2 gains a non-default-locale run.
+- **Unverified against the repo:** that the calling component is a form with a save action, that the editor renders a key list scenario 2 can assert removal against, and the editor's route. Each needs a Step 3 probe to confirm; if the component turns out to save on blur rather than on an explicit action, scenario 2's *When* changes but its *Then* does not.
+- **Handoff:** no line — no repo, so no `.pw-prove/handoff.json` was looked for.
+
+To take this further, point me at the checkout (or the PR number in a repo I can reach) and I'll run Step 3 bring-up and generate against the live DOM.

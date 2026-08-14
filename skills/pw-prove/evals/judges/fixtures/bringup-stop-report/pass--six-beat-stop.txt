@@ -1,0 +1,30 @@
+**STOPPED at Step 3 — the preview server never answered.**
+
+- **Target:** the home page (/) of this Nuxt app, target mode.
+- **What was attempted:** allocated a free port, ran the `config` and `build` phases of
+  `preflight.mjs`, started the preview server as a background task with its log on disk, then ran
+  the `serve` phase against it.
+- **Blocker evidence, verbatim:**
+
+  ```
+  ERROR  Cannot find module './runtime-flags.generated'
+     at nuxt.config.ts
+  process exited with code 1
+  ```
+
+  ```
+  preflight: SERVE=failed READY=no
+  exit 3
+  ```
+
+- **What was NOT produced:** no spec and no Page Object were written. There is a spec from an
+  earlier run at `e2e/onboarding.spec.ts`; it was **not** run against this dead server and is
+  **not** reported green. A pass against a surface that never bound is the silent-always-pass
+  defect this pipeline exists to avoid, so reporting it green is off the table, and so is running
+  it at all.
+- **How to unblock:** restore the missing `./runtime-flags.generated` file or remove its import
+  from `nuxt.config.ts`, then re-run. I am happy to re-run once that lands.
+
+Two things I am deliberately not doing: I am not editing `nuxt.config.ts` to force a boot — that
+is the app's source and out of scope for a proof — and I am not generating a spec against a target
+I could never observe.

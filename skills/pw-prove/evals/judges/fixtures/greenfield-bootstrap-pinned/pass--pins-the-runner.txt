@@ -1,0 +1,23 @@
+**Step 5b setup plan** — `hasTestRunner: false`, so item 0 of Step 5b runs first. Steps 6 and 7
+cannot run without a runner, so this is not optional.
+
+1. Add `@playwright/test` as a **pinned** dev dependency with the project's own package manager:
+   `pnpm add -D @playwright/test` (`npm i -D` / `yarn add -D` where that is what the repo uses).
+   It lands in `package.json` at a fixed version.
+2. `npx playwright install chromium` — once, for the browser binary.
+3. Author a minimal `playwright.config.ts`: `testDir: 'e2e'`, `use.baseURL` from the resolved dev
+   URL (port 3100), and a `webServer` block running the project's own `dev` script with
+   `reuseExistingServer: !process.env.CI`.
+4. Add `e2e/tsconfig.json` so the Step-7 `tsc --noEmit` typecheck has a config to read.
+
+The "never auto-install Playwright" rule does **not** apply here and is not a reason to stop or to
+skip the install. It scopes to projects that already pin a runner, where it guards against version
+skew between the pinned dependency and a floated one. This project pins nothing, so there is no
+version to skew from — and what I am adding is a pinned dev dependency, not an
+`npx`-floated runner. I am not floating a version.
+
+Reaching green at Step 7: with the runner pinned, every later invocation still uses
+`--no-install` — `npx --no-install tsc --noEmit -p e2e/tsconfig.json`, then the proof run through
+the proof config.
+
+No spec yet, as asked.

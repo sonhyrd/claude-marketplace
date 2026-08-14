@@ -24,6 +24,7 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 - 57 entries, 365 assertions recovered. **The recovered material is immutable** — every assertion below, including those of the five entries whose case files #63 deleted, is kept verbatim. The mining is the recovery; deleting a case does not un-recover it. Only the Status column moves, and it is a pointer: `REGISTRY.md` owns pass rate, uplift and status, and wins any disagreement.
 - Status as of #63 (batch 1 triage), over the 57 mined entries: **3 active** (`case-15`, `case-50`, `case-60`), **8 quarantined** (`case-1`, `case-2`, `case-3`, `case-28`, `case-30`, `case-43`, `case-44`, `case-48` — on disk, out of the active list, each with a recorded pass rate in `REGISTRY.md`), **5 retired** (case files deleted: `case-26`, `case-27`, `case-39`, `case-40`, `case-49`), and **41 dormant**. 3 + 8 + 5 + 41 = 57.
 - A dormant entry is `judge.type: agent_judge` with no `criteria:` key, which `skill-up validate` rejects outright. A dormant case is a hard config error, not a vacuous pass.
+- Status as of #64 (batch 2 triage), over the same 57 mined entries: **5 active** (batch 1's three plus `case-11`, `case-16`), **17 quarantined** (batch 1's eight plus `case-4`, `case-5`, `case-7`, `case-8`, `case-12`, `case-17`, `case-20`, `case-22`, `case-23`, `case-24`, `case-29` — every one on disk, out of the active list, each with a recorded pass rate in `REGISTRY.md`), **12 retired** (batch 1's five plus `case-9`, `case-13`, `case-19`, `case-21`, `case-25`, `case-31`, `case-32`), and **23 dormant**. 5 + 17 + 12 + 23 = 57.
 - These counts cover entries mined from `evals.json` only. `eval.yaml`'s active list also carries `gate-skill-loaded`, `b01-confirmation-gate` and `b05-handoff-stale`, which have no legacy entry here; `b32-dwell-inline` is quarantined and `b49-untrusted-page-content` was deleted for zero uplift.
 
 | Case | Judge | Status | Assertions | Recovered title |
@@ -35,27 +36,27 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-5.yaml`](cases/case-5.yaml) | `agent_judge` | dormant | 5 | PR-mode proof link: a skip must show the failing probe (no silent drop) |
 | [`case-7.yaml`](cases/case-7.yaml) | `agent_judge` | dormant | 4 | Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate |
 | [`case-8.yaml`](cases/case-8.yaml) | `agent_judge` | dormant | 5 | Step 8 lands the proof: the report is structurally invalid without the tail lines |
-| [`case-9.yaml`](cases/case-9.yaml) | `agent_judge` | dormant | 4 | Hermetic audit: undeclared live call fails the run; a declared carve-out passes |
+| `case-9.yaml` (deleted) | `agent_judge` | **retired #64** | 4 | Hermetic audit: undeclared live call fails the run; a declared carve-out passes |
 | [`case-11.yaml`](cases/case-11.yaml) | `agent_judge` | dormant | 8 | Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep |
 | [`case-12.yaml`](cases/case-12.yaml) | `agent_judge` | dormant | 8 | Legible stop report: bring-up failure names verbatim evidence and produces nothing |
-| [`case-13.yaml`](cases/case-13.yaml) | `agent_judge` | dormant | 6 | Server-set login cookie: obtain it via API-login, do not hand-author the cookie value |
+| `case-13.yaml` (deleted) | `agent_judge` | **retired #64** | 6 | Server-set login cookie: obtain it via API-login, do not hand-author the cookie value |
 | [`case-15.yaml`](cases/case-15.yaml) | `script` | **active #63** | 6 | Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden |
 | [`case-16.yaml`](cases/case-16.yaml) | `agent_judge` | dormant | 4 | POM inventory + extend-existing-POM on route match (duplicate needs stated justification) |
 | [`case-17.yaml`](cases/case-17.yaml) | `agent_judge` | dormant | 3 | PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header |
-| [`case-19.yaml`](cases/case-19.yaml) | `agent_judge` | dormant | 3 | Token diet in the fix loop: no inter-tool narration, spec written once — audit trail unaffected |
+| `case-19.yaml` (deleted) | `agent_judge` | **retired #64** | 3 | Token diet in the fix loop: no inter-tool narration, spec written once — audit trail unaffected |
 | [`case-20.yaml`](cases/case-20.yaml) | `agent_judge` | dormant | 3 | A heavy context earns a fresh-session recommendation, never an auto-background |
-| [`case-21.yaml`](cases/case-21.yaml) | `agent_judge` | dormant | 16 | Clip fidelity: the full bundle (size, held payoff, framing) on a project that declares no viewport |
+| `case-21.yaml` (deleted) | `agent_judge` | **retired #64** | 16 | Clip fidelity: the full bundle (size, held payoff, framing) on a project that declares no viewport |
 | [`case-22.yaml`](cases/case-22.yaml) | `agent_judge` | dormant | 9 | Clip fidelity guard: respect a deliberate project viewport |
 | [`case-23.yaml`](cases/case-23.yaml) | `agent_judge` | dormant | 7 | Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport |
 | [`case-24.yaml`](cases/case-24.yaml) | `agent_judge` | dormant | 7 | Proof config is reused, not rewritten, when the repo already has one |
-| [`case-25.yaml`](cases/case-25.yaml) | `agent_judge` | dormant | 9 | Step 8 delivers ONE chaptered Clips recording, not N bare clip links |
+| `case-25.yaml` (deleted) | `agent_judge` | **retired #64** | 9 | Step 8 delivers ONE chaptered Clips recording, not N bare clip links |
 | `case-26.yaml` (deleted) | `agent_judge` | **retired #63** | 5 | Every scenario times out on its first navigation — a saturated dev server, not a broken spec |
 | `case-27.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | The mutation check must not overwrite the proof clips |
 | [`case-28.yaml`](cases/case-28.yaml) | `script` | **quarantined #63** | 6 | Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser |
 | [`case-29.yaml`](cases/case-29.yaml) | `agent_judge` | dormant | 6 | An AC already proven by the diff's own unit tests is folded, not silently dropped |
 | [`case-30.yaml`](cases/case-30.yaml) | `script` | **quarantined #63** | 7 | Publish URL is read from the PWPROVE_URL marker, not stdout line 1 |
-| [`case-31.yaml`](cases/case-31.yaml) | `agent_judge` | dormant | 5 | The runner's origin is proven reachable before the proof run, not inferred from a healthy localhost |
-| [`case-32.yaml`](cases/case-32.yaml) | `agent_judge` | dormant | 5 | A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec |
+| `case-31.yaml` (deleted) | `agent_judge` | **retired #64** | 5 | The runner's origin is proven reachable before the proof run, not inferred from a healthy localhost |
+| `case-32.yaml` (deleted) | `agent_judge` | **retired #64** | 5 | A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec |
 | [`case-33.yaml`](cases/case-33.yaml) | `agent_judge` | dormant | 5 | A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks |
 | [`case-34.yaml`](cases/case-34.yaml) | `agent_judge` | dormant | 10 | The filming law: a legible clip is bought with time only, never with a different input path |
 | [`case-35.yaml`](cases/case-35.yaml) | `agent_judge` | dormant | 6 | Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader |

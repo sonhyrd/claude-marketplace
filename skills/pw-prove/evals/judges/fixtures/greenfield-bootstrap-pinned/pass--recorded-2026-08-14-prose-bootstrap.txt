@@ -1,0 +1,46 @@
+No project files exist under `/tmp/skill-up-1695524305` (only `.claude`), so this is the plan, not a run. Here's how I'd take a greenfield Nuxt-on-3100 repo to a green Step 7.
+
+## Where the run sits
+
+`/` is a route, so this is **target mode**: Step 2 (diff→AC) is skipped, Step 4 is a plan-then-continue (no PR gate), and Step 8's PR tail — commit/push/PR comment/Clips publish — does not apply. The deliverable is the spec + POM + HAR + config, plus the completion report.
+
+Step 1 profile as given: `hasTestRunner: false`, `configPath: none`, `hasPOM: false`, `pomInventory: []`, `existingSpecs: []`, `hasConventionsDoc: false` (assumed — I'd verify). `baseURL` isn't in a config, so it comes from `PLAYWRIGHT_BASE_URL`, defaulting to the port the preview server actually announces.
+
+## Step 5b — bootstrap, pulled forward
+
+One deviation I'd make deliberately and state in Assumptions: **5b.0 runs before Step 3's probe, not after Step 5.** `probe.mjs` drives the project's *pinned* Playwright, and greenfield has none — so run in sequence the recon channel would be exit-2 browserless and the whole locator plan would fall back to source reading. Installing the pinned dev-dep first is what makes real recon possible. The rest of 5b (conventions doc, seed designation) stays in place after the spec exists, since it must reference a real seed spec.
+
+**5b.0 — runner bootstrap** (idempotent; skip anything already present):
+- `@playwright/test` added with the repo's own package manager so it lands **pinned** in `package.json` — that is not the npx-float the skill forbids.
+- `npx playwright install chromium`.
+- `playwright.config.ts` at root: `testDir: 'e2e'`, `use.baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3100'`, `forbidOnly: !!process.env.CI`, `retries: process.env.CI ? 2 : 0`, `workers` left undefined off CI (the proof run is concurrent by default — I override nothing).
+- `webServer` running the project's `dev` on 3100 with `reuseExistingServer: !process.env.CI`. **This entry is for humans and CI, never for my proof run** — see the next section.
+- `e2e/tsconfig.json` so Step 7's `tsc --noEmit -p e2e/tsconfig.json` has something to point at.
+- Directory shape: `e2e/pages/HomePage.ts` (POM always, even though there are no siblings to match), `e2e/onboarding.spec.ts`, `e2e/onboarding.api.har`.
+
+**5b.1–4** after the spec: generate the E2E section into root `AGENTS.md` from `conventions-template.md`, filled from what Step 3 actually observed on this app (whether the onboarding inputs carry real labels or only placeholders, the API/proxy shape behind the form submit, the auth situation on `/`, HAR scope) — not from generic advice; designate `e2e/onboarding.spec.ts` as the seed by path; propose the `recommended-lint.md` preset as an opt-in diff since no E2E lint config exists.
+
+## The `dev`-script trap
+
+The package only has `dev`, but **the proof target is the built app** — there is no development-server path. So:
+
+- Bring-up is `preflight.mjs config build` with `BUILD_COMMAND` = the Nuxt build (`nuxt build`, added as a `build` script if the repo genuinely lacks one), `APP_ROOT` = the app root, `BUILD_OUTPUT=.output`. The phase **refuses without a `BUILD_COMMAND`** rather than silently serving whatever is listening, which is exactly the failure mode a `dev`-only package invites.
+- The server is `nuxt preview` against `.output`, started as a harness background task on a **freshly allocated free port** — 3100 is a preference, not a reservation, and the port that counts is the one the server announces in its log. `preflight.mjs serve` with `SERVER_LOG` reads that announcement; the summary's `BASE_URL=` line is the origin I carry everywhere afterward.
+- The scaffolded config's `webServer` (running `dev`) is precisely what would defeat this. `playwright.proof.config.ts` sets **`webServer: undefined`**, so the proof run cannot boot a dev server behind my back when the config's URL doesn't answer. Before Step 6 I curl the literal `use.baseURL`/`webServer.url` string the runner will dial and, if the announced port differs, set `PLAYWRIGHT_BASE_URL` to the reachable form and carry it on **every** invocation — tsc-adjacent runs, proof run, heal runs. Each is a fresh environment.
+
+## Path to a green Step 7
+
+1. `npx --no-install tsc --noEmit -p e2e/tsconfig.json` → 0 errors.
+2. `.pw-prove/` into `.git/info/exclude`, then `har-scrub.mjs bind e2e/onboarding.api.har --out .pw-prove/onboarding.api.har --origin "$BASE_URL"`, export `PW_PROVE_HAR`. Replay matches on exact URL equality, so skipping the bind makes *every* read abort and reads as a broken app — that's the first thing I'd check if the run comes back all-aborted.
+3. `playwright.proof.config.ts` written once next to `playwright.config.ts` (spread base, `webServer: undefined`, `video: {mode:'on', size}`, `trace:'on'`), staged as a deliverable.
+4. `rm -rf test-results`, then the proof run with `PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900`. **Effective viewport verdict: `pinned: 1600x900`** — I author the config myself and it carries no `viewport:` key, so the pin goes in the committed spec as `test.use({ viewport: { width: 1600, height: 900 } })`, and Step 6's `clip-fidelity.mjs spec … --verdict "pinned:1600x900"` must exit 0 before this run happens.
+5. Failure loop ≤3 attempts, healing by intent off a fresh probe snapshot, `-g` the failing test only, full spec once at the end. I record each attempt's failure signature (error class + failing locator) and **stop at the first repeat** rather than paying for a third identical timeout; loop exhausted → `playwright-debugger` on `playwright-report/`, then the target-mode stop report — never a fabricated pass.
+6. `clip-fidelity.mjs frames test-results/*/video.webm`, and I open each frame and describe it. Illegible → diagnose (payoff not held / off-frame / never settled), fix the **committed spec**, re-run the Step-6 audit, re-film exactly once.
+7. `hermetic.mjs test-results --spec e2e/onboarding.spec.ts` — always with `--spec`, since an in-spec `route.fetch()` leaves the machine but looks mocked in a trace. Any undeclared live call fails the run even though green.
+
+## Two things I'd flag rather than decide silently
+
+- **Mutation check.** It's PR-mode-required and there's no diff here. Against a built target each cycle costs a forced rebuild plus a proven server restart (~10 min for mutate/revert). I'd default to skipping it in target mode and say so on the report's `Mutation:` line — tell me if you want it and I'll mutate the onboarding form's validation to confirm the spec actually guards.
+- **Auth.** `/` is presumably public, so the token ladder likely never runs. If the onboarding form turns out to sit behind a session, the ladder applies and I'd read the *guard* on whatever mechanism I find — a `?token=` bootstrap behind `import.meta.dev` is compiled out of the preview build, so that rung is absent, not broken, and I'd descend rather than chase a timeout.
+
+Say the word and I'll run it against a real repo; I won't write the spec until then.

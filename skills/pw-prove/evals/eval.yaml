@@ -63,6 +63,20 @@ cases:
         # on a `void` uplift, and both measure +1 against a baseline the sweep certifies.
         - evals/cases/case-28.yaml
         - evals/cases/case-48.yaml
+        # --- admitted by batch 2 (#64) ---
+        # Thirteen cases were measured; these two are what survived. Both are 3/3 at n=3 with a
+        # non-zero uplift, and both close a coverage gap batch 1 recorded as unreached.
+        #
+        # The other eleven are quarantined and stay OUT of this list. Six of them are 3/3 and would
+        # look admissible from the pass rate alone — their uplift baselines read the skill body off
+        # the host (#75), so there is no difference to read. evals/REGISTRY.md says which reason
+        # applies to which; do not re-add one on the strength of its pass rate.
+        #
+        # Those six were measured on the PRE-#75 runner: this branch was cut before the seal landed,
+        # so their baselines are void by construction rather than by bad luck. They are re-measurable
+        # on the sealed runner, and #78 owns that.
+        - evals/cases/case-11.yaml
+        - evals/cases/case-16.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those

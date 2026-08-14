@@ -190,9 +190,15 @@ was mined and retired in #61. The surface is seven things:
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
+<<<<<<< HEAD
 | `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 56 on disk, 8 active — the rest are quarantined or inventory, not coverage |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against |
+=======
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 49 on disk, 8 active — the rest are quarantined or inventory, not coverage |
+| `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.txt` |
+| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against — **but see #76: `context.files` currently stages each fixture's PATH as its CONTENT, so every wet case reads a one-line file and answers a different question. Do not read a wet case's verdict until that lands.** |
+>>>>>>> sonhyrd/ticket-64-batch2-triage
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
 | `skills/pw-prove/evals/REGISTRY.md` | **The registry.** One row per triaged case: pass rate, uplift, the SKILL.md section it guards, and status (active / quarantined / retired). It is also the case → section map that makes a blast-radius re-characterization a lookup |
 | `skills/pw-prove/.skill-up.yaml` | User config for the run (e.g. the agent-under-test's effort level) |

@@ -52,12 +52,17 @@ it is noise.
 
 ## The classification
 
-56 case files: **4 trigger, 52 behavior.** 6 are active in `eval.yaml`; the rest are inventory, not
+49 case files: **4 trigger, 45 behavior.** 8 are active in `eval.yaml`; the rest are inventory, not
 coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
 
 > Counts updated by #63, which deleted six cases in triage — `case-26`, `case-27`, `case-39`,
 > `case-40` and `case-49` automatically, and `b49-untrusted-page-content` on a measured zero uplift.
-> Before it: 62 files, 4 trigger / 58 behavior, 13 active. `REGISTRY.md` carries the reason per case.
+> Before it: 62 files, 4 trigger / 58 behavior, 13 active.
+>
+> Updated again by #64, which deleted seven more on static triage — `case-9`, `case-13`, `case-19`,
+> `case-21`, `case-25`, `case-31` and `case-32`, each an ADR contradiction or an overlap with a case
+> already in the registry — and admitted `case-11` and `case-16`. Before it: 56 files, 4 trigger /
+> 52 behavior, 6 active. `REGISTRY.md` carries the reason per case.
 
 **Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3` (quarantined).
 
