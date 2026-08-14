@@ -169,6 +169,53 @@ census_roots() {
   printf '%s\n' "${TMPDIR:-/tmp}"
 }
 
+# --- the census, second half: installed plugins BY ID ----------------------------------------------
+# The fifth route (#83) uses no path at all. A baseline arm invoked the marketplace plugin through
+# the host's own skill mechanism, as `e2e:pw-prove` — the plugin's ID, not a file. Every defence
+# above is keyed on a path, so none of them can see it, and the census that feeds them was likewise
+# an inventory of bodies-by-path. This is the same inventory taken in the unit the route actually
+# uses.
+#
+# The id is the plugin's own name, the half of `<plugin>@<marketplace>` before the `@`: an install
+# recorded as `e2e@sss-marketplace` serves its skills as `e2e:<skill>`.
+installed_plugin_ids() {
+  local reg="$HOME/.claude/plugins/installed_plugins.json"
+  [ -f "$reg" ] || return 0
+  node -e '
+    const fs = require("fs");
+    let j;
+    try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
+    const ids = new Set();
+    for (const key of Object.keys(j?.plugins ?? {})) {
+      const id = String(key).split("@")[0];
+      // A rule is a JSON string in a settings file; anything exotic is skipped rather than emitted
+      // as a rule that silently does not parse. Same reasoning as the unquotable-path skip above.
+      if (/^[A-Za-z0-9_-]+$/.test(id)) ids.add(id);
+    }
+    for (const id of [...ids].sort()) console.log(id);
+  ' "$reg" 2>/dev/null
+  return 0
+}
+
+# usage: skill_deny_rules <plugin-id>...
+# One rule per installed plugin, denying its ENTIRE skill namespace. Two things make this the right
+# shape, and both were measured against the host runtime rather than read off the docs (#83):
+#
+#   * A `Skill(<id>:*)` deny rule IS enforced, and it holds under `--permission-mode
+#     bypassPermissions` — a Skill call it covers comes back `Skill execution blocked by permission
+#     rules`. Deny rules can cover the Skill tool. The open question this ticket carried is settled
+#     yes, so the residual does not have to be written down as one.
+#   * It costs the measurement nothing. The version under test is installed UNNAMESPACED, as
+#     `pw-prove`, and `Skill(e2e:pw-prove)` does not touch it — the bare id still launches. So the
+#     namespace can be denied whole rather than skill by skill, which is the stronger rule: no plugin
+#     skill has any business reaching an isolated run, and denying only `<id>:pw-prove` would leave
+#     the next bundle that vendors this body one rename away.
+skill_deny_rules() {
+  local id
+  for id in "$@"; do printf 'Skill(%s:*)\n' "$id"; done | sort -u
+  return 0
+}
+
 # usage: deny_rules <repo-root> <copy>...
 # One Claude Code permission rule per line. `Read(//abs/path)` — the doubled slash is the absolute
 # form — is enforced under `--permission-mode=bypassPermissions`; a `Bash(...)` rule is not a
@@ -397,7 +444,7 @@ requested_parallelism() {
 # refuses when the census itself cannot be believed.
 run_census() {
   local r c
-  ROOTS=(); COPIES=(); RULES=()
+  ROOTS=(); COPIES=(); RULES=(); PLUGIN_IDS=()
   while IFS= read -r r; do [ -n "$r" ] && ROOTS+=("$r"); done < <(census_roots | sort -u)
   while IFS= read -r c; do [ -n "$c" ] && COPIES+=("$c"); done < <(skill_copies "$WORKSPACE" ${ROOTS[@]+"${ROOTS[@]}"})
   # A census that finds nothing is not a clean machine — this repository's own copy is right there,
@@ -411,6 +458,10 @@ run_census() {
     return 1
   fi
   while IFS= read -r r; do [ -n "$r" ] && RULES+=("$r"); done < <(deny_rules "$REPO_ROOT" ${COPIES[@]+"${COPIES[@]}"})
+  # The id half of the census. Unlike the path half this one does NOT refuse when it finds nothing:
+  # a host with no plugins installed is an ordinary state, not a broken instrument.
+  while IFS= read -r r; do [ -n "$r" ] && PLUGIN_IDS+=("$r"); done < <(installed_plugin_ids)
+  while IFS= read -r r; do [ -n "$r" ] && RULES+=("$r"); done < <(skill_deny_rules ${PLUGIN_IDS[@]+"${PLUGIN_IDS[@]}"})
   assert_workspace_outside "$WORKSPACE" ${COPIES[@]+"${COPIES[@]}"} || return 1
   return 0
 }
@@ -420,11 +471,15 @@ if [ "$MODE" = "census" ]; then
   echo "-- copies of the pw-prove body reachable on this host --"
   for c in ${COPIES[@]+"${COPIES[@]}"}; do echo "  $c"; done
   echo ""
+  echo "-- installed plugins, by the id the Skill tool uses (#83) --"
+  for c in ${PLUGIN_IDS[@]+"${PLUGIN_IDS[@]}"}; do echo "  $c:*"; done
+  [ "${#PLUGIN_IDS[@]}" -eq 0 ] && echo "  (none installed)"
+  echo ""
   echo "-- the deny rules a run would carry --"
   for r in ${RULES[@]+"${RULES[@]}"}; do echo "  $r"; done
   echo ""
-  echo "  ${#COPIES[@]} copy(ies), ${#RULES[@]} deny rule(s). Deny closes Read/Grep/Glob and not Bash;"
-  echo "  the arm-aware sweep is what covers the rest."
+  echo "  ${#COPIES[@]} copy(ies), ${#PLUGIN_IDS[@]} plugin id(s), ${#RULES[@]} deny rule(s)."
+  echo "  Deny closes Read/Grep/Glob and the Skill tool, and NOT Bash; the arm-aware sweep covers the rest."
   exit 0
 fi
 
@@ -637,6 +692,60 @@ $fh/checkout-b/skills/pw-prove/SKILL.md" ]; then
   fi
 
   echo ""
+  echo "-- the census also inventories installed plugins BY ID, and denies the Skill route (#83) --"
+  # The fifth route uses an id, not a path, so it gets a fixture in that unit. `Skill(<id>:*)` was
+  # measured against the host runtime: it blocks under bypassPermissions, and it leaves the
+  # unnamespaced `pw-prove` skill-up installs for the run alone.
+  ph="$T/plugin-home"
+  mkdir -p "$ph/.claude/plugins"
+  cat > "$ph/.claude/plugins/installed_plugins.json" <<'JSON'
+{"version":2,"plugins":{
+  "e2e@sss-marketplace":[{"scope":"user","installPath":"/nowhere/e2e/1.2.1","version":"1.2.1"}],
+  "matt@sss-marketplace":[{"scope":"user","installPath":"/nowhere/matt/1.0.0","version":"1.0.0"}],
+  "bad id@m":[{"scope":"user","installPath":"/nowhere/bad","version":"1.0.0"}]
+}}
+JSON
+  ids="$(HOME="$ph" installed_plugin_ids)"
+  if [ "$ids" = "e2e
+matt" ]; then
+    echo "  [PASS] every installed plugin is inventoried by the id the Skill tool uses"
+  else
+    echo "  [FAIL] installed_plugin_ids returned:"; printf '%s\n' "$ids" | sed 's/^/         /'; fail=1
+  fi
+  if printf '%s\n' "$ids" | grep -q 'bad'; then
+    echo "  [FAIL] an id that cannot be written as a rule was emitted anyway"; fail=1
+  else
+    echo "  [PASS] an id that is not rule-safe is skipped rather than emitted as a rule that will not parse"
+  fi
+  # A host with no plugins is an ordinary state. Unlike the path census, this half must not refuse.
+  mkdir -p "$T/bare-home/.claude"
+  if [ -z "$(HOME="$T/bare-home" installed_plugin_ids)" ]; then
+    echo "  [PASS] a host with no plugins installed yields no ids and no refusal"
+  else
+    echo "  [FAIL] a host with no plugins did not yield an empty inventory"; fail=1
+  fi
+  srules="$(skill_deny_rules e2e matt)"
+  if [ "$srules" = "Skill(e2e:*)
+Skill(matt:*)" ]; then
+    echo "  [PASS] one Skill deny rule per installed plugin, over its whole namespace"
+  else
+    echo "  [FAIL] skill_deny_rules returned:"; printf '%s\n' "$srules" | sed 's/^/         /'; fail=1
+  fi
+  # The rule that must NOT be written. The version under test is installed unnamespaced, so a rule
+  # naming the bare skill would deny every with_skill arm the thing the run exists to measure.
+  if printf '%s\n' "$srules" | grep -qE '^Skill\(pw-prove'; then
+    echo "  [FAIL] a rule denies the unnamespaced skill under test"; fail=1
+  else
+    echo "  [PASS] no rule touches the unnamespaced 'pw-prove' the run installs"
+  fi
+  printf '%s\n' "$srules" | write_deny_settings "$T/skill-settings.json"
+  if node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).permissions.deny; if(!r.includes("Skill(e2e:*)"))process.exit(1)' "$T/skill-settings.json"; then
+    echo "  [PASS] the Skill rules survive into a settings.json that parses"
+  else
+    echo "  [FAIL] the Skill rules did not reach a usable settings.json"; fail=1
+  fi
+
+  echo ""
   echo "-- a workspace inside a checkout of the body is refused, not silently denied --"
   if assert_workspace_outside "$fh/checkout-b/skills/pw-prove/pw-prove-workspace" "$fh/checkout-b/skills/pw-prove/SKILL.md" 2>/dev/null; then
     echo "  [FAIL] a workspace inside a checkout was accepted"; fail=1
@@ -723,7 +832,8 @@ ISO_PATH="$(scrub_path "$PATH")"
 dropped=$(( $(printf '%s' "$PATH" | tr ':' '\n' | wc -l) - $(printf '%s' "$ISO_PATH" | tr ':' '\n' | wc -l) ))
 echo "-- isolated home: $ISO (no plugins, no user skills, no host settings) --"
 echo "-- PATH: $dropped marketplace plugin entr(ies) dropped --"
-echo "-- host copies of the body: ${#COPIES[@]} found, ${#RULES[@]} deny rule(s) written (Read-route only; Bash is covered by the sweep) --"
+echo "-- host copies of the body: ${#COPIES[@]} found; installed plugin ids: ${#PLUGIN_IDS[@]} --"
+echo "-- ${#RULES[@]} deny rule(s) written, covering Read/Grep/Glob and the Skill tool; Bash is covered by the sweep --"
 echo "-- workspace: $WORKSPACE (outside every checkout) --"
 echo "-- suite: $EVAL_YAML --"
 

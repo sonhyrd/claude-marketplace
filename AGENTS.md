@@ -233,7 +233,7 @@ Run it by hand, and **always through the isolated runner — never `skill-up run
 bash scripts/run-evals-isolated.sh                       # the active cases
 bash scripts/run-evals-isolated.sh --include-case-name 'b01-*'
 bash scripts/run-evals-isolated.sh --baseline             # uplift: both arms, baseline judged
-bash scripts/run-evals-isolated.sh --census              # the host copies a run must not reach
+bash scripts/run-evals-isolated.sh --census              # the host copies and plugin ids a run must not reach
 bash scripts/run-evals-isolated.sh --sweep-only <workspace>  # re-judge an existing run
 bash scripts/run-evals-isolated.sh --self-test           # no API calls, no spend
 ```
@@ -246,7 +246,7 @@ the next one; isolation is a property of the runtime, not of what the cache happ
 Isolate by `HOME`, not `CLAUDE_CONFIG_DIR`: the latter moves the session transcript out from under
 skill-up, which then has none to hand a script judge.
 
-`$HOME` and `PATH` are two of three routes. The third is the **filesystem** (#75): every checkout,
+`$HOME` and `PATH` are two of four routes. The third is the **filesystem** (#75): every checkout,
 worktree, clone and plugin cache of this repo is a copy of the body a case can `find` and `cat`, and
 `environment.type: none` has no sandbox. So before the run the runner censuses those copies
 (`--census` prints the list) and writes one Claude Code deny rule per copy into the isolated home —
@@ -255,6 +255,17 @@ the census cannot even find this repo's own copy, and when the workspace sits in
 workspace therefore defaults **outside** the repo now; `PWPROVE_EVAL_WORKSPACE` overrides it, and
 `PWPROVE_EVAL_YAML` points the run at a staged suite when you need to characterize a quarantined case
 without editing the active list.
+
+The fourth is the **Skill tool** (#83), and it uses no path at all: a marketplace install of this
+bundle can be invoked by its namespaced id, `e2e:pw-prove`, which the path census cannot see and the
+Read/Grep/Glob rules cannot cover. So the census has a second half — every installed plugin **by
+id**, read from `installed_plugins.json` — and the run carries one `Skill(<id>:*)` rule per install.
+That rule form was **measured** against the host runtime, not read off the docs: it blocks under
+`bypassPermissions`, and it leaves the unnamespaced `pw-prove` skill-up installs untouched, so the
+defence costs the with_skill arm nothing. It is defence in depth rather than the first line — a
+plugin needs both its cache **and** an `enabledPlugins` entry in `settings.json`, and the isolated
+home carries neither, which is why the route was refused in the run that found it. `docs/adr/0018`
+carries the probe table.
 
 Afterwards the runner sweeps every retained transcript through
 `skills/pw-prove/evals/judges/skill-loaded.mjs` and prints one verdict per case **arm** — LOADED (and
@@ -267,6 +278,13 @@ under test must be absent, and a fingerprint line in it reads BASELINE DIRTY and
 That is what closes the Bash route the deny rules cannot, and it is why an uplift figure taken
 through this runner can be believed — three of ten baseline arms in the 2026-08-14 run had read the
 skill off another checkout, and nothing said so at the time.
+
+A baseline arm *served* a plugin-namespaced skill reads BASELINE DIRTY on the **invocation**, not on
+a fingerprint, and the verdict names the route and says no path was traversed. Two reasons: that
+route delivers the plugin's *published* body, which can be a version behind the working tree the
+marks come from, and it is invisible in the transcript's file reads. A **refused** invocation —
+`Unknown skill`, or blocked by the deny rule — is a printed note and not a verdict; an attempt is
+not contact, the same distinction #71 drew for tool arguments.
 
 Note skill-up's config discovery is `$PWD`-only, so `.skill-up.yaml` is ignored without complaint
 unless you are in `skills/pw-prove/` or pass it as `--config`. The runner handles this for you.
