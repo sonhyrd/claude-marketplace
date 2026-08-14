@@ -70,6 +70,7 @@ docs orphan check, language,
 │   │   ├── evals/          # NOT shipped — skill-up suite: eval.yaml + cases/*.yaml
 │   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
 │   │   ├── evals/files/    # NOT shipped — repo fixtures the wet cases run pw-prove against
+│   │   ├── evals/prompt-shapes.md # NOT shipped — the trigger/behavior rule and the classification
 │   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
@@ -158,6 +159,10 @@ Two suites are deliberately **outside** that list, and must stay outside it:
 bash scripts/ci/test-eval-judges.sh  # eval judge scripts: fixture in, exit code + printed verdict out
 bash scripts/ci/test-case-shapes.sh  # every case classified trigger|behavior, and its prompt matches
 ```
+
+`test-case-shapes.sh` is the one script here that needs **python3 with PyYAML** — it reads case files
+as YAML rather than grepping them, so a case that moved a key still reads correctly. It refuses with
+a named reason when either is missing rather than skipping; an instrument that skips proves nothing.
 
 A judge fixture is a `.txt` (fed as `$EVAL_FINAL_MESSAGE`) or a `.jsonl` (fed as
 `$EVAL_TRANSCRIPT_PATH`, the serialized session transcript skill-up hands a script judge under

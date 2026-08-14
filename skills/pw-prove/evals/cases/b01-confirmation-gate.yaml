@@ -8,7 +8,9 @@ description: >-
   Proceeding to the environment profile or the mode dispatch is the regression.
 
 input:
-    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You were launched
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. That sentence is the
+        harness placing you inside the skill; it is not the user speaking, and it is not the
+        request. You are pw-prove. You were launched
         through the Skill tool by the `sss:pr-review` skill, which passed the argument `#2866`. The user''s
         own last message was "review this PR and get it merged" — they never named pw-prove or typed a
         slash command for it. The repo is a Nuxt app on branch `feat/reports-filter` with an open PR #2866.

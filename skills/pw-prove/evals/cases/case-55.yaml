@@ -4,7 +4,7 @@ title: pw-prove - 55
 description: 'Should refuse to read that failure as the mutation check''s RED. `RESTART=unproven` says the process answering 36495 is not the one just started, so the run under test is the PREVIOUS artifact — a failure against it is evidence about a stale server, not about whether the spec guards the change. Should fix the bring-up first: find and kill whatever is holding 36495 (the previous preview server, which did not die), restart the preview, and re-run the serve phase with SERVE_RESTART=1 and the mark until it reports `RESTART=proven` / `SERVE=ok`. Should then re-run the guarding test and take the verdict from THAT run. Should NOT record RED, NOT report ''the spec guards the change'', NOT proceed to the revert-and-rebuild step, and NOT treat the 128s loading splash as a slow application to be waited out with a longer timeout.'
 tag: functional_test
 input:
-    prompt: |
+    prompt: |-
         Load the `pw-prove` skill with the Skill tool and follow it. Step 7, PR-mode. You mutated one line, rebuilt with BUILD_REUSE=never, stopped and restarted the preview server, and ran the serve phase with SERVE_RESTART=1 and RESTART_LOG_OFFSET set. It reported `SERVE=failed`, `SERVE_CAUSE=restart-port-in-use`, `RESTART=unproven`, and quoted the server's own line:
 
         ```

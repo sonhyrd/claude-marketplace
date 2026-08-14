@@ -26,6 +26,11 @@
 #
 # The last section runs the checks against deliberately malformed cases and requires them to go
 # RED. A harness that cannot go red tests nothing.
+#
+# Dependency, unlike every sibling suite here: **python3 with PyYAML**. The case files are read as
+# YAML rather than grepped, so a case that moved a key or refolded a scalar still reads correctly —
+# which is the whole point when the last change to this suite refolded 62 of them. Missing either is
+# a refusal with a named reason, never a skip: an instrument that skips proves nothing.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
@@ -80,6 +85,12 @@ verdicts = []
 def report(good, text):
     verdicts.append(('PASS' if good else 'FAIL', text))
 
+def report_all(summary, problems):
+    """One headline verdict, then one line per offender so the fix is named, not hunted."""
+    report(not problems, summary)
+    for line in problems:
+        report(False, line)
+
 if not cases_dir.is_dir():
     print(f'FAIL no cases directory at {cases_dir}')
     sys.exit(0)
@@ -122,9 +133,7 @@ for cid, (path, case) in cases.items():
     shape = case.get('shape')
     if shape not in SHAPES:
         unclassified.append(f'{path.name}: shape is {shape!r}, expected one of {SHAPES}')
-report(not unclassified, f'every case declares shape: trigger|behavior ({len(cases)} case file(s))')
-for line in unclassified:
-    report(False, line)
+report_all(f'every case declares shape: trigger|behavior ({len(cases)} case file(s))', unclassified)
 
 # 2. A behavior case places the agent inside the skill, in the FIRST thing it is handed.
 missing = []
@@ -133,9 +142,7 @@ for cid, (path, case) in cases.items():
         continue
     if not PLACEMENT.search(first_prompt(case)):
         missing.append(f'{path.name}: behavior case does not place the agent in the skill')
-report(not missing, 'every behavior case places the agent in the skill explicitly')
-for line in missing:
-    report(False, line)
+report_all('every behavior case places the agent in the skill explicitly', missing)
 
 # 3. A trigger case keeps a realistic top-of-task prompt: no placement line, no role injection.
 staged = []
@@ -147,9 +154,7 @@ for cid, (path, case) in cases.items():
         staged.append(f'{path.name}: trigger case carries the placement line — loading is no longer the measurement')
     if ROLE_INJECTION.search(text):
         staged.append(f'{path.name}: trigger case carries role injection — its prompt is not a top-of-task request')
-report(not staged, 'every trigger case keeps a realistic top-of-task prompt')
-for line in staged:
-    report(False, line)
+report_all('every trigger case keeps a realistic top-of-task prompt', staged)
 
 # 4. The active list resolves, and every active case is classified.
 active = []
@@ -179,9 +184,7 @@ for cid in active:
     judge = case.get('judge') or {}
     if judge.get('type') != 'script' or 'skill-loaded' not in str(judge.get('script_path', '')):
         unasserted.append(f'{path.name}: active trigger case does not assert loading (judge is {judge.get("type")!r})')
-report(not unasserted, 'every active trigger case asserts loading')
-for line in unasserted:
-    report(False, line)
+report_all('every active trigger case asserts loading', unasserted)
 
 for status, text in verdicts:
     print(f'{status} {text}')
