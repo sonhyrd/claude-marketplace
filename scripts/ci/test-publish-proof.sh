@@ -695,12 +695,13 @@ grep -q 'node:crypto' "$S/clips.mjs" \
 
 echo ""
 echo "-- preflight: the credential round-trip, warn-only in every outcome --"
-# BASE_URL points at the stub too: readiness only asks whether SOMETHING answers, and any code that
-# is not 000/502/503/504 is a live server.
+# BASE_URL points at the stub too: the serve phase only asks whether SOMETHING answers, and any code
+# that is not 000/502/503/504 is a live server. Only that phase is run — the publish probes ride on
+# it, and there is nothing here to build.
 preflight() { # usage: preflight <extra env...>
   ( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 HOME="$W/isolated-home" \
       PWPROVE_LEDGER="$W/ledger.jsonl" "$@" \
-      node "$REPO_ROOT/$S/preflight.mjs" >"$W/pf.out" 2>"$W/pf.err" )
+      node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/pf.out" 2>"$W/pf.err" )
 }
 pf_says() { # usage: pf_says <name> <expected summary line> <expected rc>
   if [ "$pfrc" != "$3" ]; then bad "$1 — exit $pfrc, wanted $3 (the publish probe must never block)"; return; fi
@@ -829,7 +830,7 @@ NODE_BIN=$(command -v node)
 ( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 HOME="$W/isolated-home" \
     PWPROVE_LEDGER="$W/ledger.jsonl" PATH="$W/nofffbin" CLIPS_MCP_TOKEN="$TOKEN" \
     PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT" \
-    "$NODE_BIN" "$REPO_ROOT/$S/preflight.mjs" >"$W/pf.out" 2>"$W/pf.err" )
+    "$NODE_BIN" "$REPO_ROOT/$S/preflight.mjs" serve >"$W/pf.out" 2>"$W/pf.err" )
 pfrc=$?
 pf_says "missing video tooling warns without blocking" "VIDEO_TOOLING=no" 0
 grep -q 'publish-proof.mjs cannot concatenate' "$W/pf.err" \
