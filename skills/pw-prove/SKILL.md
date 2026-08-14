@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.16.0"
+  version: "0.17.0"
 ---
 
 # pw-prove
@@ -619,6 +619,7 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 Two things this does not license:
 
 - **A spec whose scenarios contend over shared state still has to serialise, in the spec** — `test.describe.configure({ mode: 'serial' })`, with the reason in a comment beside it. Each test gets a fresh browser context, so nothing leaks that way; what interferes is scenarios racing for one record on a shared tenant. That is a property of the spec, and it belongs where the code is, never in a global flag that charges every other proof for it.
+  **Ask the hermetic question first — mocking outranks serialising.** Hermetic-by-default (`code-rules.md` › Network Determinism) means a PR-mode spec should not be mutating a shared staging record at all: fixture both sides and the contention is gone, not scheduled around, and the scenarios keep full concurrency. Serialisation is for the residue that survives that question — a **declared carve-out**, where the live round-trip *is* the AC (cross-view persistence of a real write is the standard case) and a mock would be the thing making the assertion pass. Reach for `mode: 'serial'` only after naming why the mock is unavailable; reaching for it first fixes the schedule and leaves a spec that pollutes a shared tenant.
 - **Serialisation is now a diagnostic, not a fix.** If *every* scenario times out at its first navigation, re-run the same spec **unchanged** with `-j 1` appended — one command, one worker, that run only — and it separates a concurrency problem from a spec problem. This is the one place a concurrency override belongs; it never enters the proof run, a config, or the committed spec. But against the built target that signature has **no known cause** — a preview compiles nothing — so a spec that then passes serialised is a **finding to report with its evidence**, not a box ticked on the way to green. The one measured cost of concurrency is clip length: N browsers share the machine, so each test is slower and its recording longer (12–15 s per clip serialised, 18–20 s at four workers, 31–33 s at six). That is lead-in before the payoff, and it is why nothing here asks for more workers than the default.
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.

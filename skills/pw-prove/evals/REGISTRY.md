@@ -324,8 +324,8 @@ must-FAIL fixture pair before it could run at all.
 | `case-41` | behavior | Step 8 › *Hygiene sweep* — the residue refusal, not an eyeball confirmation | **1/3** | not measured | quarantined |
 | `case-42` | behavior | Step 3 › the capture-time scrub is trusted, not repeated | **1/3** | not measured | quarantined |
 | `case-56` | behavior | Step 7 › *Mutation check* — a proven restart is proven | **1/3** | not measured | quarantined |
-| `case-53` | behavior | Step 3 › *Recon* — the probe's verb surface | **0/3** | not measured | quarantined — **#79** |
-| `case-61` | behavior | Step 5 › *Generate* — serialisation belongs in the spec, not the command line | **0/3** | not measured | quarantined — **#80** |
+| `case-53` | behavior | Step 3 › *Recon* — the probe's verb surface | **2/3** (#79, after the **premise** was repaired — 0/3 before) | **+1** — baseline 0/3, all three arms certified SKILL-FREE | quarantined — **#79**, short of 3/3 |
+| `case-61` | behavior | Step 5 › *Generate* — serialisation belongs in the spec, not the command line | **0/3** (#80, after the premise was repaired — the *disagreement* is gone, one vestigial judge clause is not) | not measured — both arms failed | quarantined — **#80** |
 
 ### Why batch 3 retired nothing, and why that is the expected shape
 
@@ -401,7 +401,8 @@ than it did. Re-characterized, six moved to 3/3.
 
 **Two recorded answers were deliberately NOT adopted as must-PASS twins**, and that is a finding
 rather than an omission. `case-47`'s third iteration genuinely omits the `-g` rerun and the
-full-spec gate; `case-53` genuinely reads the probe autostart as a fault to fix. Widening a rule to
+full-spec gate; `case-53` genuinely reads the probe autostart as a fault to fix — and #79 later found the reason,
+which was the case's own prompt, not the model (see *#79 and #80* below). Widening a rule to
 admit them would measure the model rather than the skill. **No judge was tuned a second time** —
 that is the #77 lesson, and it is why `case-41`, `case-42`, `case-56`, `case-53` and `case-61` are
 quarantined at the rate the repaired instrument gave them rather than at a third rate.
@@ -781,6 +782,64 @@ Neither is a plain "the skill is wrong" result, and the tickets say so.
   ordering instead of assuming it, and the contributing factor was the whole cause: **the subcommand
   never went missing once the premise was on disk.** See *`case-43` was the premise, not the body*
   below.
+
+### #79 and #80: two premises, decided separately — and both were the case
+
+The two cases batch 3 held back were the same *kind* of question ("is the premise legitimate, or is
+the skill right to decline it?") and nothing else in common, so they were decided independently.
+Both judges had already been repaired once (`ab1ec16`), so **neither judge was touched** — the
+#77 rule. Each decision is a change to the case's **prompt**, measured at n=3 with `--baseline`,
+2026-08-14, all four arms per iteration certified (2 LOADED, 2 SKILL-FREE, 0 contaminated).
+
+**#79 — `case-53`: the body already said both things, so the case was the defect.** SKILL.md's
+Step 3 › *Recon* carries the autostart rule and the environment warning in **one sentence**: "A
+`send` with no daemon running starts one first … The autostarted daemon inherits that command's
+environment, so if `RECORD_HAR`/`BASE_URL`/`STORAGE_STATE` matter, set them on the `send` too."
+Nothing was thin. The case's prompt showed a bare `send` carrying **no environment at all** as the
+first probe command, which is precisely the failure mode the second half of that sentence exists to
+catch — so every recorded answer flagged it, correctly, and the case graded that as a miss. The
+prompt now sets `BASE_URL`/`STORAGE_STATE`/`RECORD_HAR` on the `send` and states that its stderr
+named all three, which settles the environment question and leaves the autostart as what the case is
+actually about. **No SKILL.md change was caused by #79, and none was needed.**
+
+Result: **2/3** with the skill against **0/3** on a certified SKILL-FREE baseline — up from 0/3, and
+`+1` on a baseline that tried and got it wrong rather than one that declined. Short of the 3/3 bar,
+so it stays quarantined rather than being admitted. The one red is worth naming because it is *not*
+the case's subject: the answer was correct in every particular — named-map `eval`, `console` first,
+viewport refused with Step 4 as the resolution point — and failed three judge patterns on phrasing.
+`window.__APP__?.tenant` does not match `/__APP__\.tenant/` (optional chaining is the same value),
+and "I'm not sending, because there is no verb for it" does not match a refusal pattern anchored on
+the word *viewport* being near the word *no*. Both are the bare-substring defect this registry has
+now recorded six times, and repairing them is a **judge** change this ticket was forbidden to make
+against the same transcripts. That is the open item, not the case.
+
+**#80 — `case-61`: the premise is legitimate, but only under the one condition the case omitted.**
+Every pre-repair answer declined the framing and was right to: hermetic-by-default means a PR-mode
+spec should not be mutating a shared staging record at all, so mocking dissolves the contention
+instead of scheduling around it. There is exactly one PR-mode situation the mocking guidance cannot
+dissolve — a **declared carve-out**, where the live round-trip *is* the AC. The model found it
+unprompted ("if the AC under proof is cross-view persistence, mocking both sides proves nothing,
+because the mock is what makes the assertion pass"), and `code-rules.md` § *Network Determinism*
+sanctions it: a write against a **pre-existing** record, with a restore exercised in the spec, and
+nothing created on the shared tenant. So the case is not retired; its prompt now states the
+carve-out and forbids re-opening it.
+
+The disagreement is gone. With the repaired premise the answers serialise in the spec with
+`test.describe.configure({ mode: 'serial' })`, comment the shared record as the reason, keep the
+other three scenarios concurrent, and refuse `-j 1`, a `workers` pin, retries and sleeps by name —
+the whole rule, unprompted. It is still **0/3**, on one vestigial judge clause: *"the answer never
+rules out browser-context leakage."* That assertion existed because the **old** prompt named no cause
+for the race, so ruling out context isolation was load-bearing reasoning. The repaired prompt names
+the cause, and the answer has no reason to negate a hypothesis nobody raised. Reconciling that clause
+is a judge edit, and therefore out of scope here for the same reason as #79's two.
+
+**The body change is #80's last AC, and it was occasioned rather than caused.** SKILL.md Step 7 now
+says which fix outranks the other — mocking first, serialisation for the residue a declared carve-out
+leaves behind — because the model had been reasoning to that ordering from two sections that never
+stated it. The clause demonstrably reached the model: the post-repair answer opens "the carve-out is
+settled, so the contention is the residue that survives the hermetic question," which is the new
+sentence's language. That also means `case-61`'s post-repair behaviour cannot be attributed to the
+prompt repair alone, and it is recorded here as both.
 
 ### `case-43` was the premise, not the body (#72)
 

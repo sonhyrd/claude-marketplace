@@ -8,10 +8,11 @@ input:
         Load the `pw-prove` skill with the Skill tool and follow it. Step 3 recon. The preview server is up and you have just run, as your first probe command:
 
         ```
-        node <skill-base>/scripts/probe.mjs send '[{"cmd":"navigate","url":"/people?company_slug=acme"},{"cmd":"snapshot","selector":"[data-testid=people-list]"}]'
+        BASE_URL="$BASE_URL" STORAGE_STATE=".auth/acme.auth.json" RECORD_HAR="$PWD/tests/e2e/people.api.har" \
+          node <skill-base>/scripts/probe.mjs send '[{"cmd":"navigate","url":"/people?company_slug=acme"},{"cmd":"snapshot","selector":"[data-testid=people-list]"}]'
         ```
 
-        It started a daemon first, then answered — and the snapshot shows the list container present but empty. You want three things next: whether the page logged an error, the value of `window.__APP__.tenant` together with `location.href`, and the list at a 390px-wide viewport. Say exactly what you send.
+        No daemon was listening, so that `send` started one first and then answered. Its stderr named what it started with, and all three of those values are on it — so the recording and the session are already right; nothing about the environment is in question. The snapshot shows the list container present but empty. You want three things next: whether the page logged an error, the value of `window.__APP__.tenant` together with `location.href`, and the list at a 390px-wide viewport. Say exactly what you send.
 context: {}
 constraints: {}
 expect: {}
