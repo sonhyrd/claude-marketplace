@@ -213,7 +213,8 @@ stay invisible until merge-back, which is why the verification is not optional.
 
 ### The eval judge harness is not in `ci-local.sh`, and must not be added
 
-`scripts/ci/test-eval-judges.sh` (**214 checks** after #64 added thirteen judges and their fixture pairs, on top of #66's rejection-list pair added to
+`scripts/ci/test-eval-judges.sh` (**399 checks** after #65 added twenty-one judges and their fixture
+pairs and repaired eleven of them against recorded answers; 240 after #64 added thirteen judges and their fixture pairs, on top of #66's rejection-list pair added to
 `announced-port-adopted` and a cross-judge drift check over `commitments()`/`offenders()`; 127 after
 #63 retired `b49-untrusted-page-content` and
 deleted its judge with it; 136 after #59 rewired all 12 active cases onto script judges, 44 at #58,

@@ -77,6 +77,34 @@ cases:
         # on the sealed runner, and #78 owns that.
         - evals/cases/case-11.yaml
         - evals/cases/case-16.yaml
+        # --- admitted by batch 3 (#65) ---
+        # Twenty-one cases were measured — everything left on disk from `case-33` on. Eleven are
+        # here: 3/3 at n=3 AND a non-zero uplift. Nine had a baseline the sweep certified SKILL-FREE;
+        # `case-38` and `case-51` had a CONTAMINATED baseline that FAILED anyway, which is the
+        # direction-safe reading REGISTRY.md draws for `case-15` and `case-11` — a genuinely
+        # skill-free run has strictly less to work with and cannot do better.
+        #
+        # Four of these close holes batch 1 and batch 2 recorded as unguarded: Step 6 ›
+        # Clip-fidelity (case-34/35/37 — "the largest hole batch 1 leaves"), Step 7 › Mutation check
+        # artifact isolation (case-52), Step 7 › the inherited webServer (case-45), and Step 4 ›
+        # Effective viewport's deliberate branch (case-36, the DRY twin of `case-22`, which is void
+        # under #76 and cannot be read until that lands).
+        #
+        # The other ten batch-3 cases are quarantined and stay OUT of this list. Five of them are
+        # 3/3 and would look admissible on pass rate alone — both arms of their uplift run failed,
+        # so there is no difference to read, which is the `case-30` reading. REGISTRY.md says which
+        # reason applies to which.
+        - evals/cases/case-33.yaml
+        - evals/cases/case-34.yaml
+        - evals/cases/case-35.yaml
+        - evals/cases/case-36.yaml
+        - evals/cases/case-37.yaml
+        - evals/cases/case-38.yaml
+        - evals/cases/case-45.yaml
+        - evals/cases/case-46.yaml
+        - evals/cases/case-51.yaml
+        - evals/cases/case-52.yaml
+        - evals/cases/case-57.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those

@@ -52,8 +52,10 @@ it is noise.
 
 ## The classification
 
-49 case files: **4 trigger, 45 behavior.** 8 are active in `eval.yaml`; the rest are inventory, not
-coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
+49 case files: **4 trigger, 45 behavior.** 21 are active in `eval.yaml`; the other 28 are
+quarantined (`_debug-probe-workers.yaml.off` is disabled and carries no shape). **None of them is
+inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every file on disk, so each of the 49
+carries a row with a status and the evidence behind it.
 
 > Counts updated by #63, which deleted six cases in triage — `case-26`, `case-27`, `case-39`,
 > `case-40` and `case-49` automatically, and `b49-untrusted-page-content` on a measured zero uplift.
@@ -63,6 +65,11 @@ coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
 > `case-21`, `case-25`, `case-31` and `case-32`, each an ADR contradiction or an overlap with a case
 > already in the registry — and admitted `case-11` and `case-16`. Before it: 56 files, 4 trigger /
 > 52 behavior, 6 active. `REGISTRY.md` carries the reason per case.
+>
+> Updated again by #65, which **deleted none**. It triaged the last 21 files (`case-33` onward), all
+> of them **behavior**, and admitted eleven. The file count is unchanged at 49 because the earlier
+> batches had already removed every duplicate, overlap and ADR contradiction — what was left was the
+> residue that survived two passes of exactly that filter. The active count moved 8 → 21.
 
 **Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3` (quarantined).
 
