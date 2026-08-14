@@ -22,7 +22,7 @@ failures in the 2026-08-13 run — `b32` failed on the phrase "nothing to reform
 correctly refusing a prompt injection, because the refusal quoted the injection.
 
 A negative assertion over discursive output is therefore **positional, not lexical**, and there is no
-rule_based form of that. Three shapes carry it:
+rule_based form of that. Four shapes carry it:
 
 **Artifact-shaped** — the case is answered with a command or a config block, so the judge extracts
 the fenced block and asserts on that block alone. Prose is out of scope by construction. The fenced
@@ -46,6 +46,12 @@ Three filters do that work, and all three appear verbatim in each such judge:
   `NEGATED` and inverts its bias on purpose: `NEGATED` excuses one sentence, a header excuses every
   item under it, so an incidental negation ("Nothing answers on 3000, so here is the plan:") must not
   open the scope.
+
+**Table-shaped** — the rule the case guards is settled by a **table** the answer emits, so the judge
+parses that table and decides on a row. `unit-proven-acs-folded.mjs` is the only one, and *A fold is
+a table fact, not a sentence fact* below says what it reads and why it asserts nothing about the
+prose around it. It carries neither `commitments()`/`offenders()` nor the workspace preamble: those
+filters exist to find the decision sentence, and this shape has no decision sentence to find.
 
 **Workspace-shaped** — the case is [wet](../../../../CONTEXT.md#wet-case), so the answer is not the
 evidence: the run's own artifacts are. A workspace judge reads files out of the case workspace and
@@ -156,7 +162,9 @@ Audited at #71, and the standing inventory — every judge that touches `$EVAL_T
 | `served-on-allocated-port.mjs` | workspace artifacts; same existence check | not affected |
 
 Every other judge reads `$EVAL_FINAL_MESSAGE` alone, which is one turn by construction and cannot
-carry this defect. A judge that grows a second turn joins the table above.
+carry this defect. A judge that grows a second turn joins the table above — and a judge whose unit is
+smaller than its whole input joins one of the two inventories: this one for transcript judges, the
+one under *A fold is a table fact* for the judge that decides on a table row.
 
 ### A fold is a table fact, not a sentence fact
 
@@ -180,12 +188,24 @@ up in the AC column, and reads the verdict out of that row. Three rules keep the
   two table lines — `already covered:` on one, the test file on the next, every other cell blank.
   A row with a single non-empty cell merges upward, or the file name reads as an AC with no
   Proven-by, which is the #64 line-wrap defect one layer down.
+- **The reader is anchored on the separator row, not on a leading pipe.** Leading and trailing pipes
+  are optional in GFM, so demanding them would red-flag a correct answer for its markdown style.
+- **A blank Proven-by cell is not a continuation.** A row with one non-empty cell merges upward only
+  when that cell is not the AC column; a lone AC cell is an AC whose Proven-by is empty, which is a
+  fold left silent — merging it would hide the very thing "Folding is never silent" is about.
 - **Count behaviours, not rows.** An answer may fold the three bullets into three rows or into one
   row naming the whole matrix. Both are folds, so the assertion is per behaviour — "is there an AC
   row for it, and does that row say `already covered:`" — never "are there three such rows".
 - **A silent deletion is not a fold, and a total fold is not one either.** A behaviour with no row
   at all fails, and so does a table where no row is left proven by a browser scenario: the fold
   exists to keep the ONE scenario that proves the wiring.
+
+It asserts nothing about the prose. The checks that used to sit below the table logic — the answer
+must say "fold", must say "wiring", must name `buildUpsert`, must name the test file — were
+vocabulary tolls, and an answer whose table is a perfect fold went red for a word it never wrote.
+That is the same wrong-unit family one layer down, and the must-PASS fixtures all happened to
+satisfy them, which is the fixture-fitting this whole directory exists to avoid. Every fact worth
+asserting is already a table fact.
 
 The must-FAIL twin this shape needs is the mirror of the standard one: an answer whose **prose**
 says every right word — it names the test file, says "fold", writes `already covered:

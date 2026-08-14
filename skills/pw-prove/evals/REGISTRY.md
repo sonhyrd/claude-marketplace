@@ -103,10 +103,11 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **trigger re-characterization, AFTER (#73/#74)** | the same command, the same staged suite, `description:` fixed | the same four cases with nothing else moved. 12 runs. **12/12 — all four 3/3, all four LOADED, 0 contaminated** |
 | **`case-29` re-characterization (#77)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` | `case-29` on the repaired judge, which reads the Proven-by column instead of scenario titles. 3 runs. **3/3, 3/3 LOADED, 0 contaminated** — and the three retained 2026-08-14 transcripts had already flipped to PASS offline, before the run |
 | **`case-29` uplift (#77)** | the same staged suite, `--baseline --parallelism 1` | one `with_skill` and one `without_skill` arm. 2 runs. Baseline **certified SKILL-FREE**, `with_skill` PASS, baseline FAIL → **`+1`**. The baseline failed for a nameable reason — see *the baseline refused rather than folded wrongly* |
+| **`case-29` re-judge (#77, no spend)** | the five retained responses replayed through the judge as code review left it | the judge was refined **after** the two runs above (a blank Proven-by cell is no longer read as a wrapped one; the reader anchors on the separator row so a pipe-less GFM table is not a false red; the prose vocabulary tolls are gone). Every verdict held — 4 PASS, 1 FAIL — so the 3/3 and the `+1` are figures the shipped judge produces, not an earlier draft's |
 | **trigger uplift (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --parallelism 1 --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | one `with_skill` and one `without_skill` arm each. 6 runs. **3 of 3 baselines certified SKILL-FREE, 0 dirty**; every `with_skill` arm PASS, every baseline arm FAIL. `+1` each, and tautologically so — see *Uplift* |
 
 **85 agent runs through #75; 73 in batch 2; 21 in the wet cases (#69); 128 in batch 3; 22 in #78;
-30 in #73/#74; 359 in total.**
+30 in #73/#74; 5 in #77; 364 in total.**
 
 **Batch 2's uplift arms were taken on the PRE-#75 runner.** That branch was cut before the seal
 landed, so its baselines were void *by construction* rather than by bad luck — which is why seven of
