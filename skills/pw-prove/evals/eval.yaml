@@ -63,6 +63,15 @@ cases:
         # on a `void` uplift, and both measure +1 against a baseline the sweep certifies.
         - evals/cases/case-28.yaml
         - evals/cases/case-48.yaml
+        # The two WET cases (#69), and the first cases in this suite that reference evals/files/.
+        # They are graded on what the run PRODUCED — a `serve.log` a real server wrote, a
+        # `tests/e2e/auth.setup.ts` the agent wrote — rather than on what it said, which is why the
+        # runtime above is `none` and must stay `none`. Each is paired with the dry twin that guards
+        # the same SKILL.md section (`case-50` and `case-48`), each is scoped to ONE phase so a red
+        # verdict names one behaviour, and both are admitted on the same evidence as everything else
+        # here: 3/3 at n=3 with a `+1` uplift over a baseline the sweep certified skill-free.
+        - evals/cases/w01-bringup-own-port.yaml
+        - evals/cases/w02-auth-cookie-from-app.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those

@@ -1,0 +1,3 @@
+Serve phase done. I allocated port 41317 and started the server with `PORT=41317`, and it came up.
+I left `BASE_URL` at the configured `http://localhost:4100` because that is what the Playwright
+config already reads, so the two agree without an env override.

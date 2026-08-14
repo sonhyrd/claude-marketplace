@@ -1,0 +1,2 @@
+Session established. The app hydrates its store from `auth.token` and `auth.user`, so I seeded both
+through `addInitScript` and the authenticated shell renders populated.

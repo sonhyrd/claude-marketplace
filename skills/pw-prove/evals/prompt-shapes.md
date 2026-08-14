@@ -52,7 +52,7 @@ it is noise.
 
 ## The classification
 
-56 case files: **4 trigger, 52 behavior.** 6 are active in `eval.yaml`; the rest are inventory, not
+58 case files: **4 trigger, 54 behavior.** 8 are active in `eval.yaml`; the rest are inventory, not
 coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
 
 > Counts updated by #63, which deleted six cases in triage — `case-26`, `case-27`, `case-39`,
@@ -86,8 +86,24 @@ entire job is to report whether the trigger fired. It now reads as a request:
 Its judge is unchanged: `skill-loaded.mjs`, the same gate the post-run sweep runs. Loading is the
 assertion.
 
-**Behavior (52)** — every other case file. All of them presuppose a step, an exit code, an artifact
+**Behavior (54)** — every other case file. All of them presuppose a step, an exit code, an artifact
 on disk, or a run already in progress; all of them now open with the placement line.
+
+### The two wet cases are behavior, and the shape rule is what decided it
+
+`w01-bringup-own-port` and `w02-auth-cookie-from-app` (#69) are the suite's first
+[wet cases](../../../CONTEXT.md#wet-case), and being wet does not give a case a third shape. Both
+open with the placement line, because both prompts presuppose mid-run context — *"Step 3, PR-mode …
+the config phase reported `CONFIG=undeclared` and the build phase `BUILD=reused`"*, *"the bring-up
+gate has already passed and the built app is being previewed at …"*. Neither would ever trip the
+trigger, and a NOT-LOADED verdict on either would be the instrument failing rather than the
+frontmatter.
+
+That is a deliberate choice and not a default. A wet case *could* be written as a trigger — hand the
+agent a fixture repo and a top-of-task request — but then a red verdict spans the trigger surface and
+eight steps of the body at once, which is exactly the "you cannot tell which of eight steps broke it"
+failure the ticket forbids. Narrowing the prompt to one phase is what buys a verdict that names one
+behaviour; the placement line is the price of narrowing it.
 
 ## Findings
 
