@@ -63,20 +63,29 @@ cases:
         # on a `void` uplift, and both measure +1 against a baseline the sweep certifies.
         - evals/cases/case-28.yaml
         - evals/cases/case-48.yaml
-        # --- admitted by batch 2 (#64) ---
-        # Thirteen cases were measured; these two are what survived. Both are 3/3 at n=3 with a
-        # non-zero uplift, and both close a coverage gap batch 1 recorded as unreached.
+        # --- admitted by batch 2 (#64), and by #78 re-measuring it ---
+        # Thirteen cases were measured. #64 admitted two on the evidence it had; its other six 3/3
+        # cases had baselines that read the skill body off the host, so their uplift was `void` and
+        # they were quarantined rather than retired. #78 re-measured all six on the sealed runner:
+        # four came back +1 against a certified SKILL-FREE baseline and are here; `case-17` came back
+        # ZERO uplift and was RETIRED and deleted; `case-12` failed BOTH arms, so there is no
+        # difference to read and it stays quarantined. evals/REGISTRY.md says which reason applies to
+        # which; do not re-add one on the strength of its pass rate.
         #
-        # The other eleven are quarantined and stay OUT of this list. Six of them are 3/3 and would
-        # look admissible from the pass rate alone — their uplift baselines read the skill body off
-        # the host (#75), so there is no difference to read. evals/REGISTRY.md says which reason
-        # applies to which; do not re-add one on the strength of its pass rate.
-        #
-        # Those six were measured on the PRE-#75 runner: this branch was cut before the seal landed,
-        # so their baselines are void by construction rather than by bad luck. They are re-measurable
-        # on the sealed runner, and #78 owns that.
+        # `case-11` and `case-15` were admitted by #64 and #63 on a CONTAMINATED baseline that failed
+        # anyway — the "direction-safe" reading. Batch 3's `case-51` refuted that inference, so #78
+        # re-took both rather than inheriting them. Both baselines came back SKILL-FREE and failed,
+        # so both +1s stand as measurements. No case in this list rests on that reading any more.
         - evals/cases/case-11.yaml
         - evals/cases/case-16.yaml
+        # The four #78 unvoided. Each closes a coverage gap the registry named twice: Step 8's
+        # hygiene sweep and its report invariant (case-8), the `Proof page: skipped` accounting on
+        # the same section (case-5), Step 4's notify-and-continue / approval gate (case-7), and
+        # Step 1's heavy-session recommendation (case-20).
+        - evals/cases/case-5.yaml
+        - evals/cases/case-7.yaml
+        - evals/cases/case-8.yaml
+        - evals/cases/case-20.yaml
         # The suite's first WET case (#69), and the first case of any kind to reference evals/files/.
         # It is graded on what the run PRODUCED — the `serve.log` a real server wrote, and the port in
         # it — rather than on what it said, which is why the runtime above is `none` and must stay

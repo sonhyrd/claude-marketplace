@@ -1,6 +1,0 @@
-Step 6 verdict: the first test needs a header, so I will add // PROVES: filters people by status.
-
-The second test already carries // PROVES: validates status input, which is fine and passes the
-audit — it describes what the test does.
-
-The PeopleListPage POM file is missing its PROVES header too and must gain one before Step 7.
