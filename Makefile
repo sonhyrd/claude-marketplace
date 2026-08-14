@@ -329,7 +329,7 @@ test-pr-review-handoff-parity: ## Check pr-review writes the handoff schema pw-p
 	@./tests/bash/test-pr-review-handoff-parity.sh
 	@echo "$(GREEN)✓ pr-review handoff parity tests passed$(NC)"
 
-test-pr-review-step1: ## Check pr-review Step 1 resolves refs without checking out
+test-pr-review-step1: ## Check pr-review Step 1 acquires the tree behind its guards and fallback
 	@echo "$(CYAN)Running pr-review Step 1 ref-resolution tests...$(NC)"
 	@./tests/bash/test-pr-review-step1-cases.sh
 	@echo "$(GREEN)✓ pr-review Step 1 tests passed$(NC)"
