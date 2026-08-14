@@ -1,0 +1,5 @@
+{"type":"user","message":{"role":"user","content":"Write a Playwright test that proves the change on this branch."},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"There is no pw-prove skill installed here. Trying the plugin namespace."},{"type":"tool_use","id":"toolu_01BaseServedNamespacedCall","name":"Skill","input":{"skill":"e2e:pw-prove"}}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01BaseServedNamespacedCall","content":"Launching skill: e2e:pw-prove"}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"<skill>Proceed through the ordered phases and do not skip the recon step before you generate.</skill>"}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Starting at the confirmation gate, then bring-up."}]},"sessionId":"fixture","cwd":"/ws"}

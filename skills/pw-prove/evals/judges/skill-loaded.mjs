@@ -34,6 +34,12 @@
 // and `cat`-ed SKILL.md out of it. A Skill tool call is still expected in that arm — it errors with
 // `Unknown skill: pw-prove`, and an errored call carries no body — so the tool call alone is not the
 // finding. A fingerprint line is.
+//
+// …with ONE exception, and it is the whole of #83: a Skill call that names a plugin-namespaced id
+// (`e2e:pw-prove`) and is SERVED is a dirty baseline on the invocation alone, without waiting for a
+// fingerprint. What that route delivers is the plugin's published body rather than the working
+// tree's, so it can carry the entire skill while matching no mark taken from the file under test.
+// Whether the call was served or refused is read from its RESULT — see `skillCallRefused`.
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -219,6 +225,10 @@ const toolUses = [];
 // an attempt, and its argument is not evidence that anything was read.
 const attempted = new Map();
 const denied = new Set();
+// Every tool result, by the call it answers. The Skill tool needs this for the same reason the
+// arguments above do — see `skillCallRefused` — and it is kept separate from `denied` because that
+// set answers a narrower question ("was this result WHOLLY a refusal?") tuned for file reads.
+const resultOf = new Map();
 // A THIRD bucket: the case's own prompt. Every turn of a case file is enqueued and then replayed as
 // a plain user message, and a line the case HANDED the model is not evidence about what the model
 // READ. `b32-dwell-inline`'s turn 1 quotes `if (process.env.PW_PROVE_CLIP) await
@@ -279,6 +289,11 @@ for (const line of lines) {
         if (b?.type === 'tool_result') {
           const bucket = [];
           collect(b, bucket);
+          const prior = resultOf.get(b.tool_use_id);
+          resultOf.set(b.tool_use_id, {
+            isError: (prior?.isError ?? false) || b.is_error === true,
+            text: `${prior?.text ?? ''}${bucket.join('\n')}`,
+          });
           if (isWhollyDenial(bucket)) denied.add(b.tool_use_id);
           else structural.push(...bucket.filter((s) => !isPathListing(s)));
           continue;
@@ -353,10 +368,39 @@ const pluginPaths = () => {
 };
 
 // A namespaced invocation is the same finding by another route: `e2e:pw-prove` is the plugin's
-// copy, `pw-prove` is the one skill-up installed for this run.
+// copy, `pw-prove` is the one skill-up installed for this run. It is a route no deny rule over a
+// PATH can close and no file read makes visible — the agent never names a path at all (#83).
 const namespaced = toolUses.filter(
   (t) => t?.name === 'Skill' && /^[A-Za-z0-9_-]+:pw-prove$/.test(String(t?.input?.skill ?? '')),
 );
+
+// …but an ATTEMPT is not contact, and reading it as contact is the wrong-unit defect #71 fixed for
+// tool arguments and left standing here. Both namespaced invocations in the run that found this
+// route (#82, `case-53`, two baseline arms) came back `Unknown skill: e2e:pw-prove` — the isolated
+// home carries no plugin cache and no `enabledPlugins` entry, so the route delivered nothing. The
+// gate failed those arms anyway, and an instrument that cannot tell a refused attempt from a served
+// body costs a run its measurement for a defence that worked.
+//
+// Measured against the host runtime rather than reasoned from the docs (#83): a refused Skill call
+// answers with `Unknown skill: <id>` when the plugin is not reachable, and `Skill execution blocked
+// by permission rules` when a `Skill(<id>:*)` deny rule covers it. Both are `is_error` results.
+const REFUSED_SKILL = /Unknown skill|blocked by permission rules|has been denied|denied by your permission settings/i;
+function skillCallRefused(t) {
+  const r = resultOf.get(t?.id);
+  // A call whose result the transcript never recorded is assumed to have landed. The conservative
+  // direction here is to over-report contamination, never to wave a run through on a missing record.
+  if (!r) return false;
+  // And whatever the error flag says, a result carrying a line of the body under test delivered one.
+  if (marks.some((m) => r.text.includes(m))) return false;
+  return r.isError || REFUSED_SKILL.test(r.text);
+}
+const namespacedDelivered = namespaced.filter((t) => !skillCallRefused(t));
+const namespacedRefused = namespaced.filter((t) => skillCallRefused(t));
+const refusedNote = () => {
+  for (const t of namespacedRefused) {
+    console.log(`   note: the Skill tool was attempted as '${t.input.skill}' and refused — an attempt, not contact`);
+  }
+};
 
 // In a baseline arm the body arriving is asked FIRST, and the reason is a real 2026-08-14 verdict:
 // `case-48`'s baseline was refused the plugin cache and the other checkouts by the deny rules, went
@@ -365,6 +409,21 @@ const namespaced = toolUses.filter(
 // measurement the arm exists to take, so it outranks the path it took to get there, which the
 // verdict names on its own line rather than dropping.
 if (BASELINE) {
+  // The Skill-tool route is asked FIRST, and asked on the INVOCATION rather than on a fingerprint,
+  // because a fingerprint cannot see it (#83). What that route serves is the PLUGIN's body — an
+  // older published version — and the marks are taken from the working tree, so a plugin a version
+  // or two behind delivers a whole skill to the baseline arm while matching not one mark. Waiting
+  // for a fingerprint here would report SKILL-FREE on an arm that had just been handed the skill.
+  if (namespacedDelivered.length) {
+    console.error('FAIL: BASELINE DIRTY — the without_skill arm loaded the body through the Skill tool');
+    for (const t of namespacedDelivered) {
+      console.error(`   route: Skill(${t.input.skill}) — a marketplace plugin install of this bundle, invoked by id`);
+    }
+    console.error('   NOT a file read: no path was traversed, so nothing in this transcript\'s Read/Grep/Glob calls shows it');
+    console.error('   what arrived is the PLUGIN\'s published body, which need not match a fingerprint of the working tree');
+    console.error('   uplift measured against this arm is void — deny Skill(<plugin-id>:*) in the isolated home and re-run');
+    process.exit(3);
+  }
   const dirty = evidence.find((m) => all.some((s) => s.includes(m)));
   if (dirty) {
     console.error('FAIL: BASELINE DIRTY — the without_skill arm carried the body under test');
@@ -383,9 +442,9 @@ if (BASELINE) {
   }
 }
 
-if (contaminatedBy.length || namespaced.length) {
+if (contaminatedBy.length || namespacedDelivered.length) {
   console.error('FAIL: CONTAMINATED — this run reached a marketplace plugin copy, not only the version under test');
-  for (const t of namespaced) console.error(`   Skill tool invoked as '${t.input.skill}' — a plugin-namespaced skill`);
+  for (const t of namespacedDelivered) console.error(`   Skill tool invoked as '${t.input.skill}' — a plugin-namespaced skill, and it was served`);
   // Deduplicated: one transcript names the same install path in a dozen records, and a wall of
   // identical lines hides how many DISTINCT paths were reached.
   const paths = pluginPaths();
@@ -402,6 +461,7 @@ if (BASELINE) {
   if (toolUses.some((t) => t?.name === 'Skill' && String(t?.input?.skill ?? '') === 'pw-prove')) {
     console.log('   the Skill tool was called and no body followed it — the expected baseline shape');
   }
+  refusedNote();
   console.log(fingerprintNote());
   process.exit(0);
 }
@@ -422,10 +482,12 @@ if (hit) routes.push('skill-body');
 if (routes.length === 0) {
   console.error('FAIL: NOT LOADED — the SKILL.md under test never reached the model in this case');
   console.error('   no Skill tool call, and no line of the body under test anywhere in the transcript');
+  refusedNote();
   console.error(fingerprintNote());
   process.exit(1);
 }
 
 console.log(`PASS: LOADED via ${routes.join(', ')}`);
 if (hit) console.log(`   body under test in context, e.g. "${hit.slice(0, 72)}${hit.length > 72 ? '…' : ''}"`);
+refusedNote();
 console.log(`   no marketplace plugin path in ${records} transcript record(s)`);

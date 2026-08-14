@@ -885,10 +885,31 @@ number an earlier draft produced is not a number the shipped judge produces):
 | `case-61` baseline | 0/3, all SKILL-FREE | 0/3, all SKILL-FREE |
 
 `case-53` is **admitted**: 6/6 with the skill across two independent runs, `+3` against a baseline
-whose three arms are certified SKILL-FREE. The fresh run's own baseline is unusable — all three arms
-invoked the marketplace plugin as `e2e:pw-prove`, a Skill-tool route the isolated home's deny rules
-do not close — but it fails in the safe direction: a contaminated baseline that read a *newer* copy
-of the body and still scored 0/3 bounds a clean one at 0/3, and the certified run agrees.
+whose three arms are certified SKILL-FREE — the #79 run. The fresh run's own baseline is unusable and
+contributes **nothing** to the admission, in either direction. (An earlier draft of this row argued
+that a contaminated baseline scoring 0/3 bounds a clean one at 0/3. That inference is the one #65
+refuted on `case-51`, whose contaminated baseline failed and whose clean baseline passed; it is
+struck rather than repaired, and no row may rest on it.)
+
+**What those three arms actually did (#83, from the retained records).** The account above was wrong
+on the mechanism, and the correction matters because it names which residual is still open:
+
+- **The Skill-tool route served nothing.** Two of the three arms invoked `e2e:pw-prove`, and both
+  came back `Unknown skill: e2e:pw-prove` — the isolated home carries no plugin cache and no
+  `enabledPlugins` entry, so there was no plugin to reach. The gate failed them on the *attempt*,
+  which it no longer does. Across all **303** retained transcripts in every run this repo has kept,
+  namespaced invocations number **2, both refused, both here**. No admitted row's baseline has ever
+  been served this route.
+- **The Read route held everywhere.** Every `Read` of a `SKILL.md` — the plugin cache, both host
+  checkouts, the marketplace clone — was refused by #75's deny rules. Not one line of any body was
+  read.
+- **The Bash route did not, and that is the real contamination.** In iteration-2 the arm ran
+  `node <host-checkout>/skills/pw-prove/scripts/probe.mjs --help` — a shipped script off another
+  checkout on the machine — and got its output. `case-53` is *about the probe's verb surface*, so
+  that is contact with the exact
+  surface the case measures. This is #75's documented residual — the route no prefix list can close —
+  behaving as documented, and it is why the arm is unusable. The CONTAMINATED verdicts themselves
+  came from a third thing again: a `find` listing that named plugin-cache paths without opening one.
 
 `case-61` **stays quarantined at 2/3**, and the reason for the red is not the instrument. The
 iteration-1 answer serialises correctly, scopes the describe block, comments the shared record as the
@@ -901,6 +922,30 @@ SKILL.md Step 5, not against the judge. It is 5/6 across both runs; one more cle
 occasioned by reading iteration-1 of the run this ticket took, and both were justified from the
 *prompt* rather than from the answer — deletions, not widenings. A third widening against the same
 three transcripts is what the #77 rule forbids.
+
+### #83: the Skill-tool route, queried across every retained record
+
+The route #82 surfaced — a baseline arm invoking the marketplace plugin as `e2e:pw-prove` — is
+recorded per arm in the retained transcripts, so establishing its blast radius is a **query, not a
+re-run**. Every `.jsonl` under every run this repo has kept was scanned for a Skill call matching
+`<namespace>:pw-prove`, and each hit paired with its own result:
+
+| | |
+|---|---|
+| transcripts scanned | **303** |
+| namespaced invocations found | **2** — `case-53`, `ticket-82-recharacterize`, iterations 1 and 2, both `without_skill` |
+| served | **0** |
+| refused (`Unknown skill: e2e:pw-prove`) | **2** |
+
+**No admitted row's baseline arm was ever served this route, and none was re-admitted here.** The
+one row whose arms attempted it, `case-53`, already rested on the #79 run's certified SKILL-FREE
+baseline; its entry above now says so without the direction-safe gloss it used to carry.
+
+Two things this does **not** say. It does not say the route is harmless — it is closed by the
+isolated home's *absence* of an `enabledPlugins` entry, which is an implicit defence, which is why
+#83 adds the explicit `Skill(<id>:*)` rules and the plugin-id half of the census. And it does not
+rehabilitate a contaminated baseline: `case-53`'s fresh arms remain unusable, on the Bash route, for
+the reasons recorded in its row.
 
 ### `case-43` was the premise, not the body (#72)
 
