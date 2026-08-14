@@ -5,13 +5,11 @@ description: 'The chromium project spreads `...devices["Desktop Chrome"]` (which
 tag: functional_test
 input:
     prompt: Load the `pw-prove` skill with the Skill tool and follow it. You are running pw-prove in PR-mode
-        against the project in evals/files/project-pom/, proving a change to the /checkout surface. Read
+        against the project in your current working directory, proving a change to the /checkout surface. Read
         its Playwright config and generate the proof spec plus the Step 7 proof run. Report the Assumptions
         block line for the effective viewport.
 context:
-    files:
-        evals/files/project-pom/playwright.config.ts: evals/files/project-pom/playwright.config.ts
-        evals/files/project-pom/tests/auth.spec.ts: evals/files/project-pom/tests/auth.spec.ts
+    repo_fixture: evals/files/project-pom
 constraints: {}
 expect: {}
 judge:

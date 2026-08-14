@@ -108,8 +108,8 @@ cases:
         # Four of these close holes batch 1 and batch 2 recorded as unguarded: Step 6 ›
         # Clip-fidelity (case-34/35/37 — "the largest hole batch 1 leaves"), Step 7 › Mutation check
         # artifact isolation (case-52), Step 7 › the inherited webServer (case-45), and Step 4 ›
-        # Effective viewport's deliberate branch (case-36, the DRY twin of `case-22`, which is void
-        # under #76 and cannot be read until that lands).
+        # Effective viewport's deliberate branch (case-36, the DRY twin of `case-22` — which was void
+        # under #76 and is now admitted beside it, so that branch carries two guards on two axes).
         #
         # The other ten batch-3 cases are quarantined and stay OUT of this list. Five of them are
         # 3/3 and would look admissible on pass rate alone — both arms of their uplift run failed,
@@ -125,6 +125,14 @@ cases:
         - evals/cases/case-46.yaml
         - evals/cases/case-52.yaml
         - evals/cases/case-57.yaml
+        # --- admitted by #76, once it was staging its fixture instead of the fixture's path ---
+        # `context.files` is {path: INLINE CONTENT}, so this case had been reading a 49-byte file
+        # containing its own path and answering a different question. It guards the same rule as
+        # `case-36` and is kept beside it for one reason: its premise is a config it has to open,
+        # not a config the prompt describes, so it is also the only case that goes red if fixture
+        # staging silently breaks again. Its numbers, and the judge repair that preceded them, are
+        # in evals/REGISTRY.md.
+        - evals/cases/case-22.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those

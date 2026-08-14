@@ -75,7 +75,8 @@ evidence behind it.
 **Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3` (quarantined).
 
 `case-1`/`case-2`/`case-3` ask for coverage analysis or a test plan against a fixture repo, in a
-user's words. Their prompts are still untouched; what changed in #63 is their judges. Each now runs
+user's words. What changed in #63 is their judges; what changed in #76 is one clause each, and the
+distinction matters — see *the one permitted prompt edit* below. Each now runs
 `skill-loaded.mjs`, because the rule above — an *active* trigger case asserts loading — decides what
 an active trigger case may be graded on, and it is loading. So the content assertions those three
 carry are deliberately not graded: they are preserved in `mined-assertions.md` and recorded in
@@ -87,7 +88,20 @@ carry are deliberately not graded: they are preserved in `mined-assertions.md` a
 2/3, and `case-1` and `case-3` — both plain coverage-gap requests — are **0/3 NOT LOADED**. The
 frontmatter advertises proving a change and says nothing about the Coverage-gap mode the body
 implements at Step 2. Filed as **#73** and **#74**; the three cases are quarantined, and none of
-their prompts was touched, because a trigger case is never repaired by editing its prompt.
+their prompts was touched **as a repair**, because a trigger case is never repaired by editing its
+prompt.
+
+#### The one permitted prompt edit
+
+#76 edited all three anyway, and the rule survives it. Each prompt named the fixture by the path
+`context.files` had staged it at (*"Analyze the project in `evals/files/project-pom/`"*), and those
+cases were reading a file that contained its own path. On `context.repo_fixture` the fixture lands at
+the **workspace root**, so the path in the prompt now points nowhere and the clause was removed
+(*"Analyze this project"*). That edit **removes** a detail; it adds no skill name, no placement line
+and no role injection, so it cannot make a case load that would not have loaded before — which is
+what the rule protects. A trigger prompt may be edited to match what the run actually stages, and for
+nothing else. The recorded 0/3 and 2/3 predate the edit: the phrasing under measurement changed, so
+#73/#74 re-characterize against the new prompts rather than reasoning from the old numbers.
 
 `gate-skill-loaded` is the only active trigger case, and its prompt was the reason it measured
 nothing. It read *"You are pw-prove. … Begin."* — a behavior-shaped prompt wired to a judge whose

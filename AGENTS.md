@@ -173,7 +173,7 @@ Two suites are deliberately **outside** that list, and must stay outside it:
 
 ```bash
 bash scripts/ci/test-eval-judges.sh  # eval judge scripts: fixture in, exit code + printed verdict out
-bash scripts/ci/test-case-shapes.sh  # every case classified trigger|behavior, and its prompt matches
+bash scripts/ci/test-case-shapes.sh  # every case classified trigger|behavior, its prompt matches, and its fixture is staged
 ```
 
 `test-case-shapes.sh` is the one script here that needs **python3 with PyYAML** — it reads case files
@@ -195,7 +195,11 @@ rule from `tests/pattern-corpus/` applied to judges. That twin is what catches t
 judge, the defect behind seven of the nine failures in the 2026-08-13 run.
 
 `test-case-shapes.sh` stays out for the same reason, and holds the prompt-shape rule described under
-*The Eval Suite* below. Run it by name whenever you add or edit a case prompt.
+*The Eval Suite* below, plus the fixture-staging checks from #76. Run it by name whenever you add or
+edit a case prompt or a case's `context:`. It is the one hand-run suite that is *also* wired
+somewhere: `run-evals-isolated.sh` calls it as a pre-run gate and refuses the run when it is red,
+because the #76 defect is silent in the run itself and the run is what pays for it.
+`PWPROVE_SKIP_STAGING_GATE=1` bypasses that gate and says so out loud.
 
 ## The Eval Suite
 
@@ -206,9 +210,9 @@ was mined and retired in #61. The surface is seven things:
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **49 on disk, 25 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **49 on disk, 26 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
-| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`. **Do not use `context.files`: it stages each fixture's PATH as its CONTENT (#76), so the case reads a one-line file and answers a different question.** Note also that these fixtures are written in a didactic voice a skill-free baseline arm reads too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
+| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`, which copies the directory's **contents** to the workspace **root** — so a prompt says "your current working directory", never "evals/files/x/". **`context.files` is `{workspace_path: INLINE CONTENT}`** (established from skill-up's `internal/evaluator/fixtures.go`, #76): the value is written verbatim as the file's body, so `p: p` stages a one-line file containing its own path and the case answers a different question. `scripts/ci/test-case-shapes.sh` fails on all three mistakes. Note also that a fixture written in a didactic voice is read by the skill-free baseline arm too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
 | `skills/pw-prove/evals/REGISTRY.md` | **The registry.** One row per triaged case: pass rate, uplift, the SKILL.md section it guards, and status (active / quarantined / retired). It is also the case → section map that makes a blast-radius re-characterization a lookup |
 | `skills/pw-prove/.skill-up.yaml` | User config for the run (e.g. the agent-under-test's effort level) |

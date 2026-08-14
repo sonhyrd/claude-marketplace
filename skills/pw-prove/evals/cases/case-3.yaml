@@ -19,12 +19,9 @@ description: >-
 
 tag: functional_test
 input:
-    prompt: Analyze the project in evals/files/project-flat/ for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Its existing E2E tests are flat (direct page interactions, no Page Object Model) and there is no POM directory anywhere. Identify the project pattern, coverage gaps, and how new tests should be structured.
+    prompt: Analyze this project for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Its existing E2E tests are flat (direct page interactions, no Page Object Model) and there is no POM directory anywhere. Identify the project pattern, coverage gaps, and how new tests should be structured.
 context:
-    files:
-        evals/files/project-flat/playwright.config.ts: evals/files/project-flat/playwright.config.ts
-        evals/files/project-flat/src/app/page.tsx: evals/files/project-flat/src/app/page.tsx
-        evals/files/project-flat/tests/login.spec.ts: evals/files/project-flat/tests/login.spec.ts
+    repo_fixture: evals/files/project-flat
 constraints: {}
 expect: {}
 judge:

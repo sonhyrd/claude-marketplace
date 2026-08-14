@@ -19,14 +19,9 @@ description: >-
 
 tag: functional_test
 input:
-    prompt: Analyze the project in evals/files/project-pom/ and identify coverage gaps. The project has routes defined in src/routes.ts including /login, /dashboard, /dashboard/analytics, /settings, /settings/notifications, /settings/security, /profile, /checkout, and /checkout/confirmation. Currently only auth tests exist in tests/auth.spec.ts. Identify what is covered, what is not, and how new tests should be structured.
+    prompt: Analyze this project and identify coverage gaps. The project has routes defined in src/routes.ts including /login, /dashboard, /dashboard/analytics, /settings, /settings/notifications, /settings/security, /profile, /checkout, and /checkout/confirmation. Currently only auth tests exist in tests/auth.spec.ts. Identify what is covered, what is not, and how new tests should be structured.
 context:
-    files:
-        evals/files/project-pom/playwright.config.ts: evals/files/project-pom/playwright.config.ts
-        evals/files/project-pom/src/routes.ts: evals/files/project-pom/src/routes.ts
-        evals/files/project-pom/tests/auth.spec.ts: evals/files/project-pom/tests/auth.spec.ts
-        evals/files/project-pom/tests/pages/base-page.ts: evals/files/project-pom/tests/pages/base-page.ts
-        evals/files/project-pom/tests/pages/login-page.ts: evals/files/project-pom/tests/pages/login-page.ts
+    repo_fixture: evals/files/project-pom
 constraints: {}
 expect: {}
 judge:

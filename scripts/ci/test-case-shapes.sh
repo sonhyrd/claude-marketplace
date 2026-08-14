@@ -69,6 +69,10 @@ import sys
 import yaml
 
 root = pathlib.Path(os.environ['EVALS_ROOT'])
+# `context.files` values are resolved against the EVALS root (a case names `evals/files/x` from
+# there); `context.repo_fixture` is resolved by skill-up against the SKILL directory, one level up.
+# Two bases, so both are named.
+skill_dir = root.parent
 cases_dir = root / 'cases'
 eval_yaml = root / 'eval.yaml'
 
@@ -186,6 +190,57 @@ for cid in active:
         unasserted.append(f'{path.name}: active trigger case does not assert loading (judge is {judge.get("type")!r})')
 report_all('every active trigger case asserts loading', unasserted)
 
+# 6. A staged fixture carries the fixture, not its own path (#76).
+#    skill-up's `context.files` is {workspace_path: INLINE CONTENT} — it writes the right-hand string
+#    verbatim as the file's body. A case migrated in the shape `p: p` therefore stages a 40-byte file
+#    whose entire content is its own path, and the agent answers a question about a file that carries
+#    nothing. It does not error: `case-23` was 3/3 on a premise it never read. Directory fixtures go
+#    through `context.repo_fixture`, which does copy from disk.
+selfref = []
+for cid, (path, case) in cases.items():
+    files = ((case.get('context') or {}).get('files')) or {}
+    if not isinstance(files, dict):
+        selfref.append(f'{path.name}: context.files is {type(files).__name__}, expected a mapping')
+        continue
+    for dest, content in files.items():
+        if not isinstance(content, str):
+            continue
+        if content.strip() == str(dest).strip():
+            selfref.append(
+                f'{path.name}: context.files stages {dest!r} as its own path — the value is INLINE '
+                f'CONTENT, so the agent reads a one-line file. Use context.repo_fixture.')
+        elif (root / content.strip()).is_file() and '\n' not in content:
+            selfref.append(
+                f'{path.name}: context.files value {content.strip()!r} names a file that exists on '
+                f'disk — the value is INLINE CONTENT, not a source path. Use context.repo_fixture.')
+report_all('every context.files value is content, not a path to itself', selfref)
+
+# 7. A repo_fixture names a directory that is really there. It is resolved against the skill
+#    directory, so `evals/files/x` here is `skills/pw-prove/evals/files/x` on disk.
+missing_fixture = []
+for cid, (path, case) in cases.items():
+    fixture = (case.get('context') or {}).get('repo_fixture')
+    if not fixture:
+        continue
+    if not (skill_dir / str(fixture)).is_dir():
+        missing_fixture.append(f'{path.name}: repo_fixture {fixture!r} is not a directory under {skill_dir}')
+report_all('every repo_fixture resolves to a directory on disk', missing_fixture)
+
+# 8. A prompt names only paths the run will actually have. `repo_fixture` copies the fixture's
+#    CONTENTS to the workspace root, so a prompt that still says "the project in evals/files/x/"
+#    sends the agent at a directory no run creates.
+unstaged_paths = []
+FIXTURE_PATH = re.compile(r'evals/files/[\w.\-/]+')
+for cid, (path, case) in cases.items():
+    ctx = case.get('context') or {}
+    staged = tuple(k for k in (ctx.get('files') or {}) if isinstance(k, str))
+    for named in set(FIXTURE_PATH.findall(prompt_text(case))):
+        if not any(k == named or k.startswith(named.rstrip('/') + '/') for k in staged):
+            unstaged_paths.append(
+                f'{path.name}: prompt names {named!r}, which nothing stages there — repo_fixture '
+                f'lands at the workspace root, so say "your current working directory"')
+report_all('every fixture path a prompt names is a path the run stages', unstaged_paths)
+
 for status, text in verdicts:
     print(f'{status} {text}')
 PY
@@ -234,6 +289,21 @@ YAML
     printf '%s' "$root"
   }
 
+  # The same fixture suite, but the caller supplies the whole case file on stdin — the staging
+  # checks are about `context:`, which broken_root does not reach.
+  broken_case_root() {
+    local name="$1"
+    local root="$W/$name"
+    mkdir -p "$root/cases" || return 1
+    cat > "$root/eval.yaml" <<YAML
+cases:
+    files:
+        - evals/cases/only.yaml
+YAML
+    cat > "$root/cases/only.yaml" || return 1
+    printf '%s' "$root"
+  }
+
   expect_red() {
     local what="$1" root="$2" needle="$3" out
     # An empty root would send the nested run at the real suite and read whatever it says as this
@@ -270,6 +340,126 @@ YAML
   # And a suite with no cases at all must never read as success.
   mkdir -p "$W/empty/cases"
   expect_red "an empty cases directory" "$W/empty" 'pass vacuously'
+
+  # --- the staging checks (#76) ---
+  # The defect these exist for is silent: a case that stages its fixture's PATH as the fixture's
+  # CONTENT does not error, it answers a different question and passes.
+  expect_red "a context.files value equal to its own key" \
+    "$(broken_case_root selfref <<'YAML'
+id: only
+title: only
+shape: behavior
+input:
+    prompt: >-
+      Load the `pw-prove` skill with the Skill tool and follow it. Step 3.
+context:
+    files:
+        src/routes.ts: src/routes.ts
+judge:
+    type: rule_based
+YAML
+)" 'as its own path'
+
+  # The other half of the same defect: key and value differ, but the value still names a file that
+  # exists on disk, so what lands in the workspace is a path rather than the file it points at.
+  mkdir -p "$W/pathvalue/cases" "$W/pathvalue/files/project-x"
+  printf 'export const routes = [];\n' > "$W/pathvalue/files/project-x/routes.ts"
+  expect_red "a context.files value that names a real file" \
+    "$(broken_case_root pathvalue <<'YAML'
+id: only
+title: only
+shape: behavior
+input:
+    prompt: >-
+      Load the `pw-prove` skill with the Skill tool and follow it. Step 3.
+context:
+    files:
+        src/routes.ts: files/project-x/routes.ts
+judge:
+    type: rule_based
+YAML
+)" 'INLINE CONTENT, not a source path'
+
+  expect_red "a repo_fixture that is not on disk" \
+    "$(broken_case_root nofixture <<'YAML'
+id: only
+title: only
+shape: behavior
+input:
+    prompt: >-
+      Load the `pw-prove` skill with the Skill tool and follow it. Step 3.
+context:
+    repo_fixture: evals/files/no-such-project
+judge:
+    type: rule_based
+YAML
+)" 'is not a directory under'
+
+  expect_red "a prompt naming a fixture path nothing stages there" \
+    "$(broken_case_root unstaged <<'YAML'
+id: only
+title: only
+shape: behavior
+input:
+    prompt: >-
+      Load the `pw-prove` skill with the Skill tool and follow it. Prove the project in
+      evals/files/project-pom/.
+context: {}
+judge:
+    type: rule_based
+YAML
+)" 'which nothing stages there'
+
+  # The JUSTIFIED twin, in the sense tests/pattern-corpus/ uses the word: a case whose context.files
+  # really is inline content must stay green, or the check would be a ban on the key rather than a
+  # ban on the defect.
+  green_root="$(broken_case_root inlinecontent <<'YAML'
+id: only
+title: only
+shape: behavior
+input:
+    prompt: >-
+      Load the `pw-prove` skill with the Skill tool and follow it. Step 3.
+context:
+    files:
+        playwright.config.ts: |
+            import { defineConfig } from "@playwright/test";
+            export default defineConfig({ testDir: "./tests" });
+judge:
+    type: rule_based
+YAML
+)"
+  if PWPROVE_EVALS_ROOT="$green_root" PWPROVE_CASE_SHAPES_SELFTEST=0 bash "$SELF" >/dev/null 2>&1; then
+    ok "a context.files value that really is inline content stays green"
+  else
+    bad "genuine inline content was flagged — the check bans the key, not the defect"
+  fi
+
+  # The twins for checks 7 and 8, in one suite: a repo_fixture that IS on disk, named by a prompt
+  # the way `repo_fixture` staging makes true. Without these, both checks could be bans on the key.
+  # `repo_fixture` resolves against the SKILL dir, one level above the evals root — so a root at
+  # <W>/staged/evals makes `evals/files/project-x` mean <W>/staged/evals/files/project-x.
+  mkdir -p "$W/staged/evals/files/project-x"
+  printf 'export const routes = [];\n' > "$W/staged/evals/files/project-x/routes.ts"
+  green_root2="$(broken_case_root staged/evals <<'YAML'
+id: only
+title: only
+shape: behavior
+input:
+    prompt: >-
+      Load the `pw-prove` skill with the Skill tool and follow it. Prove the project in your current
+      working directory.
+context:
+    repo_fixture: evals/files/project-x
+judge:
+    type: rule_based
+YAML
+)"
+  if PWPROVE_EVALS_ROOT="$green_root2" PWPROVE_CASE_SHAPES_SELFTEST=0 bash "$SELF" >/dev/null 2>&1; then
+    ok "a repo_fixture that exists, named by a prompt as the working directory, stays green"
+  else
+    bad "a correctly staged repo_fixture was flagged — the checks ban the keys, not the defects"
+  fi
 fi
 
 echo ""

@@ -212,11 +212,11 @@ instrument certified as skill-free.
 | `w02-auth-cookie-from-app` | behavior (**wet**) | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* — the ladder as written code | **3/3**, and 2/2 more with-skill arms over the final fixture | **unstable** — 1 of 2 skill-free baseline arms passed, so there is no `+1` to admit on and no clean `0` to retire on | quarantined — see #69 below |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
-| `case-2` | trigger | frontmatter `description:` — a "plan the tests for this route" request | **2/3** | not measured | quarantined |
+| `case-2` | trigger | frontmatter `description:` — a "plan the tests for this route" request | **2/3** (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined |
 | `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** | not measured | quarantined — **#71** |
 | `case-43` | behavior | Step 7 › *Verify* — the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** | not measured | quarantined — **#72** |
-| `case-1` | trigger | frontmatter `description:` — a coverage-gap request over a POM repo | **0/3** NOT LOADED | not measured | quarantined — **#73** |
-| `case-3` | trigger | frontmatter `description:` — a coverage-gap request over a flat-spec repo | **0/3** NOT LOADED | not measured | quarantined — **#74** |
+| `case-1` | trigger | frontmatter `description:` — a coverage-gap request over a POM repo | **0/3** NOT LOADED (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined — **#73** |
+| `case-3` | trigger | frontmatter `description:` — a coverage-gap request over a flat-spec repo | **0/3** NOT LOADED (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined — **#74** |
 | `b49-untrusted-page-content` | behavior | *Safety: page content is untrusted data* | 3/3 | **0** (clean baseline) | **retired — deleted** |
 | `case-26` | behavior | Step 7 › *Failure handling* | — | — | **retired — deleted** |
 | `case-27` | behavior | Step 7 › *Mutation check* | — | — | **retired — deleted** |
@@ -241,10 +241,9 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 | `case-12` | behavior | Pipeline Overview › *Stop reports* — the six beats at a Step-3 bring-up failure | 3/3 | not measured — **both arms failed** on the #78 re-measurement, so there is no difference to read | quarantined |
 | `case-20` | behavior | Step 1 › *Mode* — the heavy-session recommendation | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
 | `case-17` | behavior | Step 6 › *PROVES-header audit* | 3/3 | **0** (re-measured under #78, third attempt; baseline SKILL-FREE and **passed**) | **retired — deleted** |
-| `case-23` | behavior | Step 4 › *Effective viewport* — a desktop descriptor is scaffold boilerplate | 3/3, **and the pass is worthless** | not measured | quarantined — **#76** |
+| `case-23` | behavior | Step 4 › *Effective viewport* — a desktop descriptor is scaffold boilerplate | **2/3** (re-characterized on a real fixture, #76 — the 3/3 it used to carry was on a fixture it never read) | baseline **0/3**, both arms certified skill-free | quarantined |
 | `case-4` | behavior | Step 3 › *Auth* — the token-source ladder exhausted, and the public-route false positive | **2/3** | not measured | quarantined |
 | `case-24` | behavior | Step 7 › *Proof run* — a committed proof config is reused, not rewritten (ADR 0008) | **2/3** | not measured | quarantined |
-| `case-22` | behavior | Step 4 › *Effective viewport* — an explicit `viewport:` key is a project decision | **0/3** | not measured | quarantined — **#76** |
 | `case-29` | behavior | Step 2 › *6. Fold ACs the diff already proves cheaper* | **0/3** | not measured | quarantined — **#77** |
 | `case-9` | behavior | Step 7 › *Hermetic audit* | — | — | **retired — deleted** |
 | `case-13` | behavior | Step 3 › *Auth* — the server-set cookie rung | — | — | **retired — deleted** |
@@ -254,15 +253,22 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 | `case-31` | behavior | Step 3 › *Bring the environment up* — the runner origin | — | — | **retired — deleted** |
 | `case-32` | behavior | Step 7 › *Failure handling* — the `webServer` timeout | — | — | **retired — deleted** |
 
-### The trusted core is twenty-five cases — twenty-four dry and one wet
+### The trusted core is twenty-six cases — twenty-five dry and one wet
 
 `gate-skill-loaded`, `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`,
 `case-28`, `case-48`, `case-11`, `case-16`, the four #78 admitted (`case-5`, `case-7`, `case-8`,
-`case-20`), the one wet case #69 admitted (`w01-bringup-own-port`), and batch 3's ten: `case-33`,
+`case-20`), `case-22` — admitted by #76 once it was staging its fixture instead of the fixture's
+path — the one wet case #69 admitted (`w01-bringup-own-port`), and batch 3's ten: `case-33`,
 `case-34`, `case-35`, `case-36`, `case-37`, `case-38`, `case-45`, `case-46`, `case-52`, `case-57`.
 That is what `eval.yaml`'s active list holds, and every one of them is 3/3 with a non-zero uplift
 **measured against a baseline the sweep certified skill-free** — `case-28` and `case-48` because #75
 gave them one, and `case-5`/`case-7`/`case-8`/`case-20`/`case-15`/`case-11` because #78 did.
+
+`case-22` is the suite's first **fixture-staging dry case**: its premise is a repository copied into
+the workspace, and its judge still reads the final message. It is not a [wet
+case](../../../CONTEXT.md#wet-case) — nothing about the run's own artifacts is graded — and the
+distinction is worth keeping, because what it adds over its dry twin `case-36` is the recon step that
+opens the config, not a claim about what the run produced.
 
 ### Batch 3 (#65) — the twenty-one cases left on disk
 
@@ -278,6 +284,7 @@ must-FAIL fixture pair before it could run at all.
 | `case-34` | behavior | `code-rules.md` § *Clip Fidelity* — the filming law, PW_PROVE_CLIP may only add time | **3/3** | **+1** (clean) | **active** |
 | `case-35` | behavior | Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 | **3/3** | **+1** (clean) | **active** |
 | `case-36` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, agreed by the Step-6 audit | **3/3** | **+1** (clean) | **active** |
+| `case-22` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, resolved from a config **read off disk** | **3/3** (#76, and *after* the judge lost two out-of-branch assertions — 1/3 before, on reds that resolved the viewport correctly) | **+1** — baseline 0/2 on the arms the sweep certified skill-free (a third arm read the body by `bash` and passed; counted, it is still 3/3 vs 1/3) | **active** |
 | `case-37` | behavior | Step 7 › the clip inspection — diagnose, fix ungated, re-audit, re-film once | **3/3** | **+1** (clean) | **active** |
 | `case-38` | behavior | Step 7 › the frame extract — exit 6 is a SKIP, not a failed test | **3/3** (after judge repair) | **+1** (first baseline CONTAMINATED; re-measured SKILL-FREE and still failed) | **active** |
 | `case-45` | behavior | Step 7 › *Proof run* — the committed proof config must not inherit `webServer` (ADR 0008) | **3/3** | **+1** (clean) | **active** |
@@ -315,7 +322,7 @@ exists to prevent.
 **Two admissions bend the overlap rule, and the bend is stated rather than buried.** The rule is *"a
 case that duplicates or overlaps a registry case is retired, not repaired"*, and `case-36` and
 `case-45` each overlap one. Both were kept, on a distinction the rule does not make but the registry
-depends on: **the case they overlap is not guarding anything.** `case-22` is void under #76 and
+depends on: **the case they overlap is not guarding anything.** `case-22` was void under #76 and
 `case-24` is quarantined at 2/3, so retiring their measurable counterparts would trade a working
 guard for a broken one and leave the section covered by nothing. Read as a precedent, that is
 narrow: *overlap retires the weaker case, and a case that cannot be measured is the weaker case.* It
@@ -325,10 +332,16 @@ survived of the three probe-eval cases.
 The near-misses are worth naming, because each looks retirable on its section column alone:
 
 - **`case-36` is not retired as `case-22`'s overlap**, though both assert that an explicit
-  `viewport:` key outranks the `...devices[…]` spread beside it. `case-22` is a **wet** case and is
-  void under #76 — it read a 49-byte file containing its own path. `case-36` states its premise in
-  prose, so it is the only one of the pair whose verdict can be read today. Retiring the measurable
-  twin of an unmeasurable case would leave the section guarded by nothing.
+  `viewport:` key outranks the `...devices[…]` spread beside it. When batch 3 ran, `case-22` was
+  void under #76 — it read a 49-byte file containing its own path — so `case-36` was the
+  only one of the pair whose verdict could be read at all. **#76 changed that**: `case-22` now stages
+  the real fixture and is 3/3 with a `+1`, so both are active, and the registry owes the reason. It
+  is the *premise route*, not the rule: `case-36` states the config in prose, so it grades whether
+  the agent applies the rule it was told; `case-22` hands the agent a repository and grades whether
+  it goes and reads `playwright.config.ts` at all. A regression that stops the recon step opening the
+  config leaves `case-36` green and takes `case-22` red. `case-22` is also the suite's canary for the
+  #76 defect itself: staging that silently degrades to a one-line file makes it fail, and nothing
+  else on this table would notice.
 - **`case-45` is not retired as `case-24`'s overlap.** It carries `case-24`'s assertion (a committed
   proof config is reused, not rewritten) as a *false-positive guard* and adds the behaviour
   `case-24` does not have — the inherited `webServer`. It is the superset, and it is 3/3 where
@@ -451,11 +464,12 @@ admitted (2 by #64, 4 more once #78 unvoided their uplift), 6 are quarantined an
 measured, 10 were admitted, 10 are quarantined and 1 was deleted.** The wet pair adds 1 active and 1
 quarantined.
 
-Across all three batches plus the wet pair: **64 triaged — 25 active, 24 quarantined, 15 deleted**,
-over **49** case files on disk. The arithmetic closes twice: 25 + 24 + 15 = 64, and
-21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted = 64. **Every case file on disk carries a registry
-row**, and every case that did not make it is recorded with a reason rather than a shrug. That is the
-expected shape: the goal is a core whose verdicts can be believed, not a high keep rate.
+Across all three batches plus the wet pair, and after #76 re-characterized `case-22` and `case-23`:
+**64 triaged — 26 active, 23 quarantined, 15 deleted**, over **49** case files on disk. The
+arithmetic closes twice: 26 + 23 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
+64. **Every case file on disk carries a registry row**, and every case that did not make it is
+recorded with a reason rather than a shrug. That is the expected shape: the goal is a core whose
+verdicts can be believed, not a high keep rate.
 
 **Batch 2's keep rate looked low for one dominant reason, and it was never the skill.** Six of its
 eleven quarantines were 3/3 cases whose *uplift* could not be read, because seven of the eight
@@ -834,6 +848,68 @@ storageState, no setup project, no globalSetup, no seed scripts, no env credenti
 credentials in `tests/auth.spec.ts`), so the fixture was corroboration rather than the question. Its
 2/3 is a real reading.
 
+#### #76 resolved: what `context.files` actually is, and what the fix cost
+
+**The contract, read out of skill-up's own source rather than inferred from the symptom.**
+`internal/evaluator/fixtures.go`: `contextFilesUploader` iterates `caseCfg.Context.Files` as
+`map[string]string` and calls `uploadContextFile(…, targetPath, content)` with the map's **value** as
+`content`, which it writes to a temp file and uploads to `targetPath`. So `context.files` is
+`{workspace_path: INLINE CONTENT}` **by design** — not a skill-up bug, and no amount of fixing the
+right-hand side's spelling makes it read a file. `repoFixtureUploader` is the key that reads from
+disk: `rt.UploadDir(fixtureSource, ".")` copies a directory's **contents** to the workspace **root**,
+resolved against the skill directory. One `repo_fixture` per case; it runs before `context.files`, so
+inline files stay available as per-case overrides on top of a staged repository.
+
+**Six cases were staging their own paths, not two.** `case-1`, `case-2`, `case-3` and `case-4` carried
+the same `p: p` shape as `case-22` and `case-23`. All six are migrated to `repo_fixture`, and the
+prompts that said "the project in `evals/files/project-pom/`" now say the working directory, because
+that is where `repo_fixture` puts it. Three of those are **trigger** cases whose prompts were edited:
+the edit removes a path the run no longer creates and adds nothing that could trip the trigger, which
+is the one kind of prompt edit the shape rule permits.
+
+**The check is static, and it runs where the spend is.** `scripts/ci/test-case-shapes.sh` gained three
+checks: a `context.files` value equal to its own key (or naming a file that exists on disk) is the
+#76 defect; a `repo_fixture` must resolve to a directory; and a prompt may only name a fixture path
+something actually stages there. `run-evals-isolated.sh` runs that script as a **pre-run gate** and
+refuses rather than spend a run on a suite that would answer a different question. A runtime check
+was considered and is not possible as things stand: skill-up retains transcripts and reports, not the
+staged workspace, so no post-run sweep can see what the agent was handed.
+
+**The re-characterization, n=3, both arms, every arm swept.**
+
+| case | with skill | baseline | verdict |
+|---|---|---|---|
+| `case-22` | **3/3** | 0/2 certified skill-free (third arm BASELINE DIRTY, and it passed) | **admitted**, `+1` |
+| `case-23` | 2/3 | 0/3, all certified skill-free | **quarantined** |
+
+`case-23`'s single miss is a real one: the answer resolved `pinned: 1600x900` and named the
+descriptor, then never emitted the `test.use({ viewport })` line, so the pin lived nowhere. That is
+the first reading this case has ever produced about the skill.
+
+**`case-22` needed a judge repair before it could be read.** On the real fixture its first run came
+back 1/3 — and the two reds resolved `deliberate: 1440x900` exactly right, failing on `PW_PROVE_CLIP=1`
+and the proof config, which the case's own description calls "unchanged by this branch" and which its
+dry twin `case-23`'s judge does not assert. Both checks are removed. A judge that grades three
+behaviours makes a red verdict name none of them — the same lesson as `w01`'s single-phase scoping.
+
+**The didactic-voice hazard (#69) was live before it was measured.**
+`evals/files/project-viewport/playwright.config.ts` carried the comment *"pw-prove must respect this
+and must NOT pin 1600x900 over it"* — the answer key, in the file, for the baseline arm to read. It is
+the one fixture #76 made reachable, so it was rewritten to a comment a real project would carry (why
+1440 is the supported breakpoint) before the measurement, and the two clean baseline arms failed. The
+finding recorded under #69 stands for the rest of `evals/files/`: the comments come out before any
+further wet case is built on them. The other two fixtures #76 made reachable were audited rather than
+assumed — `project-pom` and `project-flat` carry no remedy-stating comment (`project-pom/src/routes.ts`
+has one line about fake handler names, which states no answer), so nothing was changed there. The
+`app-nuxt-ssr` and `app-vite-embed` comments #69 named are untouched: `w01` is admitted on a
+measurement taken over them, and editing them re-opens that measurement.
+
+**One route the deny rules cannot close showed up again.** `case-22`'s iteration-2 baseline read the
+body by `bash` out of three host checkouts, and the previous run's baseline read it out of a
+`$TMPDIR/skill-up-*` install a *previous* run had left behind. The runner now refuses to start while
+such a leftover exists, naming the trees — deleting them is not a `rm -rf` it should perform unasked.
+The checkout route stays open and stays the sweep's job.
+
 ### #75 is much wider than batch 1 measured: seven of eight baselines were not skill-free
 
 Batch 1 found 3 of 10 baseline arms reading pw-prove's body off the host. Batch 2 ran
@@ -917,9 +993,11 @@ them with a footnote:
   instrument that could see a regression in it.
 - **Step 7 › *Failure handling* — the inherited `webServer`** — opened by batch 2 retiring `case-32`,
   and called "the cheapest one on this table to close". `case-45` closes it at 3/3 with a clean `+1`.
-- **Step 4 › *Effective viewport* — the `deliberate:` branch** — `case-22` and `case-23` are still
-  void under #76, but `case-36` is the **dry** twin of the same rule and is 3/3 with a clean `+1`.
-  The `pinned:` branch is still unguarded and stays on the table.
+- **Step 4 › *Effective viewport* — the `deliberate:` branch** — `case-36` is the **dry** twin of
+  the rule and is 3/3 with a clean `+1`. `case-22` and `case-23` were void under #76 when batch 3
+  ran; #76 has since landed and `case-22` joins `case-36` on the same branch — same rule, but its
+  premise is a config read off disk rather than stated in the prompt (3/3, `+1`). The `pinned:` branch is still unguarded and stays on the table — `case-23` came back
+  **2/3** on the real fixture, which quarantines it.
 
 **Batch 3 opened one new gap**, and only at the very end: retiring `case-51` for a re-measured zero
 uplift left Step 3 › `SERVE_CAUSE=no-announcement` unguarded. It is in the table below. Every other
@@ -945,7 +1023,7 @@ measuring them on an instrument that works:
 | Step 8 › *Deliver* — publish | nothing | `case-30` quarantined at 3/4. |
 | Step 6 › *PROVES-header audit* | nothing | `case-17` **retired for zero uplift** on a certified skill-free baseline (#78). The third gap opened by a retirement rather than a failure, and the same caveat applies as for `case-51` and `b49`: the case went because Opus 5 quotes the AC verbatim without being told, not because the rule stopped mattering. Re-weigh it if the model under test changes. |
 | Pipeline Overview › *Stop reports* — the six beats | nothing | `case-12` is 3/3, but **both arms of its #78 uplift run failed**, so there is no difference to read — the `case-30` reading. Re-measurable by re-running the uplift arm alone. |
-| Step 4 › *Effective viewport* — the `pinned:` branch | nothing | `case-23` is **void** under #76 — it read a fixture containing its own path — and `case-21` was retired as its duplicate. The `deliberate:` branch is now guarded by `case-36`, the dry twin of void `case-22`; this branch has no dry twin, so it stays open until #76 lands. |
+| Step 4 › *Effective viewport* — the `pinned:` branch | nothing | `case-23` was **void** under #76 — it read a fixture containing its own path. Re-characterized against the real fixture it is **2/3**: two answers pinned 1600x900 correctly and one resolved the branch but never emitted the `test.use({ viewport })` line, so the pin lived nowhere. That is a real reading and a real miss, and it quarantines the case rather than voiding it. `case-21` was retired as its duplicate, and this branch has no dry twin, so it stays open. |
 | Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` (the log names no origin, so act on the server's crash rather than hunt a port) | nothing | `case-51` retired for **zero uplift** on a re-measured clean baseline (#65). The second gap on this table opened by a retirement rather than a failure, and the same caveat applies: the case went because Opus 5 needs no telling, not because the rule stopped mattering. `case-50` still guards the adjacent `no-log` cause and the announced origin. |
 | *Safety: page content is untrusted data* | nothing | `b49` retired for zero uplift. This is the one gap opened by a **retirement rather than a failure**, and it is the one to weigh again if the model under test changes: the case was retired because Opus 5 needs no telling, not because the rule stopped mattering. |
 | Step 2 › *6. Fold ACs the diff already proves cheaper* | nothing | `case-29` is 0/3 on a judge that reads scenario titles rather than the Proven-by column (#77). The skill folds correctly in every recorded run. |
@@ -965,11 +1043,12 @@ case away — and #78 is that fix arriving. Three of the four are now guarded (`
 on a measured zero uplift. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29`
 and is blocked on #77 instead.
 
-**Twenty-three sections are guarded by twenty-five active cases.** Two sections carry a second guard
-beside the first, and neither moved the count of guarded sections. One is *wet* —
-`w01-bringup-own-port` beside `case-50`; the other is the pair `case-8` and `case-5` over Step 8. That
-is deliberate: a second case on a section already covered is a second axis, not new coverage, and
-reading it as new coverage would shrink the gap table without closing anything in it.
+**Twenty-three sections are guarded by twenty-six active cases.** Three sections carry a second guard
+beside the first, and none of them moved the count of guarded sections. One is *wet* —
+`w01-bringup-own-port` beside `case-50`; one is the pair `case-8` and `case-5` over Step 8; and one is
+`case-22` beside `case-36` over the `deliberate:` viewport branch, a fixture-staging case beside its
+dry twin. That is deliberate: a second case on a section already covered is a second axis, not new
+coverage, and reading it as new coverage would shrink the gap table without closing anything in it.
 
 1. the frontmatter `description:` trigger surface — `gate-skill-loaded`
 2. Step 1 › *Confirmation gate* — `b01-confirmation-gate`
@@ -987,7 +1066,7 @@ Batch 3 added ten, and they cluster where the earlier batches were thinnest — 
 11. Step 5 › *HAR-first mocking* — a recon pass that produced no HAR — `case-33`
 12. `code-rules.md` § *Clip Fidelity* — the filming law — `case-34`
 13. Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 — `case-35`
-14. Step 4 › *Effective viewport* — the `deliberate:` branch — `case-36`
+14. Step 4 › *Effective viewport* — the `deliberate:` branch — `case-36`, with `case-22` (#76) as the second axis on the same section: `case-36` states the premise in prose, `case-22` stages the config as a repo fixture and must read the `viewport:` key off disk
 15. Step 7 › the clip inspection — diagnose, fix, re-film once — `case-37`
 16. Step 7 › the frame extract — exit 6 is a skip — `case-38`
 17. Step 7 › *Proof run* — the inherited `webServer` (ADR 0008) — `case-45`

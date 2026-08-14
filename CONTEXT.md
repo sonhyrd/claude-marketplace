@@ -319,9 +319,9 @@ The set of cases whose verdicts may be **acted on**: each carries a recorded pas
 SKILL.md section it guards. Membership is earned at admission and recorded in the **registry**
 (`skills/pw-prove/evals/REGISTRY.md`) — the one file listing every case with its pass rate, uplift,
 guarded section and status, enforced by nothing. A case file sitting on disk is inventory, not
-coverage: after three batches of triage, #69's two wet cases and the sealed re-measurements of #75
-and #78 the core is **25** cases of 49 on disk, and a case outside the core is not a weaker guard but
-no guard at all.
+coverage: after three batches of triage, #69's two wet cases, the sealed re-measurements of #75 and
+#78, and #76's fixture-staging repair the core is **26** cases of 49 on disk, and a case outside the
+core is not a weaker guard but no guard at all.
 
 ## Characterization
 The measurement that decides whether a case joins the [trusted core](#trusted-core): three runs of
