@@ -1,6 +1,6 @@
 {
   "name": "e2e",
-  "version": "1.0.0+codex.dbb13d69368e",
+  "version": "1.1.0+codex.019c7bbda039",
   "description": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. Both are model-invocable so they can chain: pw-prove into e2e-reviewer at its quality gate, and a review skill into pw-prove, which confirms before a model-invoked run.",
   "author": {
     "name": "voidmatcha"
