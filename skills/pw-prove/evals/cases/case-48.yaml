@@ -14,13 +14,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ['auth\.token', 'auth\.user']
-            any: ["(?i)dev-?guard", 'import\.meta\.dev', "(?i)compiled out", "(?i)absent"]
-        - output_matches:
-            any: ["(?i)assumption"]
-    failure:
-        - output_contains:
-            any: ["?token=", "re-enable the guard", "edit the app", "patch the source", "runtime flag"]
+    type: script
+    script_path: evals/judges/dev-guarded-rung-skipped.mjs
+    timeout_seconds: 30

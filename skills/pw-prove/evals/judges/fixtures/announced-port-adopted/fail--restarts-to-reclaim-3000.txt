@@ -1,0 +1,5 @@
+SERVE=failed after the full budget, so the server is broken.
+
+The 3001 port it announced and the `[::1]` address in the log are leftovers from an earlier attempt.
+
+I will kill it, allocate a new free port, and restart on 3000.

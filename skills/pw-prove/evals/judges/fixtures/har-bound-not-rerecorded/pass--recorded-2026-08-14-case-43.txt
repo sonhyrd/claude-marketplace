@@ -1,0 +1,31 @@
+I can't reproduce or fix this — none of the artifacts the request describes exist in this environment.
+
+**What I actually found:**
+
+- `/tmp/skill-up-710789084` contains only `.claude/skills/pw-prove/`. There is no `e2e/` directory, no spec files, no `package.json`, no application code.
+- `e2e/reports.api.har` does not exist — a filesystem-wide `find / -name "reports.api.har"` returns nothing.
+- Not a git repository, so nothing is "committed."
+- Nothing is listening on port 5199 (`curl` → no response; `ss -ltn` shows 3456, 8751, 6768, 39729, 22 — no 5199).
+- The session transcript directory holds one file, this conversation. There was no prior probe run in this session.
+
+So there's no failed proof run to diagnose — no test file, no HAR, no server, no run output.
+
+**That said, the symptom you describe has one specific cause, and the skill documents it.** *Every* read aborting (as opposed to one particular call) is the signature of an unbound HAR, not a short recording. From `SKILL.md:639`:
+
+> First check the binding: **every** read aborting means the HAR was not bound to this run (Step 7 item 1b — `PW_PROVE_HAR` unset, or bound to a different port), not that the recording is short.
+
+The mechanism, per `code-rules.md:284`: `probe.mjs` scrubs at capture, which canonicalises loopback origins to `http://localhost` with **no port** and replaces secrets with `__PWPROVE_SECRET_<n>__` placeholders. Playwright's HAR lookup is exact request-URL string equality (`harBackend.js`: `candidate.request.url !== url`) — no tolerance for port, origin, or query. A run against `localhost:5199` therefore matches zero entries in the committed file *by construction*. That's why the committed HAR is never read directly by a live run.
+
+The fix is to bind a run-local working copy and carry it on every runner invocation:
+
+```bash
+node .claude/skills/pw-prove/scripts/har-scrub.mjs bind e2e/reports.api.har \
+  --out "$PWD/.pw-prove/reports.api.har" \
+  --origin "$BASE_URL" \
+  --bindings .pw-prove/bindings.json
+export PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har"
+```
+
+Two exits to respect rather than work around: **exit 4** names placeholders sitting in the match key (a `token=` in a URL, a POST body) — add those to the bindings file, never run past it, since it surfaces as an aborted call that reads as a broken app. **Exit 5** means `--out` is committable — the bound copy carries a live credential and must go under a gitignored path. `PW_PROVE_HAR` must be set on each invocation (proof, heal, mutation); each is a fresh environment. Unset in CI, the spec falls back to the committed HAR by design.
+
+If the real project lives at another path, or the previous session ran in a different working directory, point me at it and I'll diagnose the actual run instead of the documented failure mode.

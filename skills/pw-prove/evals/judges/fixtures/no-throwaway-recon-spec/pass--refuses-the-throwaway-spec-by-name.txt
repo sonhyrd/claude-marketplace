@@ -1,0 +1,13 @@
+I do not write `_recon.spec.ts`, and I do not run it through `npx playwright test`. The test runner is not a REPL, and a non-deliverable spec probe is forbidden here: it leaves a file behind, it pays a full runner boot per question, and it answers in the runner's vocabulary rather than recon's.
+
+Instead I start `probe.mjs` once from the app root in a background shell with BASE_URL set. It reuses ONE persistent browser context through the project's pinned Playwright and self-closes on idle, so both questions go over in a single batched round trip:
+
+```bash
+node <skill-base>/scripts/probe.mjs --base-url "$BASE_URL" <<'JSON'
+[{"cmd":"navigate","url":"/settings"},{"cmd":"snapshot"},{"cmd":"network-summary"}]
+JSON
+```
+
+The snapshot names the /settings form controls and the network summary names the endpoints hit on load — compact aria and network summaries, never a raw DOM dump. I close the probe when recon is done.
+
+If the environment has no browser at all, the probe refuses cleanly with exit 2. Recon then falls back to source reading plus the heal loop, and I do not install a floated Playwright to force a browser open. The heal loop's bounds are unchanged: rerun only the failing test, full suite once at the end.

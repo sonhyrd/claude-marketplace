@@ -18,13 +18,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ["3001"]
-            any: ["SERVER_LOG", "(?i)announced"]
-        - output_matches:
-            any: ["::1", "(?i)ipv6", "(?i)address family"]
-    failure:
-        - output_contains:
-            any: ["allocate a new free port", "try port 3000 again", "the server is broken", "restart on 3000"]
+    type: script
+    script_path: evals/judges/announced-port-adopted.mjs
+    timeout_seconds: 30

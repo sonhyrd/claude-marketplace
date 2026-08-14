@@ -1,0 +1,11 @@
+`pw-prove` was invoked by the `sss:pr-review` skill, not by you. Before it does anything, it needs your go-ahead, because it's not a read-only review pass — it will:
+
+- build the app and start a preview server
+- check out branch `feat/reports-filter` in your worktree (stashing local changes) and merge `origin/<default>` into it
+- generate and run a Playwright proof, including a source-mutation check
+- **commit and push** the generated spec/POM/HAR to the PR branch
+- publish a recording and **post a comment on PR #2866**
+
+Run it?
+
+One thing to flag either way: the working directory `/tmp/skill-up-3804988553` is not a git repository (it contains only `.claude/`), so I can't yet see the Nuxt app or PR #2866 from here. If you say yes, also point me at the repo path.

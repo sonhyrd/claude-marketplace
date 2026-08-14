@@ -13,13 +13,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ['hermetic\.mjs', "--spec"]
-            any: ['route\.fetch']
-        - output_matches:
-            any: ["(?i)carve-?out"]
-    failure:
-        - output_contains:
-            any: ["write a parser", "parse the trace", "unzip trace.zip", "jq ", "hand-roll"]
+    type: script
+    script_path: evals/judges/hermetic-audit-not-hand-parsed.mjs
+    timeout_seconds: 30

@@ -12,13 +12,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ["PWPROVE_URL"]
-            any: ["sed -n", "(?i)marker"]
-        - output_matches:
-            any: ["(?i)exit code", '\$RC', 'RC=\$\?']
-    failure:
-        - output_contains:
-            any: ["head -n1 /tmp/pw-prove-publish.out", "head -1 /tmp/pw-prove-publish.out", "the first line of stdout"]
+    type: script
+    script_path: evals/judges/publish-url-from-marker.mjs
+    timeout_seconds: 30

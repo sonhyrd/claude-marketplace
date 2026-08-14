@@ -13,12 +13,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ["NUXT_PUBLIC_AUTH_URL"]
-            any: ["(?i)re-?run", "(?i)run (it|the) (phase|command) again", 'preflight\.mjs config build']
-            not: ["(?i)(slow|unresponsive) server", "(?i)wait longer", "(?i)increase the (timeout|budget)"]
-    failure:
-        - output_contains:
-            any: ["rebuild", "exit 5", "SERVE_CAUSE", "poll budget"]
+    type: script
+    script_path: evals/judges/config-exit-names-the-key.mjs
+    timeout_seconds: 30

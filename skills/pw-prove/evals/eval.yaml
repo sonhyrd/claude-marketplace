@@ -28,7 +28,12 @@ cases:
         # exercised by every run rather than trusted. Unknown eval.yaml keys are accepted
         # silently, so a wiring that is never exercised is a wiring nobody has checked.
         - evals/cases/gate-skill-loaded.yaml
-        # --- first run: the 12 P0 behaviors, judges hand-authored ---
+        # --- the 12 P0 behaviors ---
+        # Every one is judged by a script under evals/judges/, and every one of those scripts is
+        # covered by a must-PASS / must-FAIL fixture pair in scripts/ci/test-eval-judges.sh. They
+        # were rule_based `output_contains` until #59: a bare substring fires when the model names
+        # the forbidden thing IN ORDER TO REJECT IT, which is what produced seven of the nine
+        # failures in the 2026-08-13 run. Do not reintroduce one over discursive output.
         - evals/cases/b01-confirmation-gate.yaml
         - evals/cases/b05-handoff-stale.yaml
         - evals/cases/b49-untrusted-page-content.yaml
@@ -41,17 +46,26 @@ cases:
         - evals/cases/case-60.yaml
         - evals/cases/case-28.yaml
         - evals/cases/case-30.yaml
-        # The remaining imported cases stay on disk but OUT of this list until their
-        # placeholder judges are replaced. An unrepaired case reports a vacuous pass.
+        # The remaining imported cases stay on disk but OUT of this list until their placeholder
+        # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
+        # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those
+        # cases carry no `criteria:` key at all, so `skill-up validate` rejects them outright.
     defaults:
         timeout_seconds: 300
         max_turns: 10
     parallelism: 2
 
+# The criteria COUNT is part of an agent_judge's contract, not a free parameter. `agent_judge`
+# scores passed_criteria / total_criteria against a 0.7 default threshold, so a fourth criterion
+# silently loosens the other three from 3/3 to 3/4 — a case can start passing with a criterion it
+# used to have to satisfy. State the count wherever you set criteria, and re-read the threshold
+# before adding one. Every active case uses a `script` judge instead, so this default is a
+# placeholder: one criterion, threshold irrelevant, never expected to be reached.
 judge:
     type: agent_judge
     model: anthropic/claude-sonnet-4-6
     criteria:
+        # 1 criterion. See the note above before adding a second.
         - Cases define their own judges; this default is never expected to be reached.
 
 report:

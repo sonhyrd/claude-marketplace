@@ -1,0 +1,8 @@
+```bash
+node <skill-base>/scripts/publish-proof.mjs .pw-prove/manifest.json >/tmp/pw-prove-publish.out 2>/tmp/pw-prove-publish.log
+RC=$?
+grep -c PWPROVE_URL /tmp/pw-prove-publish.out
+URL="$(head -n1 /tmp/pw-prove-publish.out)"
+```
+
+The marker is printed first, so line 1 is the URL. If it is empty I look for PWPROVE_PROOF_FILE, and a gate exit is reported from the log.
