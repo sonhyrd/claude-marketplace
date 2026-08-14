@@ -288,7 +288,11 @@ edited until it loads: that deletes the only signal the case produces. The compl
 An eval case whose prompt presupposes **mid-run context** — a step number, a preflight exit code, a
 pasted server log. Nothing about such a prompt would ever trip the skill's trigger, so it opens with
 the [placement line](#placement-line) and a failure is about the body rather than the frontmatter.
+<<<<<<< HEAD
 The bulk of the suite: 45 of 49 case files.
+=======
+The bulk of the suite: 54 of 58 case files.
+>>>>>>> sonhyrd/ticket-69-wet-cases
 
 ## Placement line
 The one sentence that puts a [behavior case](#behavior-case)'s agent inside the skill — *"Load the
@@ -319,8 +323,13 @@ The set of cases whose verdicts may be **acted on**: each carries a recorded pas
 SKILL.md section it guards. Membership is earned at admission and recorded in the **registry**
 (`skills/pw-prove/evals/REGISTRY.md`) — the one file listing every case with its pass rate, uplift,
 guarded section and status, enforced by nothing. A case file sitting on disk is inventory, not
+<<<<<<< HEAD
 coverage: after two batches of triage the core is **eight** cases of 49 on disk, and a case outside
 the core is not a weaker guard but no guard at all.
+=======
+coverage: after the first batch of triage, #75's re-measurement and #69's two wet cases the core is
+**nine** cases of 58 on disk, and a case outside the core is not a weaker guard but no guard at all.
+>>>>>>> sonhyrd/ticket-69-wet-cases
 
 ## Characterization
 The measurement that decides whether a case joins the [trusted core](#trusted-core): three runs of

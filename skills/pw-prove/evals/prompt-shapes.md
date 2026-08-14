@@ -52,7 +52,7 @@ it is noise.
 
 ## The classification
 
-49 case files: **4 trigger, 45 behavior.** 8 are active in `eval.yaml`; the rest are inventory, not
+51 case files: **4 trigger, 47 behavior.** 11 are active in `eval.yaml`; the rest are inventory, not
 coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
 
 > Counts updated by #63, which deleted six cases in triage — `case-26`, `case-27`, `case-39`,

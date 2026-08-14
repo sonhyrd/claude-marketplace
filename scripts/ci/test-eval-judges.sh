@@ -297,6 +297,35 @@ else
   ok "$filter_carriers judgment-call judges compared"
 fi
 
+# --- and the workspace judges' preamble is one text too --------------------------------------------
+# A WET case's judge reads the run's artifacts rather than its prose (judges/README.md), and the way
+# it finds them — the refusal on an absent input, `$PWPROVE_JUDGE_ROOT` or cwd, the `read()` helper —
+# is duplicated for the same reason `offenders()` is: skill-up copies a judge to a temp directory, so
+# a relative import resolves to nothing. Unpoliced duplication is how one copy quietly keeps an older
+# rule, which is the defect #66 fixed in eight files at once.
+echo ""
+echo "-- the workspace preamble is verbatim across the wet judges --"
+preamble_of() { awk '/^const finalMessage/ { p = 1 } p { print } /^};$/ { if (p) exit }' "$1"; }
+ws_ref=""; ws_ref_name=""; ws_carriers=0
+for n in "${judge_names[@]}"; do
+  grep -q 'PWPROVE_JUDGE_ROOT' "$JUDGES/$n.mjs" || continue
+  ws_carriers=$((ws_carriers + 1))
+  sum="$(preamble_of "$JUDGES/$n.mjs" | md5sum | cut -d' ' -f1)"
+  if [ -z "$ws_ref" ]; then
+    ws_ref="$sum"; ws_ref_name="$n"
+    ok "$n carries the workspace preamble (reference copy)"
+  elif [ "$sum" = "$ws_ref" ]; then
+    ok "$n carries it verbatim"
+  else
+    bad "$n's workspace preamble has drifted from $ws_ref_name's — one copy resolves the workspace differently"
+  fi
+done
+if [ "$ws_carriers" -lt 2 ]; then
+  bad "found $ws_carriers workspace judge(s) — the extraction has stopped matching, so this check is proving nothing"
+else
+  ok "$ws_carriers workspace judges compared"
+fi
+
 # --- the harness must be able to go red -----------------------------------------------------------
 if [ "$SELF_TEST" = "1" ]; then
   echo ""

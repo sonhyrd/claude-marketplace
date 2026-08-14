@@ -1,0 +1,2 @@
+Session established. `tests/e2e/auth.setup.ts` API-logs in against `/api/auth/login` and reuses the
+cookie the response sets. The `?token=` rung was skipped.

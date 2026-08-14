@@ -83,13 +83,21 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **batch 2 re-characterization** | the same, over `case-4`, `case-7`, `case-11`, `case-16`, `case-24`, `case-29` | those six after their judges were repaired against the answers the first run recorded. 18 runs, 6/6 LOADED |
 | **batch 2 uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` over the eight 3/3 cases | one `with_skill` and one `without_skill` arm each. 16 runs. **Seven of the eight baselines were not skill-free** — see below |
 
-**85 agent runs through #75; 73 more in batch 2; 158 in total.**
+**85 agent runs through #75; 73 more in batch 2; 21 in the wet cases (#69); 179 in total.**
 
 **Batch 2's uplift arms were taken on the PRE-#75 runner.** That branch was cut before the seal
 landed, so its baselines are void *by construction* rather than by bad luck — which is why seven of
 eight were dirty against three of ten in batch 1. Its pass rates are unaffected: characterization
 does not depend on the baseline seal, and all 13 cases ran LOADED with 0 contaminated. **#78 owns
 re-measuring the six affected rows on the sealed runner.**
+
+| **wet smoke (#69)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 1` | one pass of `w01`/`w02` before spending a characterization on them — proof that `context.repo_fixture` stages under `environment.type: none` and that a file-reading judge sees the workspace. 2 runs |
+| **wet characterization (#69)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` | the pass rate of the two wet cases. 6 runs, 6/6 LOADED, **3/3 each** |
+| **wet uplift (#69)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline` | `+1` for both, over baseline arms the sweep certifies skill-free — **after** three defects in the sweep itself were fixed. 4 runs. See *#69: the sweep failed the run for its own remedy working* |
+| **`w02` re-characterization (#69)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` | `w02` over the corrected fixture (code review found its judge asserting a route the fixture did not expose). **3/3.** 3 runs |
+| **`w02` uplift, twice (#69)** | the same, `--baseline`, then `--baseline --iteration 2` | the uplift the correction moved: `0` on the corrected fixture, then **1 pass / 1 fail** once the fixtures' answer-key comments were removed. 6 runs |
+
+
 
 **The gate held, with one exception.** Across the 39 characterization runs the skill under test
 reached the model every time (`LOADED via skill-tool, skill-body`), 0 not loaded. **One run was
@@ -150,11 +158,12 @@ the reason the sweep — not the deny list — is the binding assertion.
 
 ## Registry
 
-Forty-one cases have been triaged over two batches.
+Forty-three cases have been triaged over two batches plus the wet pair.
 
 **Batch 1 (#63) triaged twenty-one:** the 13 that were active before it, and 8 dormant — the five the
 spec named for automatic retirement, plus the three trigger cases `prompt-shapes.md` named as the
-only route to widening trigger coverage.
+only route to widening trigger coverage. **#69 then added the 2 wet cases**, the first of any kind to
+reference `evals/files/`.
 
 **Batch 2 (#64) triaged the next twenty**, taken in case-number order from the dormant remainder
 (`case-4` … `case-32`); `case-33` onward is batch 3's scope (#65). Seven were retired on static
@@ -177,6 +186,9 @@ instrument certified as skill-free.
 | `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
 | `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
 | `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
+| `w01-bringup-own-port` | behavior (**wet**) | Step 3 › *Bring the environment up* — bullet 1, the packaged serve script that hard-codes a port | **3/3** | **+1** (clean; the discriminating half is the gate, see #69 below) | **active** |
+
+| `w02-auth-cookie-from-app` | behavior (**wet**) | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* — the ladder as written code | **3/3**, and 2/2 more with-skill arms over the final fixture | **unstable** — 1 of 2 skill-free baseline arms passed, so there is no `+1` to admit on and no clean `0` to retire on | quarantined — see #69 below |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
 | `case-2` | trigger | frontmatter `description:` — a "plan the tests for this route" request | **2/3** | not measured | quarantined |
@@ -219,11 +231,12 @@ must-FAIL fixture. Uplift was measured only for the eight cases that reached 3/3
 | `case-31` | behavior | Step 3 › *Bring the environment up* — the runner origin | — | — | **retired — deleted** |
 | `case-32` | behavior | Step 7 › *Failure handling* — the `webServer` timeout | — | — | **retired — deleted** |
 
-### The trusted core is ten cases
+### The trusted core is eleven cases — ten dry and one wet
 
 `gate-skill-loaded`, `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`,
-`case-28`, `case-48`, `case-11`, `case-16`. That is what `eval.yaml`'s active list holds, and every
-one of them is 3/3 with a non-zero uplift. `case-28` and `case-48` are in it because #75 gave them a
+`case-28`, `case-48`, `case-11`, `case-16`, and the one wet case #69 admitted,
+`w01-bringup-own-port`. That is what `eval.yaml`'s active list holds, and every one of them is 3/3
+with a non-zero uplift. `case-28` and `case-48` are in it because #75 gave them a
 baseline that can be believed; batch 2 added the last two.
 
 Of the 21 cases batch 1 triaged, 5 were automatic retirements. **Of the 16 it actually measured, 8
@@ -231,7 +244,8 @@ were admitted (6 by #63, 2 more once #75 unvoided their uplift), 7 are quarantin
 deleted.** Of the 20 batch 2 triaged, 7 were automatic retirements; **of the 13 it measured, 2 were
 admitted and 11 are quarantined.**
 
-Across both batches: **41 triaged — 10 active, 18 quarantined, 13 deleted.** Thirty-one of the
+Across both batches plus the wet pair: **43 triaged — 11 active, 19 quarantined, 13 deleted.**
+Thirty-two of the
 measured cases that did not make it are recorded with a reason rather than a shrug. That
 is the expected shape: the goal is a core whose verdicts can be believed, not a high keep rate.
 
@@ -353,6 +367,125 @@ the removal with the fix is precisely the error that got a shipped fix committed
 (`d717e05` → `2b04ade`); it is not repeated here.
 
 Nothing moved out of 3/3, so the quarantine rule had nothing to act on and no row's status changes.
+
+### #69: the first two wet cases, and the divergence they did not find
+
+Every case in this suite before these two asked the model to **say** what it would do. `w01` and `w02`
+are the first that check it can **do** it, and they are the first cases of any kind to reference
+`evals/files/`, which had sat unused since it was built.
+
+| | `w01-bringup-own-port` | `w02-auth-cookie-from-app` |
+|---|---|---|
+| Fixture | `app-vite-embed` — its packaged serve script hard-codes `PORT=4100`, and `script/serve-ssr.mjs` is zero-dependency Node that really binds | `app-nuxt-ssr` — `import.meta.dev`-guarded `?token=` rung in `app/composables/useAuth.ts`, `app_session` minted server-side in `server/api/auth/login.post.ts` |
+| Dry twin | `case-50` | `case-48` |
+| What the twin grades | an answer about a **pasted** server log | an answer about a dev-guarded rung |
+| What the wet case grades | the `serve.log` a real process wrote, the port in it, and whether the recorded `BASE_URL=` carries that same port | the `tests/e2e/auth.setup.ts` the run left on disk, and whether that file takes the ladder its answer describes |
+| What its twin cannot assert | that a server came up **at all**, or on which port | that the emitted code does what the prose said |
+
+#### Which fixture got which case, and what had to be added to make that true
+
+The ticket names the two fixtures by what they are — *"the hard-coded port one and the SSR one"* —
+and says to read them rather than assume from the names. Read, they do not split cleanly, and the
+reading is recorded here because it is a judgement someone will otherwise have to redo:
+
+- **`app-vite-embed` is the hard-coded-port fixture, and it is the only one that can be brought up.**
+  Its own comment says so (*"The packaged serve script hard-codes its port through the package.json
+  script (PORT=4100)"*), and `script/serve-ssr.mjs` is zero-dependency Node that binds for real.
+  `app-nuxt-ssr` also names port 3000 in three places, but bringing it up needs Nuxt installed, so a
+  wet bring-up case against it would go red for a missing dependency. `w01` therefore takes it.
+- **`app-nuxt-ssr` is the SSR fixture, and it did not carry a dev-guarded rung.** The `__DEV__`-guarded
+  `?token=` bootstrap and the two-key `localStorage` store live in `app-vite-embed/src/`. So the
+  premise `w02` needs was **added** to `app-nuxt-ssr` — one file, `app/composables/useAuth.ts`,
+  guarding the `?token=` rung with `import.meta.dev` beside the `app_session` cookie the fixture
+  already minted server-side. That is authored, not found, and it is stated plainly rather than left
+  for a reader to discover: the alternative was to point both wet cases at `app-vite-embed` and leave
+  the second fixture unreferenced, which is the condition this ticket exists to end.
+
+Three corrections landed in code review, and `w02` was re-characterized and re-measured over the
+corrected fixture rather than carried on the earlier reading:
+
+- `server/api/auth-login.post.ts` is mapped by Nuxt to `/api/auth-login`, while `app/pages/login.vue`
+  posts to `/api/auth/login` — the fixture contradicted itself, and `w02`'s judge had made that
+  contradiction load-bearing. The handler is `server/api/auth/login.post.ts` now, and the judge
+  accepts either spelling so no reading of the source is punished for the fixture's own drift.
+- The added composable referenced `setToken`/`getCurrentUser`, which exist only in the *other*
+  fixture. It is self-contained now.
+- Both the handler comment and the composable comment stated the correct remedy in prose. That is an
+  answer key in the input, and it is what the first two uplift readings were actually measuring —
+  see the finding below. Both are gone.
+
+Neither is a whole proof run. Each is scoped to one phase — `w01`'s prompt declares the config and
+build phases already passed, `w02`'s declares the bring-up gate passed and forbids running Playwright
+— because a case that spans eight steps cannot tell you which one broke.
+
+**Measured: `w01` 3/3 with `+1`, and admitted. `w02` 3/3 with an uplift that would not settle, and
+quarantined.** The three `w01` iterations served on ports 36217, 39825 and 40221 — three real
+processes, three real announcements, never the packaged 4100.
+
+#### The finding: no divergence between saying and doing — and the reason is the fixtures
+
+This is the outcome the ticket named in advance as a result rather than a disappointment, and it is
+the one that came back, harder than expected. **Both wet cases pass at exactly the rate their dry
+twins do**, so nothing here shows the skill describing a behaviour it then fails to perform, on
+either of the two sections most likely to expose the gap. For these two sections the dry suite is a
+fair proxy, and that is a reason not to convert more of it wet.
+
+The `without_skill` arms are where the finding sharpens, and what they expose is the **fixtures**:
+
+- **`w01`'s baseline did not diverge on the behaviour under test.** It allocated its own free port and
+  did not take 4100 — it cleared every port assertion and failed on the next one, the bring-up gate
+  (`SERVE=up`, its own invention, where `preflight.mjs` prints `SERVE=ok`). So the `+1` is real but
+  the discriminating half is the **gate**, not the port choice. Recorded rather than smoothed over,
+  because the row above would otherwise read as "the skill is what stops it taking 4100", which this
+  run says it is not. A named limitation on that reading: `script/serve-ssr.mjs` carries a comment
+  telling the reader not to invoke the packaged command verbatim, so the port half of that case was
+  never a fair test of the skill in the first place.
+- **`w02` could not be admitted, and the fixture is why.** Its skill-free baseline answered the whole
+  ladder correctly — the `import.meta.dev` guard, the rung recorded absent, the API login, the cookie
+  taken off the response. Two of the fixture's files *stated that answer in prose*: the handler's own
+  comment (*"a test must API-login and reuse the Set-Cookie it returns rather than hand-authoring
+  one"*) and the composable comment added with the rung. **A fixture that narrates the remedy is an
+  answer key, and uplift measured over one measures the fixture's legibility, not the skill.** Both
+  comments are gone now; re-measured, the baseline came back **1 pass in 2** — not a `+1` to admit on
+  and not a clean `0` to retire on, so `w02` is quarantined rather than either.
+
+That is the real finding of this ticket, and it is bigger than the two cases: **every fixture under
+`evals/files/` is written in a didactic voice** — `auth-store.ts` explains that a credential-only seed
+renders an empty shell, `session.ts` explains that `__DEV__` folds to false. That style is useful for
+a human reading the corpus and fatal for an uplift measurement, because the baseline arm reads it too.
+Before any further wet case is built on these fixtures, the comments that state the remedy have to
+come out. Filed as follow-up work rather than fixed wholesale here: stripping them changes the input
+to every case that stages them, so it is a change with its own re-characterization bill.
+
+What the wet pair buys in the meantime is not a higher hit rate on prose. `w01` is the only coverage
+in this suite that reaches the **shipped scripts and a real process** — `preflight.mjs serve` actually
+runs and its summary is actually parsed — and `w02`, quarantined, is the only one that reaches the
+**emitted artifact**. Nothing dry touches either.
+
+#### #69: the sweep failed the run for its own remedy working
+
+The uplift above took two attempts, and the first failure was the instrument again — three defects in
+`judges/skill-loaded.mjs`, all in the contamination half, each pinned now by a fixture pair that goes
+red without its fix:
+
+1. **The runner's own deny list read as contamination.** #75 writes one `Read(<copy>/**)` rule per
+   host copy into the isolated home's `settings.json`. A baseline agent that cannot find the skill
+   reads that settings file while hunting for it, and the whole list of marketplace paths lands in a
+   tool result. Both baseline arms were failed for the remedy doing its job. A `Read(…)` rule form is
+   discounted now; a bare path beside one is not.
+2. **A real `tool_use_id` defeated the refusal discount.** `isWhollyDenial` treated any string over
+   24 characters as substantial, and a real id is 30 (`toolu_01EngPMVf8ECsBeRkp4DaUD3`) — so a denied
+   `ls -d ~/.claude/plugins/cache/*/*/*/` was counted as a breach. **Every fixture in the set was
+   hand-authored with `t1`-shaped ids, which is precisely why none could see it.** A fixture that is
+   tidier than the data is a fixture with a blind spot.
+3. **Claude Code mirrors a tool result at the record level** in `toolUseResult`, so a refusal the
+   block-level discount had just removed walked straight back in as metadata. This was the one that
+   survived the first two fixes.
+
+Read that the way #75 asks it to be read: twice more, the deny rules held and the instrument reported
+a route nobody had enumerated. The sweep is still the binding assertion — after the repairs it
+certified both baseline arms SKILL-FREE, and it did so by reading the body's own lines, not by being
+told the run was clean.
 
 ### The retirements, each with its reason
 
@@ -543,15 +676,19 @@ scored 3/3, and all landed on a dirty uplift baseline.** They are one #75 fix fr
 one case away. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29` and is blocked
 on #77 instead.
 
-Ten sections are guarded, one per active case:
+**Ten sections are guarded by eleven active cases.** One section carries a second, *wet* guard beside
+its dry one — `w01-bringup-own-port` beside `case-50` — so admitting it did **not** move the count of
+guarded sections. That is deliberate: a wet case is a second axis on a section already covered, not
+new coverage, and reading it as new coverage would shrink the gap table without closing anything in
+it.
 
 1. the frontmatter `description:` trigger surface — `gate-skill-loaded`
 2. Step 1 › *Confirmation gate* — `b01-confirmation-gate`
 3. Step 4 › *Assumptions* › the Handoff line — `b05-handoff-stale`
 4. Step 3 › *Recon — the probe is the question channel* — `case-15`
-5. Step 3 › *Bring the environment up* — the announced origin — `case-50`
+5. Step 3 › *Bring the environment up* — the announced origin — `case-50`, and bullet 1's hard-coded packaged port — `w01-bringup-own-port` (wet)
 6. Step 7 › *Verify* — the proof-run command — `case-60`
 7. Step 7 › *Hermetic audit* — `case-28`
-8. Step 3 › *Auth — drive the app's OWN entry* — `case-48`
+8. Step 3 › *Auth — drive the app's OWN entry* — `case-48`. The wet second axis on this section, `w02-auth-cookie-from-app`, is quarantined, so the emitted auth artifact is guarded by nothing
 9. Step 5b › *Bootstrap the runner if greenfield* — `case-11`
 10. Step 5 › *Generate* — *Extend, don't duplicate* — `case-16`
