@@ -14,6 +14,12 @@ skills:
 
 engine:
     name: claude_code
+    # The agent UNDER TEST. Judges are separate and stay on sonnet-4-6 (see `judge:`
+    # below and each case file). skill-up has no effort field, so the reasoning
+    # effort that pairs with this model is set as an env var in ../.skill-up.yaml.
+    model:
+        provider: anthropic
+        name: claude-opus-5
 
 cases:
     files:
