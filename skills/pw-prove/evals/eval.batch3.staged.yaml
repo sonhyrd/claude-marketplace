@@ -1,0 +1,67 @@
+schema_version: v1alpha1
+
+# Runtime is `none` deliberately. The docker runtime cannot see files the agent writes:
+# `expect.files_exist` and judge-level `files_exist` both report "does not exist" for a file
+# that demonstrably exists and is collected into outputs/workspace/. Every wet case would
+# silently fail. See docs/adr/0018. Do not "fix" this back to docker.
+environment:
+    type: none
+
+skills:
+    - source: local_path
+      path: .
+      include: [SKILL.md, "*.md", "scripts/**"]
+
+engine:
+    name: claude_code
+    # The agent UNDER TEST. Judges are separate and stay on sonnet-4-6 (see `judge:`
+    # below and each case file). skill-up has no effort field, so the reasoning
+    # effort that pairs with this model is set as an env var in ../.skill-up.yaml.
+    model:
+        provider: anthropic
+        name: claude-opus-5
+
+cases:
+    files:
+        - evals/cases/case-33.yaml
+        - evals/cases/case-34.yaml
+        - evals/cases/case-35.yaml
+        - evals/cases/case-36.yaml
+        - evals/cases/case-37.yaml
+        - evals/cases/case-38.yaml
+        - evals/cases/case-41.yaml
+        - evals/cases/case-42.yaml
+        - evals/cases/case-45.yaml
+        - evals/cases/case-46.yaml
+        - evals/cases/case-47.yaml
+        - evals/cases/case-51.yaml
+        - evals/cases/case-52.yaml
+        - evals/cases/case-53.yaml
+        - evals/cases/case-54.yaml
+        - evals/cases/case-55.yaml
+        - evals/cases/case-56.yaml
+        - evals/cases/case-57.yaml
+        - evals/cases/case-58.yaml
+        - evals/cases/case-59.yaml
+        - evals/cases/case-61.yaml
+    defaults:
+        timeout_seconds: 300
+        max_turns: 10
+    parallelism: 2
+
+# The criteria COUNT is part of an agent_judge's contract, not a free parameter. `agent_judge`
+# scores passed_criteria / total_criteria against a 0.7 default threshold, so a fourth criterion
+# silently loosens the other three from 3/3 to 3/4 — a case can start passing with a criterion it
+# used to have to satisfy. State the count wherever you set criteria, and re-read the threshold
+# before adding one. Every active case uses a `script` judge instead, so this default is a
+# placeholder: one criterion, threshold irrelevant, never expected to be reached.
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6
+    criteria:
+        # 1 criterion. See the note above before adding a second.
+        - Cases define their own judges; this default is never expected to be reached.
+
+report:
+    formats: [json, html]
+    artifacts: [transcript]

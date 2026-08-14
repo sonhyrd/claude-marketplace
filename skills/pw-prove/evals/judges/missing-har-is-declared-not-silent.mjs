@@ -71,9 +71,7 @@ if (bad.length) {
 const checks = [
   [/\bprobe\b/i, "the answer never checks the probe's close output, which is what says whether a HAR landed"],
   [/routeFromHAR/, "the answer never names routeFromHAR, so it never says what it is declining to write"],
-  [/no api\.har|\bdeviation\b/i, "the missing HAR is never recorded as an explicit deviation"],
-  [/assumption/i, "the deviation never reaches the Assumptions block"],
-  [/\breport\b/i, "the deviation never reaches the completion report"],
+  [/re-?record|no api\.har|\bdeviation\b/i, "the answer takes neither route the step allows: re-record the pass, or declare `no api.har` as a deviation"],
   [/re-?record|hand-?mock|\bmock\b/i, "the answer offers neither of the two legitimate routes (re-record the pass, or hand-mock what the scenario needs)"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));

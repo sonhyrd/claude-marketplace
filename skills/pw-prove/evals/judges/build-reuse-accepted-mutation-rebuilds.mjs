@@ -78,7 +78,7 @@ const checks = [
   [/BUILD_REUSE=never/, "the mutation never forces its own rebuild, so it would run against the standing artifact"],
   [/restart/i, "the preview server is never restarted onto the rebuilt artifact"],
   [/green by construction|un-?rebuilt|standing artifact|would (?:always )?pass/i, "the answer never says why a mutation against the un-rebuilt artifact is worthless"],
-  [/revert/i, "the mutation is never reverted"],
+  [/revert|git checkout --|git (?:restore|stash)|undo the mutation/i, "the mutation is never reverted"],
   [/--output/, "the mutation run's artifacts are never isolated with --output"],
   [/pw-prove-mutation|\/tmp\//, "the answer never names where the mutation artifacts go"],
 ];

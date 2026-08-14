@@ -1,0 +1,29 @@
+## Stop — do not write the `routeFromHAR` line yet
+
+`ls` showing no file is **not yet evidence of a failed recording**, and it is also not permission to proceed. Playwright flushes `recordHar` **on context close** (`probe.mjs:429`, `:614`) — batches answering normally says nothing about the HAR, because during the batches no HAR exists by design. The file appears when the probe closes, and only then.
+
+What must not happen: committing `page.routeFromHAR('tests/e2e/<feature>.api.har', { notFound: 'abort' })` against a file that isn't there. Under `notFound: 'abort'` every read aborts, and in Step 7 that reads as a broken application — you'd spend the whole three-attempt heal budget on a missing recording. `probe.mjs` says this in its own warning text: *"Do NOT commit a routeFromHAR spec against a HAR that does not exist."*
+
+### Diagnose in this order
+
+**1. Close the probe and read its stderr — the likeliest answer is "not flushed yet."**
+
+```bash
+node <skill-base>/scripts/probe.mjs close
+```
+
+Three outcomes, and the line you read decides everything:
+
+- `probe: HAR written <path> (<n> bytes, filter **/api/**) — …` → the file exists now, scrubbed at capture. Go write the network determinism. Also check for a `probe: REFUSED` line beneath it — residue survived the scrub, and that recording must not be committed.
+- `probe: WARNING — RECORD_HAR was set but no HAR landed …` → recording ran, nothing matched `**/api/**`. Real cause on proxy-shaped apps (`/api/request?cmd=`) is usually a filter mismatch — compare against what the recon `network-summary` actually listed, then re-record with a corrected `HAR_URL_FILTER`.
+- Nothing about a HAR at all → the daemon never had `RECORD_HAR` (case 2).
+
+**2. If the close is silent on HAR: the daemon predated your env.** A `send` autostarts a daemon inheriting *that* command's environment, and a second `start` against a live daemon exits 1 with exactly this warning (`probe.mjs:401`). If a daemon was already up when you set `RECORD_HAR`, it never had it — the whole recon pass recorded nothing, and "the batches answered normally" is precisely how that failure looks. Fix: `close`, `start` again with `RECORD_HAR` and `BASE_URL` set, and **re-drive the recon batches** — the recording only captures traffic that happens while it's open.
+
+**3. If the probe was backgrounded with a trailing `&` or SIGKILLed:** no flush path ran. Re-record. The raw staging capture may survive in `$TMPDIR/pwprove-har-*/capture.har` — do not copy it into the tree; it is unscrubbed and authenticated, which is the exact thing capture-time scrubbing exists to prevent.
+
+### On resuming Step 5
+
+Re-record before generating, not after. The alternative — writing the spec now and letting Step 7 discover it — burns a full proof run, and the failure mode is the one the failure-handling table flags as most misleading: *every* read aborting means a binding or recording problem, not a short recording.
+
+One thing to keep straight when the HAR does land: the mutation under assertion still gets a hand-written `route.fulfill`. Only the reads come from the recording.

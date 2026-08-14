@@ -76,8 +76,8 @@ const checks = [
   [/\bJSON\b/, "the answer never says arg is JSON data, which is the whole reason the plan fails"],
   [/\bstring\b/i, "the answer never says the selector arrives as the string itself"],
   [/getComputedStyle/, "the answer never connects this to what getComputedStyle would be handed"],
-  [/inside (?:the )?fn|within (?:the )?fn|do the selection|querySelector\(sel\)/i, "the answer never moves the selection inside fn, which is the fix"],
-  [/"arg"\s*:\s*"tr\[|\barg\b[^\n]{0,40}tr\[data-id/, "the answer never passes the selector as plain data"],
+  [/inside (?:the )?fn|within (?:the )?fn|do the selection|select it inside|select inside|(?:lookup|look it up) in the page|querySelector\(sel\)/i, "the answer never moves the selection inside fn, which is the fix"],
+  [/"arg"\s*:\s*"[^"]+"|\barg\b[^\n]{0,40}(?:tr\[data-id|JSON-serialisable|plain data)/i, "the answer never passes JSON-serialisable data as the arg"],
   [/\bno\b|\bnot\b|\bwrong\b|\breject\w*|\brefus\w*/i, "the answer never actually answers the question it was asked, which is whether the batch is right"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));

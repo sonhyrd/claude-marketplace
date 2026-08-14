@@ -70,11 +70,11 @@ if (bad.length) {
 const checks = [
   [/har-scrub\.mjs/, "the answer never runs har-scrub.mjs, which is the instrument the step names"],
   [/--verify/, "the answer never passes --verify, so it is scrubbing rather than checking"],
-  [/\bexit(?:s|ed)?\s*0\b|\bexit code 0\b/i, "the answer never says what exit 0 means"],
-  [/\bexit(?:s|ed)?\s*3\b|\bexit code 3\b/i, "the answer never says what exit 3 means"],
+  [/\bexit(?:s|ed)?\s*0\b|\bexit code 0\b|\*\*0\*\*|\|\s*0\s*\|/i, "the answer never says what exit 0 means"],
+  [/\bexit(?:s|ed)?\s*3\b|\bexit code 3\b|\*\*3\*\*|\|\s*3\s*\|/i, "the answer never says what exit 3 means"],
   [/\bstop\w*|\bhalt\w*|\brefus\w*|\bblock\w*/i, "exit 3 is never treated as a hard stop"],
   [/\bnot (?:be )?staged?\b|\bdo(?:es)? not stage\b|\bnever staged?\b|\bwithhold/i, "the answer never says the HAR is withheld from staging on exit 3"],
-  [/re-?scrub|scrub(?:bed)? again|run the scrubber/i, "the answer never re-scrubs and re-verifies before continuing"],
+  [/re-?scrub|scrub(?:bed)? again|run the scrubber|re-?run[^\n]{0,40}har-scrub/i, "the answer never re-scrubs and re-verifies before continuing"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));
 if (missing.length) {

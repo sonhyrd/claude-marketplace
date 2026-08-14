@@ -67,7 +67,7 @@ if (bad.length) {
 }
 
 const checks = [
-  [/\bnothing\b[^\n]{0,30}(?:to do|needs? doing)|\bno (?:further |additional |extra )?(?:action|step|work)\b/i, "the answer never states the conclusion — that nothing needs doing here"],
+  [/^\s*nothing\b|\bnothing\b[^\n]{0,30}(?:to do|needs? doing|is the right)|\bno (?:further |additional |extra |second )?(?:action|step|work|scrub)\b|already scrubbed/im, "the answer never states the conclusion — that nothing needs doing here"],
   [/capture|on close|context close/i, "the answer never says the scrub already happened at capture time"],
   [/3 secret|placeheld/i, "the answer never reads the reported line, which is the evidence the scrub ran"],
   [/REFUSED/, "the answer never says what the failure line would have looked like, so the pass is unfalsifiable"],

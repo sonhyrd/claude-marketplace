@@ -1,0 +1,19 @@
+**I read it as RED — the mutation check passed. Then I revert and continue to Step 8.**
+
+**Why the 400ms restart is not a problem.** The trap here would be to distrust `RESTART=proven` because the `Listening on http://127.0.0.1:36495` line landed before the poll started. But the restart proof isn't timing-based — it's offset-based. `MARK=$(wc -c < "$SERVER_LOG")` is taken *before* the kill, and the serve phase scans the log from `RESTART_LOG_OFFSET` onward. An announcement written 400ms after the kill is still past the mark, so it is unambiguously the *new* process's line. A fast server is exactly the case the mark exists to handle; re-running with a longer poll, re-allocating a port, or treating this as `restart-unannounced` would all be fighting a correct signal.
+
+The one thing that would invalidate it is taking `MARK` *after* the restart (then the announcement sits below the offset and you'd get `restart-unannounced`) — that's an invocation bug, not this case. Here `RESTART=proven` licenses reading the mutation verdict.
+
+**So the failing test is the verdict, not a fault.** `expect(locator).toHaveText` — element not found — against a preview server proven to be serving the freshly-built mutated artifact is the spec detecting the removed behavior. Red → the spec guards the change. No strengthening cycle, no second mutation.
+
+Before banking it, one cheap sanity check that the failure is *the mutation's*: the named locator should be the one tied to the mutated behavior, not a nav timeout or an aborted-HAR read. A blanket first-navigation timeout, or every read aborting under `notFound: 'abort'`, would mean the run failed environmentally and coincidentally looks red — that proves nothing. A specific miss on the asserted element is the genuine RED.
+
+**Then, in order:**
+
+1. `git checkout -- <mutated file>` — revert exactly.
+2. Rebuild with `BUILD_REUSE=never` (the mutated artifact must not survive into any later step).
+3. Fresh `MARK=$(wc -c < "$SERVER_LOG")` → stop/start the preview → poll with `SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK"`. This restart is the one whose staleness would poison everything after it, so it's proven or it's not.
+4. `diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch` — process substitution on both sides. Real residue is a hard stop.
+5. `ls test-results/*/video.webm | wc -l` equals the scenario count. It should — the mutation run used `--output=/tmp/pw-prove-mutation` and no `PW_PROVE_CLIP`, so it never wrote to `test-results/`.
+
+Then Step 8 with `Mutation: RED (spec guards the change)`.

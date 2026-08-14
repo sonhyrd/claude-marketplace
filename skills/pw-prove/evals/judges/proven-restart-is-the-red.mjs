@@ -73,7 +73,7 @@ if (bad.length) {
 const checks = [
   [/RESTART=proven/, "the answer never reads the flag that settles this"],
   [/\bRED\b/, "the answer never records the RED, which is what the failure is"],
-  [/after the (?:restart )?mark|written after|ordinary|expected|normal/i, "the answer never says why a fast restart is still a proven one"],
+  [/after the (?:restart )?mark|written after|ordinary|expected|normal|before the poll|not a problem|distrust/i, "the answer never says why a fast restart is still a proven one"],
   [/revert/i, "the mutation is never reverted"],
   [/rebuild/i, "the artifact is never rebuilt after the revert"],
   [/SERVE_RESTART=1/, "the final restart is never re-proven"],

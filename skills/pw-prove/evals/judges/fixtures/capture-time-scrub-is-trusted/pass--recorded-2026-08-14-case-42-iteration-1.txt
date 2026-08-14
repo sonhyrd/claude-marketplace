@@ -1,0 +1,23 @@
+Nothing. The recording is already scrubbed, and re-scrubbing it now would be a mistake.
+
+**Why nothing is the right action here**
+
+`probe.mjs` scrubs at capture — the raw recording lands in a private staging file and only the scrubbed result is ever written to `e2e/reports.api.har`. The close line already reports the outcome, and it's clean on all three counts:
+
+- `3 secret(s) placeheld` — the auth bearer from the recon pass is a stable placeholder, not a live token.
+- `loopback origins canonicalised` — `http://localhost`, no port.
+- **No `probe: REFUSED` line beneath it** — that's the signal that residue survived and the recording must not be committed. Its absence is the pass.
+
+A manual `har-scrub.mjs` pass now would be a *re*-scrub, not the first one, and it risks the over-scrub failure mode (exit 6) where a learned value that also occurs in ordinary content shreds the recording — invisible to a residue check, and a destroyed capture can verify *clean*.
+
+**What actually needs attention before Step 4**
+
+1. **The storageState, not the HAR.** If I saved a session with `{"cmd":"storage-state", ...}`, that file holds a *working* bearer with no scrubbing. It must sit under a gitignored path (`.auth/<slug>.auth.json`) and never be staged. That's the artifact carrying real credentials out of this pass.
+2. **Note the deferred gates in the Step 4 Assumptions block**, so they aren't rediscovered later:
+   - Step 7 must **bind** the HAR before the proof run (`har-scrub.mjs bind … --out .pw-prove/… --origin "$BASE_URL"`), because Playwright matches replay entries on exact request-URL string equality — a canonical, placeheld HAR matches nothing, and under `notFound: 'abort'` every read would abort and read as a broken app. The bound copy carries this run's live credential, so it goes to a gitignored path and is never staged.
+   - Step 8 runs `har-scrub.mjs --verify` on the committed file as a hard gate before staging. That's where cleanliness is *proven* by a refusal rather than assumed — exit 3 (residue) and exit 6 (over-scrub) both hard-stop.
+3. The spec references the committed HAR with `process.env.PW_PROVE_HAR ?? '<feature>.api.har'` so the bound copy is used at proof time and CI falls back to the committed one.
+
+So: no credential action on the HAR now — it's scrubbed, unrefused, and safe to carry. Verification is a Step 8 gate, binding is a Step 7 step, and the only live credential on disk is the storageState, which stays gitignored.
+
+Moving to Step 4 — writing the plan (scenarios, locator mapping table, assumptions).

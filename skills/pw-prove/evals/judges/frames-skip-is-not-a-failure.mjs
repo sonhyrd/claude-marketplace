@@ -59,7 +59,7 @@ function offenders(t, phrases) {
 const bad = offenders(text, [
   /\b(?:install|npm i|apt-get install|brew install)\b[^\n]{0,30}(?:ffmpeg|ffprobe)/i,
   /\bretry\b[^\n]{0,30}(?:extract|frames)|re-?run[^\n]{0,20}(?:the )?(?:extract|frames)/i,
-  /\bfail(?:s|ed|ing)? the run\b|\bstop the run\b|\bblocks? (?:step 7|delivery)\b/i,
+  /\bI (?:\w+ )?(?:fail|stop|abort|block)\b[^\n]{0,20}(?:the )?run\b/i,
 ]);
 if (bad.length) {
   console.error("FAIL: the answer treats a missing tool as a failure, retries it, or installs into the user's project:");

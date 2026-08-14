@@ -78,7 +78,7 @@ const checks = [
   [/__APP__\.tenant/, "the tenant value is never asked for"],
   [/location\.href/, "the URL is never asked for"],
   [/one eval|single eval|named-?map|one batch|same eval/i, "the two values are never gathered in one eval, which is the form the case is about"],
-  [/\bno viewport verb\b|\bthere is no\b[^\n]{0,30}viewport|\brefus\w*/i, "the viewport request is never refused"],
+  [/\bno viewport verb\b|\bthere is (?:\w+ ){0,2}no\b[^\n]{0,30}viewport|\brefus\w*|\bI do not send\b/i, "the viewport request is never refused"],
   [/Step 4|playwright\.config|committed spec/i, "the answer never says where the effective viewport actually comes from"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));

@@ -79,7 +79,7 @@ const checks = [
   [/verbatim/i, "the handover never says the spec, POM and failure output go over verbatim"],
   [/F-?\d|F-?code/i, "the handover carries no F-code diagnosis"],
   [/test-results/, "test-results/ is never swept"],
-  [/\bnothing is committed\b|\bnot committed\b|\bno commit\b/i, "the answer never states plainly that nothing is committed"],
+  [/\bnothing is committed\b|\bnot committed\b|\bno commit\b|\bnothing committed\b|\bcommit nothing\b/i, "the answer never states plainly that nothing is committed"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));
 if (missing.length) {

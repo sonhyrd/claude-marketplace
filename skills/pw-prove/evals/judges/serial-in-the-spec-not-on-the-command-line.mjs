@@ -74,8 +74,8 @@ const checks = [
   [/mode:\s*['"]serial/, "the configure call never sets mode: 'serial'"],
   [/\/\/|comment|because|reason/i, "the reason is never recorded beside the configure line"],
   [/shared|same (?:job )?record|contend|contention/i, "the answer never names the shared record as the thing being contended for"],
-  [/fresh (?:browser )?context|new context|context per test|isolated context/i, "the answer never rules out browser-context leakage, which is what makes this look like a concurrency bug"],
-  [/rest of|other (?:three|3|scenarios)|remain\w* concurrent|still (?:run )?concurrent/i, "the answer never keeps the rest of the proof concurrent"],
+  [/fresh (?:browser )?context|new context|context per test|isolated context|per-context/i, "the answer never rules out browser-context leakage, which is what makes this look like a concurrency bug"],
+  [/rest of|other (?:three|3|scenarios)|remain\w* concurrent|still (?:run )?concurrent|full concurrency|at concurrency/i, "the answer never keeps the rest of the proof concurrent"],
   [/wall clock|every other proof|globally|whole (?:run|suite)/i, "the answer never says why the command line is the wrong place"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));
