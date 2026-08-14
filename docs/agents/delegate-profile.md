@@ -163,5 +163,20 @@ this behaves correctly (verified 2026-08-13 for `#34` and `#36` off `feat/ledger
 blind `reset --hard` is not needed — but an omitted flag and an ignored flag fail identically and
 stay invisible until merge-back, which is why the verification is not optional.
 
-- **Commit**: `f0e5cc9` · **Measured**: 2026-08-06 (after #27 merge-back)
+- **Commit**: `fbb1ff0` · **Measured**: 2026-08-14 (after the #55 + #57 merge-backs)
 - `ci-local.sh` — **GREEN**, all checks passed. · `pre-push-security.sh` — **GREEN**, 7 passed.
+
+### The eval judge harness is not in `ci-local.sh`, and must not be added
+
+`scripts/ci/test-eval-judges.sh` (19 checks) is run **by name**, never by `ci-local.sh`. This is a
+decision, not an oversight: CI is the contract for the shipped surface, and the eval suite is an
+instrument operated by hand. A worker that "helpfully" wires it in is undoing #57's acceptance
+criterion. Run it by hand whenever a brief touches `skills/pw-prove/evals/judges/`.
+
+### `.skill-up.yaml` no longer demands a skill version bump — the rule was fixed, not waived
+
+Both wave-1 workers independently went red on it and fixed it two different ways: one repaired the
+rule in `review.sh`, the other paid the toll with a `0.15.1` bump. The rule fix won and the bump was
+dropped at merge. `evals/` **and** a skill-root `.skill-up.yaml` are eval-engine material, not the
+shipped instruction surface, and drift Case 21 pins that. Do not re-add a bump for eval config —
+the ledger's stale-install detection only works while the version means something.
