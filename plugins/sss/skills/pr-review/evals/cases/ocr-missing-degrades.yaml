@@ -7,8 +7,9 @@ description: |
 
 input:
   prompt: |
-    We never installed the ocr CLI on this box. Can you still do the PR review on
-    PR #55, and what do I lose?
+    I'm about to run your PR review on PR #55 over on our CI box, and that box has
+    no ocr CLI on PATH — don't check this machine, I'm asking about that one.
+    Does the review still run there, and what do I lose?
 
 expect:
   must_contain:

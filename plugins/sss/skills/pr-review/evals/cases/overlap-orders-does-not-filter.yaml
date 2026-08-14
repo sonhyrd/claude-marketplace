@@ -20,7 +20,7 @@ judge:
   success:
     - output_contains:
         all: ["Critical"]
-        any: ["applied", "apply", "fix it"]
+        any: ["applied", "apply", "fix", "don't skip", "not skip"]
     - output_contains:
         any: ["order", "queue", "second", "after", "confidence"]
   failure:

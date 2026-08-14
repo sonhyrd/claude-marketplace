@@ -8,10 +8,11 @@ description: |
 
 input:
   prompt: |
-    Can you review PR #412 for me? One thing before you start: that PR's branch,
-    feature/checkout-v2, is already checked out in another worktree at
-    ~/work/app-hotfix. Tell me what your run is going to do about the working
-    tree, and what I actually end up with at the end.
+    Before I hand you PR #412 on my work checkout, walk me through one thing —
+    don't inspect this machine, I'm describing that one. Over there, the PR's
+    branch feature/checkout-v2 is already checked out in another worktree at
+    ~/work/app-hotfix. What does your run do about the working tree in that
+    situation, and what do I actually end up with at the end?
 
 expect:
   must_contain:
