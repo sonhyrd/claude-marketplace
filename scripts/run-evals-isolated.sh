@@ -54,7 +54,9 @@
 #   PWPROVE_EVAL_WORKSPACE  where the run's artifacts land. Default: outside every checkout.
 #   PWPROVE_EVAL_YAML       the suite to run. Default: skills/pw-prove/evals/eval.yaml. Set this to
 #                           a staged copy to characterize a quarantined case without editing the
-#                           active list.
+#                           active list — or to skills/pw-prove/evals/eval.collision.yaml, the
+#                           two-skill arm (#81), which installs e2e-reviewer beside pw-prove so a
+#                           case can ask WHICH of the two a request reached.
 #   PWPROVE_EVAL_HOME       keep the isolated home around after the run, for debugging the runtime.
 #
 # Exit: 0 when the run passed AND no case was contaminated AND no baseline arm carried the body;
@@ -197,22 +199,95 @@ installed_plugin_ids() {
   return 0
 }
 
-# usage: skill_deny_rules <plugin-id>...
-# One rule per installed plugin, denying its ENTIRE skill namespace. Two things make this the right
+# usage: suite_skill_names <eval.yaml>
+# The skills THIS suite installs, by the name the Skill tool uses for them. `eval.yaml` installs
+# `pw-prove` alone; `eval.collision.yaml` installs `pw-prove` and `e2e-reviewer`, because the
+# question #81 asks — which of two trigger surfaces a request reaches — needs both present.
+#
+# Read from the suite's own `skills:` block rather than assumed, so a suite that adds a third skill
+# is protected by the rule below without anyone remembering to come back here. A `path:` in that
+# block is relative to the SKILL directory, one level above the suite.
+suite_skill_names() {
+  local suite="$1" base p name
+  [ -f "$suite" ] || return 0
+  base="$(cd "$(dirname "$suite")/.." && pwd)" || return 0
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    name="$(sed -n '/^---$/,/^---$/p' "$base/$p/SKILL.md" 2>/dev/null | sed -n 's/^name:[[:space:]]*//p' | head -1)"
+    [ -n "$name" ] && printf '%s\n' "$name"
+  done < <(awk '
+      /^[A-Za-z_]+:/ { in_skills = ($0 ~ /^skills:/) }
+      in_skills && $1 == "path:" { print $2 }
+    ' "$suite")
+  return 0
+}
+
+# usage: plugin_skill_ids <plugin-id> — the skills that plugin actually ships, by directory name.
+plugin_skill_ids() {
+  local id="$1" reg="$HOME/.claude/plugins/installed_plugins.json" p d
+  [ -f "$reg" ] || return 0
+  while IFS= read -r p; do
+    [ -d "$p/skills" ] || continue
+    for d in "$p"/skills/*/; do
+      [ -f "$d/SKILL.md" ] || continue
+      d="$(basename "$d")"
+      case "$d" in *[!A-Za-z0-9_-]*) continue ;; esac
+      printf '%s\n' "$d"
+    done
+  done < <(node -e '
+    const fs = require("fs");
+    let j; try { j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
+    for (const [key, entries] of Object.entries(j?.plugins ?? {})) {
+      if (String(key).split("@")[0] !== process.argv[2]) continue;
+      for (const e of entries ?? []) if (e?.installPath) console.log(e.installPath);
+    }
+  ' "$reg" "$id" 2>/dev/null)
+  return 0
+}
+
+# usage: skill_deny_rules <plugin-id>...   ($PROTECTED_SKILLS: names the run installs, space-separated)
+# One rule per installed plugin, denying its ENTIRE skill namespace. Two things make that the right
 # shape, and both were measured against the host runtime rather than read off the docs (#83):
 #
 #   * A `Skill(<id>:*)` deny rule IS enforced, and it holds under `--permission-mode
 #     bypassPermissions` — a Skill call it covers comes back `Skill execution blocked by permission
-#     rules`. Deny rules can cover the Skill tool. The open question this ticket carried is settled
-#     yes, so the residual does not have to be written down as one.
-#   * It costs the measurement nothing. The version under test is installed UNNAMESPACED, as
-#     `pw-prove`, and `Skill(e2e:pw-prove)` does not touch it — the bare id still launches. So the
-#     namespace can be denied whole rather than skill by skill, which is the stronger rule: no plugin
-#     skill has any business reaching an isolated run, and denying only `<id>:pw-prove` would leave
-#     the next bundle that vendors this body one rename away.
+#     rules`. Deny rules can cover the Skill tool.
+#   * It costs the measurement nothing when the run installs `pw-prove` alone: the version under test
+#     is installed UNNAMESPACED and `Skill(e2e:*)` does not touch a bare `pw-prove`.
+#
+# …and #81 measured the edge that second bullet does not cover. `Skill(e2e:*)` DOES block a bare
+# `e2e-reviewer`: the id is a PREFIX of the skill's own name, and the host matches it. Measured both
+# ways in an isolated home — with the rule the call comes back `Skill execution blocked by permission
+# rules`, without it the same call is served — so the two-skill arm was silently measuring a run
+# whose neighbour skill could never load. Invisible until a suite installed a second skill, because
+# nothing else on this host is named after a plugin id.
+#
+# So a colliding id is denied skill by skill instead, enumerated from the plugin's own install. That
+# is narrower than the namespace rule and cannot swallow a name the run needs. When the plugin's
+# skills cannot be enumerated there is nothing narrow to write, so the wide rule stands and the run
+# says out loud which of its own skills that rule will block — a stated cost, never a silent one.
 skill_deny_rules() {
-  local id
-  for id in "$@"; do printf 'Skill(%s:*)\n' "$id"; done | sort -u
+  local id protected s collides sk wrote
+  for id in "$@"; do
+    collides=0
+    for protected in ${PROTECTED_SKILLS:-}; do
+      case "$protected" in "$id"?*) collides=1 ;; esac
+    done
+    if [ "$collides" -eq 0 ]; then
+      printf 'Skill(%s:*)\n' "$id"
+      continue
+    fi
+    wrote=0
+    while IFS= read -r sk; do
+      [ -n "$sk" ] || continue
+      printf 'Skill(%s:%s)\n' "$id" "$sk"
+      wrote=1
+    done < <(plugin_skill_ids "$id")
+    if [ "$wrote" -eq 0 ]; then
+      printf 'Skill(%s:*)\n' "$id"
+      echo "run-evals-isolated.sh: plugin '$id' ships no enumerable skills, so Skill($id:*) stands — it will also block this run's own '${PROTECTED_SKILLS}' skill(s) whose name starts with '$id'" >&2
+    fi
+  done | sort -u
   return 0
 }
 
@@ -461,6 +536,9 @@ run_census() {
   # The id half of the census. Unlike the path half this one does NOT refuse when it finds nothing:
   # a host with no plugins installed is an ordinary state, not a broken instrument.
   while IFS= read -r r; do [ -n "$r" ] && PLUGIN_IDS+=("$r"); done < <(installed_plugin_ids)
+  # What the suite installs decides which namespace rules may be written wide (#81).
+  PROTECTED_SKILLS="$(suite_skill_names "$EVAL_YAML" | sort -u | paste -sd' ' -)"
+  export PROTECTED_SKILLS
   while IFS= read -r r; do [ -n "$r" ] && RULES+=("$r"); done < <(skill_deny_rules ${PLUGIN_IDS[@]+"${PLUGIN_IDS[@]}"})
   assert_workspace_outside "$WORKSPACE" ${COPIES[@]+"${COPIES[@]}"} || return 1
   return 0
@@ -738,6 +816,54 @@ Skill(matt:*)" ]; then
   else
     echo "  [PASS] no rule touches the unnamespaced 'pw-prove' the run installs"
   fi
+  # …and the edge #81 measured: an id that PREFIXES a skill the run installs would take that skill
+  # with it. `Skill(e2e:*)` blocks a bare `e2e-reviewer` on the live runtime — measured both ways —
+  # so a colliding namespace is denied skill by skill instead, enumerated from the plugin's install.
+  mkdir -p "$ph/plugin-install/skills/pw-prove" "$ph/plugin-install/skills/e2e-reviewer"
+  : > "$ph/plugin-install/skills/pw-prove/SKILL.md"
+  : > "$ph/plugin-install/skills/e2e-reviewer/SKILL.md"
+  cat > "$ph/.claude/plugins/installed_plugins.json" <<JSON
+{"version":2,"plugins":{
+  "e2e@sss-marketplace":[{"scope":"user","installPath":"$ph/plugin-install","version":"1.2.1"}],
+  "matt@sss-marketplace":[{"scope":"user","installPath":"/nowhere/matt/1.0.0","version":"1.0.0"}]
+}}
+JSON
+  crules="$(HOME="$ph" PROTECTED_SKILLS='pw-prove e2e-reviewer' skill_deny_rules e2e matt)"
+  if printf '%s\n' "$crules" | grep -qx 'Skill(e2e:\*)'; then
+    echo "  [FAIL] a namespace whose id prefixes an installed skill is still denied wide — it would block the run's own e2e-reviewer"; fail=1
+  else
+    echo "  [PASS] a namespace whose id prefixes a skill the run installs is denied skill by skill"
+  fi
+  if printf '%s\n' "$crules" | grep -qx 'Skill(e2e:e2e-reviewer)' && printf '%s\n' "$crules" | grep -qx 'Skill(e2e:pw-prove)'; then
+    echo "  [PASS] and the plugin's own skills are each named, so the namespace is still covered"
+  else
+    echo "  [FAIL] the enumerated rules are missing:"; printf '%s\n' "$crules" | sed 's/^/         /'; fail=1
+  fi
+  if printf '%s\n' "$crules" | grep -qx 'Skill(matt:\*)'; then
+    echo "  [PASS] a namespace that collides with nothing keeps the wide rule every earlier run carried"
+  else
+    echo "  [FAIL] a non-colliding namespace lost its wide rule"; fail=1
+  fi
+  # And the suite says which skills it installs, rather than the runner being told.
+  mkdir -p "$T/suite/e2e-reviewer" "$T/suite/pw-prove/evals"
+  printf -- '---\nname: e2e-reviewer\n---\nbody\n' > "$T/suite/e2e-reviewer/SKILL.md"
+  printf -- '---\nname: pw-prove\n---\nbody\n' > "$T/suite/pw-prove/SKILL.md"
+  cat > "$T/suite/pw-prove/evals/eval.two.yaml" <<'YAML'
+skills:
+    - source: local_path
+      path: .
+    - source: local_path
+      path: ../e2e-reviewer
+engine:
+    name: claude_code
+YAML
+  names="$(suite_skill_names "$T/suite/pw-prove/evals/eval.two.yaml" | sort | paste -sd' ' -)"
+  if [ "$names" = "e2e-reviewer pw-prove" ]; then
+    echo "  [PASS] the skills a suite installs are read from the suite, by name"
+  else
+    echo "  [FAIL] suite_skill_names returned '$names'"; fail=1
+  fi
+
   printf '%s\n' "$srules" | write_deny_settings "$T/skill-settings.json"
   if node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).permissions.deny; if(!r.includes("Skill(e2e:*)"))process.exit(1)' "$T/skill-settings.json"; then
     echo "  [PASS] the Skill rules survive into a settings.json that parses"

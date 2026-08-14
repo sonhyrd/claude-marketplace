@@ -171,6 +171,43 @@ That is a correction to the instrument, **not** grounds to re-read any admitted 
 paragraph makes a contaminated baseline informative, and #65 refuted that inference on `case-51`
 already.
 
+## The fourth price: a namespace rule takes a skill whose name starts with the id (#81)
+
+The second bullet above — *the rule costs the measurement nothing* — was measured on a suite that
+installs `pw-prove` and nothing else, and it is true exactly that far. #81 built the first arm that
+installs a second skill (`evals/eval.collision.yaml`, pw-prove **and** e2e-reviewer, so a case can
+ask which of two trigger surfaces a request reaches) and the arm measured nothing on its first run:
+the agent invoked `e2e-reviewer` and the runner's own rules refused it.
+
+Two more probes against the same host runtime, same method as the table above — the verdict read from
+the Skill tool's own result:
+
+| Home | installed, unnamespaced | deny rule | `Skill(e2e-reviewer)` returns |
+|---|---|---|---|
+| isolated | `e2e-reviewer` | `Skill(e2e:*)` | `Skill execution blocked by permission rules` |
+| isolated | `e2e-reviewer` | `Skill(e2e:e2e-reviewer)`, `Skill(e2e:pw-prove)`, `Skill(e2e:playwright-debugger)` | `Launching skill: e2e-reviewer` — served |
+
+The marketplace plugin id here is `e2e`; the bundle's own skill is `e2e-reviewer`. The id is a
+**prefix of the skill's name**, and the host matches it. `pw-prove` shares no prefix with any
+installed id, which is why every measurement taken before #81 was unaffected and why nothing could
+have surfaced this: the collateral is only visible to a run that installs a skill named after a
+plugin id.
+
+So the whole-namespace rule now yields, for a colliding id only, to **one rule per skill the plugin
+actually ships**, enumerated from its own `installPath`. That is narrower than what the second bullet
+argues for — it is one rename away from useless, exactly as that bullet says — and it is the narrower
+rule or no arm at all. Which skills the run installs is read from the suite's own `skills:` list, so
+a suite that adds a third skill is covered without anyone editing the runner; a non-colliding
+namespace keeps the wide rule, so `eval.yaml`'s rule set is byte-identical to what every earlier
+measurement carried.
+
+**Installing a second skill through the suite is not a hole in the seal.** The seal is against copies
+of a body the runner did not put there — the marketplace cache, other checkouts, a previous run's
+leftovers, the namespaced Skill route. What `eval.collision.yaml` installs comes from the working
+tree, through skill-up, at a version this repository can name, and the routing judges still exit
+CONTAMINATED on a plugin-namespaced invocation of either skill. An arm that had defeated the deny
+rules to get its second skill would not be a measurement; this one does not.
+
 ## Alternatives weighed
 
 - **`docker` for dry cases, `none` for wet cases.** Rejected. `environment` is one key for one
