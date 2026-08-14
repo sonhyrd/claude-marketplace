@@ -21,15 +21,16 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 
 ## Index
 
-- 57 entries, 365 assertions recovered.
-- 49 of them are dormant: `judge.type: agent_judge` with no `criteria:` key, which `skill-up validate` rejects outright. A dormant case is a hard config error, not a vacuous pass.
-- 8 are in `eval.yaml`'s active list.
+- 57 entries, 365 assertions recovered. **The recovered material is immutable** — every assertion below, including those of the five entries whose case files #63 deleted, is kept verbatim. The mining is the recovery; deleting a case does not un-recover it. Only the Status column moves, and it is a pointer: `REGISTRY.md` owns pass rate, uplift and status, and wins any disagreement.
+- Status as of #63 (batch 1 triage), over the 57 mined entries: **3 active** (`case-15`, `case-50`, `case-60`), **8 quarantined** (`case-1`, `case-2`, `case-3`, `case-28`, `case-30`, `case-43`, `case-44`, `case-48` — on disk, out of the active list, each with a recorded pass rate in `REGISTRY.md`), **5 retired** (case files deleted: `case-26`, `case-27`, `case-39`, `case-40`, `case-49`), and **41 dormant**. 3 + 8 + 5 + 41 = 57.
+- A dormant entry is `judge.type: agent_judge` with no `criteria:` key, which `skill-up validate` rejects outright. A dormant case is a hard config error, not a vacuous pass.
+- These counts cover entries mined from `evals.json` only. `eval.yaml`'s active list also carries `gate-skill-loaded`, `b01-confirmation-gate` and `b05-handoff-stale`, which have no legacy entry here; `b32-dwell-inline` is quarantined and `b49-untrusted-page-content` was deleted for zero uplift.
 
 | Case | Judge | Status | Assertions | Recovered title |
 | --- | --- | --- | ---: | --- |
-| [`case-1.yaml`](cases/case-1.yaml) | `agent_judge` | dormant | 14 | Coverage gap analysis with POM project |
-| [`case-2.yaml`](cases/case-2.yaml) | `agent_judge` | dormant | 12 | Test generation plan for /checkout with POM |
-| [`case-3.yaml`](cases/case-3.yaml) | `agent_judge` | dormant | 13 | Flat-sibling repo — scaffold a POM anyway (POM is always the default) |
+| [`case-1.yaml`](cases/case-1.yaml) | `script` | **quarantined #63** | 14 | Coverage gap analysis with POM project |
+| [`case-2.yaml`](cases/case-2.yaml) | `script` | **quarantined #63** | 12 | Test generation plan for /checkout with POM |
+| [`case-3.yaml`](cases/case-3.yaml) | `script` | **quarantined #63** | 13 | Flat-sibling repo — scaffold a POM anyway (POM is always the default) |
 | [`case-4.yaml`](cases/case-4.yaml) | `agent_judge` | dormant | 7 | Exploration auth/seed gate: stop and ask when credentials are missing |
 | [`case-5.yaml`](cases/case-5.yaml) | `agent_judge` | dormant | 5 | PR-mode proof link: a skip must show the failing probe (no silent drop) |
 | [`case-7.yaml`](cases/case-7.yaml) | `agent_judge` | dormant | 4 | Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate |
@@ -38,7 +39,7 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-11.yaml`](cases/case-11.yaml) | `agent_judge` | dormant | 8 | Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep |
 | [`case-12.yaml`](cases/case-12.yaml) | `agent_judge` | dormant | 8 | Legible stop report: bring-up failure names verbatim evidence and produces nothing |
 | [`case-13.yaml`](cases/case-13.yaml) | `agent_judge` | dormant | 6 | Server-set login cookie: obtain it via API-login, do not hand-author the cookie value |
-| [`case-15.yaml`](cases/case-15.yaml) | `rule_based` | active | 6 | Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden |
+| [`case-15.yaml`](cases/case-15.yaml) | `script` | **active #63** | 6 | Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden |
 | [`case-16.yaml`](cases/case-16.yaml) | `agent_judge` | dormant | 4 | POM inventory + extend-existing-POM on route match (duplicate needs stated justification) |
 | [`case-17.yaml`](cases/case-17.yaml) | `agent_judge` | dormant | 3 | PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header |
 | [`case-19.yaml`](cases/case-19.yaml) | `agent_judge` | dormant | 3 | Token diet in the fix loop: no inter-tool narration, spec written once — audit trail unaffected |
@@ -48,11 +49,11 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-23.yaml`](cases/case-23.yaml) | `agent_judge` | dormant | 7 | Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport |
 | [`case-24.yaml`](cases/case-24.yaml) | `agent_judge` | dormant | 7 | Proof config is reused, not rewritten, when the repo already has one |
 | [`case-25.yaml`](cases/case-25.yaml) | `agent_judge` | dormant | 9 | Step 8 delivers ONE chaptered Clips recording, not N bare clip links |
-| [`case-26.yaml`](cases/case-26.yaml) | `agent_judge` | dormant | 5 | Every scenario times out on its first navigation — a saturated dev server, not a broken spec |
-| [`case-27.yaml`](cases/case-27.yaml) | `agent_judge` | dormant | 6 | The mutation check must not overwrite the proof clips |
-| [`case-28.yaml`](cases/case-28.yaml) | `rule_based` | active | 6 | Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser |
+| `case-26.yaml` (deleted) | `agent_judge` | **retired #63** | 5 | Every scenario times out on its first navigation — a saturated dev server, not a broken spec |
+| `case-27.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | The mutation check must not overwrite the proof clips |
+| [`case-28.yaml`](cases/case-28.yaml) | `script` | **quarantined #63** | 6 | Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser |
 | [`case-29.yaml`](cases/case-29.yaml) | `agent_judge` | dormant | 6 | An AC already proven by the diff's own unit tests is folded, not silently dropped |
-| [`case-30.yaml`](cases/case-30.yaml) | `rule_based` | active | 7 | Publish URL is read from the PWPROVE_URL marker, not stdout line 1 |
+| [`case-30.yaml`](cases/case-30.yaml) | `script` | **quarantined #63** | 7 | Publish URL is read from the PWPROVE_URL marker, not stdout line 1 |
 | [`case-31.yaml`](cases/case-31.yaml) | `agent_judge` | dormant | 5 | The runner's origin is proven reachable before the proof run, not inferred from a healthy localhost |
 | [`case-32.yaml`](cases/case-32.yaml) | `agent_judge` | dormant | 5 | A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec |
 | [`case-33.yaml`](cases/case-33.yaml) | `agent_judge` | dormant | 5 | A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks |
@@ -61,18 +62,18 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-36.yaml`](cases/case-36.yaml) | `agent_judge` | dormant | 7 | A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin |
 | [`case-37.yaml`](cases/case-37.yaml) | `agent_judge` | dormant | 7 | Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film |
 | [`case-38.yaml`](cases/case-38.yaml) | `agent_judge` | dormant | 5 | Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip |
-| [`case-39.yaml`](cases/case-39.yaml) | `agent_judge` | dormant | 6 | Step 6 exit 2 on a dwell hoisted into a helper — inline it, do not conclude there is none |
-| [`case-40.yaml`](cases/case-40.yaml) | `agent_judge` | dormant | 4 | A dwell wrapped across two lines already satisfies Step 6 — do not reformat it to appease the audit |
+| `case-39.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | Step 6 exit 2 on a dwell hoisted into a helper — inline it, do not conclude there is none |
+| `case-40.yaml` (deleted) | `agent_judge` | **retired #63** | 4 | A dwell wrapped across two lines already satisfies Step 6 — do not reformat it to appease the audit |
 | [`case-41.yaml`](cases/case-41.yaml) | `agent_judge` | dormant | 4 | Step 8 runs the residue refusal — it does not confirm the HAR by eye |
 | [`case-42.yaml`](cases/case-42.yaml) | `agent_judge` | dormant | 4 | The recon HAR is already scrubbed at capture — do not hand-roll a second scrub |
-| [`case-43.yaml`](cases/case-43.yaml) | `rule_based` | active | 4 | Every read aborting in Step 7 is an unbound HAR, not a short recording |
-| [`case-44.yaml`](cases/case-44.yaml) | `rule_based` | active | 6 | A missing configuration key is a configuration failure, named in seconds — not a slow server |
+| [`case-43.yaml`](cases/case-43.yaml) | `script` | **quarantined #63** | 4 | Every read aborting in Step 7 is an unbound HAR, not a short recording |
+| [`case-44.yaml`](cases/case-44.yaml) | `script` | **quarantined #63** | 6 | A missing configuration key is a configuration failure, named in seconds — not a slow server |
 | [`case-45.yaml`](cases/case-45.yaml) | `agent_judge` | dormant | 6 | The committed proof config must not inherit the project's development webServer |
 | [`case-46.yaml`](cases/case-46.yaml) | `agent_judge` | dormant | 7 | Two attempts with the same failure signature take the handover stop, not a third try |
 | [`case-47.yaml`](cases/case-47.yaml) | `agent_judge` | dormant | 5 | Genuinely different failures are a converging run — spend the full budget of three |
-| [`case-48.yaml`](cases/case-48.yaml) | `rule_based` | active | 9 | A dev-guarded session bootstrap does not exist in the built target — descend the ladder |
-| [`case-49.yaml`](cases/case-49.yaml) | `agent_judge` | dormant | 6 | An unestablished session fails loudly in seconds, not at a sixty-second timeout |
-| [`case-50.yaml`](cases/case-50.yaml) | `rule_based` | active | 7 | The server announced a shifted port — poll what it said, not what you asked for |
+| [`case-48.yaml`](cases/case-48.yaml) | `script` | **quarantined #63** | 9 | A dev-guarded session bootstrap does not exist in the built target — descend the ladder |
+| `case-49.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | An unestablished session fails loudly in seconds, not at a sixty-second timeout |
+| [`case-50.yaml`](cases/case-50.yaml) | `script` | **active #63** | 7 | The server announced a shifted port — poll what it said, not what you asked for |
 | [`case-51.yaml`](cases/case-51.yaml) | `agent_judge` | dormant | 6 | A server whose log names no origin is not a port mismatch |
 | [`case-52.yaml`](cases/case-52.yaml) | `agent_judge` | dormant | 6 | A batch pays for one build, and the mutation check pays for its own |
 | [`case-53.yaml`](cases/case-53.yaml) | `agent_judge` | dormant | 6 | The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure |
@@ -82,7 +83,7 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-57.yaml`](cases/case-57.yaml) | `agent_judge` | dormant | 5 | A probe question that needs an argument uses the {fn, arg} form, and its answer is the value |
 | [`case-58.yaml`](cases/case-58.yaml) | `agent_judge` | dormant | 5 | The eval argument carries data, not a page handle |
 | [`case-59.yaml`](cases/case-59.yaml) | `agent_judge` | dormant | 6 | Every scenario times out on its first navigation — serialise once to diagnose, then report the finding |
-| [`case-60.yaml`](cases/case-60.yaml) | `script` | active | 5 | The proof run names no worker count |
+| [`case-60.yaml`](cases/case-60.yaml) | `script` | **active #63** | 5 | The proof run names no worker count |
 | [`case-61.yaml`](cases/case-61.yaml) | `agent_judge` | dormant | 5 | Scenarios that contend over one shared record serialise in the spec, not on the command line |
 
 ## Per-case detail

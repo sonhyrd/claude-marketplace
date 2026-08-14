@@ -28,24 +28,37 @@ cases:
         # exercised by every run rather than trusted. Unknown eval.yaml keys are accepted
         # silently, so a wiring that is never exercised is a wiring nobody has checked.
         - evals/cases/gate-skill-loaded.yaml
-        # --- the 12 P0 behaviors ---
+        #
+        # `case-1`, `case-2` and `case-3` were repaired onto this same judge by #63 and characterized
+        # beside it, and they are NOT in this list. A realistic "analyse this project's coverage gaps"
+        # request does not trip the trigger, because the `description:` frontmatter advertises nothing
+        # about the Coverage-gap mode the body implements. That is a defect against the frontmatter
+        # (#73, #74) and is never repaired by editing a trigger prompt — their case files stay on
+        # disk, quarantined, until it is fixed. evals/REGISTRY.md has their pass rates.
+        # --- the admitted P0 behaviors ---
         # Every one is judged by a script under evals/judges/, and every one of those scripts is
         # covered by a must-PASS / must-FAIL fixture pair in scripts/ci/test-eval-judges.sh. They
         # were rule_based `output_contains` until #59: a bare substring fires when the model names
         # the forbidden thing IN ORDER TO REJECT IT, which is what produced seven of the nine
         # failures in the 2026-08-13 run. Do not reintroduce one over discursive output.
+        #
+        # Every case in this list is admitted on evidence — 3/3 over three iterations AND a non-zero
+        # uplift measured against a baseline that was genuinely skill-free.
+        #
+        # evals/REGISTRY.md is the source of truth for every number: pass rate, uplift, the SKILL.md
+        # section each case guards, and the reason for every case that is NOT here. Do not restate a
+        # figure in this file; a number in two places drifts. #63 took six cases out of this list —
+        # b32-dwell-inline, case-43, case-44, case-30, case-28 and case-48 — rather than leave one as
+        # a permanent red or an unproven guard, and DELETED b49-untrusted-page-content outright for
+        # zero uplift. The registry says which reason applies to which.
+        #
+        # Do not re-add one without re-characterizing it and updating its row. A guard whose pass
+        # rate is a coinflip is what caused a shipped fix to be committed and then reverted.
         - evals/cases/b01-confirmation-gate.yaml
         - evals/cases/b05-handoff-stale.yaml
-        - evals/cases/b49-untrusted-page-content.yaml
-        - evals/cases/b32-dwell-inline.yaml
-        - evals/cases/case-44.yaml
         - evals/cases/case-50.yaml
-        - evals/cases/case-48.yaml
         - evals/cases/case-15.yaml
-        - evals/cases/case-43.yaml
         - evals/cases/case-60.yaml
-        - evals/cases/case-28.yaml
-        - evals/cases/case-30.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those

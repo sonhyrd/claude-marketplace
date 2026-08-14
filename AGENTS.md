@@ -185,15 +185,16 @@ judge, the defect behind seven of the nine failures in the 2026-08-13 run.
 
 **pw-prove is evaluated by the `skill-up` CLI, and that suite is the skill's eval
 surface.** There is exactly one eval format for this skill; the `evals.json` predecessor
-was mined and retired in #61. The surface is six things:
+was mined and retired in #61. The surface is seven things:
 
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 62 on disk, 13 active — the rest are inventory, not coverage |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 56 on disk, 6 active — the rest are quarantined or inventory, not coverage |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.txt` |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
+| `skills/pw-prove/evals/REGISTRY.md` | **The registry.** One row per triaged case: pass rate, uplift, the SKILL.md section it guards, and status (active / quarantined / retired). It is also the case → section map that makes a blast-radius re-characterization a lookup |
 | `skills/pw-prove/.skill-up.yaml` | User config for the run (e.g. the agent-under-test's effort level) |
 
 ### Running the eval suite
@@ -224,7 +225,7 @@ whatever its own judge said; the gate makes that visible, and non-invocation sta
 Note skill-up's config discovery is `$PWD`-only, so `.skill-up.yaml` is ignored without complaint
 unless you are in `skills/pw-prove/` or pass it as `--config`. The runner handles this for you.
 
-Five things to know before you touch any of it:
+Six things to know before you touch any of it:
 
 - **Every case declares a `shape:`, and the shape decides what a prompt may say.** A `trigger` case
   carries a realistic top-of-task request and never names the skill — whether pw-prove loads is the
@@ -247,6 +248,13 @@ Five things to know before you touch any of it:
 - **Before hand-authoring a judge for a dormant case, read
   `skills/pw-prove/evals/mined-assertions.md`** — it holds the assertions the migration to case files
   dropped, so repairing a case is recovery rather than invention.
+- **A case is admitted on evidence, and `REGISTRY.md` is where that evidence lives.** 3/3 over three
+  iterations admits a guard; 0/3 admits a confirmed defect, filed as its own ticket; anything in
+  between is quarantined and never left active. Uplift is measured once at admission, with the skill
+  installed and removed, and **zero uplift retires the case** — a case that cannot go red when the
+  skill regresses is not a guard. Retired cases are **deleted**, not left dormant: dormancy is what
+  produced 49 unusable files. Never add a case to `eval.yaml`'s active list without characterizing
+  it and adding its row.
 
 The vocabulary — **wet case, dry case, trusted core, characterization, blast radius** — is defined
 once in `CONTEXT.md` under *Eval vocabulary*. Use those words for those things.

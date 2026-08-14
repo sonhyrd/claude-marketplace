@@ -52,16 +52,31 @@ it is noise.
 
 ## The classification
 
-62 case files: **4 trigger, 58 behavior.** 13 are active in `eval.yaml`; the rest are inventory, not
+56 case files: **4 trigger, 52 behavior.** 6 are active in `eval.yaml`; the rest are inventory, not
 coverage (`_debug-probe-workers.yaml.off` is disabled and carries no shape).
 
-**Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3`.
+> Counts updated by #63, which deleted six cases in triage — `case-26`, `case-27`, `case-39`,
+> `case-40` and `case-49` automatically, and `b49-untrusted-page-content` on a measured zero uplift.
+> Before it: 62 files, 4 trigger / 58 behavior, 13 active. `REGISTRY.md` carries the reason per case.
+
+**Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3` (quarantined).
 
 `case-1`/`case-2`/`case-3` ask for coverage analysis or a test plan against a fixture repo, in a
-user's words. They are dormant and their prompts are untouched; they become live trigger measurements
-when their judges are repaired (#59).
+user's words. Their prompts are still untouched; what changed in #63 is their judges. Each now runs
+`skill-loaded.mjs`, because the rule above — an *active* trigger case asserts loading — decides what
+an active trigger case may be graded on, and it is loading. So the content assertions those three
+carry are deliberately not graded: they are preserved in `mined-assertions.md` and recorded in
+`REGISTRY.md` as an unmeasured coverage gap against the SKILL.md sections they name.
 
-`gate-skill-loaded` is the one active trigger case, and its prompt was the reason it measured
+**That widening is what overturned finding 1 below.** Measured at n=3 through the isolated runner on
+2026-08-14, four top-of-task phrasings gave **1 pass, 1 flake and 2 hard misses**: only
+`gate-skill-loaded` ("prove this PR") loads reliably. `case-2` ("plan the tests for this route") is
+2/3, and `case-1` and `case-3` — both plain coverage-gap requests — are **0/3 NOT LOADED**. The
+frontmatter advertises proving a change and says nothing about the Coverage-gap mode the body
+implements at Step 2. Filed as **#73** and **#74**; the three cases are quarantined, and none of
+their prompts was touched, because a trigger case is never repaired by editing its prompt.
+
+`gate-skill-loaded` is the only active trigger case, and its prompt was the reason it measured
 nothing. It read *"You are pw-prove. … Begin."* — a behavior-shaped prompt wired to a judge whose
 entire job is to report whether the trigger fired. It now reads as a request:
 
@@ -71,12 +86,22 @@ entire job is to report whether the trigger fired. It now reads as a request:
 Its judge is unchanged: `skill-loaded.mjs`, the same gate the post-run sweep runs. Loading is the
 assertion.
 
-**Behavior (58)** — every other case file. All of them presuppose a step, an exit code, an artifact
+**Behavior (52)** — every other case file. All of them presuppose a step, an exit code, an artifact
 on disk, or a run already in progress; all of them now open with the placement line.
 
 ## Findings
 
-### 1. No trigger defect — the frontmatter fired on the first realistic request put to it
+### 1. ~~No trigger defect~~ — SUPERSEDED BY #63: there is one, and it is Coverage-gap mode
+
+> **Read this heading as overturned.** Everything below is accurate about what #60 measured, and its
+> own last paragraph names the limit — one case's worth of evidence. #63 activated the other three
+> trigger cases and measured all four at n=3: `case-1` and `case-3` are **0/3 NOT LOADED** (#73,
+> #74) and `case-2` is 2/3. A realistic *"analyse this project's coverage gaps"* request does not
+> load pw-prove, because the `description:` frontmatter is entirely about proving a change and says
+> nothing about the Coverage-gap mode SKILL.md implements at Step 2. The finding belongs against the
+> frontmatter, exactly as the rule says.
+
+#### What #60 measured — the frontmatter fired on the first realistic request put to it
 
 The three cases the #58 sweep found never loading — `b01`, `b49`, `case-50` — are all **behavior**
 cases. Their NOT-LOADED verdicts say nothing about the `description:` frontmatter, and none of them
@@ -128,13 +153,22 @@ gate would not.
 - **`case-1`/`case-2`/`case-3` are trigger cases whose judges do not read loading**, so the rule is
   recorded on them and not yet measured by them. `scripts/ci/test-case-shapes.sh` requires the
   loading assertion of *active* trigger cases only, which is what makes activating one a deliberate
-  act rather than a silent one.
+  act rather than a silent one. **Superseded by #63**: all three were activated, and the deliberate
+  act was paid — each took `skill-loaded.mjs` as its judge, which is the only judge shape that rule
+  admits for an active trigger case.
 
-## Measured
+## Measured — #60's single-iteration run, superseded
 
 Every run goes through `scripts/run-evals-isolated.sh`, never bare `skill-up run`.
 See `docs/adr/0018` before running the suite, and `docs/agents/delegate-profile.md` for how runs are
 operated.
+
+> **This table is a historical record, not the current state of the suite.** It is one iteration of
+> the 13 cases that were active when #60 landed, and it is what that change measured. #63 then
+> characterized every one of them at **n=3**, which is the reading to act on: five of the thirteen
+> are no longer active, `b49-untrusted-page-content` no longer exists, and three trigger cases have
+> been added and quarantined since. **`REGISTRY.md` is the current state**; the value of the table
+> below is that it shows what one iteration looked like before anyone had a pass rate.
 
 **2026-08-14, after this change** — the whole active suite, so the claim rests on every active case
 rather than on the ones the rule was designed against.
