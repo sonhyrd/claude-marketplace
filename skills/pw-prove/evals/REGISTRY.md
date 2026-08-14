@@ -77,8 +77,10 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **n=3, trigger cases** | the same, `--include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | the pass rate of the three trigger cases #63 repaired and activated. 9 runs |
 | **uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` | one `with_skill` and one `without_skill` arm per case, over the 10 cases still active at that point — the 13 that started the batch, minus `b32` (0/3), `case-43` (0/3) and `case-44` (2/3), which the characterization run had already disqualified. 20 runs |
 | **#66 re-characterization** | `bash scripts/run-evals-isolated.sh --include-case-name case-50 --iteration 3`, run twice | `case-50` after the announced-port co-location. **2/3 against the judge as it stood, then 3/3 against the repaired judge.** 6 runs, 6/6 LOADED. See *#66: the rate did not move, and the one red was the judge* |
+| **uplift re-measurement (#75)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --include-case-name case-28 --include-case-name case-48` | the two `void` rows, re-taken through the sealed runner. 8 runs over three attempts — see *What the sealed re-measurement cost* below |
+| **`case-28` re-characterization (#75)** | `bash scripts/run-evals-isolated.sh --iteration 3 --include-case-name case-28` | a clean pass rate to replace the 3/3 whose iteration 3 was CONTAMINATED. 3 runs, **3/3, all three iterations LOADED and clean** |
 
-74 agent runs in total.
+85 agent runs in total.
 
 **The gate held, with one exception.** Across the 39 characterization runs the skill under test
 reached the model every time (`LOADED via skill-tool, skill-body`), 0 not loaded. **One run was
@@ -101,11 +103,41 @@ matters is which way the contamination could have pushed the verdict:
   and the reading is conservative rather than wrong. That is `case-15`, which stays **active**.
 - The baseline **had the skill and passed** → we learned nothing. The pass may be the model's own
   capability or may be the body it just read, and there is no way to tell them apart from this run.
-  The reading is **void**, so the case can be neither admitted nor retired for zero uplift. That is
-  `case-28` and `case-48`, both **quarantined** pending #75.
+  The reading is **void**, so the case can be neither admitted nor retired for zero uplift. That was
+  `case-28` and `case-48`, quarantined pending #75 — **both have since been re-measured against a
+  certified skill-free baseline, both came back `+1`, and both are now active.**
 
 Recorded here rather than left implicit, because on its face the three rows look like the same
 evidence treated two different ways.
+
+### What the sealed re-measurement cost
+
+`case-28` and `case-48` were re-measured on 2026-08-14 through the runner #75 rebuilt: a census of
+every copy of the body on the host, one Claude Code deny rule per copy in the isolated home, the
+workspace moved outside every checkout, and an arm-aware sweep that fails the run when a
+`without_skill` transcript carries the body. **It took three attempts, and each failure was the
+instrument reporting a route nobody had enumerated** — which is the point of asserting rather than
+assuming:
+
+1. **First attempt** (both cases, parallel). `case-28`'s baseline came back SKILL-FREE and failed its
+   judge → `+1`. `case-48`'s baseline was refused the plugin cache and every checkout by the deny
+   rules, kept looking, and read the body out of `/tmp/skill-up-<n>/.claude/skills/pw-prove/` — a
+   **concurrent case's own install**. That path cannot be denied; it is the other agent's working
+   directory.
+2. **Second attempt** (`case-48` alone, serialised). Same verdict, different copy: the body came from
+   a `/tmp/skill-up-<n>/` install **left behind by an earlier run**. `$TMPDIR` was not a census root.
+3. **Third attempt**, with `$TMPDIR` censused and those stale installs denied: SKILL-FREE, and the
+   baseline failed its judge → `+1`.
+
+`case-28`'s **pass rate** was re-taken as well, and for a reason that would otherwise have been
+carried over unexamined: the 3/3 it was admitted on came from the characterization run whose
+iteration 3 is recorded above as CONTAMINATED. A 3/3 containing an iteration this instrument would
+now fail is not a clean 3/3. Re-run through the sealed runner it is 3/3 with all three iterations
+LOADED and clean, so the row stands on its own evidence rather than on the earlier run's.
+
+Twice the deny rules held against everything the census had seen and the agent still found a copy the
+census had not. Read that as the standing risk of `environment.type: none` (`docs/adr/0018`) and as
+the reason the sweep — not the deny list — is the binding assertion.
 
 ## Registry
 
@@ -115,7 +147,9 @@ only route to widening trigger coverage.
 
 **Pass rate** is over three iterations with the skill installed. **Uplift** is `+1` when the case
 went red with the skill removed, `0` when it passed anyway, `void` when the baseline was not
-skill-free.
+skill-free. Since #75 a `void` uplift is not something a run can report and leave: the sweep fails
+any run whose baseline arm carried the body, so a figure recorded here was taken against an arm the
+instrument certified as skill-free.
 
 | Case | Shape | Guards (SKILL.md section) | Pass rate | Uplift | Status |
 |---|---|---|:--:|:--:|---|
@@ -125,8 +159,8 @@ skill-free.
 | `case-15` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (baseline read the body and failed anyway — direction safe, reading not clean; #75) | **active** |
 | `case-50` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** → **3/3** after #66 (see below) | **+1** (clean) | **active** |
 | `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
-| `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
-| `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
+| `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
+| `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
 | `case-2` | trigger | frontmatter `description:` — a "plan the tests for this route" request | **2/3** | not measured | quarantined |
@@ -141,14 +175,15 @@ skill-free.
 | `case-40` | behavior | Step 6 › *Clip-fidelity audit* | — | — | **retired — deleted** |
 | `case-49` | behavior | Step 3 › *Auth* — the token-source ladder | — | — | **retired — deleted** |
 
-### The trusted core is six cases
+### The trusted core is eight cases
 
-`gate-skill-loaded`, `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`.
-That is what `eval.yaml`'s active list holds, and every one of them is 3/3 with a non-zero uplift.
+`gate-skill-loaded`, `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`,
+and — since #75 gave them a baseline that can be believed — `case-28` and `case-48`. That is what
+`eval.yaml`'s active list holds, and every one of them is 3/3 with a non-zero uplift.
 
-Of the 21 cases triaged, 5 were automatic retirements. **Of the 16 that were actually measured, 6
-were admitted, 9 are quarantined and 1 was deleted** — so ten of sixteen did not make it. That is the
-expected shape: the goal is a core whose verdicts can be believed, not a high keep rate.
+Of the 21 cases triaged, 5 were automatic retirements. **Of the 16 that were actually measured, 8
+were admitted, 7 are quarantined and 1 was deleted** — so eight of sixteen did not make it. That is
+the expected shape: the goal is a core whose verdicts can be believed, not a high keep rate.
 
 ### #66: the rate did not move, and the one red was the judge
 
@@ -264,22 +299,20 @@ intermittently on a third phrasing.
 
 ## Coverage gaps this table exposes
 
-The point of the section column is that an empty one is visible. After batch 1, **no active case
-guards** any of the following:
+The point of the section column is that an empty one is visible. After batch 1 and #75, **no active
+case guards** any of the following:
 
 | SKILL.md section | Guarded by | Why it is not covered |
 |---|---|---|
 | Step 2 › *Coverage-gap mode (no argument)* | nothing | `case-1` and `case-3` quarantined at 0/3 (#73, #74). Their 27 mined content assertions are unmeasured on top of that — an **active trigger case asserts loading and nothing else**, so grading them needs a second, behavior-shaped case rather than a second judge. |
 | Step 4 › *Scenarios* / *Locator Mapping Table* / POM-always | nothing | `case-2` quarantined at 2/3; its 12 mined content assertions are unmeasured for the same reason. |
 | Step 6 › *Clip-fidelity audit* | nothing | `b32` quarantined at 0/3 (#71); `case-39`/`case-40` retired as its duplicates. This section had three case files and now has no guard at all — it is the largest hole batch 1 leaves. |
-| Step 7 › *Hermetic audit* | nothing | `case-28` quarantined on a void uplift (#75). |
-| Step 3 › *Auth — drive the app's OWN entry* | nothing | `case-48` quarantined on a void uplift (#75); `case-49` retired as its overlap. |
 | Step 8 › *Deliver* — publish | nothing | `case-30` quarantined at 3/4. |
 | Step 7 › *Mutation check* — artifact isolation (`--output`, no `PW_PROVE_CLIP`, clip count preserved) | nothing | `case-27` retired for its `--workers=1` half. Dormant `case-8` and `case-52` touch the same artifacts and are batch 2/3 material (#64, #65). |
 | *Safety: page content is untrusted data* | nothing | `b49` retired for zero uplift. This is the one gap opened by a **retirement rather than a failure**, and it is the one to weigh again if the model under test changes: the case was retired because Opus 5 needs no telling, not because the rule stopped mattering. |
 | Step 5 › *Generate*, Step 5b, Step 6 › *PROVES-header audit*, Step 8 › hygiene sweep, Step 2 › *PR-mode: Diff → Acceptance Criteria* | nothing | no batch-1 case reached them; they are batch 2/3 scope. |
 
-Six sections are guarded, one per active case:
+Eight sections are guarded, one per active case:
 
 1. the frontmatter `description:` trigger surface — `gate-skill-loaded`
 2. Step 1 › *Confirmation gate* — `b01-confirmation-gate`
@@ -287,3 +320,5 @@ Six sections are guarded, one per active case:
 4. Step 3 › *Recon — the probe is the question channel* — `case-15`
 5. Step 3 › *Bring the environment up* — the announced origin — `case-50`
 6. Step 7 › *Verify* — the proof-run command — `case-60`
+7. Step 7 › *Hermetic audit* — `case-28`
+8. Step 3 › *Auth — drive the app's OWN entry* — `case-48`

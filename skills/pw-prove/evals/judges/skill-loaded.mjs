@@ -18,13 +18,22 @@
 // $PWPROVE_SKILL_MD names the body under test; without it the gate searches for pw-prove's
 // SKILL.md (see findSkillMd below) and refuses rather than guessing if it finds none.
 //
-// Exit codes are three-valued on purpose — "the case was contaminated" and "the case never loaded
-// the skill" call for different repairs:
-//   0  LOADED and clean
+// Exit codes are four-valued on purpose — "the case was contaminated", "the case never loaded
+// the skill" and "the baseline arm read the body anyway" call for different repairs:
+//   0  LOADED and clean  (or, under $PWPROVE_EXPECT_SKILL_FREE, SKILL-FREE and clean)
 //   1  NOT LOADED — the version under test never reached the model
 //   2  CONTAMINATED — the run reached a marketplace plugin copy, so isolation did not hold
+//   3  BASELINE DIRTY — a `without_skill` arm carried the body under test
 //
 // Non-invocation stays a FAIL. The gate exists to make the failure diagnosable, not to excuse it.
+//
+// $PWPROVE_EXPECT_SKILL_FREE=1 (or `--baseline` in argv) INVERTS the load question, for the
+// `without_skill` arm of an uplift run. There the body reaching the model is the defect, because an
+// uplift measured against a baseline that read the skill is not an uplift (issue #75): in the
+// 2026-08-14 run three of ten baseline arms found another checkout of this repository on the host
+// and `cat`-ed SKILL.md out of it. A Skill tool call is still expected in that arm — it errors with
+// `Unknown skill: pw-prove`, and an errored call carries no body — so the tool call alone is not the
+// finding. A fingerprint line is.
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,7 +72,13 @@ function findSkillMd(fromTranscript) {
   return '';
 }
 
-const transcriptPath = process.env.EVAL_TRANSCRIPT_PATH || process.argv[2] || '';
+const rawArgv = process.argv.slice(2);
+const argv = rawArgv.filter((a) => a !== '--baseline');
+const BASELINE =
+  /^(1|true|yes)$/i.test(process.env.PWPROVE_EXPECT_SKILL_FREE ?? '') ||
+  rawArgv.length !== argv.length;
+
+const transcriptPath = process.env.EVAL_TRANSCRIPT_PATH || argv[0] || '';
 
 // An absent transcript is never a pass. skill-up only WARNS when it has none to hand over
 // ("ScriptJudge.TranscriptPath is empty; EVAL_TRANSCRIPT_PATH will be unset"), so a judge that
@@ -150,7 +165,49 @@ if (rawTranscript.trimStart().startsWith('[')) {
   lines = rawTranscript.split('\n');
 }
 
+// A REFUSED access is the boundary holding, not a breach. Claude Code answers a denied file read
+// with one of these, naming the path it would not open — and the path is the only thing that
+// crossed. Counting that as contamination would fail every run in which the deny rules did their
+// job, which is the run this instrument is trying to produce.
+const DENIAL = /has been denied|denied by your permission settings|Permission to use \w+ with/i;
+
+// The discount applies only to a result that is WHOLLY a refusal. Matching the phrase anywhere in
+// the result would hand the transcript a way to hide the body: one Bash call whose output carries
+// both real body lines and the string "has been denied" would take the entire result out of the
+// scan — down the exact route (Bash) the deny rules cannot close and this gate is the only cover
+// for. So every substantial string in the result has to be the refusal; short scaffolding
+// (`tool_result`, an id, `true`) does not count against it.
+function isWhollyDenial(strings) {
+  const substantial = strings.filter((s) => s.trim().length > 24);
+  if (substantial.length === 0) return false;
+  // A refusal is one line. Anything with a second line is a result that merely MENTIONS a refusal.
+  if (!substantial.every((s) => !s.includes('\n') && DENIAL.test(s))) return false;
+  // And whatever else it is, a result carrying a line of the body under test is never discounted.
+  return !strings.some((s) => marks.some((m) => s.includes(m)));
+}
+
+// And a `find` LISTING is not a read either. Under the deny rules an agent that cannot open a copy
+// will still enumerate the disk, so the path lands in a tool result while not one line of the file
+// does. What separates the two is the shape of the result: a listing is paths and nothing else.
+// A file's contents are not. The moment the agent opens one of those paths, the tool argument that
+// opened it is undenied and structural, and the run reads CONTAMINATED again.
+function isPathListing(s) {
+  const lines = s.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+  let paths = 0;
+  for (const l of lines) {
+    if (/^[=~-]{2,}$/.test(l)) continue; // an `echo "==="` separator between two searches
+    if (/\s/.test(l)) return false;
+    if (l.includes('/')) paths++;
+  }
+  return paths > 0;
+}
+
 const toolUses = [];
+// Tool arguments are held back until the result is known: a `cat <plugin path>` that was refused is
+// an attempt, and its argument is not evidence that anything was read.
+const attempted = new Map();
+const denied = new Set();
 let records = 0;
 for (const line of lines) {
   if (!line.trim()) continue;
@@ -167,17 +224,37 @@ for (const line of lines) {
   } else if (msg?.role === 'assistant' && Array.isArray(content)) {
     for (const block of content) {
       if (block?.type === 'text' || block?.type === 'thinking') collect(block, prose);
-      else collect(block, structural);
-      if (block?.type === 'tool_use') toolUses.push(block);
+      else if (block?.type === 'tool_use') {
+        const bucket = [];
+        collect(block, bucket);
+        attempted.set(block.id ?? `#${attempted.size}`, bucket);
+        toolUses.push(block);
+      } else collect(block, structural);
     }
     // The record's own metadata is structural even when its content is prose.
     const { message: _m, ...meta } = rec;
     collect(meta, structural);
   } else {
-    collect(rec, structural);
-    if (Array.isArray(content)) for (const b of content) if (b?.type === 'tool_use') toolUses.push(b);
+    if (Array.isArray(content)) {
+      for (const b of content) {
+        if (b?.type === 'tool_result') {
+          const bucket = [];
+          collect(b, bucket);
+          if (isWhollyDenial(bucket)) denied.add(b.tool_use_id);
+          else structural.push(...bucket.filter((s) => !isPathListing(s)));
+          continue;
+        }
+        if (b?.type === 'tool_use') toolUses.push(b);
+        collect(b, structural);
+      }
+      const { message: _m, ...meta } = rec;
+      collect(meta, structural);
+    } else {
+      collect(rec, structural);
+    }
   }
 }
+for (const [id, bucket] of attempted) if (!denied.has(id)) structural.push(...bucket);
 
 if (records === 0) {
   console.error(`FAIL: ${transcriptPath} holds no transcript records`);
@@ -192,6 +269,14 @@ const all = prose.concat(structural);
 // plugin at all, which under an isolated runtime it must not.
 const PLUGIN_PATH = /\.claude\/plugins\/(?:cache|marketplaces)\//;
 const contaminatedBy = structural.filter((s) => PLUGIN_PATH.test(s));
+const pluginPaths = () => {
+  const paths = new Set();
+  for (const s of contaminatedBy) {
+    const m = s.match(/[^\s"']*\.claude\/plugins\/(?:cache|marketplaces)\/[^\s"']*/);
+    paths.add(m ? m[0] : s.slice(0, 160));
+  }
+  return [...paths];
+};
 
 // A namespaced invocation is the same finding by another route: `e2e:pw-prove` is the plugin's
 // copy, `pw-prove` is the one skill-up installed for this run.
@@ -199,19 +284,52 @@ const namespaced = toolUses.filter(
   (t) => t?.name === 'Skill' && /^[A-Za-z0-9_-]+:pw-prove$/.test(String(t?.input?.skill ?? '')),
 );
 
+// In a baseline arm the body arriving is asked FIRST, and the reason is a real 2026-08-14 verdict:
+// `case-48`'s baseline was refused the plugin cache and the other checkouts by the deny rules, went
+// looking anyway, and read the body out of a CONCURRENT case's skill-up install under /tmp. The gate
+// reported CONTAMINATED — true, and not the finding that mattered. A dirty baseline voids the
+// measurement the arm exists to take, so it outranks the path it took to get there, which the
+// verdict names on its own line rather than dropping.
+if (BASELINE) {
+  const dirty = marks.find((m) => all.some((s) => s.includes(m)));
+  if (dirty) {
+    console.error('FAIL: BASELINE DIRTY — the without_skill arm carried the body under test');
+    console.error(`   line of the body in context: "${dirty.slice(0, 88)}${dirty.length > 88 ? '…' : ''}"`);
+    // The path and the body arrive in DIFFERENT records — the `cat` command in one, the file
+    // contents in the next — so this scans the whole structural half rather than the record that
+    // carried the fingerprint.
+    const sources = new Set();
+    for (const s of structural) {
+      for (const m of s.matchAll(/[^\s"'\\]*\/skills\/pw-prove\/[^\s"'\\]*/g)) sources.add(m[0]);
+    }
+    for (const p of [...sources].slice(0, 3)) console.error(`   read from ${p}`);
+    for (const p of pluginPaths().slice(0, 2)) console.error(`   and a marketplace plugin path was reached: ${p}`);
+    console.error('   uplift measured against this arm is void — seal the host copies and re-run');
+    process.exit(3);
+  }
+}
+
 if (contaminatedBy.length || namespaced.length) {
   console.error('FAIL: CONTAMINATED — this run reached a marketplace plugin copy, not only the version under test');
   for (const t of namespaced) console.error(`   Skill tool invoked as '${t.input.skill}' — a plugin-namespaced skill`);
   // Deduplicated: one transcript names the same install path in a dozen records, and a wall of
   // identical lines hides how many DISTINCT paths were reached.
-  const paths = new Set();
-  for (const s of contaminatedBy) {
-    const m = s.match(/[^\s"']*\.claude\/plugins\/(?:cache|marketplaces)\/[^\s"']*/);
-    paths.add(m ? m[0] : s.slice(0, 160));
-  }
-  for (const p of [...paths].slice(0, 3)) console.error(`   ${p}`);
-  if (paths.size > 3) console.error(`   … and ${paths.size - 3} more plugin path(s)`);
+  const paths = pluginPaths();
+  for (const p of paths.slice(0, 3)) console.error(`   ${p}`);
+  if (paths.length > 3) console.error(`   … and ${paths.length - 3} more plugin path(s)`);
   process.exit(2);
+}
+
+// --- the baseline arm: the body must NOT be here ----------------------------------------------------
+// The DIRTY half of this question was asked BEFORE the contamination check above, deliberately.
+// Reaching here means the arm is clean and the run is entitled to an uplift reading from it.
+if (BASELINE) {
+  console.log('PASS: SKILL-FREE — no line of the body under test reached the model in this arm');
+  if (toolUses.some((t) => t?.name === 'Skill' && String(t?.input?.skill ?? '') === 'pw-prove')) {
+    console.log('   the Skill tool was called and no body followed it — the expected baseline shape');
+  }
+  console.log(`   (fingerprinted ${marks.length} line(s) of ${skillMdPath} against ${records} transcript record(s))`);
+  process.exit(0);
 }
 
 // --- did the body reach the model, by any route? ----------------------------------------------------

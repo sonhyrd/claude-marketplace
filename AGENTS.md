@@ -190,8 +190,8 @@ was mined and retired in #61. The surface is seven things:
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 56 on disk, 6 active — the rest are quarantined or inventory, not coverage |
-| `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.txt` |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. 56 on disk, 8 active — the rest are quarantined or inventory, not coverage |
+| `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
 | `skills/pw-prove/evals/REGISTRY.md` | **The registry.** One row per triaged case: pass rate, uplift, the SKILL.md section it guards, and status (active / quarantined / retired). It is also the case → section map that makes a blast-radius re-characterization a lookup |
@@ -204,6 +204,8 @@ Run it by hand, and **always through the isolated runner — never `skill-up run
 ```bash
 bash scripts/run-evals-isolated.sh                       # the active cases
 bash scripts/run-evals-isolated.sh --include-case-name 'b01-*'
+bash scripts/run-evals-isolated.sh --baseline             # uplift: both arms, baseline judged
+bash scripts/run-evals-isolated.sh --census              # the host copies a run must not reach
 bash scripts/run-evals-isolated.sh --sweep-only <workspace>  # re-judge an existing run
 bash scripts/run-evals-isolated.sh --self-test           # no API calls, no spend
 ```
@@ -216,11 +218,27 @@ the next one; isolation is a property of the runtime, not of what the cache happ
 Isolate by `HOME`, not `CLAUDE_CONFIG_DIR`: the latter moves the session transcript out from under
 skill-up, which then has none to hand a script judge.
 
+`$HOME` and `PATH` are two of three routes. The third is the **filesystem** (#75): every checkout,
+worktree, clone and plugin cache of this repo is a copy of the body a case can `find` and `cat`, and
+`environment.type: none` has no sandbox. So before the run the runner censuses those copies
+(`--census` prints the list) and writes one Claude Code deny rule per copy into the isolated home —
+enforced even under `bypassPermissions`, covering Read/Grep/Glob and **not** Bash. It refuses when
+the census cannot even find this repo's own copy, and when the workspace sits inside a checkout. The
+workspace therefore defaults **outside** the repo now; `PWPROVE_EVAL_WORKSPACE` overrides it, and
+`PWPROVE_EVAL_YAML` points the run at a staged suite when you need to characterize a quarantined case
+without editing the active list.
+
 Afterwards the runner sweeps every retained transcript through
-`skills/pw-prove/evals/judges/skill-loaded.mjs` and prints one verdict per case — LOADED (and by
-which route), NOT LOADED, or CONTAMINATED. A contaminated case fails the sweep, so isolation is
+`skills/pw-prove/evals/judges/skill-loaded.mjs` and prints one verdict per case **arm** — LOADED (and
+by which route), NOT LOADED, or CONTAMINATED. A contaminated case fails the sweep, so isolation is
 proven per run rather than assumed. A case that never loaded the skill is not measuring the skill,
 whatever its own judge said; the gate makes that visible, and non-invocation stays a FAIL.
+
+A `--baseline` run's `without_skill` arm is judged with the question **inverted**: there the body
+under test must be absent, and a fingerprint line in it reads BASELINE DIRTY and fails the run.
+That is what closes the Bash route the deny rules cannot, and it is why an uplift figure taken
+through this runner can be believed — three of ten baseline arms in the 2026-08-14 run had read the
+skill off another checkout, and nothing said so at the time.
 
 Note skill-up's config discovery is `$PWD`-only, so `.skill-up.yaml` is ignored without complaint
 unless you are in `skills/pw-prove/` or pass it as `--config`. The runner handles this for you.

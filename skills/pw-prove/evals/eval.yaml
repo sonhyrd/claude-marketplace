@@ -59,6 +59,10 @@ cases:
         - evals/cases/case-50.yaml
         - evals/cases/case-15.yaml
         - evals/cases/case-60.yaml
+        # Admitted by #75, once their baseline arms were provably skill-free: both were quarantined
+        # on a `void` uplift, and both measure +1 against a baseline the sweep certifies.
+        - evals/cases/case-28.yaml
+        - evals/cases/case-48.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those
