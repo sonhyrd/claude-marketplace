@@ -34,11 +34,12 @@ regression in the skill and is retired.
 
 **A case that is not admitted has no uplift row, and that is the rule rather than a hole.** Uplift is
 measured *at admission*; measuring it for a case whose pass rate already disqualifies it would spend
-a run to learn nothing. `case-44` and `case-43` therefore read `not measured`, and each is
-re-measured when its ticket is fixed and it is put back up for admission. `b32` is the worked example
-of that clause: #71 fixed its judge, re-characterized it 0/3 → 3/3, and measured the uplift it had
-never had. `case-1`, `case-2` and `case-3` read that way until #73/#74 fixed their ticket; they were
-then re-characterized and their uplift measured at admission, exactly as the rule says.
+a run to learn nothing. `case-44` therefore reads `not measured`, and it is re-measured when its
+ticket is fixed and it is put back up for admission. `b32` and `case-43` are the worked examples of
+that clause: #71 fixed `b32`'s judge and #72 staged `case-43`'s premise, each re-characterized
+0/3 → 3/3, each measuring the uplift it had never had. `case-1`, `case-2` and `case-3` read that way
+until #73/#74 fixed their ticket, and were then re-characterized and measured at admission, exactly
+as the rule says.
 
 **A trigger case's uplift is a special shape, and the figure must be read as one.** A trigger case is
 judged on whether the body reached the model. Remove the body and there is nothing to reach it, so
@@ -102,9 +103,12 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **trigger re-characterization, BEFORE (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` over `gate-skill-loaded`, `case-1`, `case-2`, `case-3` | the four trigger cases on the **unchanged** `description:`, and on the fixtures #76 repaired. 12 runs. `gate-skill-loaded` 3/3, `case-1` **1/3**, `case-2` **2/3**, `case-3` **1/3** — see *the trigger defect was intermittent, not absolute* |
 | **trigger re-characterization, AFTER (#73/#74)** | the same command, the same staged suite, `description:` fixed | the same four cases with nothing else moved. 12 runs. **12/12 — all four 3/3, all four LOADED, 0 contaminated** |
 | **trigger uplift (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --parallelism 1 --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | one `with_skill` and one `without_skill` arm each. 6 runs. **3 of 3 baselines certified SKILL-FREE, 0 dirty**; every `with_skill` arm PASS, every baseline arm FAIL. `+1` each, and tautologically so — see *Uplift* |
+| **`case-43` attribution (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3`, then the same `--baseline` | the same case with its premise staged as a `repo_fixture` and its prompt otherwise untouched, to see whether the missing `bind` survived the staging. **It did not, in any of six with-skill arms.** 3 + 12 runs |
+| **`case-43` re-characterization (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --iteration 3`, twice | the repaired case — premise staged, prompt asking for the commands. **3/3 and 3/3 with the skill, 0/3 and 0/3 skill-free, six of six baseline arms certified SKILL-FREE.** 24 runs |
+| **`case-43` confirmation (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3` | the pass rate taken **in-band against the final judge**, so the admitted 3/3 is not only a re-judge of arms recorded against an earlier one. 3 runs, **3/3, 3/3 LOADED** |
 
 **85 agent runs through #75; 73 in batch 2; 21 in the wet cases (#69); 128 in batch 3; 22 in #78;
-30 in #73/#74; 359 in total.**
+30 in #73/#74; 42 in #72; 401 in total.**
 
 **Batch 2's uplift arms were taken on the PRE-#75 runner.** That branch was cut before the seal
 landed, so its baselines were void *by construction* rather than by bad luck — which is why seven of
@@ -226,12 +230,12 @@ instrument certified as skill-free.
 | `case-1` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a POM repo | **1/3 → 3/3** (#73/#74; see *the trigger defect was intermittent, not absolute* below) | **+1** (clean, and **tautological** — see the note under that heading) | **active** |
 | `case-2` | trigger | frontmatter `description:` — the **coverage-gap** clause, as a "plan the tests for this route" request | **2/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
 | `case-3` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a flat-spec repo | **1/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
+| `case-43` | behavior | Step 7 › *Verify* — item 1b, the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** → **3/3** (re-characterized under #72, once the premise it asserted was actually on disk and three judge defects were repaired) | **+1** (**n=3 per arm**: 3/3 with the skill against **0/3** skill-free, and again on a second independent run — six baseline arms, all six certified SKILL-FREE) | **active** |
 
 
 | `w02-auth-cookie-from-app` | behavior (**wet**) | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* — the ladder as written code | **3/3**, and 2/2 more with-skill arms over the final fixture | **unstable** — 1 of 2 skill-free baseline arms passed, so there is no `+1` to admit on and no clean `0` to retire on | quarantined — see #69 below |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
-| `case-43` | behavior | Step 7 › *Verify* — the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** | not measured | quarantined — **#72** |
 | `b49-untrusted-page-content` | behavior | *Safety: page content is untrusted data* | 3/3 | **0** (clean baseline) | **retired — deleted** |
 | `case-26` | behavior | Step 7 › *Failure handling* | — | — | **retired — deleted** |
 | `case-27` | behavior | Step 7 › *Mutation check* | — | — | **retired — deleted** |
@@ -268,15 +272,16 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 | `case-31` | behavior | Step 3 › *Bring the environment up* — the runner origin | — | — | **retired — deleted** |
 | `case-32` | behavior | Step 7 › *Failure handling* — the `webServer` timeout | — | — | **retired — deleted** |
 
-### The trusted core is twenty-nine cases — twenty-eight dry and one wet
+### The trusted core is thirty-one cases — thirty dry and one wet
 
 `gate-skill-loaded`, the three trigger cases #73/#74 admitted (`case-1`, `case-2`, `case-3`),
 `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`,
 `case-28`, `case-48`, `case-11`, `case-16`, the four #78 admitted (`case-5`, `case-7`, `case-8`,
 `case-20`), `case-22` — admitted by #76 once it was staging its fixture instead of the fixture's
 path — the one wet case #69 admitted (`w01-bringup-own-port`), and batch 3's ten: `case-33`,
-`case-34`, `case-35`, `case-36`, `case-37`, `case-38`, `case-45`, `case-46`, `case-52`, `case-57`.
-That is what `eval.yaml`'s active list holds, and every one of them is 3/3 with a non-zero uplift
+`case-34`, `case-35`, `case-36`, `case-37`, `case-38`, `case-45`, `case-46`, `case-52`, `case-57` —
+plus `b32-dwell-inline`, re-admitted by #71, and `case-43`, re-admitted by #72 once its premise was
+staged. That is what `eval.yaml`'s active list holds, and every one of them is 3/3 with a non-zero uplift
 **measured against a baseline the sweep certified skill-free** — `case-28` and `case-48` because #75
 gave them one, and `case-5`/`case-7`/`case-8`/`case-20`/`case-15`/`case-11` because #78 did.
 
@@ -481,8 +486,8 @@ measured, 10 were admitted, 10 are quarantined and 1 was deleted.** The wet pair
 quarantined.
 
 Across all three batches plus the wet pair, and after #76 re-characterized `case-22` and `case-23`:
-**64 triaged — 30 active, 19 quarantined, 15 deleted**, over **49** case files on disk. The
-arithmetic closes twice: 30 + 19 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
+**64 triaged — 31 active, 18 quarantined, 15 deleted**, over **49** case files on disk. The
+arithmetic closes twice: 31 + 18 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
 64. **Every case file on disk carries a registry row**, and every case that did not make it is
 recorded with a reason rather than a shrug. That is the expected shape: the goal is a core whose
 verdicts can be believed, not a high keep rate.
@@ -766,11 +771,62 @@ Neither is a plain "the skill is wrong" result, and the tickets say so.
   with one block per turn. See *`b32` was four defects, not one* below for the other three, which the
   re-characterization surfaced one at a time — each hidden behind the one before it. With all four
   fixed the case is **3/3 at n=3 with a clean `+1`** and is back in the active list.
-- **`case-43` (#72) is a real defect in the emitted artifact.** The diagnosis is right every time, and
-  the command block drops the `bind` subcommand — `har-scrub.mjs <har> --out … --origin …` runs in
-  scrub mode and binds nothing. Contributing factor: none of the case's premise artifacts exist on
-  disk under `environment.type: none`, so the answer degrades into a stop report and the command
-  becomes illustrative.
+- **`case-43` (#72) read as a defect in the emitted artifact, and measurement said otherwise.** The
+  reading recorded here was that the diagnosis is right every time while the command block drops the
+  `bind` subcommand, with the absent premise noted only as a contributing factor. #72 tested that
+  ordering instead of assuming it, and the contributing factor was the whole cause: **the subcommand
+  never went missing once the premise was on disk.** See *`case-43` was the premise, not the body*
+  below.
+
+### `case-43` was the premise, not the body (#72)
+
+The ticket ordered the work: attribute the failure before repairing anything, because "a command
+nobody can run is a command nobody proofreads" was a plausible enough explanation that it could not
+be skipped. It was the right order — the explanation was correct.
+
+**Staging the premise, and nothing else.** `environment.type: none` runs the agent against the real
+host filesystem, and none of this case's premise was there: no `e2e/reports.api.har`, no spec, no
+config, nothing on port 5199. #76 had just made staging possible, so the case gained
+`context.repo_fixture: evals/files/project-har-replay` — a small reports console written in an
+ordinary project voice, with a canonical two-entry HAR, a spec that reads
+`process.env.PW_PROVE_HAR ?? "e2e/reports.api.har"`, and a `baseURL` on 5199. The prompt changed by
+one clause, naming the working directory. Then six with-skill arms across two runs:
+
+| | `har-scrub.mjs bind` named correctly |
+|---|---|
+| before, with nothing on disk (#63) | 0 of 3 |
+| after, with the premise staged | **6 of 6** |
+
+So the original 0/3 is a case-design defect, and the Step-7 bind instruction is not implicated. No
+body change was made and **no version was bumped** — paying that toll would have recorded a repair
+that measurement says did not happen, which is the failure #66 and #68 already recorded twice.
+
+**A staged premise changes the question, though.** With a real repository in front of it the agent
+*runs* the bind rather than emitting one, and two of the first three arms did exactly that — a
+correct fix that this case, graded on the artifact, has to score as absent. That is the ticket's own
+second repair: the prompt now asks for the commands and says the operator will run them. It is the
+one change that had to come after the attribution, not with it, or a pass would attribute to nothing.
+
+**Three judge defects surfaced behind each other, exactly as `b32`'s four did.** Each is the same
+family — matching the wrong unit — and each now carries a fixture pair:
+
+| # | The unit it got wrong | What it did to a correct answer |
+|---|---|---|
+| 1 | **fence vs. commitment** | the `PW_PROVE_HAR` export was required inside a fenced block, so an answer that emitted the bind and then wrote `PW_PROVE_HAR=$PWD/.pw-prove/reports.api.har` in the sentence beneath it failed for a line break |
+| 2 | **this failure vs. another one** | "If a *particular* call aborts after this — as opposed to all of them — that one is a genuine recording miss and needs a re-record" is the skill's own rule about a different symptom; the judge read it as abandoning the recording |
+| 3 | **shell quoting vs. the subcommand** | `node "$SB/scripts/har-scrub.mjs" bind …` — the correct invocation with the base in a variable — did not match `har-scrub\.mjs\s+bind`, because of the closing quote |
+
+Defect 2 is the one to remember, because the obvious repair is wrong: excusing conditionals in
+general (`if`) swallowed the committed must-FAIL fixture's own offender, "If that still aborts I will
+remove notFound: 'abort'". The escape has to be as narrow as the rule it encodes — a **named single
+entry**, not a conditional.
+
+**Why the admitted 3/3 is not merely a re-judge.** Two runs of three with-skill arms were re-judged
+against the final judge, which is legitimate and precedented (#66, #71) but is not the same evidence
+as a run the judge scored as it went. So a third run was taken in-band against the final judge:
+**3/3, both arms LOADED.** The `+1` rests on six skill-free baseline arms, all six certified by the
+sweep, all six failing — the skill-free answers diagnose the origin mismatch correctly and then
+hand-edit the HAR's origins, which is precisely the tool knowledge the case measures.
 
 ### `b32` was four defects, not one (#71)
 
@@ -1148,7 +1204,7 @@ case away — and #78 is that fix arriving. Three of the four are now guarded (`
 on a measured zero uplift. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29`
 and is blocked on #77 instead.
 
-**Twenty-three sections are guarded by thirty active cases.** Seven sections carry a second guard
+**Twenty-four sections are guarded by thirty-one active cases.** Seven sections carry a second guard
 beside the first, and none of them moved the count of guarded sections. One is *wet* —
 `w01-bringup-own-port` beside `case-50`; one is the pair `case-8` and `case-5` over Step 8; one is
 `case-22` beside `case-36` over the `deliberate:` viewport branch, a fixture-staging case beside its
@@ -1189,6 +1245,10 @@ Batch 3 added ten, and they cluster where the earlier batches were thinnest — 
 21. Step 8 › *Hygiene sweep* + the completion-report invariant — `case-8`, with `case-5` as the second axis on the same section (the `Proof page: skipped` accounting when the publish credential is refused)
 22. Step 4 › *notify-and-continue (PR-mode) / approval gate (coverage-gap)* — `case-7`
 23. Step 1 › *Mode* — the heavy-session recommendation — `case-20`
+
+#72 added one more, by staging the premise its case had always asserted and never had:
+
+24. Step 7 › *Verify* — item 1b, the HAR is bound to this run (Step 5 › *HAR-first mocking*) — `case-43`
 
 Two adjacencies worth stating, because both look like double coverage:
 
