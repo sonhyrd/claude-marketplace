@@ -19,7 +19,7 @@ Guidance for AI coding agents working in this repository.
 ### Distribution: subtree out, nothing in
 
 This repo is not independently installable and will not be made so. It is grafted into the private
-local marketplace (`~/SonDev/claude-marketplace`) as an editable git subtree at
+local marketplace (`~/work/claude-marketplace`) as an editable git subtree at
 `plugins/e2e-skills`; **that** repo owns the plugin manifests, the version, and the shipped-skill
 list. This repo is the source of truth for skill *content* only, and propagation is one-directional:
 
@@ -113,7 +113,7 @@ Everything under `scripts/` is repo-only tooling and stays shell.
 - **Severity-first organization**: tables in SKILL.md, README, and `docs/e2e-test-smells.md` group by P0/P1/P2 in the same order.
 - **Run ledger**: every shipped-script entry point emits one `PWPROVE_RUN {json}` line through `skills/pw-prove/scripts/pwprove-run.mjs` and appends it to `~/.ptg/ledger.jsonl` (`PWPROVE_LEDGER` overrides). Telemetry never fails a run. Records carry a `schema`; read it before reading anything else, because fields are added over time (schema 2 added `session`/`session_src`).
 - **Session id**: a proof is many processes, so each record carries the session that produced it — `$PWPROVE_SESSION` (explicit override), else `$CLAUDE_CODE_SESSION_ID` (the host runtime's own id), else a cwd-keyed `$TMPDIR` nonce that expires after 30 idle minutes; `session_src` names which. Count *proofs* by distinct `session`, not by record.
-- **Version bumps**: bump the `metadata.version` in a skill's SKILL.md whenever you change its body or its shipped scripts. The ledger's stale-install detection leans on that field, and a version that never moves detects nothing — pw-prove sat at `0.1.0` across 638 recorded runs and 14 distinct installs. This is enforced, not merely stated: `review.sh`'s `Skill version bump` check compares the working tree against the merge base with `main` and fails, naming the skill, when a body or a shipped script moved and the version did not. SKILL.md counts only below its frontmatter; sibling and reference `.md` files and `scripts/` count in full; `evals/` does not.
+- **Version bumps**: bump the `metadata.version` in a skill's SKILL.md whenever you change its body or its shipped scripts. The ledger's stale-install detection leans on that field, and a version that never moves detects nothing — pw-prove sat at `0.1.0` across 638 recorded runs and 14 distinct installs. This is enforced, not merely stated: `review.sh`'s `Skill version bump` check compares the working tree against the merge base with `main` and fails, naming the skill, when a body or a shipped script moved and the version did not. SKILL.md counts only below its frontmatter; sibling and reference `.md` files and `scripts/` count in full; `evals/` and the eval engine's own `.skill-up.yaml` do not.
 - **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check).
 
 ## Frameworks in Scope

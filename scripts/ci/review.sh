@@ -393,8 +393,9 @@ import sys
 # Scope is deliberately the two things the convention names. SKILL.md counts only below its
 # frontmatter (the frontmatter is where the version itself lives, and an author or description edit
 # is not a change to what the skill instructs); sibling and reference .md files count in full,
-# because the body is split across them and read on demand; scripts/ counts in full. evals/ is test
-# material rather than the shipped instruction surface and does not demand a bump.
+# because the body is split across them and read on demand; scripts/ counts in full. evals/ and the
+# eval engine's own config (.skill-up.yaml at the skill root, and only there) are test material
+# rather than the shipped instruction surface and do not demand a bump.
 
 
 def git(*args):
@@ -474,6 +475,8 @@ for skill_dir in sorted(p for p in pathlib.Path('skills').iterdir() if p.is_dir(
     for rel in sorted(p for p in paths if p.startswith(prefix)):
         parts = pathlib.PurePosixPath(rel).parts
         if len(parts) > 2 and parts[2] == 'evals':
+            continue
+        if len(parts) == 3 and parts[2] == '.skill-up.yaml':
             continue
         if rel == skill_md.as_posix():
             before = blob_at_base(rel)
