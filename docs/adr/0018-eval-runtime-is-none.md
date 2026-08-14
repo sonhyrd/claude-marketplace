@@ -112,6 +112,65 @@ is that the exposure is now enumerated before each run and asserted after it, ra
 away. **If a future runtime does give the suite a real filesystem boundary, the census and the sweep
 stay** — they are what tells you the boundary held.
 
+## The third price: the plugin is reachable by id, and a deny rule can reach it back
+
+The two prices above are both about *paths*. The route found by #82 and settled by #83 uses none: a
+baseline arm invoked the marketplace install of this very bundle through the host's own skill
+mechanism, by its namespaced id.
+
+```
+Skill(e2e:pw-prove)
+```
+
+No file read, no path for the census to deny, no Bash. Every defence recorded above is keyed on a
+path, so none of them could have seen it coming — the fifth distinct contamination route found after
+the seal was declared closed.
+
+**The open question this route arrived with is settled, and the answer is yes.** A Claude Code deny
+rule *can* cover the Skill tool, and it holds under `--permission-mode=bypassPermissions`. That is
+measured, not inferred from the documentation: six headless probes against this host runtime, each
+read from the Skill tool's own result in the retained transcript rather than from the model's
+summary of it.
+
+| Home | plugin cache | `enabledPlugins` | deny rule | `Skill(e2e:pw-prove)` returns |
+|---|---|---|---|---|
+| isolated, as the runner builds it | absent | absent | — | `Unknown skill: e2e:pw-prove` |
+| cache present, not enabled | present | absent | — | `Unknown skill: e2e:pw-prove` |
+| fully reachable | present | present | — | `Launching skill: e2e:pw-prove` |
+| fully reachable | present | present | `Skill(e2e:pw-prove)` | `Skill execution blocked by permission rules` |
+| fully reachable | present | present | `Skill(e2e:*)` | `Skill execution blocked by permission rules` |
+| fully reachable, plus an unnamespaced `pw-prove` | present | present | `Skill(e2e:pw-prove)` | bare `pw-prove` still returns `Launching skill: pw-prove` |
+
+Four things follow.
+
+- **The runner writes one `Skill(<id>:*)` rule per installed plugin**, taking the census in the unit
+  the route actually uses. `installed_plugins.json` is the inventory; the id is the half of
+  `<plugin>@<marketplace>` before the `@`. The whole namespace is denied rather than
+  `<id>:pw-prove` alone, because no plugin skill has business reaching an isolated run and a
+  skill-by-skill rule is one rename away from useless.
+- **The rule costs the measurement nothing** (last row). The version under test is installed
+  *unnamespaced*, so denying `e2e:pw-prove` leaves `pw-prove` reachable. A defence that had denied
+  the with_skill arm its own skill would have been worse than the exposure.
+- **This is defence in depth, not the first line.** Rows one and two are the finding that matters
+  most: a plugin needs *both* its cache on disk **and** an `enabledPlugins` entry in `settings.json`,
+  and the isolated home carries neither. The route was refused in the very run that found it. The
+  deny rules exist so that the isolation stops depending on a `settings.json` key nobody wrote down,
+  which is exactly the shape of the assumption #58's `$HOME` isolation was already making.
+- **The sweep names the route.** A `without_skill` arm that is *served* a plugin-namespaced skill
+  reads BASELINE DIRTY on the invocation alone, without waiting for a fingerprint — what that route
+  delivers is the plugin's *published* body, which can be a version behind the working tree and match
+  no mark taken from it. The verdict says so, and says that no path was traversed, because the next
+  reader will otherwise go looking for a `Read` that is not there.
+
+And one correction to how the route was first reported. The gate called those arms CONTAMINATED on
+the *attempt*: it read `tool_use` blocks and never looked at the result. Both recorded invocations
+came back `Unknown skill: e2e:pw-prove`, so nothing was served and no body reached the model. An
+attempt is not contact — the wrong-unit distinction #71 drew for tool arguments, applied here — so a
+refused invocation is now a printed note rather than a verdict, and only a served one fails an arm.
+That is a correction to the instrument, **not** grounds to re-read any admitted row: nothing in this
+paragraph makes a contaminated baseline informative, and #65 refuted that inference on `case-51`
+already.
+
 ## Alternatives weighed
 
 - **`docker` for dry cases, `none` for wet cases.** Rejected. `environment` is one key for one
