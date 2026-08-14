@@ -206,7 +206,7 @@ was mined and retired in #61. The surface is seven things:
 | Path | What it is |
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **50 on disk, 21 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **49 on disk, 25 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`. **Do not use `context.files`: it stages each fixture's PATH as its CONTENT (#76), so the case reads a one-line file and answers a different question.** Note also that these fixtures are written in a didactic voice a skill-free baseline arm reads too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |

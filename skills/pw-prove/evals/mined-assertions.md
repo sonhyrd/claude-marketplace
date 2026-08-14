@@ -42,7 +42,7 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | `case-13.yaml` (deleted) | `agent_judge` | **retired #64** | 6 | Server-set login cookie: obtain it via API-login, do not hand-author the cookie value |
 | [`case-15.yaml`](cases/case-15.yaml) | `script` | **active #63** | 6 | Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden |
 | [`case-16.yaml`](cases/case-16.yaml) | `agent_judge` | dormant | 4 | POM inventory + extend-existing-POM on route match (duplicate needs stated justification) |
-| [`case-17.yaml`](cases/case-17.yaml) | `agent_judge` | dormant | 3 | PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header |
+| `case-17.yaml` (deleted) | `script` | **retired #78** | 3 | PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header |
 | `case-19.yaml` (deleted) | `agent_judge` | **retired #64** | 3 | Token diet in the fix loop: no inter-tool narration, spec written once — audit trail unaffected |
 | [`case-20.yaml`](cases/case-20.yaml) | `agent_judge` | dormant | 3 | A heavy context earns a fresh-session recommendation, never an auto-background |
 | `case-21.yaml` (deleted) | `agent_judge` | **retired #64** | 16 | Clip fidelity: the full bundle (size, held payoff, framing) on a project that declares no viewport |
@@ -308,7 +308,7 @@ Dropped assertions:
 
 ### `case-17.yaml` — PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header
 
-Legacy id `17` · judge `agent_judge` · dormant · 3 assertions.
+Legacy id `17` · judge `script` · **retired #78** — 3/3 at n=3, then a re-measured **zero uplift** on a certified skill-free baseline · 3 assertions.
 
 Dropped assertions:
 

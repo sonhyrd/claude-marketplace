@@ -126,6 +126,14 @@ bundle_of() {
 # usage: skill_copies <exclude-prefix> <root>...
 # One path per line, deduplicated. <exclude-prefix> drops the run's own workspace: skill-up installs
 # the version under test into each case directory, and THAT copy is the measurement, not a leak.
+#
+# The depth limit is load-bearing and was WRONG at 9 (#78). A sibling agent's scratchpad under
+# $TMPDIR holds whole checkouts ELEVEN components down — runner, project, session, scratchpad, the
+# clone, its plugins directory, the bundle, skills, pw-prove, SKILL.md — and every one of those is a
+# body a baseline arm can read. Two of #78's baseline arms did exactly that, twice, against a census
+# that reported itself complete. At 14 the same sweep of $HOME and $TMPDIR takes under a second, so
+# the limit was not buying anything it was costing correctness for. Raise it rather than trim it if a
+# deeper copy ever appears.
 skill_copies() {
   local exclude="$1"; shift
   local root f
@@ -140,7 +148,7 @@ skill_copies() {
         *'"'*|*'\'*) echo "run-evals-isolated.sh: census skipping an unquotable path: $f" >&2; continue ;;
       esac
       is_pw_prove_body "$f" && printf '%s\n' "$f"
-    done < <(find "$root" -maxdepth 9 \
+    done < <(find "$root" -maxdepth 14 \
                \( -name node_modules -o -name .git -o -name .cache -o -name .venv \) -prune -o \
                -type f -name 'SKILL.md' -path '*/pw-prove/SKILL.md' -print 2>/dev/null)
   done | sort -u
@@ -505,6 +513,16 @@ $fh/checkout-b/skills/pw-prove/SKILL.md" ]; then
     echo "  [PASS] both host copies found; the decoy skill and the run's own installed copy are not"
   else
     echo "  [FAIL] the census returned:"; printf '%s\n' "$found" | sed 's/^/         /'; fail=1
+  fi
+  # A sibling agent's scratchpad nests a checkout eleven components down (#78). The census missed it
+  # at the old maxdepth of 9 and two baseline arms read the body out of one, so the depth is pinned
+  # here rather than left to the next person to rediscover from a dirty run.
+  deep="$fh/runner/project/session/scratchpad/clone/plugins/bundle/skills/pw-prove/SKILL.md"
+  mk_body "$deep" pw-prove
+  if printf '%s\n' "$(skill_copies "$fh/ws" "$fh")" | grep -qF "$deep"; then
+    echo "  [PASS] a copy nested deeper than a sibling scratchpad's checkout is still censused"
+  else
+    echo "  [FAIL] the census cannot see $deep"; fail=1
   fi
 
   echo ""
