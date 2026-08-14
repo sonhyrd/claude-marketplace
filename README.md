@@ -180,7 +180,9 @@ Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-
 [0014 one vaulted bearer over JSON-RPC](docs/adr/0014-one-vaulted-bearer-over-json-rpc.md) ·
 [0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md) ·
 [0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md) ·
-[0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md).
+[0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md) ·
+[0018 the eval runtime is `none`](docs/adr/0018-eval-runtime-is-none.md) (and unsandboxed — read it
+before running the suite).
 
 ## License
 
