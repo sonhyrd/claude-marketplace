@@ -234,3 +234,39 @@ these five is legible as a judge defect within a line of its evidence.
 
 An earlier partial run of the four cases the rule was designed against (`gate-skill-loaded`, `b01`,
 `b49`, `case-50`) reported the same four verdicts, before `b01` gained its harness clarifier.
+
+## A behavior case's premise has to be readable — the on-disk artifact audit (#72)
+
+`environment.type: none` runs the agent against the real host filesystem, so a behavior case that
+*presupposes* files gets a workspace where they are absent. `case-43` is the case that made this
+visible: it said "the committed `e2e/reports.api.har` was recorded through the probe" and staged
+nothing, so all three iterations of the 2026-08-14 characterization opened with a stop report about
+the missing repository and let the fix degrade into an illustration. It scored 0/3, and the judge
+read the illustration as the answer.
+
+**The distinguishing question is not "does the prompt name a path".** It is **"does the answer
+depend on content the prompt does not carry".** A prompt that names `e2e/onboarding.spec.ts` only to
+establish that a spec exists has told the agent everything the answer needs; a prompt that says a
+run failed and leaves the agent to find out why has not.
+
+Every behavior case was checked against that question when #72 staged `case-43`'s premise. Eleven
+others name an artifact on disk, and **all eleven carry the content the answer turns on inside the
+prompt** — a pasted handoff JSON (`b05`), a pasted exit code and message (`case-12`, `case-54`), a
+described config or spec shape (`case-16`, `case-24`, `case-28`, `case-35`), a described diff
+(`case-29`), pasted probe output (`case-42`), or a purely procedural question over named
+deliverables (`case-41`, `case-46`). None of them needs a fixture, and staging one for them would
+buy nothing but a directory to maintain.
+
+So the audit's finding is that `case-43` was the only affected case, and the rule to apply to the
+next one is: **stage a `repo_fixture` when the answer is a diagnosis, not when the prompt is a
+description.** A prompt that already contains its own evidence is self-contained by construction.
+
+Two things to carry into writing such a fixture, both learned the expensive way:
+
+- **Write it in the voice a real project would use.** The skill-free baseline arm reads the same
+  files, so a fixture whose comments explain the lesson hands the baseline the answer and voids the
+  uplift the run was taken for (#69).
+- **`context.repo_fixture` copies the directory's *contents* to the workspace root**, so the prompt
+  says "your current working directory" and never names a path no run creates.
+  `context.files` is `{workspace_path: INLINE CONTENT}` and is the wrong key for a directory (#76).
+  `scripts/ci/test-case-shapes.sh` fails on both mistakes.

@@ -1,0 +1,21 @@
+The recording is fine and re-recording it would produce the same bytes. `e2e/reports.api.har` holds two entries, both canonical:
+
+```
+GET http://localhost/api/reports?workspace=acme
+GET http://localhost/api/reports/q3-revenue
+```
+
+Playwright's replay matches by exact request-URL string equality (`harBackend.js`, `candidate.request.url !== url`). The live page requests `http://localhost:5199/api/...`, which never equals `http://localhost/api/...`. Every read misses, and `notFound: 'abort'` turns each miss into `Route.abort`. A partial miss would mean a short recording; a total miss means an unbound HAR.
+
+`.pw-prove/` did not exist and `PW_PROVE_HAR` was unset, so Step 7 item 1b was skipped. The spec is correct as written.
+
+Fix applied:
+
+```bash
+node <skill-base>/scripts/har-scrub.mjs bind e2e/reports.api.har \
+  --out .pw-prove/reports.api.har --origin "http://localhost:5199"
+```
+
+Both entries now carry `:5199`. Zero substitutions, so no placeholder sits in a match key and no `--bindings` file is needed. Carry `PW_PROVE_HAR=$PWD/.pw-prove/reports.api.har` on **every** runner invocation from here — the proof run, each heal run, the mutation run. Each is a fresh environment, so exporting it once in your shell does not reach them.
+
+I did not re-record the HAR, did not hand-write mocks for the reads, and did not widen the URL filter or relax `notFound: 'abort'`.

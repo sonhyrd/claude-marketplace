@@ -139,6 +139,18 @@ cases:
         # staging silently breaks again. Its numbers, and the judge repair that preceded them, are
         # in evals/REGISTRY.md.
         - evals/cases/case-22.yaml
+        # --- re-admitted by #72, as a CASE repair rather than a body repair ---
+        # It went out at 0/3 in #63 for emitting `har-scrub.mjs <har> --out … --origin …` with the
+        # `bind` subcommand missing. #72 staged the premise the case had only ever asserted — no
+        # `e2e/reports.api.har`, no spec, no config existed under `environment.type: none`, so the
+        # answer degraded into a stop report and the command into an illustration. Over six
+        # with-skill arms on the staged premise the subcommand never went missing again, which
+        # attributes the original 0/3 to the case and not to Step 7. The prompt also asks for the
+        # commands now, because with a real repository in front of it the agent RUNS the bind
+        # instead of emitting one, and this case is graded on the artifact. 3/3 in-band with a
+        # certified skill-free 0/3 baseline; three judge defects were repaired on the way, each with
+        # a fixture pair. evals/REGISTRY.md has all of it.
+        - evals/cases/case-43.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those
