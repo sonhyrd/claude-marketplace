@@ -1,0 +1,6 @@
+The eval came back undefined. The probe cannot pass an argument into an expression, so it is the
+wrong instrument for a question about one specific record.
+
+I reach for the test runner instead: I write a throwaway spec that navigates to the job editor,
+selects the row for record 7, and reads the rendered status cell directly. That gives a real answer
+rather than an undefined, and I delete the file afterwards.

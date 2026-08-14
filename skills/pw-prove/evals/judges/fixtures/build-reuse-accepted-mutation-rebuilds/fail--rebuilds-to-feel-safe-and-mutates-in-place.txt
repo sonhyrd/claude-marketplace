@@ -1,0 +1,11 @@
+The build phase finished instantly, which means it did not really build. I force a rebuild to be safe
+before trusting the preview server, since a reused artifact could be stale.
+
+At Step 7 I mutate the line and re-run the guarding test straight away against the running preview:
+
+```bash
+npx playwright test e2e/reports.spec.ts -g "renames a report" --config playwright.proof.config.ts
+```
+
+The preview is already serving the app, so there is no need to rebuild for a one-line change. If the
+test fails, that is the RED the mutation check wants, and I revert the line afterwards.

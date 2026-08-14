@@ -25,56 +25,21 @@ ok() { [ "$QUIET" = "1" ] || echo "  [OK] $*"; PASSED=$((PASSED + 1)); }
 section() { [ "$QUIET" = "1" ] || { echo ""; echo "-- $* --"; }; }
 repo_files() { git ls-files -co --exclude-standard -- "$@" 2>/dev/null; }
 
-section "Eval metadata"
-eval_log=$(mktemp "${TMPDIR:-/tmp}/e2e-skills-evals.XXXXXX")
-if ./scripts/validate-evals.sh >"$eval_log" 2>&1; then
-  total=$(grep -oE 'total: [0-9]+ eval\(s\)' "$eval_log" | tail -1 || true)
-  ok "validate-evals.sh ${total:-passed}"
-else
-  err "validate-evals.sh failed"
-  [ "$QUIET" = "0" ] && tail -20 "$eval_log" >&2
-fi
-rm -f "$eval_log"
-
-if command -v python3 >/dev/null 2>&1; then
-  if python3 - <<'PY'
-import json
-import pathlib
-import sys
-
-errors = []
-seen = set()
-for path in sorted(pathlib.Path('skills').glob('*/evals/evals.json')):
-    data = json.loads(path.read_text(encoding='utf-8'))
-    skill = path.parts[1]
-    if data.get('skill_name') != skill:
-        errors.append(f"{path}: skill_name must be {skill!r}")
-    ids = []
-    for entry in data.get('evals', []):
-        eval_id = entry.get('id')
-        key = (skill, eval_id)
-        if key in seen:
-            errors.append(f"{path}: duplicate eval id {eval_id!r}")
-        seen.add(key)
-        ids.append(eval_id)
-        if 'files' in entry and not isinstance(entry['files'], list):
-            errors.append(f"{path}: eval {eval_id!r} files must be a list when present")
-    if ids != sorted(ids):
-        errors.append(f"{path}: eval ids should be sorted")
-
-if errors:
-    for error in errors:
-        print(error, file=sys.stderr)
-    sys.exit(1)
-PY
-  then
-    ok "eval names and ids match skill conventions"
-  else
-    err "eval convention check failed"
-  fi
-else
-  warn "python3 not available; skipped eval convention check"
-fi
+# There is deliberately no eval SCHEMA or CONVENTION check here any more. pw-prove's evals moved to
+# skill-up (`evals/eval.yaml` plus `evals/cases/*.yaml`) and the legacy `evals/evals.json` is gone;
+# the two checks that read that format — `scripts/validate-evals.sh` and an id/name convention
+# block — were deleted rather than ported, because CI is the contract for the SHIPPED surface and
+# the eval suite is an instrument operated by hand. See issue #54.
+#
+# Two consequences worth stating, because neither is obvious from the deletion:
+#   - `e2e-reviewer` and `playwright-debugger` still carry the array-form `evals/evals.json`. They
+#     lose the fixture-existence guarantee the deleted validator gave them. That is accepted: the
+#     decision is no eval CI, not no eval CI for pw-prove only.
+#   - One check below still READS an `evals/` file: Check 4, in the pattern-parity section, holds
+#     playwright-debugger's evals to the F-code taxonomy in its SKILL.md. That is a taxonomy parity
+#     check — the same class as every other check in that block — and it is not an eval check.
+#
+# `scripts/ci/test-eval-judges.sh` is the eval suite's own harness and is run by name, not here.
 
 section "Security"
 if [ "${E2E_SKILLS_SKIP_SECURITY:-}" = "1" ]; then
@@ -393,8 +358,9 @@ import sys
 # Scope is deliberately the two things the convention names. SKILL.md counts only below its
 # frontmatter (the frontmatter is where the version itself lives, and an author or description edit
 # is not a change to what the skill instructs); sibling and reference .md files count in full,
-# because the body is split across them and read on demand; scripts/ counts in full. evals/ is test
-# material rather than the shipped instruction surface and does not demand a bump.
+# because the body is split across them and read on demand; scripts/ counts in full. evals/ and the
+# eval engine's own config (.skill-up.yaml at the skill root, and only there) are test material
+# rather than the shipped instruction surface and do not demand a bump.
 
 
 def git(*args):
@@ -474,6 +440,8 @@ for skill_dir in sorted(p for p in pathlib.Path('skills').iterdir() if p.is_dir(
     for rel in sorted(p for p in paths if p.startswith(prefix)):
         parts = pathlib.PurePosixPath(rel).parts
         if len(parts) > 2 and parts[2] == 'evals':
+            continue
+        if len(parts) == 3 and parts[2] == '.skill-up.yaml':
             continue
         if rel == skill_md.as_posix():
             before = blob_at_base(rel)
@@ -733,6 +701,22 @@ PY
   fi
 else
   warn "python3 not available; skipped language check"
+fi
+
+# --- Unresolved merge-conflict markers ---------------------------------------------------------
+# A committed conflict marker is invisible to every other check here: the parity, link, orphan and
+# language checks all read the file happily with `<<<<<<< HEAD` in it, and one shipped through two
+# merges into AGENTS.md and CONTEXT.md before a worker noticed. Tracked files only, and anchored to
+# column 0 so prose about conflict markers (this comment included) does not trip it.
+echo ""
+echo "-- Unresolved merge-conflict markers --"
+conflict_hits=$(git grep -n -E '^(<<<<<<< |>>>>>>> |={7}$)' -- \
+  '*.md' '*.sh' '*.mjs' '*.js' '*.json' '*.yaml' '*.yml' '*.ts' 2>/dev/null || true)
+if [ -z "$conflict_hits" ]; then
+  ok "no unresolved merge-conflict markers in tracked files"
+else
+  err "unresolved merge-conflict markers found:"
+  echo "$conflict_hits" >&2
 fi
 
 echo ""

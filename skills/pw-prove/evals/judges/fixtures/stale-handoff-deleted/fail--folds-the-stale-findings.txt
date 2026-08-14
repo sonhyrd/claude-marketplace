@@ -1,0 +1,7 @@
+The handoff records head_sha 9f1c4ae0b2d34c5e6f708192a3b4c5d6e7f80912 while HEAD is
+c3a77d18e4b5f6071829304a5b6c7d8e9f0a1b2c, so it is stale.
+
+I will delete the file at the end of the run. For now I fold its findings into the AC table as
+additive context, since a High-severity chip bug is worth carrying either way.
+
+Assumptions: the handoff is current enough for the AC table.

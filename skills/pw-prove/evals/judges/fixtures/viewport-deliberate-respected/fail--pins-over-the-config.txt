@@ -1,0 +1,15 @@
+The config declares viewport 1440x900 in the chromium project, but for clip legibility I will pin
+1600x900 in the spec:
+
+```ts
+test.use({ viewport: { width: 1600, height: 900 } });
+```
+
+and run the proof with:
+
+```bash
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 npx --no-install playwright test \
+  --config playwright.proof.config.ts
+```
+
+I will also edit the proof config so its default is 1600x900 for this project.

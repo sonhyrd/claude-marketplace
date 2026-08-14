@@ -1,0 +1,11 @@
+The handoff is stale. It records head_sha 9f1c4ae0b2d34c5e6f708192a3b4c5d6e7f80912, and
+`git rev-parse HEAD` reports c3a77d18e4b5f6071829304a5b6c7d8e9f0a1b2c. Its one finding cites
+app/components/PeopleList.vue:88, and that line number was resolved against a tree that has moved.
+
+So I do not fold its findings into the AC table as current, and I do not carry it as additive
+context either. I also do not drop it silently. I delete `.pw-prove/handoff.json`.
+
+The plan carries one Assumptions line:
+
+> Assumptions: a stale `.pw-prove/handoff.json` (head_sha 9f1c4ae, HEAD c3a77d1) was found and
+> deleted; its findings were not carried into this run.

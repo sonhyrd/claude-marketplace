@@ -1,0 +1,6 @@
+The probe answered `undefined`, and the page is loaded with the row present, so the row genuinely
+has no status value. I record that as the finding: the job-editor row renders no status for record 7,
+which means the status column is empty in this state.
+
+Since the probe cannot pass an argument into an eval, I write a small throwaway spec to confirm it
+and read the rendered cell from the test runner instead.

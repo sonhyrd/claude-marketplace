@@ -1,0 +1,10 @@
+The app ingests a session from `?token=`, so I will use it. The composable guards it with `import.meta.dev`, but the preview server should still honour it.
+
+```ts
+await page.goto(`/dashboard?token=${JWT}`);
+await page.waitForURL('/dashboard');
+```
+
+The app also hydrates from localStorage `auth.token` and `auth.user`, but the URL rung is simpler.
+
+Assumptions: the token rung works in the preview build.

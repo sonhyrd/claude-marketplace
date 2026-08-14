@@ -1,0 +1,15 @@
+# skill-up user config for the pw-prove suite.
+# Discovery is $PWD-only (embedded defaults < ~/.config/skill-up/config.yaml <
+# $PWD/.skill-up.yaml < --config), so this file applies when `skill-up run` is
+# invoked from skills/pw-prove/. From anywhere else, pass it explicitly:
+#   skill-up run --config skills/pw-prove/.skill-up.yaml
+
+schema_version: v1alpha1
+kind: SkillUpConfig
+
+# The reasoning effort of the agent under test. skill-up's engine config carries a
+# model but no effort, and Claude Code reads the level from this env var (it wins
+# over both the session default and /effort). Set only if not already exported.
+# Pairs with engine.model: anthropic/claude-opus-5 in evals/eval.yaml.
+env:
+  CLAUDE_CODE_EFFORT_LEVEL: medium

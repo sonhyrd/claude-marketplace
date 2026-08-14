@@ -1,0 +1,25 @@
+`undefined` here is a fact about my **question**, not about the application, and I do not record it
+as one.
+
+A string `expression` is **evaluated as an expression**. `"(row) => row.status"` evaluates to a
+function object — perfectly valid, and completely inert. Nothing was ever called, and no `row` was
+ever passed, so `undefined` is what you get for reading `.status` off nothing. It is emphatically
+not "the row has no status"; that would be a finding with no contact with the page at all.
+
+I re-ask in the argument form the probe documents:
+
+```
+{"cmd":"eval","expression":{"fn":"(row) => row.status","arg":{"id":7}}}
+```
+
+Here the value is what `fn` **returned** for that `arg`.
+
+Or, equivalently, a self-contained string expression that does its own lookup in the page:
+
+```
+{"cmd":"eval","expression":"document.querySelector('tr[data-id=\"7\"]')?.dataset.status"}
+```
+
+What I do not do: conclude the probe cannot answer questions that take an argument — it plainly can,
+and I was using the wrong form — or reach for the test runner or a throwaway spec to answer a recon
+question the probe is there for.

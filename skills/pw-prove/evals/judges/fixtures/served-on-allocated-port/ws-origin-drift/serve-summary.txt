@@ -1,0 +1,5 @@
+SERVE=ok
+BASE_URL=http://localhost:4100
+PORT_SOURCE=requested
+PORT_SHIFTED=no
+ADDRESS_FAMILY=localhost

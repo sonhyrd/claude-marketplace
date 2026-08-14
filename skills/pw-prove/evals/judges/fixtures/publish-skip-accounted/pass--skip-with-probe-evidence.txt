@@ -1,0 +1,37 @@
+## pw-prove — Complete
+
+Generated:
+- tests/pages/reports-page.ts (new)
+- tests/reports.spec.ts (new, 2 scenarios)
+
+ACs: 2 proven / 2 total
+Preview server: stopped (port 4173)
+e2e-reviewer: 0 P0, 1 P1 (listed below)
+Tests: 2 passed · hermetic (carve-outs: none)
+Mutation: RED (spec guards the change)
+Clips: 2 inspected — clip 1 shows the saved banner centred; clip 2 shows the filtered list
+Proof page: skipped — the publish credential was refused
+
+```
+PROBE_HOSTING=1
+PUBLISH_READY=no
+  rejected: HTTP 401 — the credential was refused
+VIDEO_TOOLING=yes  (ffmpeg ok, ffprobe ok, chrome ok)
+HOSTING_READY=no
+```
+
+Committed: 9f2c114 on feat/reports-filter
+Pushed: origin/feat/reports-filter
+PR comment: https://github.com/acme/app/pull/2872#issuecomment-1
+
+Two things I want to be explicit about, because both are ways this report could have lied:
+
+- I am **not** writing a `https://clips.paulsjob.ai/share/<id>` link. No recording was published,
+  so there is no id to write, and inventing one would be the worst artifact this pipeline could
+  emit.
+- The undelivered link does **not** fail or abort the run. The proof is the passing test plus the
+  RED mutation verdict; a missing hosted page is a WARN.
+
+The skip cause is the rejected credential specifically — an expired or revoked CLIPS_MCP_TOKEN.
+It is not missing video tooling: ffmpeg and ffprobe are both installed, as the probe output above
+records.

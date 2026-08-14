@@ -1,0 +1,5 @@
+preflight exited 4 with MISSING_KEYS=NUXT_PUBLIC_AUTH_URL. I will rebuild the app and re-run the gate;
+the missing key is probably supplied by the build itself.
+
+If it still fails, this is really an exit 5 shape of problem — a slow server — so I will increase the
+timeout and raise READY_TIMEOUT.

@@ -1,0 +1,44 @@
+id: w01-bringup-own-port
+shape: behavior
+title: pw-prove - w01 (wet) - the server it actually brought up, on a port it actually chose
+description: >-
+    WET case. Its dry twin is `case-50`, which guards the same section — Step 3 › *Bring the
+    environment up* — by grading an answer about a pasted server log. This one grades the run: the
+    fixture `evals/files/app-vite-embed` is staged as the working directory, its packaged serve
+    script hard-codes `PORT=4100 node ./script/serve-ssr.mjs`, and `script/serve-ssr.mjs` is
+    zero-dependency Node that really binds and really announces its origin. So a run that invoked the
+    packaged command verbatim leaves a `serve.log` announcing 4100, and a run that read the command
+    and supplied its own `PORT` leaves one announcing something else. Nothing the model writes can
+    put a port in that log; only a process can.
+
+    Should allocate a free port, start the preview server with that port itself, run the serve phase
+    of `preflight.mjs` with `SERVER_LOG` pointing at the log, and carry the summary's `BASE_URL=`
+    origin — the one that answered — rather than the `http://localhost:4100` the config and the
+    packaged script both name. Should NOT run the packaged serve command as written, and should NOT
+    record an origin that disagrees with the port the server announced.
+
+    The two named output files are harness plumbing, not the behavior under test: the judge needs the
+    server's own output and the phase's own summary to read, and the measurement is which port is in
+    them. Scoped to the serve phase alone (config and build are declared done in the prompt) so a red
+    verdict names one behaviour rather than one of three bring-up phases.
+tag: functional_test
+input:
+    prompt: |-
+        Load the `pw-prove` skill with the Skill tool and follow it. Step 3, PR-mode. The app under proof is the repository in your current working directory.
+
+        The first two phases of the bring-up gate are already done and must not be re-run: the config phase reported `CONFIG=undeclared` (this app declares no configuration contract of its own) and the build phase reported `BUILD=reused` against the artifact already on disk. Do not build, and do not bring up a development server — the proof target is the built app behind its preview server, and `package.json` exposes the command that serves it.
+
+        Bring that preview server up and complete the serve phase of the bring-up gate. Then stop the server and leave exactly two files in the working directory:
+
+        - `serve.log` — the preview server's own output, exactly as it was written.
+        - `serve-summary.txt` — the serve phase's printed summary, verbatim.
+
+        Confine everything you do to this directory.
+context:
+    repo_fixture: evals/files/app-vite-embed
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/served-on-allocated-port.mjs
+    timeout_seconds: 30

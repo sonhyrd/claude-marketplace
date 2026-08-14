@@ -1,0 +1,20 @@
+id: case-23
+shape: behavior
+title: pw-prove - 23
+description: 'The chromium project spreads `...devices["Desktop Chrome"]` (which carries 1280x720) and the config has no explicit `viewport:` key anywhere. The agent must resolve this to a `pinned: 1600x900` verdict rather than `deliberate: 1280x720` — a desktop device-descriptor viewport is scaffold boilerplate, not a project decision. Externally: the generated spec must contain `test.use({ viewport: { width: 1600, height: 900 } })`, and the proof run must carry `PW_PROVE_W=1600 PW_PROVE_H=900`. Failing this branch is the regression that would silently nullify the legibility fix on nearly every real project, since almost every scaffolded config spreads a descriptor.'
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. You are running pw-prove in PR-mode
+        against the project in evals/files/project-pom/, proving a change to the /checkout surface. Read
+        its Playwright config and generate the proof spec plus the Step 7 proof run. Report the Assumptions
+        block line for the effective viewport.
+context:
+    files:
+        evals/files/project-pom/playwright.config.ts: evals/files/project-pom/playwright.config.ts
+        evals/files/project-pom/tests/auth.spec.ts: evals/files/project-pom/tests/auth.spec.ts
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/viewport-descriptor-pinned.mjs
+    timeout_seconds: 30

@@ -73,9 +73,11 @@ number — silently, with no conflict to make you look. #42 did exactly this aga
 **After every merge-back, check that the version actually moved past what is already on the
 integration branch**, whether or not git raised a conflict.
 
-`skills/pw-prove/evals/evals.json` conflicts the same way and needs the opposite resolution: both
-sides append independent evals at the same array slot, so keep BOTH and renumber the incoming ids
-onto the end. Taking one side silently deletes a worker's evals.
+An `evals/evals.json` conflicts the same way and needs the opposite resolution: both sides append
+independent evals at the same array slot, so keep BOTH and renumber the incoming ids onto the end.
+Taking one side silently deletes a worker's evals. pw-prove's copy was retired in #61 — its suite is
+now one file per case, where the same trap appears as two workers adding a case with the same id —
+but `e2e-reviewer` and `playwright-debugger` still carry the array form.
 
 ### Known noise: `test-parity.sh` drift smoke has failed once, unreproducibly
 
@@ -88,13 +90,56 @@ Treat a lone drift-smoke failure as suspect, not as a verdict: **re-run before a
 second failure, or one that names a file the branch touched, is real and must be investigated.
 Do not add a retry to the script to make this go away — that would hide the real case too.
 
-### Dispatch note: `worker-release` does not know low-level dispatches
+### Dispatch note: the whole `worker-*` family does not know low-level dispatches
 
 Workers launched with the engine argv go through `terminal create --command …` plus
 `orchestration dispatch --inject`, not `worker-start`. `worker-release --dispatch <id>` therefore
 returns `dispatch_not_found` for them even though `dispatch-show` reports the dispatch `completed`,
 and `terminal close` returns `runtime_error`. Settled panes stay idle and harmless; do not chase
 them, and never reach for `orchestration reset` to tidy up while other workers are live.
+
+**`worker-show` and `worker-read` fail the same way** (measured 2026-08-14), so there is no
+`worker-*` progress signal on this dispatch path at all. To check whether a low-level worker is
+alive, use the two things that do work:
+
+```bash
+orca terminal read --terminal <handle> --json      # result.terminal.status + result.terminal.tail
+git -C <worktree> log --oneline <integration-head>..HEAD
+```
+
+Note the pane text is at `result.terminal.tail`, **not** `result.lines` — reading the wrong key
+returns empty and looks exactly like a dead worker.
+
+### Coordinator note: a dispatched worker does not receive mail it never checks for
+
+`orchestration send --to dispatch:<id>` succeeds and returns `ok: true` the moment the message is
+**queued**. A low-level dispatched worker only reads it when it calls `orchestration check`, and a
+worker head-down in a long task may never call it. **A sent message is not a delivered one, and
+`ok: true` is not receipt.**
+
+This cost a real re-measurement (#78): #64 was told to rebase once #75 merged, never checked its
+mail, and measured 16 uplift arms on the superseded runner. Seven of eight came back contaminated.
+
+So: **do not let a dispatched worker's correctness depend on mail you send mid-flight.** If a merge
+invalidates a live worker's premise, either
+
+- verify receipt before relying on it — `terminal read` the pane and look for the worker acting on
+  it, not merely for the send returning `ok`; or
+- accept the branch as-is and re-do the affected work afterwards, which is usually cheaper than it
+  sounds because static triage and pass rates often survive when only one measurement axis is void.
+
+Choosing the second is legitimate. Assuming the first happened is not.
+
+### Coordinator note: `check --wait` replays unacked mail, and prints more than one JSON object
+
+`check --wait` returns every delivery that has not been acknowledged, so a coordinator that
+processes a `worker_done` without acking gets the same message again on the next wait — with
+`replayed: true` and a fresh `deliveryId`. Read those two fields **first**; a replayed batch is not
+new work, and mistaking it for one wastes a full wait cycle. Ack with
+`check --ack <delivery_id> --wait …` in the same call that starts the next wait.
+
+The output is also a **stream of concatenated JSON objects**, not one document — `json.load` dies
+with "Extra data". Parse with a `raw_decode` loop.
 
 ## Baseline
 
@@ -163,5 +208,25 @@ this behaves correctly (verified 2026-08-13 for `#34` and `#36` off `feat/ledger
 blind `reset --hard` is not needed — but an omitted flag and an ignored flag fail identically and
 stay invisible until merge-back, which is why the verification is not optional.
 
-- **Commit**: `f0e5cc9` · **Measured**: 2026-08-06 (after #27 merge-back)
+- **Commit**: `fbb1ff0` · **Measured**: 2026-08-14 (after the #55 + #57 merge-backs)
 - `ci-local.sh` — **GREEN**, all checks passed. · `pre-push-security.sh` — **GREEN**, 7 passed.
+
+### The eval judge harness is not in `ci-local.sh`, and must not be added
+
+`scripts/ci/test-eval-judges.sh` (**392 checks** after #65 added twenty-one judges and their fixture
+pairs, repaired eleven of them against recorded answers and deleted one with its retired case; 240 after #64 — **corrected from the 214 recorded here previously, which was taken before #64 merged** — added thirteen judges and their fixture pairs, on top of #66's rejection-list pair added to
+`announced-port-adopted` and a cross-judge drift check over `commitments()`/`offenders()`; 127 after
+#63 retired `b49-untrusted-page-content` and
+deleted its judge with it; 136 after #59 rewired all 12 active cases onto script judges, 44 at #58,
+19 at #57) is run **by name**, never by `ci-local.sh`. This is a
+decision, not an oversight: CI is the contract for the shipped surface, and the eval suite is an
+instrument operated by hand. A worker that "helpfully" wires it in is undoing #57's acceptance
+criterion. Run it by hand whenever a brief touches `skills/pw-prove/evals/judges/`.
+
+### `.skill-up.yaml` no longer demands a skill version bump — the rule was fixed, not waived
+
+Both wave-1 workers independently went red on it and fixed it two different ways: one repaired the
+rule in `review.sh`, the other paid the toll with a `0.15.1` bump. The rule fix won and the bump was
+dropped at merge. `evals/` **and** a skill-root `.skill-up.yaml` are eval-engine material, not the
+shipped instruction surface, and drift Case 21 pins that. Do not re-add a bump for eval config —
+the ledger's stale-install detection only works while the version means something.

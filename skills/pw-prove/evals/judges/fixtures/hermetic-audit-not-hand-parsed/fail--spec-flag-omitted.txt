@@ -1,0 +1,7 @@
+Run the audit over the whole results directory:
+
+```bash
+node <skill-base>/scripts/hermetic.mjs test-results
+```
+
+Then read the LIVE lines against the CARVE-OUT in the header; route.fetch is covered by the auth bootstrap carve-out.

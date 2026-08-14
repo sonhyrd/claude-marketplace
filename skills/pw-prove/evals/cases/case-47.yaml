@@ -1,0 +1,19 @@
+id: case-47
+shape: behavior
+title: pw-prove - 47
+description: 'Should continue the fix loop and use the third attempt: the failure signature changed on both axes (error class TimeoutError -> assertion failure, and a different failing locator), so each fix moved the failure and the run is converging. Should fix the assertion''s expected value for attempt 3, rerun only the failing test with -g, and run the full spec once after the last fix as the gate. Should NOT invoke the no-progress checkpoint, should NOT take the handover stop, and should NOT post a PR comment or a stop report while an attempt remains and the failure is still changing.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are at Step 7 of a PR-mode
+        run. Attempt 1 failed with `TimeoutError: locator.click: Timeout 30000ms exceeded. waiting for
+        getByRole(''button'', { name: ''Apply filter'' })`; you healed that locator by re-snapshotting
+        the live page. Attempt 2 failed differently: `Error: expect(locator).toHaveText(expected) — Expected:
+        "3 results" Received: "12 results"` on `getByTestId(''result-count'')`. You have one attempt left
+        in the budget. What do you do?'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/changed-signature-spends-the-budget.mjs
+    timeout_seconds: 30

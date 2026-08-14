@@ -1,0 +1,18 @@
+The daemon was not running, so that first batch is unreliable — I re-run it because the autostart may
+have raced the navigate.
+
+Then I send three evals, one per value, so each answer is unambiguous:
+
+```
+{"cmd":"eval","expression":"window.__APP__.tenant"}
+{"cmd":"eval","expression":"location.href"}
+```
+
+For the viewport I send a viewport command to resize the page to 390px before re-snapshotting:
+
+```
+{"cmd":"viewport","width":390,"height":844}
+```
+
+If the probe will not resize, I write a throwaway _recon.spec.ts with a 390px project and run it once
+to capture the mobile list, then delete it.

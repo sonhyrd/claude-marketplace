@@ -1,0 +1,27 @@
+**Exit 6 is not a failure — it's the sanctioned no-tooling verdict.** I don't stop, don't retry, don't try to install ffmpeg, and don't attempt the illegible-frame diagnose→fix→re-film cycle (there's no frame to read, so there's nothing to diagnose).
+
+## What I do next
+
+1. **Carry on immediately** to the rest of Step 7 in order:
+   - **Hermetic audit** — `node <skill>/scripts/hermetic.mjs test-results --spec <spec>`, always with `--spec` so in-spec `route.fetch()` round-trips are checked. Any undeclared LIVE call fails the run even though it's green.
+   - **Mutation check** (required in PR-mode) — mutate one line of the changed behavior, `BUILD_REUSE=never` rebuild, restart the preview with `SERVE_RESTART=1` + a `RESTART_LOG_OFFSET` mark taken before the kill, and only read Red/Green once the serve phase says `RESTART=proven`. Then revert, rebuild, restart-proven again, and diff the tree against `/tmp/pre.status` + `/tmp/pre.patch`.
+   - Confirm the two webms survived: `ls test-results/*/video.webm | wc -l` equals the scenario count. They're still the passing run's clips — the mutation run went to `--output=/tmp/pw-prove-mutation`.
+2. **Step 8 publish will not happen.** No ffmpeg means Step 3's `PROBE_HOSTING` probe reported `VIDEO_TOOLING=no` → `HOSTING_READY=no`, so I skip the `publish-proof.mjs` call altogether rather than letting it die at its exit-4 video-tooling gate. That's the "prerequisites not ready" skip cause, not a gate, and it never fails the run. The webms stay on disk and I say where they are.
+3. Everything else in Step 8 runs normally: hygiene sweep (keeping `playwright.proof.config.ts`), `har-scrub.mjs --verify` before staging, commit, push, PR comment — the comment carries the AC table and mutation verdict with no share link, and states why there's no recording.
+
+## What the completion report says
+
+The two lines that change:
+
+```
+Clips: 2 uninspected — no video tooling (ffmpeg/ffprobe not runnable)
+Proof page: skipped — publish prerequisites not ready
+<the verbatim PROBE_HOSTING output showing VIDEO_TOOLING=no / HOSTING_READY=no,
+ and the verbatim clip-fidelity exit-6 output naming ffprobe as not runnable>
+```
+
+Pasted output is mandatory beneath the skip line — a skip with nothing under it is a silent drop. No `Kept locally:` line: that belongs only to an *undelivered* publish (exit 0 with a kept file), and here nothing was ever attempted.
+
+Everything else is unchanged and still required: `Generated`, `ACs`, `Preview server`, `e2e-reviewer`, `Tests: N passed · hermetic (…)`, `Mutation: RED | unguardable at <layer>`, `Committed`, `Pushed`, `PR comment`. Missing video tooling excuses none of them — in particular `Mutation` is still required, and `Committed`/`Pushed`/`PR comment` have no skip form.
+
+The honest framing I'd carry into the PR comment: **the proof is the passing spec plus the RED mutation verdict.** The clip is evidence, and its absence is reported as `uninspected` rather than described — I won't write a sentence about a frame I never opened.
