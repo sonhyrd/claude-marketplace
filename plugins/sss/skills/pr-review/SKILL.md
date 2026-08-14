@@ -259,6 +259,11 @@ and its `SKILL.md` (`plugins/e2e-skills/skills/pw-prove/SKILL.md` in this market
 is where the shape is defined. Write to it; do not
 extend it. A key it does not read is a key nobody reads.
 
+**Asked mid-run for a field this schema does not have, name the owner and carry on** — the answer is
+where the change belongs, not the change. It is two files in two plugins plus a parity test and a
+targeted push to the fork, which is a decision of its own and not a step of this review. Say so in
+one line and finish the run.
+
 ```jsonc
 {
   "base":      "origin/main",   // the BASE Step 1 resolved — the same one all three tracks saw
@@ -320,7 +325,10 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 - **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
   renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`
   is told to ignore without complaint. `tests/bash/test-pr-review-handoff-parity.sh` is what
-  notices. If the contract is wrong, change it there and push the fork — not here.
+  notices. If the contract is wrong, that is a change in `pw-prove` and a push to the fork — which
+  this run routes and does not make. **Neither half of that is edited away by a request to extend
+  the schema**: an eval trial asked for one field and got the field, plus this Gotcha rewritten to
+  permit it. A rule that yields to the first request it refuses was never a rule.
 - **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
 - **Report before you write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence.
 - **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.
