@@ -180,6 +180,21 @@ sentence *"a shifted port it announced is still your server"* came back in the m
 list. A prose change can move a pass rate through the judge rather than through the skill, and the
 2/3 would have read as "the co-location made it worse" to anyone who did not open the transcript.
 
+### #67: recorded before measuring — no movement is the expected outcome
+
+`case-60` is **3/3 before** this change, characterized at n=3 in #63 with a clean `+1`. There is no
+headroom: it can stay 3/3 or get worse, and nothing it can do would show the removal of the flag
+string from SKILL.md working. This paragraph is written **before** the re-characterization is run, so
+that a 3/3 afterwards reads as the prediction it is rather than as a result claimed after the fact.
+
+The established cause of the flag finding is a **stale shipped copy** (#55) — a 615-line `0.1.0`
+SKILL.md from 2026-08-03, still on disk, carrying `# --workers=1 is REQUIRED` at line 414. The model
+was reading it, not remembering it. #59 then measured `case-60` passing once the runtime was
+de-contaminated. A previous session committed a prose fix for the same finding, measured it as noise
+and reverted it (`d717e05` → `2b04ade`). **#67 is claimed as a legibility change and as nothing
+else**: the skill named the retired flag six times while instructing the agent never to write it, and
+steering by prohibition keeps the forbidden string inside the agent's reachable context.
+
 ### The retirements, each with its reason
 
 **Automatic — taken off the top before anything was measured.**
