@@ -205,7 +205,7 @@ Report the resolved effective viewport in the run's Assumptions block. Step 7 pa
 
 ### Framing
 
-**Framing is the fourth property of the clip fidelity contract**, beside legible size, warm lead and held payoff — and it is mandatory, not a polish pass. A clip can hold the success signal for the full dwell and still be worthless, because the signal sits jammed against the screen edge — or was pushed off-frame entirely by a re-render that landed after the scroll. **Centre the element under proof, at the moment of the hold** — `await el.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }))`, immediately before the dwell it frames (see the §Payoff dwell snippet, which is the shape to copy).
+**Framing is the third property of the clip fidelity contract**, beside legible size and held payoff — and it is mandatory, not a polish pass. A clip can hold the success signal for the full dwell and still be worthless, because the signal sits jammed against the screen edge — or was pushed off-frame entirely by a re-render that landed after the scroll. **Centre the element under proof, at the moment of the hold** — `await el.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }))`, immediately before the dwell it frames (see the §Payoff dwell snippet, which is the shape to copy).
 
 - **`scrollIntoViewIfNeeded()` is not framing.** It moves the *minimum* distance, so it parks the element against whichever edge it entered from. Playwright's actionability scroll does the same. Both leave a frame one re-render away from useless.
 - **At the moment of the hold, not before it.** Centre after the assertion that proves the payoff, so any re-render that assertion waited for has already happened. Centring earlier and dwelling later films whatever the re-render moved into place.
@@ -213,7 +213,7 @@ Report the resolved effective viewport in the run's Assumptions block. Step 7 pa
 
 ### Payoff dwell
 
-The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. **Every generated `test()` carries at least one dwell**, framed:
+The clip's last informative frame is the success signal, and a hermetic proof reaches it in a fraction of a second — faster than a reviewer can see. **Every generated `test()` carries at least one dwell**, framed. This is the canonical dwell: Step 5 carries it inline, `clip-fidelity.mjs` prints it on failure, and CI fails on any variant.
 
 ```typescript
 // Then: the save is confirmed
@@ -221,8 +221,8 @@ const status = page.getByRole('status');
 await expect(status).toHaveText('Saved');                     // assertion covering this beat
 await status.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));  // framing, ungated
 // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
-// run); it sits after the assertion above, outside the race window, so it adds time and nothing
-// else. CI never sets it.
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
 if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
 ```
 
@@ -232,6 +232,7 @@ Every constraint here is load-bearing:
 - **Framed.** A dwell holds on something; if the reader cannot see it, the hold bought nothing. Centre first, hold second.
 - **Env-gated on `PW_PROVE_CLIP`.** Only the Step-7 proof run sets it. CI never does, so the suite does not get slower with every proof that lands.
 - **`// JUSTIFIED:` on the preceding line**, naming the gate and why it is safe. e2e-reviewer honors the marker for #9 across all three detection tiers, so the quality gate stays quiet — and stays meaningful. A dwell without the marker is an unexplained fixed wait and gets flagged like any other.
+- **Written as an `if (…)`, inline in the `test()` body.** Brace style and line wrapping are free — braced or not, on one line or two, all read the same. Two things are not: a gate written without parentheses (`process.env.PW_PROVE_CLIP && await …`) is not recognised, and a dwell hoisted into a helper does not count for the tests that call it, because one shared dwell would satisfy tests that hold on nothing.
 
 This is the **only** sanctioned `page.waitForTimeout()` in generated output. Any other one is #9 and gets fixed, not justified.
 
@@ -244,10 +245,11 @@ The evidence is the **state change**, not the keystrokes — so fill atomically 
 await page.getByLabel('Title').fill('Q3 revenue review');
 // Then: the form accepts it
 await expect(page.getByLabel('Title')).toHaveValue('Q3 revenue review');
-await page.getByLabel('Title').evaluate((el) => el.scrollIntoView({ block: 'center' }));
-// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP; adds time only, and sits
-// after the assertion covering the fill above. CI never sets it.
-if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1500);
+await page.getByLabel('Title').evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));
+// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
 ```
 
 A held filled field reads as well as keystrokes and costs CI nothing.
@@ -256,12 +258,18 @@ A held filled field reads as well as keystrokes and costs CI nothing.
 
 ## Network Determinism
 
-**Hermetic by default, HAR-first.** Every call the spec triggers is answered from a committed fixture; the only live traffic a spec may carry is a **declared carve-out**. Read traffic replays from an **API-scoped, auth-scrubbed HAR** recorded during the Step-3 probe pass (`RECORD_HAR`); the one **mutation under assertion** is hand-mocked. This keeps generated mock code small (the reads are recorded, not authored) and the spec self-hermetic and CI-durable.
+**Hermetic by default, HAR-first.** Every call the spec triggers is answered from a committed fixture; the only live traffic a spec may carry is a **declared carve-out**. Read traffic replays from an **API-scoped HAR, scrubbed at capture**, recorded during the Step-3 probe pass (`RECORD_HAR`); the one **mutation under assertion** is hand-mocked. This keeps generated mock code small (the reads are recorded, not authored) and the spec self-hermetic and CI-durable.
 
 ```typescript
 // reads: replay the committed HAR. notFound:'abort' makes an unrecorded call FAIL loudly
 // instead of leaking to the live backend — the strict-hermetic default.
-await page.routeFromHAR('<feature>.api.har', { url: '**/api/**', notFound: 'abort' });
+// PW_PROVE_HAR points at this run's bound working copy (Step 7 item 1b); unset — in CI — the
+// committed file is used. Playwright matches on EXACT request-URL equality, so a live run must
+// replay the bound copy or every read aborts.
+await page.routeFromHAR(process.env.PW_PROVE_HAR ?? '<feature>.api.har', {
+  url: '**/api/**',
+  notFound: 'abort',
+});
 // the mutation under assertion: hand-mock it so no write leaves the browser (see below).
 await page.route('**/api/v1/section-config', route => route.fulfill({ status: 200, body: '{}' }));
 ```
@@ -273,7 +281,7 @@ await page.route('**/api/v1/section-config', route => route.fulfill({ status: 20
 | Third-party services | Covered by the HAR's `**/api/**` scope only if first-party; otherwise stub explicitly (also Spec Rules above) |
 | A real round-trip that **IS the acceptance criterion** | **Declared carve-out only** — see below |
 
-**The HAR is a committed deliverable.** Scoped to `**/api/**` (so it stays small — no bundle/asset bytes), auth-scrubbed (`Authorization`/cookie headers removed before commit — a leaked bearer in a committed HAR is the same incident as one in a log line), and refreshed with a `routeFromHAR(..., { update: true })` run when it drifts. Gitignoring it is forbidden: the committed spec must replay hermetically in CI without a live backend, and a HAR-absent run must never fall through to the shared tenant.
+**The HAR is a committed deliverable.** Scoped to `**/api/**` (so it stays small — no bundle/asset bytes), **scrubbed at the moment of capture** — `probe.mjs` hands the recording to `har-scrub.mjs` on context close, so the file is never unscrubbed on disk and there is no scrub step to place, remember or get wrong — and refreshed with a `routeFromHAR(..., { update: true })` run when it drifts. Every secret in it is a stable placeholder (`__PWPROVE_SECRET_<n>__`, or `__PWPROVE_SCRUBBED__` inside a URL) rather than a deletion, so the recording still replays; loopback origins are canonical (`http://localhost`, no port), so a live run cannot replay the committed file directly: Playwright's HAR lookup matches on **exact request-URL string equality** (`harBackend.js`: `candidate.request.url !== url`, verified in playwright-core 1.58.2 and 1.62.1), with no tolerance for port, origin or query. `har-scrub.mjs bind --out <gitignored> --origin "$BASE_URL" --bindings <json>` writes the run-local working copy replay actually reads — this run's origin substituted back, and each placeholder in the match key (request URL, query string, and a POST's body) bound to this run's own value. It refuses on a placeholder it cannot bind rather than letting the entry abort as if the application were broken, and refuses a destination git would commit. The committed file is never rewritten. Before it is staged, Step 8 runs `har-scrub.mjs <file> --verify` and a non-zero exit stops the run — a leaked bearer in a committed HAR is the same incident as one in a log line, so it is held by a refusal, not by a request that someone confirm. The same check refuses in the other direction (exit 6): a value short enough to occur inside ordinary content is placeheld only where it was found and never swept across the recording, and a scrub whose substitution count is implausible is a **destroyed** recording, which a residue check reads as clean. Gitignoring it is forbidden: the committed spec must replay hermetically in CI without a live backend, and a HAR-absent run must never fall through to the shared tenant.
 
 **Declared carve-out** — the one sanctioned exception, used only when the real round-trip is itself the behavior under proof (e.g. "the live rate endpoint answers"). It must be:
 

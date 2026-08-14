@@ -32,8 +32,12 @@ There is deliberately no plugin manifest, no host adapter, no installer script a
 Manifest, marketplace and cross-host parity are not concepts this repo has. Changes you make land in
 a runtime only after the operator pulls the subtree.
 
-`upstream` (`voidmatcha/e2e-skills`) is fetch-only and mechanically push-disabled. Never push to it,
-never open an issue or PR against it.
+`origin` (`sonhyrd/e2e-skills`) is the only remote. There is deliberately no `upstream` remote: the
+fork it would point at (`voidmatcha/e2e-skills`) has diverged into the public-bundle arrangement this
+repo retired, so nothing there is mergeable wholesale. If you ever need a scanner fix from it, add it
+fetch-only and push-disabled for that one job, port the change into `scan.mjs` by hand — upstream's
+fix will land in `scan.sh`, which does not exist here — and remove the remote and any tags it
+brought with it afterwards.
 
 ## Verification gate (must pass before commit)
 
@@ -43,9 +47,10 @@ never open an issue or PR against it.
 ```
 
 `ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity,
-security, evals, public skill surface, framework scope, link integrity, docs orphan check, language,
+**skill version bump**, security, evals, public skill surface, framework scope, link integrity,
+docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
-**probe HAR and warm contracts**, publish-proof, **clip-fidelity audit**,
+**the probe HAR contract**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
 **run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
@@ -63,7 +68,7 @@ security, evals, public skill surface, framework scope, link integrity, docs orp
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
 │   │   ├── evals/evals.json
-│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
+│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   └── playwright-debugger/
@@ -106,7 +111,9 @@ Everything under `scripts/` is repo-only tooling and stays shell.
 - **Failure category IDs**: 15 codes (`F1`–`F15`) used by `playwright-debugger` and its subagent. Codes are stable.
 - **JUSTIFIED comments**: `// JUSTIFIED: <reason>` on the line above (or above the enclosing block / multi-line chain) suppresses scanner findings. Suppress for documented intent, never to hide a real finding.
 - **Severity-first organization**: tables in SKILL.md, README, and `docs/e2e-test-smells.md` group by P0/P1/P2 in the same order.
-- **Run ledger**: every shipped-script entry point emits one `PWPROVE_RUN {json}` line through `skills/pw-prove/scripts/pwprove-run.mjs` and appends it to `~/.ptg/ledger.jsonl` (`PWPROVE_LEDGER` overrides). Telemetry never fails a run.
+- **Run ledger**: every shipped-script entry point emits one `PWPROVE_RUN {json}` line through `skills/pw-prove/scripts/pwprove-run.mjs` and appends it to `~/.ptg/ledger.jsonl` (`PWPROVE_LEDGER` overrides). Telemetry never fails a run. Records carry a `schema`; read it before reading anything else, because fields are added over time (schema 2 added `session`/`session_src`).
+- **Session id**: a proof is many processes, so each record carries the session that produced it — `$PWPROVE_SESSION` (explicit override), else `$CLAUDE_CODE_SESSION_ID` (the host runtime's own id), else a cwd-keyed `$TMPDIR` nonce that expires after 30 idle minutes; `session_src` names which. Count *proofs* by distinct `session`, not by record.
+- **Version bumps**: bump the `metadata.version` in a skill's SKILL.md whenever you change its body or its shipped scripts. The ledger's stale-install detection leans on that field, and a version that never moves detects nothing — pw-prove sat at `0.1.0` across 638 recorded runs and 14 distinct installs. This is enforced, not merely stated: `review.sh`'s `Skill version bump` check compares the working tree against the merge base with `main` and fails, naming the skill, when a body or a shipped script moved and the version did not. SKILL.md counts only below its frontmatter; sibling and reference `.md` files and `scripts/` count in full; `evals/` does not.
 - **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check).
 
 ## Frameworks in Scope
@@ -125,11 +132,11 @@ bash scripts/ci/ci-local.sh
 bash scripts/ci/review.sh           # parity, language, links, framework scope, orphans
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
 bash scripts/ci/test-corpus.sh      # scanner golden: 25/25 checks fire, suppression holds
-bash scripts/ci/test-pw-prove-scripts.sh # preflight readiness gate + probe argument/socket contract
+bash scripts/ci/test-pw-prove-scripts.sh # preflight three-phase bring-up gate + probe argument/socket contract
 bash scripts/ci/test-hermetic.sh    # hermetic.mjs: LIVE/MOCKED classification + route.fetch blind spot
 bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clips share link out (four gates, kept-file fallback)
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so
-bash scripts/ci/test-probe-warm.sh  # probe.mjs warm: the Step-7 warm lead's exit codes
+bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
 bash scripts/validate-evals.sh      # eval JSON schema
@@ -160,7 +167,7 @@ marketplace subtree) — a plain skill copy never sees them. So any skill that d
 - Do **not** introduce out-of-scope framework code paths. Skills must say "out of scope" rather than emit half-working examples for Selenium/WebdriverIO/etc.
 - Do **not** push commits without running `bash scripts/ci/ci-local.sh`.
 - Do **not** reintroduce plugin manifests, a host adapter surface, or a second installer. The marketplace owns distribution; a second propagation path is how a runtime ends up running a skill version this repo does not have.
-- Do **not** push to `upstream`, or open issues/PRs against it. It exists to fetch scanner fixes.
+- Do **not** add a permanent `upstream` remote, merge `voidmatcha/e2e-skills`, or open issues/PRs against it. `origin` is the only remote; see the distribution section for the one-off fetch-only exception.
 - Do **not** edit `skills/e2e-reviewer/references/grep-patterns.md` without checking that the matching pattern IDs in `skills/e2e-reviewer/scripts/scan.mjs` still line up — `scan.mjs` is the runtime source of truth, `grep-patterns.md` is an ID-meaning reference for Phase 2 / debugger lookup.
 - Do **not** create side effects on third-party repos when validating the skill. Cloning into `testbed/` and running `scan.mjs` locally is allowed; pushing to forks, opening PRs/issues, posting comments, or any state-changing `gh` command is not.
 

@@ -24,7 +24,7 @@ Auto-waiting web-first assertions only (`toBeVisible`, `toHaveURL`, `toHaveText`
 
 ### Network (HAR-first)
 - API shape: `<e.g. "all calls proxied through /api/request?cmd=<path>">`
-- Reads: replayed from a committed, API-scoped (`**/api/**`), auth-scrubbed HAR — `page.routeFromHAR('<feature>.api.har', { url: '**/api/**', notFound: 'abort' })`. Recorded during recon; refresh with `{ update: true }` when it drifts. No hand-authored read mocks.
+- Reads: replayed from a committed, API-scoped (`**/api/**`), capture-time-scrubbed HAR — `page.routeFromHAR(process.env.PW_PROVE_HAR ?? '<feature>.api.har', { url: '**/api/**', notFound: 'abort' })` — `PW_PROVE_HAR` is the run-local copy bound by `har-scrub.mjs bind`; CI replays the committed file. Recorded during recon; refresh with `{ update: true }` when it drifts. No hand-authored read mocks.
 - Writes/credentials (signup, login, payment, mutations): the mutation under assertion is the one hand-written `route.fulfill`; every other write MUST be stubbed too. A write must never reach the real backend.
 - Real backend allowed: `<which read endpoints / the one designated smoke spec — only as a declared // CARVE-OUT:>`
 

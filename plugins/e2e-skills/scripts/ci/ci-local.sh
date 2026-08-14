@@ -74,7 +74,7 @@ fi
 
 if [ "${E2E_SKILLS_SKIP_PW_PROVE_SCRIPTS:-}" != "1" ]; then
   step "pw-prove scripts (process boundary)"
-  # preflight readiness gate + probe argument/socket contract: exit codes and emitted bytes.
+  # preflight three-phase bring-up gate + probe argument/socket contract: exit codes and emitted bytes.
   # Binds one loopback server for the ready-origin branch; never touches the network.
   if [ "$QUIET" = "1" ]; then
     bash scripts/ci/test-pw-prove-scripts.sh >/dev/null 2>&1 || fail "test-pw-prove-scripts.sh"
@@ -120,16 +120,16 @@ if [ "${E2E_SKILLS_SKIP_PROBE_HAR:-}" != "1" ]; then
   fi
 fi
 
-if [ "${E2E_SKILLS_SKIP_PROBE_WARM:-}" != "1" ]; then
-  step "Probe warm-lead contract (probe.mjs warm, exit codes)"
-  # ADR 0013: the Step-7 warm lead is a browser load, not a curl — a curl warms the document and
-  # leaves the client module graph cold, which Playwright then films. The SKILL's fallback chain is
-  # written against warm's exit codes (1 usage / 2 browserless / 0 even on a warm miss), so those
-  # codes are the contract this freezes.
+if [ "${E2E_SKILLS_SKIP_HAR_SCRUB:-}" != "1" ]; then
+  step "HAR scrubber (har-scrub.mjs, process boundary)"
+  # Issue #36: the documented header-only scrub leaves a bearer in Referer values and token= query
+  # parameters, so the positive fixture carries one in both and the residue check must refuse.
+  # Also freezes the stable-placeholder and origin-normalisation contracts replay depends on.
+  # Synthetic fixtures only; never touches the network.
   if [ "$QUIET" = "1" ]; then
-    bash scripts/ci/test-probe-warm.sh >/dev/null 2>&1 || fail "test-probe-warm.sh"
+    bash scripts/ci/test-har-scrub.sh >/dev/null 2>&1 || fail "test-har-scrub.sh"
   else
-    bash scripts/ci/test-probe-warm.sh || fail "test-probe-warm.sh"
+    bash scripts/ci/test-har-scrub.sh || fail "test-har-scrub.sh"
   fi
 fi
 
