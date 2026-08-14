@@ -157,6 +157,12 @@ One suite is deliberately **outside** that list, and must stay outside it:
 bash scripts/ci/test-eval-judges.sh  # eval judge scripts: fixture in, exit code + printed verdict out
 ```
 
+A judge fixture is a `.txt` (fed as `$EVAL_FINAL_MESSAGE`) or a `.jsonl` (fed as
+`$EVAL_TRANSCRIPT_PATH`, the serialized session transcript skill-up hands a script judge under
+`environment.type: none`). A sibling `<slug>.env` — or a directory-wide `_fixtures.env`, with
+`$EVAL_FIXTURE_DIR` already exported — adds environment for that fixture only; that is how a
+transcript judge is kept hermetic against a fixture-local SKILL.md instead of the shipped one.
+
 CI is the contract for the shipped surface; the eval suite is an instrument operated by hand, so
 wiring this into `ci-local.sh` would give CI an eval dependency it should not have. Run it by name
 whenever you add or change a judge under `skills/pw-prove/evals/judges/`. Every judge needs a
@@ -164,6 +170,31 @@ fixture directory carrying both halves — a must-FAIL input, and a must-PASS in
 correct answer naming the forbidden thing in order to reject it*, which is the one-hit-one-JUSTIFIED-twin
 rule from `tests/pattern-corpus/` applied to judges. That twin is what catches the bare-substring
 judge, the defect behind seven of the nine failures in the 2026-08-13 run.
+
+### Running the eval suite
+
+Always through the isolated runner, never `skill-up run` directly:
+
+```bash
+bash scripts/run-evals-isolated.sh                       # the active cases
+bash scripts/run-evals-isolated.sh --include-case-name 'b01-*'
+bash scripts/run-evals-isolated.sh --sweep-only <workspace>  # re-judge an existing run
+bash scripts/run-evals-isolated.sh --self-test           # no API calls, no spend
+```
+
+It gives the run a fresh `$HOME` carrying credentials and nothing else — no `plugins/`, no
+user-level `skills/`, no host `settings.json` — because skill-up launches the agent against the
+operator's real home, where a marketplace install of this very bundle also lives. Two cases in the
+2026-08-13 run were graded against that plugin copy. Deleting the stale copy fixed that run and not
+the next one; isolation is a property of the runtime, not of what the cache happens to hold today.
+Isolate by `HOME`, not `CLAUDE_CONFIG_DIR`: the latter moves the session transcript out from under
+skill-up, which then has none to hand a script judge.
+
+Afterwards the runner sweeps every retained transcript through
+`skills/pw-prove/evals/judges/skill-loaded.mjs` and prints one verdict per case — LOADED (and by
+which route), NOT LOADED, or CONTAMINATED. A contaminated case fails the sweep, so isolation is
+proven per run rather than assumed. A case that never loaded the skill is not measuring the skill,
+whatever its own judge said; the gate makes that visible, and non-invocation stays a FAIL.
 
 ## When You Edit Skills
 
