@@ -1,0 +1,14 @@
+Here is the Step 7 proof-run command. I have pinned a single worker so the five scenarios cannot
+interfere with one another:
+
+```bash
+rm -rf test-results/
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
+  npx playwright test tests/proof/pr-2866.proof.spec.ts \
+  --config=playwright.proof.config.ts \
+  --project=chromium \
+  --workers=1 \
+  --reporter=html
+```
+
+Serialising the run keeps the trace readable.

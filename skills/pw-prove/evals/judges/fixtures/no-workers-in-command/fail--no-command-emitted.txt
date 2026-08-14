@@ -1,0 +1,8 @@
+For Step 7 you want to clear the previous run's artifacts, then invoke the proof spec through the
+committed proof config with the clip environment variables set to the effective viewport, pinning
+the browser project to chromium and asking for the HTML reporter. The clip width and height are the
+viewport you recorded during recon, so they must match it exactly rather than being rounded to a
+common resolution.
+
+Concurrency is left to Playwright. Once the run finishes, open the HTML report and check that the
+trace and video landed under test-results/ before you audit them.
