@@ -23,6 +23,11 @@ engine:
 
 cases:
     files:
+        # The runtime gate. Runs the same judge the post-run sweep runs, so the in-band mechanism
+        # — a script judge reading $EVAL_TRANSCRIPT_PATH under `environment.type: none` — is
+        # exercised by every run rather than trusted. Unknown eval.yaml keys are accepted
+        # silently, so a wiring that is never exercised is a wiring nobody has checked.
+        - evals/cases/gate-skill-loaded.yaml
         # --- first run: the 12 P0 behaviors, judges hand-authored ---
         - evals/cases/b01-confirmation-gate.yaml
         - evals/cases/b05-handoff-stale.yaml

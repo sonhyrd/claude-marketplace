@@ -16,10 +16,26 @@
 # Fixture layout, per judge:
 #
 #   skills/pw-prove/evals/judges/<judge>.mjs
-#   skills/pw-prove/evals/judges/fixtures/<judge>/pass--<slug>.txt   must exit 0
-#   skills/pw-prove/evals/judges/fixtures/<judge>/fail--<slug>.txt   must exit non-zero
-#   skills/pw-prove/evals/judges/fixtures/<judge>/<slug>.expect      optional: substring the
-#                                                                    verdict must name
+#   skills/pw-prove/evals/judges/fixtures/<judge>/pass--<slug>.txt    must exit 0
+#   skills/pw-prove/evals/judges/fixtures/<judge>/fail--<slug>.txt    must exit non-zero
+#   skills/pw-prove/evals/judges/fixtures/<judge>/pass--<slug>.jsonl  same, fed as a TRANSCRIPT
+#   skills/pw-prove/evals/judges/fixtures/<judge>/fail--<slug>.jsonl
+#   skills/pw-prove/evals/judges/fixtures/<judge>/<slug>.expect       optional: substring the
+#                                                                     verdict must name
+#   skills/pw-prove/evals/judges/fixtures/<judge>/_fixtures.env       optional: extra env for
+#                                                                     every fixture in the dir
+#   skills/pw-prove/evals/judges/fixtures/<judge>/<slug>.env          optional: extra env for
+#                                                                     this fixture only
+#
+# Two judge inputs, two fixture extensions. skill-up hands a script judge the model's final
+# message in `$EVAL_FINAL_MESSAGE` and — under `environment.type: none` — the serialized session
+# transcript in `$EVAL_TRANSCRIPT_PATH`. A `.txt` fixture is fed as the former, a `.jsonl` fixture
+# as the latter, and the other variable is unset for the invocation, so a judge that reads the
+# wrong one cannot coast on the fixture it was not given.
+#
+# A `<slug>.env` is sourced before the judge runs, with `$EVAL_FIXTURE_DIR` already exported. That
+# is how a transcript judge is kept hermetic: it points the judge at a fixture-local copy of the
+# SKILL.md under test, so editing the real skill body cannot turn a judge fixture red.
 #
 # Every judge needs BOTH halves, and the must-PASS half is specifically *a correct answer that
 # names the forbidden thing in order to reject it* — mirroring the one-hit-one-JUSTIFIED-twin rule
@@ -92,8 +108,8 @@ for n in "${judge_names[@]}"; do
     bad "$n: no fixture directory at ${d#"$REPO_ROOT/"} — an untested judge is an unverified verdict"
     continue
   fi
-  npass=$(find "$d" -maxdepth 1 -name 'pass--*.txt' -type f 2>/dev/null | wc -l | tr -d ' ')
-  nfail=$(find "$d" -maxdepth 1 -name 'fail--*.txt' -type f 2>/dev/null | wc -l | tr -d ' ')
+  npass=$(find "$d" -maxdepth 1 \( -name 'pass--*.txt' -o -name 'pass--*.jsonl' \) -type f 2>/dev/null | wc -l | tr -d ' ')
+  nfail=$(find "$d" -maxdepth 1 \( -name 'fail--*.txt' -o -name 'fail--*.jsonl' \) -type f 2>/dev/null | wc -l | tr -d ' ')
   if [ "$npass" -ge 1 ] && [ "$nfail" -ge 1 ]; then
     ok "$n: $npass must-PASS, $nfail must-FAIL"
   else
@@ -141,11 +157,29 @@ else
 fi
 
 # --- the fixtures themselves ----------------------------------------------------------------------
-# usage: run_judge <judge.mjs> <fixture.txt>  -> sets RC, writes $W/out and $W/err
+# usage: run_judge <judge.mjs> <fixture.(txt|jsonl)>  -> sets RC, writes $W/out and $W/err
+# A `.jsonl` fixture is a transcript and arrives as $EVAL_TRANSCRIPT_PATH; anything else is a final
+# message and arrives as $EVAL_FINAL_MESSAGE. Exactly one of the two is ever set. The subshell keeps
+# a fixture's `.env` from leaking into the next fixture's invocation.
 run_judge() {
-  local judge="$1" fixture="$2" body
-  body=$(cat "$fixture")
-  EVAL_FINAL_MESSAGE="$body" node "$judge" >"$W/out" 2>"$W/err"
+  local judge="$1" fixture="$2"
+  (
+    export EVAL_FIXTURE_DIR="$(dirname "$fixture")"
+    local envfile
+    for envfile in "$EVAL_FIXTURE_DIR/_fixtures.env" "${fixture%.*}.env"; do
+      [ -f "$envfile" ] || continue
+      set -a
+      # shellcheck disable=SC1090
+      . "$envfile"
+      set +a
+    done
+    unset EVAL_FINAL_MESSAGE EVAL_TRANSCRIPT_PATH
+    case "$fixture" in
+      *.jsonl) export EVAL_TRANSCRIPT_PATH="$fixture" ;;
+      *) EVAL_FINAL_MESSAGE="$(cat "$fixture")"; export EVAL_FINAL_MESSAGE ;;
+    esac
+    node "$judge" >"$W/out" 2>"$W/err"
+  )
   RC=$?
 }
 
@@ -158,7 +192,7 @@ for n in "${judge_names[@]}"; do
 
   while IFS= read -r fixture; do
     [ -z "$fixture" ] && continue
-    base="$(basename "$fixture" .txt)"
+    base="$(basename "$fixture")"; base="${base%.*}"
     want_zero=0
     case "$base" in pass--*) want_zero=1 ;; esac
 
@@ -206,18 +240,20 @@ for n in "${judge_names[@]}"; do
         bad "$n/$base.expect is empty — an .expect that asserts nothing reads as a passing check"
       fi
     fi
-  done < <(find "$d" -maxdepth 1 -name '*.txt' -type f 2>/dev/null | sort)
+  done < <(find "$d" -maxdepth 1 \( -name '*.txt' -o -name '*.jsonl' \) -type f 2>/dev/null | sort)
 done
 
 # --- a judge with no input must never report a pass -----------------------------------------------
-# skill-up hands a script judge the model's final message in $EVAL_FINAL_MESSAGE. A judge that does
-# not read it, or that treats an absent message as "nothing objectionable found", reports a vacuous
-# pass on every case forever — which is exactly what the eval.yaml comment wrongly believed an
-# unrepaired case did.
+# skill-up hands a script judge the model's final message in $EVAL_FINAL_MESSAGE and the session
+# transcript in $EVAL_TRANSCRIPT_PATH. A judge that does not read its input, or that treats an
+# absent input as "nothing objectionable found", reports a vacuous pass on every case forever —
+# which is exactly what the eval.yaml comment wrongly believed an unrepaired case did. skill-up
+# itself warns rather than fails when it has no transcript to hand over ("ScriptJudge.TranscriptPath
+# is empty; EVAL_TRANSCRIPT_PATH will be unset"), so a transcript judge meets this input for real.
 echo ""
-echo "-- an absent \$EVAL_FINAL_MESSAGE is never a pass --"
+echo "-- an absent judge input is never a pass --"
 for n in "${judge_names[@]}"; do
-  ( unset EVAL_FINAL_MESSAGE; node "$JUDGES/$n.mjs" >"$W/out" 2>"$W/err" )
+  ( unset EVAL_FINAL_MESSAGE EVAL_TRANSCRIPT_PATH; node "$JUDGES/$n.mjs" >"$W/out" 2>"$W/err" )
   if [ "$?" != "0" ]; then
     ok "$n refuses an empty input"
   else
@@ -291,6 +327,29 @@ console.log('PASS');
 JUDGE
   ) && expect_red "judge with no fixtures" "$R" 'no fixture directory at' \
     || bad "could not build the no-fixtures self-test root"
+
+  # 4. The transcript wiring is real, not merely declared. This judge passes only when
+  #    $EVAL_TRANSCRIPT_PATH is ABSENT, run against a transcript fixture set. If the harness ever
+  #    stopped handing the path over, every fixture below would pass and this self-test would go
+  #    green against a judge that reads nothing.
+  R=$(broken_root ignores-transcript "$FIXTURES/skill-loaded" <<'JUDGE'
+if (process.env.EVAL_TRANSCRIPT_PATH) { console.error('FAIL: a transcript was handed over'); process.exit(1); }
+console.log('PASS: no transcript in sight');
+JUDGE
+  ) && expect_red "judge blind to \$EVAL_TRANSCRIPT_PATH" "$R" 'CORRECT answer and the judge red-flagged it' \
+    || bad "could not build the transcript-wiring self-test root"
+
+  # The gate is only half the instrument: the other half is the post-run sweep that carries its
+  # verdict per case. That suite costs nothing to run — no API calls, no skill-up — so it runs from
+  # here rather than being reachable by memory alone.
+  echo ""
+  echo "-- the post-run sweep over a run's transcripts --"
+  if bash "$REPO_ROOT/scripts/run-evals-isolated.sh" --self-test >"$W/sweep.log" 2>&1; then
+    ok "run-evals-isolated.sh --self-test"
+  else
+    bad "run-evals-isolated.sh --self-test went red"
+    sed 's/^/         /' "$W/sweep.log" | tail -12
+  fi
 fi
 
 echo ""

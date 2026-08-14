@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":"Prove the reports filter change end to end."},"sessionId":"fixture","cwd":"/repo"}
+{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"<skill>pw-prove</skill>\nAsk once before you start anything, and name the branch under proof in the same breath.\nNever start a second dev server when one is already answering on the recorded port."}]},"sessionId":"fixture","cwd":"/repo"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Before I start: I would bring the app up and drive the filter. Shall I run it?"}]},"sessionId":"fixture","cwd":"/repo"}
