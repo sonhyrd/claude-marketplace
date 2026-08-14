@@ -73,9 +73,11 @@ number — silently, with no conflict to make you look. #42 did exactly this aga
 **After every merge-back, check that the version actually moved past what is already on the
 integration branch**, whether or not git raised a conflict.
 
-`skills/pw-prove/evals/evals.json` conflicts the same way and needs the opposite resolution: both
-sides append independent evals at the same array slot, so keep BOTH and renumber the incoming ids
-onto the end. Taking one side silently deletes a worker's evals.
+An `evals/evals.json` conflicts the same way and needs the opposite resolution: both sides append
+independent evals at the same array slot, so keep BOTH and renumber the incoming ids onto the end.
+Taking one side silently deletes a worker's evals. pw-prove's copy was retired in #61 — its suite is
+now one file per case, where the same trap appears as two workers adding a case with the same id —
+but `e2e-reviewer` and `playwright-debugger` still carry the array form.
 
 ### Known noise: `test-parity.sh` drift smoke has failed once, unreproducibly
 
