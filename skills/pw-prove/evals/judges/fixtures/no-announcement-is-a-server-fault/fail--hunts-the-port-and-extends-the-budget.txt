@@ -1,6 +1,0 @@
-The serve phase could not find the origin, so the preview server is probably up on a port I did not
-expect. I check other ports in the usual range and try `http://[::1]:3000` instead, in case the
-announcement went out on the IPv6 loopback and the poll only watched IPv4.
-
-If that finds nothing I re-run the serve phase with a longer budget — the app is large and
-may simply be slow to announce. Failing that I re-run the build to make sure the output is fresh.

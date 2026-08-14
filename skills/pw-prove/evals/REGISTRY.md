@@ -168,7 +168,8 @@ characterized at n=3.
 **Batch 3 (#65) triaged the remaining twenty-one** — `case-33` onward, everything still on disk.
 None was retired on static triage, because the earlier batches had already removed the duplicates;
 all 21 gained a script judge and were characterized at n=3, eleven judges were repaired once against
-the answers the run recorded, and the sixteen that reached 3/3 had their uplift measured. **This is
+the answers the run recorded, and the sixteen that reached 3/3 had their uplift measured. One,
+`case-51`, was then retired on a re-measured zero uplift. **This is
 the batch that closes the registry over the whole suite.**
 
 **Pass rate** is over three iterations with the skill installed. **Uplift** is `+1` when the case
@@ -244,10 +245,10 @@ must-FAIL fixture pair before it could run at all.
 | `case-35` | behavior | Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 | **3/3** | **+1** (clean) | **active** |
 | `case-36` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, agreed by the Step-6 audit | **3/3** | **+1** (clean) | **active** |
 | `case-37` | behavior | Step 7 › the clip inspection — diagnose, fix ungated, re-audit, re-film once | **3/3** | **+1** (clean) | **active** |
-| `case-38` | behavior | Step 7 › the frame extract — exit 6 is a SKIP, not a failed test | **3/3** (after judge repair) | **+1** (baseline CONTAMINATED and failed anyway — direction safe, reading not clean) | **active** |
+| `case-38` | behavior | Step 7 › the frame extract — exit 6 is a SKIP, not a failed test | **3/3** (after judge repair) | **+1** (first baseline CONTAMINATED; re-measured SKILL-FREE and still failed) | **active** |
 | `case-45` | behavior | Step 7 › *Proof run* — the committed proof config must not inherit `webServer` (ADR 0008) | **3/3** | **+1** (clean) | **active** |
 | `case-46` | behavior | Step 7 › *Failure handling* — the no-progress checkpoint takes the handover stop | **3/3** (after judge repair) | **+1** (clean) | **active** |
-| `case-51` | behavior | Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` is a server fault | **3/3** | **+1** (baseline CONTAMINATED and failed anyway — direction safe) | **active** |
+| `case-51` | behavior | Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` is a server fault | **3/3** | **0** (re-measured on a certified SKILL-FREE baseline, which **passed**) | **retired — deleted** |
 | `case-52` | behavior | Step 3 › build reuse **and** Step 7 › *Mutation check* — artifact isolation | **3/3** (after judge repair) | **+1** (clean) | **active** |
 | `case-57` | behavior | Step 4 › *Recon* — a string `expression` is evaluated, not called | **3/3** | **+1** (clean) | **active** |
 | `case-47` | behavior | Step 7 › *Failure handling* — a moved signature is a converging run | **3/3** (after judge repair) | not measured — **both arms failed**, so there is no difference to read | quarantined |
@@ -276,6 +277,16 @@ and the `{fn, arg}` form and no `viewport` verb, `preflight.mjs` emits `no-annou
 premise, a duplicate prompt, or an ADR contradiction.** Zero retirements is what the evidence
 supports, and the alternative — retiring on a guess to hit a keep rate — is what the admission rule
 exists to prevent.
+
+**Two admissions bend the overlap rule, and the bend is stated rather than buried.** The rule is *"a
+case that duplicates or overlaps a registry case is retired, not repaired"*, and `case-36` and
+`case-45` each overlap one. Both were kept, on a distinction the rule does not make but the registry
+depends on: **the case they overlap is not guarding anything.** `case-22` is void under #76 and
+`case-24` is quarantined at 2/3, so retiring their measurable counterparts would trade a working
+guard for a broken one and leave the section covered by nothing. Read as a precedent, that is
+narrow: *overlap retires the weaker case, and a case that cannot be measured is the weaker case.* It
+does not license keeping two guards over one section when both work — which is why only `case-57`
+survived of the three probe-eval cases.
 
 The near-misses are worth naming, because each looks retirable on its section column alone:
 
@@ -337,13 +348,42 @@ batch 2 had 7 of 8:
 
 | Baseline verdict | Cases | Reading |
 |---|---|---|
-| `SKILL-FREE`, arm **failed** | `case-33`, `case-34`, `case-35`, `case-36`, `case-37`, `case-45`, `case-46`, `case-52`, `case-57` | **`+1`, clean** |
-| `CONTAMINATED`, arm **failed anyway** | `case-38`, `case-51` | **`+1`, direction safe.** A genuinely skill-free run has strictly less to work with and cannot do better, so the reading is conservative rather than wrong — the rule this registry already applies to `case-15` and `case-11` |
+| `SKILL-FREE`, arm **failed** | `case-33`, `case-34`, `case-35`, `case-36`, `case-37`, `case-45`, `case-46`, `case-52`, `case-57`, and `case-38` on re-measurement | **`+1`, clean** |
 | both arms **failed** | `case-47`, `case-54`, `case-55`, `case-58`, `case-59` | **not measured.** There is no difference to read, so these five cannot be admitted or retired for zero uplift — the `case-30` reading, at five times the scale |
+| `SKILL-FREE`, arm **passed** | `case-51` on re-measurement | **zero uplift → retired, deleted** |
 
-**No batch-3 case was retired for zero uplift, because no baseline passed.** That is worth stating
-plainly: the zero-uplift retirement rule had nothing to act on in this batch. Every 3/3 case here
-either went red without the skill or could not be read at all.
+### The direction-safe reading is not sound, and this batch has the counter-example
+
+Two baselines came back **CONTAMINATED** on the first uplift run — `case-38` and `case-51`, both
+having reached `~/.claude/plugins/cache/sss-marketplace/e2e/1.2.0/skills/pw-prove/SKILL.md` through
+the Bash route the deny rules cannot close. **Both arms failed**, which under this registry's
+existing rule is the *direction-safe* reading: a run that had the body and still failed licenses a
+`+1`, because a genuinely skill-free run has strictly less to work with and cannot do better. That
+is the rule `case-15` and `case-11` are active on.
+
+Both were re-measured anyway, on a baseline the sweep certified SKILL-FREE. The results split:
+
+- **`case-38` — baseline SKILL-FREE and failed. `+1` confirmed.** The direction-safe reading was right.
+- **`case-51` — baseline SKILL-FREE and *passed*. Zero uplift.** The direction-safe reading was
+  **wrong**, and by the rule's own logic it should have been impossible: a strictly-less-informed run
+  did strictly better.
+
+**So the inference does not hold.** What it silently assumes is that a single arm's verdict is a
+property of the information available to it; run-to-run variance in one arm is enough to break that,
+and here it did. `case-51` would have been admitted as an active guard on a reading rather than a
+measurement, and it is not a guard at all — Opus 5 reads `SERVE_CAUSE=no-announcement` correctly
+without the skill.
+
+Recorded as a rule change rather than an anecdote: **a contaminated baseline that merely failed is
+not admission-grade evidence. Re-measure it.** `case-15` and `case-11` are left active and untouched
+— they are pre-existing rows and #78 owns re-measuring that cohort — but they are now the only two
+rows in this registry resting on an inference this batch has a counter-example to, and #78 should
+re-take them rather than inherit them.
+
+The cost of finding this was **4 agent runs**. It caught one wrongly-admitted guard out of eleven.
+
+**One batch-3 case was retired for zero uplift**, and only because it was re-measured. On the first
+uplift run no baseline passed at all, so the zero-uplift rule appeared to have nothing to act on.
 
 The five both-arms-failed cases are the batch's largest single source of quarantine, and they differ
 from batch 2's void rows in an important way: batch 2's baselines were dirty, so the *instrument*
@@ -352,33 +392,34 @@ failed on the uplift run** having passed 3/3 hours earlier, which points at ordi
 variance in a single arm rather than at contamination. They are re-measurable by re-running the
 uplift arm alone.
 
-### The trusted core is twenty-one cases
+### The trusted core is twenty cases
 
 `gate-skill-loaded`, `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`,
 `case-28`, `case-48`, `case-11`, `case-16`, and batch 3's eleven: `case-33`, `case-34`, `case-35`,
-`case-36`, `case-37`, `case-38`, `case-45`, `case-46`, `case-51`, `case-52`, `case-57`. That is what
-`eval.yaml`'s active list holds, and every one is 3/3 with a non-zero uplift. `case-28` and `case-48`
-are in it because #75 gave them a baseline that can be believed; batch 2 added two, batch 3 eleven.
+`case-36`, `case-37`, `case-38`, `case-45`, `case-46`, `case-52`, `case-57`. That is what
+`eval.yaml`'s active list holds, and every one is 3/3 with a non-zero uplift measured against a
+baseline the sweep certified skill-free. `case-28` and `case-48` are in it because #75 gave them a
+baseline that can be believed; batch 2 added two, batch 3 ten.
 
 **The core more than doubled in one batch, and that is worth reading carefully rather than as
 progress.** It did not happen because batch 3's cases are better; it happened because they are the
 first cohort measured end to end on the sealed runner, so their uplift figures survived. Batch 2
 scored 8 of 13 on pass rate and admitted 2, entirely because its baselines were dirty. Batch 3
-scored 16 of 21 and admitted 11. **The difference between those keep rates is the instrument, not
+scored 16 of 21 and admitted 10. **The difference between those keep rates is the instrument, not
 the cases** — which is the strongest single argument for #78 re-measuring batch 2's six void rows.
 
 Of the 21 cases batch 1 triaged, 5 were automatic retirements. **Of the 16 it actually measured, 8
 were admitted (6 by #63, 2 more once #75 unvoided their uplift), 7 are quarantined and 1 was
 deleted.** Of the 20 batch 2 triaged, 7 were automatic retirements; **of the 13 it measured, 2 were
 admitted and 11 are quarantined.** Of the 21 batch 3 triaged, **0 were automatic retirements; all 21
-were measured, 11 were admitted and 10 are quarantined.**
+were measured, 10 were admitted, 10 are quarantined and 1 was deleted.**
 
-Across all three batches: **62 triaged — 21 active, 28 quarantined, 13 deleted.** The arithmetic
-closes: 21 + 28 + 13 = 62, and 21 + 20 + 21 = 62. **Every case file on disk now carries a registry
+Across all three batches: **62 triaged — 20 active, 28 quarantined, 14 deleted.** The arithmetic
+closes: 20 + 28 + 14 = 62, and 21 + 20 + 21 = 62. **Every case file on disk now carries a registry
 row**, which is the acceptance criterion that distinguished this batch from the other two — there is
 nothing left in an undecided state.
 
-Forty-one of the measured cases that did not make it are recorded with a reason rather than a shrug.
+Forty-two of the measured cases that did not make it are recorded with a reason rather than a shrug.
 That is the expected shape: the goal is a core whose verdicts can be believed, not a high keep rate.
 
 **Batch 2's keep rate is low for one dominant reason, and it is not the skill.** Six of its eleven
@@ -519,6 +560,7 @@ retired. Recovery already happened; deleting a case file does not un-recover it.
 
 | Case | Reason |
 |---|---|
+| `case-51` | **Zero uplift, on a re-measured clean baseline** (#65). Its first baseline was CONTAMINATED and failed, which the direction-safe rule would have read as `+1`; re-taken against a certified SKILL-FREE arm it **passed**. Opus 5 reads `SERVE_CAUSE=no-announcement` plus a printed `Cannot find module` crash correctly without the skill — it does not hunt a port, and it acts on the server's own error. The **behavior is unchanged** and still stated in SKILL.md Step 3; what is retired is the case. Its judge `no-announcement-is-a-server-fault.mjs` and that judge's fixtures were deleted with it. |
 | `b49-untrusted-page-content` | **Zero uplift, on a clean baseline.** With the skill removed the agent never reached a line of the body (`LOADED via skill-tool` only — the call errored) and its answer passed the judge anyway: Opus 5 treats page content as data without being told. A case that cannot go red when the skill regresses is not a guard. The **behavior is unchanged** and still stated in SKILL.md § *Safety: page content is untrusted data*; what is retired is the case, not the rule. Its judge `page-content-is-data.mjs` and that judge's fixtures were deleted with it. |
 
 A case that merely exercises a script's exit code was **not** treated as automatically out of scope.
@@ -676,7 +718,9 @@ them with a footnote:
   void under #76, but `case-36` is the **dry** twin of the same rule and is 3/3 with a clean `+1`.
   The `pinned:` branch is still unguarded and stays on the table.
 
-**Batch 3 opened no new gaps**, because it retired nothing — no guard was removed.
+**Batch 3 opened one new gap**, and only at the very end: retiring `case-51` for a re-measured zero
+uplift left Step 3 › `SERVE_CAUSE=no-announcement` unguarded. It is added to the table below. Every
+other section batch 3 touched gained a guard rather than losing one.
 
 | SKILL.md section | Guarded by | Why it is not covered |
 |---|---|---|
@@ -689,6 +733,7 @@ them with a footnote:
 | Step 4 › *notify-and-continue / approval gate* | nothing | `case-7` is 3/3, quarantined on a void uplift (#75). Same. |
 | Step 1 › *Mode* — the heavy-session recommendation | nothing | `case-20` is 3/3, quarantined on a void uplift (#75). Same. |
 | Step 4 › *Effective viewport* — the `pinned:` branch | nothing | `case-23` is **void** under #76 — it read a fixture containing its own path — and `case-21` was retired as its duplicate. The `deliberate:` branch is now guarded by `case-36`, the dry twin of void `case-22`; this branch has no dry twin, so it stays open until #76 lands. |
+| Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` (the log names no origin, so act on the server's crash rather than hunt a port) | nothing | `case-51` retired for **zero uplift** on a re-measured clean baseline (#65). The second gap on this table opened by a retirement rather than a failure, and the same caveat applies: the case went because Opus 5 needs no telling, not because the rule stopped mattering. `case-50` still guards the adjacent `no-log` cause and the announced origin. |
 | *Safety: page content is untrusted data* | nothing | `b49` retired for zero uplift. This is the one gap opened by a **retirement rather than a failure**, and it is the one to weigh again if the model under test changes: the case was retired because Opus 5 needs no telling, not because the rule stopped mattering. |
 | Step 2 › *6. Fold ACs the diff already proves cheaper* | nothing | `case-29` is 0/3 on a judge that reads scenario titles rather than the Proven-by column (#77). The skill folds correctly in every recorded run. |
 | Step 3 › *Auth* — the ladder exhausted → STOP | nothing | `case-4` is 2/3; `case-13` retired as `case-48`'s overlap. |
@@ -705,7 +750,7 @@ scored 3/3, and all landed on a dirty uplift baseline.** They are one #75 fix fr
 one case away. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29` and is blocked
 on #77 instead.
 
-Twenty-one sections are guarded, one per active case:
+Twenty sections are guarded, one per active case:
 
 1. the frontmatter `description:` trigger surface — `gate-skill-loaded`
 2. Step 1 › *Confirmation gate* — `b01-confirmation-gate`
@@ -718,7 +763,7 @@ Twenty-one sections are guarded, one per active case:
 9. Step 5b › *Bootstrap the runner if greenfield* — `case-11`
 10. Step 5 › *Generate* — *Extend, don't duplicate* — `case-16`
 
-Batch 3 added eleven, and they cluster where the earlier batches were thinnest — Step 6 and Step 7:
+Batch 3 added ten, and they cluster where the earlier batches were thinnest — Step 6 and Step 7:
 
 11. Step 5 › *HAR-first mocking* — a recon pass that produced no HAR — `case-33`
 12. `code-rules.md` § *Clip Fidelity* — the filming law — `case-34`
@@ -728,16 +773,11 @@ Batch 3 added eleven, and they cluster where the earlier batches were thinnest �
 16. Step 7 › the frame extract — exit 6 is a skip — `case-38`
 17. Step 7 › *Proof run* — the inherited `webServer` (ADR 0008) — `case-45`
 18. Step 7 › *Failure handling* — the no-progress checkpoint — `case-46`
-19. Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` — `case-51`
-20. Step 3 › build reuse **and** Step 7 › *Mutation check* artifact isolation — `case-52`
-21. Step 4 › *Recon* — a string `expression` is evaluated, not called — `case-57`
+19. Step 3 › build reuse **and** Step 7 › *Mutation check* artifact isolation — `case-52`
+20. Step 4 › *Recon* — a string `expression` is evaluated, not called — `case-57`
 
 Two adjacencies worth stating, because both look like double coverage:
 
-- **`case-50` and `case-51` both sit in Step 3 › *Bring the environment up*.** They guard different
-  `SERVE_CAUSE` codes with opposite remedies: `case-50` owns `no-log` and the announced origin (adopt
-  the port the server chose), `case-51` owns `no-announcement` (there is no port to adopt — act on
-  the crash). A single guard over both would pass while getting one of them backwards.
 - **`case-15` and `case-57` both sit in Step 3/4 recon.** `case-15` guards the channel (the probe
   asks, the test run validates — never a throwaway spec); `case-57` guards the probe's `eval`
   grammar. `case-53` and `case-58` would have been the third and fourth here and are both

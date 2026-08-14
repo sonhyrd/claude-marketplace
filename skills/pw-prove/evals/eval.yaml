@@ -80,9 +80,10 @@ cases:
         # --- admitted by batch 3 (#65) ---
         # Twenty-one cases were measured — everything left on disk from `case-33` on. Eleven are
         # here: 3/3 at n=3 AND a non-zero uplift. Nine had a baseline the sweep certified SKILL-FREE;
-        # `case-38` and `case-51` had a CONTAMINATED baseline that FAILED anyway, which is the
-        # direction-safe reading REGISTRY.md draws for `case-15` and `case-11` — a genuinely
-        # skill-free run has strictly less to work with and cannot do better.
+        # `case-38` had a CONTAMINATED baseline first; it was re-measured on a certified SKILL-FREE
+        # one and came back +1. `case-51` was re-measured the same way and its clean baseline PASSED
+        # — zero uplift — so it was RETIRED rather than admitted. See REGISTRY.md, *the direction-safe
+        # reading is not sound*: do not admit a row on a contaminated baseline that merely failed.
         #
         # Four of these close holes batch 1 and batch 2 recorded as unguarded: Step 6 ›
         # Clip-fidelity (case-34/35/37 — "the largest hole batch 1 leaves"), Step 7 › Mutation check
@@ -102,7 +103,6 @@ cases:
         - evals/cases/case-38.yaml
         - evals/cases/case-45.yaml
         - evals/cases/case-46.yaml
-        - evals/cases/case-51.yaml
         - evals/cases/case-52.yaml
         - evals/cases/case-57.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder

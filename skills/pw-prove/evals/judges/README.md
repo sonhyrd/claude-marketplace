@@ -1,7 +1,14 @@
 # Judges
 
-One script per active case. `evals/cases/<id>.yaml` names it as `judge.script_path`, and
-`scripts/ci/test-eval-judges.sh` covers it with a fixture pair in `fixtures/<judge>/`.
+One script per **triaged** case, active or quarantined. `evals/cases/<id>.yaml` names it as
+`judge.script_path`, and `scripts/ci/test-eval-judges.sh` covers it with a fixture pair in
+`fixtures/<judge>/`.
+
+There are more judges here than there are active cases, and that is deliberate. A case cannot be
+characterized without a judge, and a quarantined case keeps the judge it was measured on — its
+pass rate in `REGISTRY.md` is only re-readable if the instrument that produced it still exists.
+Batch 3 (#65) wrote twenty-one judges for twenty-one cases and eleven of those cases were admitted;
+the other ten keep theirs against the ticket that will decide them.
 
 **These are not shipped.** `evals/` is eval-engine material — it is excluded from the skill's
 `include:` list and does not trigger the `Skill version bump` check. It is still zero-dependency ESM
