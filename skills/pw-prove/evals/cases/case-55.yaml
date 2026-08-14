@@ -19,3 +19,4 @@ judge:
     type: script
     script_path: evals/judges/unproven-restart-has-no-verdict.mjs
     timeout_seconds: 30
+derived_from_prompt: 0c402611e5c9

@@ -20,3 +20,4 @@ judge:
     type: script
     script_path: evals/judges/probe-vocabulary-one-batch.mjs
     timeout_seconds: 30
+derived_from_prompt: 5452a47bf76f

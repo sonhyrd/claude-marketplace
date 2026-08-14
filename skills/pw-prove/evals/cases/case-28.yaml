@@ -16,3 +16,4 @@ judge:
     type: script
     script_path: evals/judges/hermetic-audit-not-hand-parsed.mjs
     timeout_seconds: 30
+derived_from_prompt: ca773f32ebe0

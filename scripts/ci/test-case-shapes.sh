@@ -61,6 +61,7 @@ bad() { fail=$((fail + 1)); echo "  [FAIL] $1"; }
 # shell owns the tally and the exit code and python owns nothing but the reading.
 run_checks() {
   EVALS_ROOT="$1" python3 - <<'PY'
+import hashlib
 import os
 import pathlib
 import re
@@ -241,6 +242,37 @@ for cid, (path, case) in cases.items():
                 f'lands at the workspace root, so say "your current working directory"')
 report_all('every fixture path a prompt names is a path the run stages', unstaged_paths)
 
+# 9. A judge's assertions are re-derived when the prompt they are about moves (#82).
+#    #80 repaired case-61's premise to state the cause outright, and left behind an assertion that
+#    the answer "rules out browser-context leakage" — real under the OLD prompt, which named no
+#    cause, and unreachable by construction under the new one. It scored the case 0/3 across three
+#    answers that were right in every particular, and nothing anywhere said the prompt had moved.
+#
+#    So each case records the digest of the prompt its judge was written against. When the prompt
+#    moves and the digest does not, this goes red and names the judge to re-read. Deliberately NOT
+#    a git diff against a merge base: `main` here lags the working branches by many merges, so a
+#    since-merge-base rule would fire on every case any recent ticket touched.
+#
+#    What it checks is the OCCASION, not the derivation. It cannot tell a re-derived assertion from
+#    an inherited one — only that somebody was made to look. A stronger version would have to read
+#    the judge's intent, and nothing here can. Re-stamp with:
+#      python3 scripts/ci/derive-stamp.py <case-id>...
+DIGEST_KEY = 'derived_from_prompt'
+def digest(case):
+    return hashlib.sha256(prompt_text(case).encode('utf-8')).hexdigest()[:12]
+
+stale = []
+for cid, (path, case) in sorted(cases.items()):
+    recorded = case.get(DIGEST_KEY)
+    if not isinstance(recorded, str) or not recorded.strip():
+        stale.append(f'{path.name}: no {DIGEST_KEY}: — stamp it once its judge has been read against this prompt')
+    elif recorded.strip() != digest(case):
+        judge = str(((case.get('judge') or {}).get('script_path')) or 'its judge')
+        stale.append(
+            f'{path.name}: prompt has moved since {DIGEST_KEY} was stamped — re-derive {judge}\'s '
+            f'assertions against the new prompt, then stamp {digest(case)}')
+report_all(f'every case\'s judge was derived from the prompt it now carries ({len(cases)} case file(s))', stale)
+
 for status, text in verdicts:
     print(f'{status} {text}')
 PY
@@ -264,6 +296,22 @@ if [ "$SELF_TEST" = "1" ]; then
   W="$(mktemp -d)" || exit 1
   trap 'rm -rf "$W"' EXIT
 
+  # Every fixture case built here is stamped with the digest check 9 reads, so a fixture built to
+  # break ONE rule does not also trip that one and read as caught for the wrong reason. Computed
+  # exactly as scripts/ci/derive-stamp.py computes it.
+  stamp_only() {
+    python3 -c '
+import hashlib, pathlib, sys, yaml
+p = pathlib.Path(sys.argv[1])
+c = yaml.safe_load(p.read_text()) or {}
+i = c.get("input") or {}
+parts = [i["prompt"]] if isinstance(i.get("prompt"), str) else []
+parts += [t["content"] for t in (i.get("turns") or []) if isinstance(t, dict) and isinstance(t.get("content"), str)]
+d = hashlib.sha256(chr(10).join(parts).encode()).hexdigest()[:12]
+p.write_text(p.read_text().rstrip(chr(10)) + chr(10) + "derived_from_prompt: " + d + chr(10))
+' "$1/cases/only.yaml"
+  }
+
   broken_root() {
     local name="$1" shape="$2" prompt="$3"
     # Declared on its own line: under `set -u` a single `local` statement that reads a name it is
@@ -286,6 +334,7 @@ input:
 judge:
     type: rule_based
 YAML
+    stamp_only "$root" || return 1
     printf '%s' "$root"
   }
 
@@ -301,6 +350,7 @@ cases:
         - evals/cases/only.yaml
 YAML
     cat > "$root/cases/only.yaml" || return 1
+    stamp_only "$root" || return 1
     printf '%s' "$root"
   }
 
@@ -336,6 +386,26 @@ YAML
   expect_red "an active trigger case that does not assert loading" \
     "$(broken_root unasserted trigger 'Prove PR #2866 with a Playwright test.')" \
     'does not assert loading'
+
+  # --- the re-derivation record (#82) ---
+  # Both halves of the rule: a case that never recorded which prompt its judge was written against,
+  # and a case whose prompt has moved since it did. The second is #80's defect, reproduced.
+  unstamped_root="$(broken_root unstamped behavior 'Load the `pw-prove` skill with the Skill tool and follow it. Step 5.')"
+  if [ -n "$unstamped_root" ]; then
+    sed -i '/^derived_from_prompt:/d' "$unstamped_root/cases/only.yaml"
+    expect_red "a case with no derived_from_prompt" "$unstamped_root" 'stamp it once its judge'
+  else
+    bad "a case with no derived_from_prompt: could not build the fixture suite"
+  fi
+
+  moved_root="$(broken_root movedprompt behavior 'Load the `pw-prove` skill with the Skill tool and follow it. Step 5.')"
+  if [ -n "$moved_root" ]; then
+    # The stamp stays; the prompt moves under it — exactly what #80 did to case-61.
+    sed -i 's/Step 5\./Step 5, and the cause is stated outright in the premise./' "$moved_root/cases/only.yaml"
+    expect_red "a case whose prompt moved after its judge was derived" "$moved_root" 're-derive'
+  else
+    bad "a case whose prompt moved: could not build the fixture suite"
+  fi
 
   # And a suite with no cases at all must never read as success.
   mkdir -p "$W/empty/cases"

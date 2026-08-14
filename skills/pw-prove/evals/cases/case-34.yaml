@@ -16,3 +16,4 @@ judge:
     type: script
     script_path: evals/judges/clip-adds-time-not-input.mjs
     timeout_seconds: 30
+derived_from_prompt: e91bb7e049e1

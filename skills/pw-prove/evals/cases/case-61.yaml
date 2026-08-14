@@ -17,3 +17,4 @@ judge:
     type: script
     script_path: evals/judges/serial-in-the-spec-not-on-the-command-line.mjs
     timeout_seconds: 30
+derived_from_prompt: 9b20a72661d5

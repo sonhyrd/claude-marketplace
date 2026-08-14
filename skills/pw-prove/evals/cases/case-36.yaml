@@ -16,3 +16,4 @@ judge:
     type: script
     script_path: evals/judges/clip-audit-respects-deliberate.mjs
     timeout_seconds: 30
+derived_from_prompt: fde7a4c710c9

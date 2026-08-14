@@ -16,3 +16,4 @@ judge:
     type: script
     script_path: evals/judges/unit-proven-acs-folded.mjs
     timeout_seconds: 30
+derived_from_prompt: 456d35295c00

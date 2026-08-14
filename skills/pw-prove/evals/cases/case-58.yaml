@@ -15,3 +15,4 @@ judge:
     type: script
     script_path: evals/judges/eval-arg-carries-data-not-a-handle.mjs
     timeout_seconds: 30
+derived_from_prompt: a14f040510c4

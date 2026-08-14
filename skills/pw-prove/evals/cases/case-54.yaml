@@ -16,3 +16,4 @@ judge:
     type: script
     script_path: evals/judges/overscrub-is-rerecorded-not-repaired.mjs
     timeout_seconds: 30
+derived_from_prompt: b073b70a4128

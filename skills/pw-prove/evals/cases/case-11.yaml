@@ -16,3 +16,4 @@ judge:
     type: script
     script_path: evals/judges/greenfield-bootstrap-pinned.mjs
     timeout_seconds: 30
+derived_from_prompt: b2350af3e47e

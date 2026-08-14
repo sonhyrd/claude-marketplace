@@ -18,3 +18,4 @@ judge:
     type: script
     script_path: evals/judges/stale-handoff-deleted.mjs
     timeout_seconds: 30
+derived_from_prompt: 84b961f2b846

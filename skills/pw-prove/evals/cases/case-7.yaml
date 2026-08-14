@@ -17,3 +17,4 @@ judge:
     type: script
     script_path: evals/judges/plan-notify-and-continue.mjs
     timeout_seconds: 30
+derived_from_prompt: 4cbca7cd4f6f

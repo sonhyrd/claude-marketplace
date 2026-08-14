@@ -42,3 +42,4 @@ judge:
     type: script
     script_path: evals/judges/served-on-allocated-port.mjs
     timeout_seconds: 30
+derived_from_prompt: 6a9cbcc8b4a4
