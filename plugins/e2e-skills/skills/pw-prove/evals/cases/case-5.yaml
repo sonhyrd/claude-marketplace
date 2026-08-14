@@ -1,0 +1,18 @@
+id: case-5
+shape: behavior
+title: pw-prove - 5
+description: 'Emits the completion report and accounts for the link as `Proof page: skipped -- the publish credential was refused`, with the actual preflight probe output pasted directly beneath it as evidence. Does NOT write ''Complete'' while silently omitting the Proof page line. Does NOT fabricate a clips.paulsjob.ai share URL it never produced. Does NOT fail or abort the run over the undelivered link -- the proof is the passing test plus the mutation verdict, so the run finishes normally. Because ffmpeg is installed, the skip reason is specifically the rejected credential (an expired or revoked CLIPS_MCP_TOKEN), not missing video tooling.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are finishing a PR-mode
+        pw-prove run (invoked with PR #2872). The generated spec passes. The Step-3 `PROBE_HOSTING=1 preflight.mjs`
+        run printed `PUBLISH_READY=no` with `rejected: HTTP 401 - the credential was refused`; ffmpeg
+        and Chrome are both installed. The spec + POM are already committed and pushed to the PR branch
+        and the PR comment is posted. Produce the Step-8 completion report and account for the proof link.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/publish-skip-accounted.mjs
+    timeout_seconds: 30

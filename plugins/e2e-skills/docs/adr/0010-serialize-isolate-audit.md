@@ -6,7 +6,7 @@
 > and 120 test instances against a real pull request, 1.76–1.89× faster concurrent, zero failures and
 > zero flaky verdicts at every worker count, and a preview server that did not saturate even with
 > every API call live. Serialisation survives as a **diagnostic**, not a mandate; the measurements are
-> in `docs/studies/proof-concurrency-pr2866.md`. The other two decisions — the mutation run's isolated
+> in `docs/adr/0017`. The other two decisions — the mutation run's isolated
 > `--output`, and `hermetic.mjs` as a script — are **LIVE and untouched**.
 >
 > Also retired with the development server (0016, issue #46): the **diagnosis**. The Step-7 failure

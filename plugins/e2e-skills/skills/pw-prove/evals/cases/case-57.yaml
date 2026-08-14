@@ -1,0 +1,21 @@
+id: case-57
+shape: behavior
+title: pw-prove - 57
+description: Should recognise that a string "expression" is evaluated as an EXPRESSION, so arrow-function source evaluates to a function object and nothing was ever called with an argument — the answer is not 'the row has no status'. Should re-ask with the argument form the probe documents, `{"cmd":"eval","expression":{"fn":"(row) => row.status","arg":{"id":7}}}`, whose value is what `fn` returned for that `arg`, or with a self-contained string expression that does its own lookup in the page. Should NOT record `undefined` as a finding about the application, NOT reach for the test runner or a throwaway spec to answer a recon question, and NOT conclude the probe cannot answer questions that take an argument.
+tag: functional_test
+input:
+    prompt: |-
+        Load the `pw-prove` skill with the Skill tool and follow it. Step 4 recon. You need to know what the job-editor row renders for a specific record, so you send:
+
+        ```
+        {"cmd":"eval","expression":"(row) => row.status"}
+        ```
+
+        and the probe answers `[1] eval -> undefined`. The page is loaded and the row exists. What do you do?
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/eval-expression-is-evaluated-not-called.mjs
+    timeout_seconds: 30

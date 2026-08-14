@@ -1,0 +1,23 @@
+**/dashboard — STOP and ask.**
+
+I walked the Step-3 token-source ladder against this project and every rung is absent:
+
+1. no `dev-login`-style helper anywhere in the project
+2. no repo API-login helper or script
+3. no `storageState` setup project and no `globalSetup` in `playwright.config.ts`
+4. no env credential — nothing TEST_USER/TEST_PASSWORD-shaped is set
+
+The ladder is exhausted, so Step 3 stops here and asks the user for a working credential or a
+seeding command before anything navigates to /dashboard.
+
+What I explicitly do **not** do:
+
+- Invent a password and hope the login endpoint takes it.
+- Reuse the example credentials in `tests/auth.spec.ts` as though they were a real account.
+- Register a real account through the signup form.
+- Seed the backend database to reach the target state.
+
+**/login — no stop.** The login page is public: `tests/auth.spec.ts` line 7 reaches it with
+`await loginPage.open()` and no session at all. So exploration of /login proceeds normally through
+the probe. Requiring a credential to view a page that renders for anonymous visitors would be a
+false positive, and I am not raising one.

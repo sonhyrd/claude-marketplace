@@ -1,0 +1,18 @@
+No. The `arg` in the function form travels as JSON inside the expression — it is **not** a page handle, so a DOM node can't be sent that way. What you wrote passes the *string* `"document.querySelector(...)"` to `fn`, so `el` is a string, `getComputedStyle` gets a non-Element, and you get a useless/erroring result — not the row's colour. The skill states this directly: "`arg` … must be JSON-serialisable (it travels inside the expression, not as a page handle — a DOM node cannot be sent this way; select it inside `fn` instead)."
+
+Two correct shapes — select inside the page:
+
+```jsonc
+// string form — simplest for a one-off
+{"cmd":"eval","expression":"getComputedStyle(document.querySelector('tr[data-id=\"7\"]')).backgroundColor"}
+
+// fn form — pass the id (JSON-serialisable), do the lookup in the page
+{"cmd":"eval","expression":{"fn":"(id) => { const el = document.querySelector(`tr[data-id=\"${id}\"]`); return el ? getComputedStyle(el).backgroundColor : null; }","arg":"7"}}
+```
+
+The `fn` version is the better one here: it returns `null` instead of throwing if the row isn't there, which distinguishes "row missing" from "colour is transparent" — worth having, since the row you saw in a `snapshot` may have re-rendered.
+
+Two things while you're at it:
+
+- If you want more than the one value, use the **named map** in a single round trip (`{"url":"…","bg":"…"}`) rather than three `eval`s — but every value must be synchronous. `getComputedStyle` is, so it's fine.
+- Recon-wise, a computed background colour is a reasonable probe question only if the colour is the behaviour under proof (a status/highlight AC). If you just want to confirm the row's *state*, prefer `snapshot` or a class/attribute check — a raw `rgb()` string is brittle evidence and makes for a brittle assertion later.

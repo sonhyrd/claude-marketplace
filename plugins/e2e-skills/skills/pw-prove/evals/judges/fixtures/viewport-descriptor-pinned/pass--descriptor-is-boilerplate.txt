@@ -1,0 +1,24 @@
+**Assumptions — Effective viewport: `pinned: 1600x900` (config carries only a desktop descriptor).**
+
+`playwright.config.ts` spreads `...devices['Desktop Chrome']` in the chromium project and declares
+no explicit `viewport:` key anywhere. The descriptor brings 1280x720 with it.
+
+That 1280x720 is **not** the effective viewport and this is not a `deliberate:` verdict. A desktop
+device descriptor is scaffold boilerplate — nearly every scaffolded config spreads one — so reading
+it as a project decision would silently nullify the pin on almost every real project. The rule's
+`pinned:` branch applies: only a desktop descriptor or nothing at all, so 1600x900.
+
+The pin lives in the committed spec, never in the project config and never only in the proof config:
+
+```ts
+import { test, expect } from '@playwright/test';
+test.use({ viewport: { width: 1600, height: 900 } });
+```
+
+And the proof run sizes the recording to match:
+
+```bash
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
+  npx --no-install playwright test tests/checkout.spec.ts --project=chromium \
+  --config playwright.proof.config.ts --reporter=html
+```

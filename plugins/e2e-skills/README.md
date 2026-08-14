@@ -18,7 +18,7 @@ exceptions — see [Distribution](#distribution).
 
 ## Distribution
 
-The repo is grafted into `~/SonDev/claude-marketplace` as an editable git subtree at
+The repo is grafted into `~/work/claude-marketplace` as an editable git subtree at
 `plugins/e2e-skills`. The marketplace's own `.claude-plugin/plugin.json` names the shipped skills
 (`pw-prove`, `e2e-reviewer`) and carries the version. Nothing here is installed by any other route.
 
@@ -159,10 +159,7 @@ Studies: [proof target measurements](docs/studies/proof-target-measurements.md) 
 against a built preview, measured, plus the two claims that were verified by running them ·
 [the first live proof](docs/studies/live-proof-pr2866.md) — pw-prove run end to end against a real
 pull request on a real application, with the timings against the numbers this work was justified by
-and the twelve behaviours no fixture shows ·
-[proof-run concurrency](docs/studies/proof-concurrency-pr2866.md) — 31 runs and 120 test instances at
-one to six workers against the built proof target, the wall clock they saved, the verdicts and
-evidence they did not damage, and the one cost they did carry.
+and the twelve behaviours no fixture shows.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
@@ -180,7 +177,9 @@ Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-
 [0014 one vaulted bearer over JSON-RPC](docs/adr/0014-one-vaulted-bearer-over-json-rpc.md) ·
 [0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md) ·
 [0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md) ·
-[0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md).
+[0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md) ·
+[0018 the eval runtime is `none`](docs/adr/0018-eval-runtime-is-none.md) (and unsandboxed — read it
+before running the suite).
 
 ## License
 

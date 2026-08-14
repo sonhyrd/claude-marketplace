@@ -1,0 +1,45 @@
+**The audit can't run here — this directory is empty.** No `tests/`, no `test-results/`, only `.claude/`:
+
+```
+$ find . -not -path './.claude/*'
+.
+./.claude
+```
+
+So there's no Step 7 output to classify. What follows is the command and the verdict rule; run it from the repo that actually holds the proof run.
+
+## The command
+
+```bash
+node .claude/skills/pw-prove/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts
+```
+
+`--spec` is not optional for this spec in particular — see below. Exit 2 means the run recorded no traces (the proof config must set `trace: 'on'`); re-run the proof, then re-audit.
+
+## How the verdict is reached
+
+The script classifies and stops there — it deliberately renders no verdict (`hermetic.mjs:11-13`), because matching against declared intent is the judgement call. It gives you four lists:
+
+- **LIVE** — `serverIPAddress` present in the trace snapshot; the browser put it on the wire.
+- **MOCKED** — no `serverIPAddress`; a `route.fulfill()` answered in-browser.
+- **FAILED/ABORTED** — `status: -1` / `_failureText`; expected under `notFound: 'abort'` or blocked third parties.
+- **IN-SPEC LIVE ROUND-TRIPS** — grepped from the spec source, not the trace.
+
+The rule: every LIVE line **and** every in-spec round-trip must be named in a `// CARVE-OUT:` line in the spec header. Any undeclared one fails the run even though the tests passed — and an undeclared live *write* to a shared tenant is a data-pollution incident to report as such.
+
+## The verdict this spec will get
+
+It fails, and the `route.fetch()` is exactly why.
+
+`const response = await route.fetch()` performs the round-trip **from the Playwright process**, then hands the browser a fulfilled response. The trace records the browser, not the Playwright process — so the section GET appears under **MOCKED** while a real request left the machine (`hermetic.mjs:21-26`). Without `--spec`, that reads as clean, which is the silent-pass class the audit exists to catch.
+
+With `--spec`, it surfaces as a separate section. The grep matches any receiver (`/\b\w+\.fetch\s*\(/`, excluding `window.`/`globalThis.`/`self.`), so the common `page.route('**/api/sections', async r => { const res = await r.fetch(); ... })` one-letter form is caught — matching only the literal `route.fetch` is how the check once passed a live round-trip during its own spike.
+
+So: one declared carve-out (auth bootstrap), two live paths. The section GET is undeclared → **FAIL**. Two ways out, and they aren't equivalent:
+
+- **Replace it with a static mock.** Correct if the round-trip is incidental — you patch in flight only to tweak one field. Take the read from `api.har` via `routeFromHAR` and hand-write the fulfil for the field under assertion. This is the default; it makes the spec genuinely hermetic.
+- **Declare a second carve-out.** Only legitimate if the *real* section response is itself the acceptance criterion. Then the `Tests` line reads `hermetic (carve-outs: live auth bootstrap, section GET patch-in-flight)`.
+
+Note the carve-out is declared against `METHOD origin+path` — query strings are stripped as per-run noise (`hermetic.mjs:121-128`), so write it that way.
+
+Point me at the repo with the spec and traces and I'll run it for real.

@@ -1,0 +1,27 @@
+id: b32-dwell-inline
+shape: behavior
+title: Step 6 dwell must be inline per test() — and a two-line dwell already passes
+description: >-
+  B32. Turn 1 is the hit: a dwell hoisted into a helper is exit 2, and the fix is to
+  inline it in each test(), not to conclude there is none. Turn 2 is the JUSTIFIED twin:
+  a dwell already inline but wrapped across two lines satisfies the audit, and reformatting
+  it to appease the check is the false positive this case guards.
+
+input:
+    turns:
+    -   role: user
+        content: 'Load the `pw-prove` skill with the Skill tool and follow it. You are at Step 6. `e2e/reports.spec.ts`
+            carries its viewport pin and two test() blocks, each ending in `await payoffHold(page);`.
+            `payoffHold` is a helper declared at the top of the same file: `async function payoffHold(page)
+            { /* JUSTIFIED: proof-clip payoff hold... */ if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
+            }`. The clip-fidelity audit exits 2 and says the PW_PROVE_CLIP-gated wait sits OUTSIDE every
+            test() body and must sit INLINE in the test() body it holds. Say what you do next.'
+    -   role: user
+        content: Different spec, same step. Every test() in `e2e/checkout.spec.ts` ends with the ungated
+            centring, a `// JUSTIFIED:` comment, then `if (process.env.PW_PROVE_CLIP)` on one line and
+            `  await page.waitForTimeout(2500);` on the next. The viewport pin is committed and matches
+            the Assumptions block. Run the clip-fidelity audit and say what happens next.
+judge:
+    type: script
+    script_path: evals/judges/dwell-inline-per-test.mjs
+    timeout_seconds: 30

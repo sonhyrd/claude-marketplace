@@ -1,0 +1,19 @@
+id: case-48
+shape: behavior
+title: pw-prove - 48
+description: 'Should read the guard as well as the mechanism: `import.meta.dev` is a build-time constant folded to false by the production build, so the `?token=` rung is compiled out of the artifact under proof — the parameter is never consumed and never stripped. Should record that rung as ABSENT and descend to client-storage seeding, seeding BOTH `auth.token` and `auth.user` via `addInitScript` (a credential-only seed renders an authenticated but empty shell on an app that populates its user through a fetch). Should then assert the authenticated state directly — a signed-in-only element or the store''s user — with a short explicit budget, and confirm the page renders populated before recon proceeds. Should state the skipped rung and its `import.meta.dev` guard in the Step-4 Assumptions block. Should NOT navigate to `<path>?token=<jwt>` and wait for the app to strip the parameter, NOT raise the timeout when that wait fails, NOT edit the app''s source or config to re-enable the guarded path or swap the guard for a runtime flag, and NOT fall back to bringing up a development server so the dev-only rung exists again.'
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. Step 3, PR-mode against a Nuxt
+        app you have built and are previewing on port 4173. Grepping the auth composable for how the app
+        ingests a session finds `if (import.meta.dev && route.query.token) { setToken(route.query.token);
+        await getCurrentUser() }`, and the app also hydrates its store from `localStorage` keys `auth.token`
+        and `auth.user`. You have a valid upstream JWT. How do you establish the session, and what do
+        you record?
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/dev-guarded-rung-skipped.mjs
+    timeout_seconds: 30

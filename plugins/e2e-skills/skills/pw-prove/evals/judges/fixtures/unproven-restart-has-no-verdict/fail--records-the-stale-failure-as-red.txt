@@ -1,0 +1,8 @@
+The guarding test failed after the mutation, which is exactly what the mutation check is looking for.
+I record this as the RED: the spec guards the change.
+
+The port warning is noise — something answers on 36495 and returns 200, so the server is up. The 128s
+before the failure just means the app is slow to boot under load, so I raise the test timeout to 180s
+for this run.
+
+With the RED recorded I proceed to revert the mutation and rebuild.

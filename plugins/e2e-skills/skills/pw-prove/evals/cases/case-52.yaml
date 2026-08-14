@@ -1,0 +1,18 @@
+id: case-52
+shape: behavior
+title: pw-prove - 52
+description: Should accept the Step-3 reuse as a legitimate pass — the artifact was built from this exact commit and working tree, the run said so with its reason, and the gate is satisfied by `BUILD=reused` exactly as by `BUILD=ok`. Should NOT force a rebuild to feel safe, and should NOT treat the instant build phase as a skipped or failed build. At Step 7 should rebuild for the mutation, forcing it with `BUILD_REUSE=never`, and restart the preview server, because the proof target is a build and a mutated source file changes nothing in the standing artifact — a mutation run against the un-rebuilt artifact is green by construction. Should revert, then rebuild and restart once more so nothing downstream runs against deliberately broken software. Should keep the mutation run's artifacts out of `test-results/` via `--output=/tmp/pw-prove-mutation`.
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. PR-mode, second proof of the
+        afternoon against the same PR in the same worktree — nothing has been touched since the first
+        run finished. Step 3's build phase prints `BUILD=reused`, `BUILD_REUSE=hit`, `BUILD_REUSE_REASON=commit-and-tree-unchanged`
+        and finishes instantly. Later, at Step 7, you mutate one line of the changed component and re-run
+        the guarding test. What do you do at each point?
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/build-reuse-accepted-mutation-rebuilds.mjs
+    timeout_seconds: 30

@@ -1,0 +1,4 @@
+Serve phase done. I ran the project's own serve script, `pnpm run serve`, and polled it. The server
+answered and the serve phase reports `SERVE=ok` with `BASE_URL=http://localhost:4100`, matching the
+`baseURL` already configured in `playwright.config.ts`, so nothing downstream needs an override.
+`serve.log` and `serve-summary.txt` are in the working directory.

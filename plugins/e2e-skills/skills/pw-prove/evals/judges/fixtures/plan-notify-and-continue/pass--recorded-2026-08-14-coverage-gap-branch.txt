@@ -1,0 +1,35 @@
+I've loaded the skill. Here's the walkthrough for both — no execution, since you asked me to describe.
+
+## PR-mode (`PR #412`), at Step 4
+
+**I ask you nothing.** Step 4 in PR-mode is notify-and-continue: I post the plan as the audit trail and go straight to Step 5 in the same turn. Silence is consent; you interrupt to redirect. Every question the three context items *want* to raise is a contract-resolved Assumptions line instead — asking any of them is a bug in the run.
+
+Concretely, before moving on I make sure the written plan carries:
+
+**1. Scenarios** — at minimum one per AC from the Step 2 table plus the error/edge case the diff implies. Any AC without a scenario is a coverage gap I have to name, and a gated surface stays visible as `unproven — gated: <what blocks it>` rather than being dropped.
+
+**2. Locator Mapping Table** — and this is where two of your three context items land:
+
+- *Flat specs everywhere:* the File column is still `<testDir>/pages/<Feature>Page.ts`. POM always, no `structure: flat` opt-out. I scaffold a Page Object for the new coverage only and never rewrite the flat siblings. I also check the Step-1 `pomInventory` by route first — if a POM already covers that route I extend it rather than scaffolding a second one.
+- *Label-less input:* `getByLabel` matches nothing, so the row is `getByPlaceholder('…')` (or `getByRole('textbox')` if the placeholder is unstable), with the reason recorded in the table — the accessible-name reality check from Step 3 is what justifies the tier drop.
+
+**3. Assumptions block** — one line per contract-resolved decision. For your scenario at least:
+
+- `Structure: POM — repo's existing specs are flat; new POM added for this coverage only, flat siblings untouched.`
+- `Worktree: uncommitted changes stashed (git stash -u) before checkout; restored after the proof run.`
+- `Selectors: testid tier-1 where configured; the <field> input is label-less (placeholder only) → getByPlaceholder.`
+- Plus the standard lines: hermetic network (HAR replays reads, the mutation under assertion hand-mocked, any carve-out named), locale, auth (which rung of the Step-3 ladder was used, and any dev-guarded rung recorded as absent), and **Effective viewport** stated with its branch — `pinned: 1600x900` or `deliberate: <w>x<h>` — since Step 5 writes the pin from that line and Step 6 audits it.
+- A **Handoff** line if `.pw-prove/handoff.json` was found — current or stale. Zero lines only if there was no file.
+
+Then straight into Step 5 generation. No pause, no planning mode.
+
+## Coverage-gap mode (no argument)
+
+Step 4 is an **approval gate**: the plan *is* the question. I present the same artifact — scenarios, locator table, assumptions — enter a planning mode if the host has one, and **stop until you explicitly approve**. No spec, no POM, no code of any kind until you say go.
+
+Two differences worth flagging, since the mode has already asked you something once:
+
+- Step 2 in this mode ends with "which uncovered route do you want to start with?" — so by Step 4 you've already picked the target. The Step-4 gate is a *second* deliberate stop, on the plan for that target.
+- The Assumptions block is still written and still binding (POM always, the label-less-input locator choice, viewport verdict) — approval mode doesn't turn those into questions either. They're presented as decisions for you to override, not as a menu.
+
+And at the tail: coverage-gap mode skips the PR-mode deliverable — no commit, no push, no PR comment. The report is `Generated` through `Mutation`, with a `Proof page` line only if a clip was requested or produced.

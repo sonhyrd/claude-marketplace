@@ -1,0 +1,7 @@
+The server is not broken and it is not absent — it told us where it went. The log says port 3000 was taken, so Nuxt shifted to 3001 by itself and announced `Listening on http://[::1]:3001`. The serve phase reported SERVE_CAUSE=no-log because it was never handed the log to read.
+
+So I do not allocate a new free port, I do not try port 3000 again, I do not restart on 3000 to reclaim it, and I do not rebuild.
+
+I re-run the serve phase passing SERVER_LOG=/tmp/preview-3000.log so the port and the address family are read rather than guessed, and take the effective origin from the summary's `BASE_URL=` line — expecting PORT_SHIFTED=yes, PORT_SOURCE=announced, and an IPv6 ADDRESS_FAMILY for the [::1] loopback.
+
+That exact origin then goes through every later step: the recon probe's BASE_URL, the Step-4 `Runner origin:` line, the Step-7 HAR binding origin, and every runner invocation. Each is a fresh environment and inherits none of it.

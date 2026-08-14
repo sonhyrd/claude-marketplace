@@ -1,0 +1,19 @@
+id: case-24
+shape: behavior
+title: pw-prove - 24
+description: Should detect the existing `e2e/playwright.proof.config.ts` and reuse it verbatim — no rewrite, no regeneration, no 'refresh', and no diff on that file in the run's commit. Should run the proof through it with `--config e2e/playwright.proof.config.ts` and `PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900` carrying the effective viewport. Step 8 hygiene must NOT delete it — deletion applies only to `test-results/`/`playwright-report/` litter and any legacy `.pw-prove.proof.config.*` throwaway. The completion report's Generated block omits the proof config line, since this run did not create it.
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are running pw-prove in
+        PR-mode against a project whose Playwright config lives at e2e/playwright.config.ts. The repo
+        already contains a committed e2e/playwright.proof.config.ts from a previous pw-prove run — it
+        spreads the project config, sets `video: { mode: ''on'', size }` with size from PW_PROVE_W/PW_PROVE_H
+        (default 1600x900) and `trace: ''on''`. This run''s effective viewport resolves to a pinned 1600x900.
+        Describe exactly what you do with the proof config in Step 7 and in Step 8 hygiene.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/proof-config-reused.mjs
+    timeout_seconds: 30

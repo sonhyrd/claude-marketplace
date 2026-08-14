@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+# Prompt-shape attribution over the pw-prove eval cases (issue #60).
+#
+# A case prompt has one of two shapes, and the shape decides what a NOT-LOADED verdict from
+# `skills/pw-prove/evals/judges/skill-loaded.mjs` means:
+#
+#   trigger   The prompt is a realistic top-of-task request. Nothing tells the agent to load
+#             pw-prove; whether it does is the measurement. A trigger case that fails to load is a
+#             defect in the skill's `description:` frontmatter, recorded as such — never repaired by
+#             editing the prompt, which would destroy the only signal the case produces.
+#   behavior  The prompt presupposes mid-run context — a step number, a preflight exit code, a
+#             pasted server log. Nothing about such a prompt would ever trip the skill's trigger, so
+#             the case must place the agent inside the skill explicitly. Then a failure means the
+#             BODY was wrong, which is what the case exists to measure.
+#
+# The classification is recorded in each case file's `shape:` key and narrated in
+# `skills/pw-prove/evals/prompt-shapes.md`. This script is what keeps the two honest: a new case
+# with no shape, a behavior case that forgot the placement line, or a trigger case that quietly
+# grew one, all go red here.
+#
+# Deliberately NOT wired into `ci-local.sh`. No CI check reads the eval suite, in any skill, by
+# decision (#54) — CI is the contract for the shipped surface and the eval suite is an instrument
+# operated by hand, exactly as `scripts/ci/test-eval-judges.sh` is. Run it by name:
+#
+#   bash scripts/ci/test-case-shapes.sh
+#
+# The last section runs the checks against deliberately malformed cases and requires them to go
+# RED. A harness that cannot go red tests nothing.
+#
+# Dependency, unlike every sibling suite here: **python3 with PyYAML**. The case files are read as
+# YAML rather than grepped, so a case that moved a key or refolded a scalar still reads correctly —
+# which is the whole point when the last change to this suite refolded 62 of them. Missing either is
+# a refusal with a named reason, never a skip: an instrument that skips proves nothing.
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
+# The self-test re-invokes THIS file, not the committed path of the same name — so an edit under
+# review is what goes red, rather than whatever happens to be checked in beside it.
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")" || exit 1
+cd "$REPO_ROOT" || exit 1
+
+EVALS_ROOT="${PWPROVE_EVALS_ROOT:-$REPO_ROOT/skills/pw-prove/evals}"
+SELF_TEST="${PWPROVE_CASE_SHAPES_SELFTEST:-1}"
+
+command -v python3 >/dev/null 2>&1 || {
+  echo "test-case-shapes.sh: python3 is required" >&2
+  exit 1
+}
+python3 -c 'import yaml' 2>/dev/null || {
+  echo "test-case-shapes.sh: python3 -c 'import yaml' failed — PyYAML is required" >&2
+  exit 1
+}
+
+pass=0
+fail=0
+ok()  { pass=$((pass + 1)); echo "  [PASS] $1"; }
+bad() { fail=$((fail + 1)); echo "  [FAIL] $1"; }
+
+# --- the checks -------------------------------------------------------------------------------------
+# One python pass over the suite, printing one `PASS <text>` / `FAIL <text>` line per finding, so the
+# shell owns the tally and the exit code and python owns nothing but the reading.
+run_checks() {
+  EVALS_ROOT="$1" python3 - <<'PY'
+import os
+import pathlib
+import re
+import sys
+
+import yaml
+
+root = pathlib.Path(os.environ['EVALS_ROOT'])
+cases_dir = root / 'cases'
+eval_yaml = root / 'eval.yaml'
+
+# The canonical placement line. One wording, because a behavior case that invents its own is a
+# behavior case nobody can grep for — and this is the only mechanism putting the body in context.
+PLACEMENT = re.compile(r'Load the .?pw-prove.? skill with the Skill tool', re.I)
+# Role injection asserts a persona; it does not load a body. b01 carried "You are pw-prove." into
+# the only recorded run and still read NOT LOADED. It is allowed beside the placement line and
+# forbidden as a substitute for it, and forbidden outright in a trigger prompt.
+ROLE_INJECTION = re.compile(r'You are (the )?.?pw-prove', re.I)
+SHAPES = ('trigger', 'behavior')
+
+verdicts = []
+def report(good, text):
+    verdicts.append(('PASS' if good else 'FAIL', text))
+
+def report_all(summary, problems):
+    """One headline verdict, then one line per offender so the fix is named, not hunted."""
+    report(not problems, summary)
+    for line in problems:
+        report(False, line)
+
+if not cases_dir.is_dir():
+    print(f'FAIL no cases directory at {cases_dir}')
+    sys.exit(0)
+
+def prompt_text(case):
+    """Every string a case puts in front of the agent, joined."""
+    inp = case.get('input') or {}
+    parts = []
+    if isinstance(inp.get('prompt'), str):
+        parts.append(inp['prompt'])
+    for turn in inp.get('turns') or []:
+        if isinstance(turn, dict) and isinstance(turn.get('content'), str):
+            parts.append(turn['content'])
+    return '\n'.join(parts)
+
+def first_prompt(case):
+    """What the agent is handed FIRST. A placement line in turn 3 places nothing in turn 1."""
+    inp = case.get('input') or {}
+    if isinstance(inp.get('prompt'), str):
+        return inp['prompt']
+    for turn in inp.get('turns') or []:
+        if isinstance(turn, dict) and isinstance(turn.get('content'), str):
+            return turn['content']
+    return ''
+
+cases = {}
+for path in sorted(cases_dir.glob('*.yaml')):
+    try:
+        cases[path.stem] = (path, yaml.safe_load(path.read_text(encoding='utf-8')) or {})
+    except Exception as exc:  # noqa: BLE001 — the filename and the parser's own words are the report
+        report(False, f'{path.name}: does not parse as YAML ({exc.__class__.__name__})')
+
+if not cases:
+    print('FAIL no case files found — the checks would pass vacuously')
+    sys.exit(0)
+
+# 1. Every case is classified, and the classification is one of the two shapes.
+unclassified = []
+for cid, (path, case) in cases.items():
+    shape = case.get('shape')
+    if shape not in SHAPES:
+        unclassified.append(f'{path.name}: shape is {shape!r}, expected one of {SHAPES}')
+report_all(f'every case declares shape: trigger|behavior ({len(cases)} case file(s))', unclassified)
+
+# 2. A behavior case places the agent inside the skill, in the FIRST thing it is handed.
+missing = []
+for cid, (path, case) in cases.items():
+    if case.get('shape') != 'behavior':
+        continue
+    if not PLACEMENT.search(first_prompt(case)):
+        missing.append(f'{path.name}: behavior case does not place the agent in the skill')
+report_all('every behavior case places the agent in the skill explicitly', missing)
+
+# 3. A trigger case keeps a realistic top-of-task prompt: no placement line, no role injection.
+staged = []
+for cid, (path, case) in cases.items():
+    if case.get('shape') != 'trigger':
+        continue
+    text = prompt_text(case)
+    if PLACEMENT.search(text):
+        staged.append(f'{path.name}: trigger case carries the placement line — loading is no longer the measurement')
+    if ROLE_INJECTION.search(text):
+        staged.append(f'{path.name}: trigger case carries role injection — its prompt is not a top-of-task request')
+report_all('every trigger case keeps a realistic top-of-task prompt', staged)
+
+# 4. The active list resolves, and every active case is classified.
+active = []
+if eval_yaml.is_file():
+    try:
+        suite = yaml.safe_load(eval_yaml.read_text(encoding='utf-8')) or {}
+    except Exception:
+        suite = {}
+        report(False, 'eval.yaml does not parse as YAML')
+    for rel in ((suite.get('cases') or {}).get('files') or []):
+        stem = pathlib.PurePosixPath(str(rel)).stem
+        if stem in cases:
+            active.append(stem)
+        else:
+            report(False, f'eval.yaml lists {rel}, which is not a case file on disk')
+    report(bool(active), f'every case in the active list resolves to a case file ({len(active)} active)')
+else:
+    report(False, f'no eval.yaml at {eval_yaml}')
+
+# 5. An ACTIVE trigger case asserts loading — otherwise nothing reads the signal it exists to make.
+#    Dormant trigger cases are inventory; their judges are repaired with the case (#54, #59).
+unasserted = []
+for cid in active:
+    path, case = cases[cid]
+    if case.get('shape') != 'trigger':
+        continue
+    judge = case.get('judge') or {}
+    if judge.get('type') != 'script' or 'skill-loaded' not in str(judge.get('script_path', '')):
+        unasserted.append(f'{path.name}: active trigger case does not assert loading (judge is {judge.get("type")!r})')
+report_all('every active trigger case asserts loading', unasserted)
+
+for status, text in verdicts:
+    print(f'{status} {text}')
+PY
+}
+
+echo "-- prompt-shape attribution over $EVALS_ROOT --"
+while IFS= read -r line; do
+  case "$line" in
+    'PASS '*) ok "${line#PASS }" ;;
+    'FAIL '*) bad "${line#FAIL }" ;;
+    *) [ -n "$line" ] && echo "  $line" ;;
+  esac
+done < <(run_checks "$EVALS_ROOT")
+
+# --- the harness goes red ---------------------------------------------------------------------------
+# Each fixture below breaks exactly one rule. If the checks stay green against them, the green run
+# above proved nothing.
+if [ "$SELF_TEST" = "1" ]; then
+  echo ""
+  echo "-- the checks go red on a broken suite --"
+  W="$(mktemp -d)" || exit 1
+  trap 'rm -rf "$W"' EXIT
+
+  broken_root() {
+    local name="$1" shape="$2" prompt="$3"
+    # Declared on its own line: under `set -u` a single `local` statement that reads a name it is
+    # itself declaring is an unbound-variable error, and the empty root that follows sends the
+    # nested run at the REAL suite — which is red already, so every fixture would read as caught.
+    local root="$W/$name"
+    mkdir -p "$root/cases" || return 1
+    cat > "$root/eval.yaml" <<YAML
+cases:
+    files:
+        - evals/cases/only.yaml
+YAML
+    cat > "$root/cases/only.yaml" <<YAML
+id: only
+title: only
+shape: $shape
+input:
+    prompt: >-
+      $prompt
+judge:
+    type: rule_based
+YAML
+    printf '%s' "$root"
+  }
+
+  expect_red() {
+    local what="$1" root="$2" needle="$3" out
+    # An empty root would send the nested run at the real suite and read whatever it says as this
+    # fixture's verdict. Refuse rather than measure the wrong thing.
+    if [ -z "$root" ] || [ ! -d "$root/cases" ]; then
+      bad "$what: could not build the fixture suite"
+      return
+    fi
+    out="$(PWPROVE_EVALS_ROOT="$root" PWPROVE_CASE_SHAPES_SELFTEST=0 bash "$SELF" 2>&1)"
+    if printf '%s' "$out" | grep -q '\[FAIL\]' && printf '%s' "$out" | grep -qi "$needle"; then
+      ok "$what goes red"
+    else
+      bad "$what stayed green"
+      printf '%s\n' "$out" | sed 's/^/         /' | head -8
+    fi
+  }
+
+  expect_red "an unclassified case" \
+    "$(broken_root unclassified '' 'Step 3, PR-mode. What do you do?')" \
+    'shape is'
+  expect_red "a behavior case with no placement line" \
+    "$(broken_root unplaced behavior 'Step 3, PR-mode. What do you do?')" \
+    'does not place the agent'
+  expect_red "a trigger case carrying the placement line" \
+    "$(broken_root staged trigger 'Load the `pw-prove` skill with the Skill tool and follow it. Prove PR #2866.')" \
+    'loading is no longer the measurement'
+  expect_red "a trigger case carrying role injection" \
+    "$(broken_root injected trigger 'You are pw-prove. Prove PR #2866.')" \
+    'not a top-of-task request'
+  expect_red "an active trigger case that does not assert loading" \
+    "$(broken_root unasserted trigger 'Prove PR #2866 with a Playwright test.')" \
+    'does not assert loading'
+
+  # And a suite with no cases at all must never read as success.
+  mkdir -p "$W/empty/cases"
+  expect_red "an empty cases directory" "$W/empty" 'pass vacuously'
+fi
+
+echo ""
+echo "  case shapes: $pass passed, $fail failed"
+[ "$fail" -eq 0 ] || exit 1

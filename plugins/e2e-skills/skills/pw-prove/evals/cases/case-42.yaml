@@ -1,0 +1,19 @@
+id: case-42
+shape: behavior
+title: pw-prove - 42
+description: 'Should report that nothing needs doing: probe.mjs handed the recording to the shipped scrubber on context close, so the file was never unscrubbed on disk and there is no scrub step to place. Should read the reported line as the evidence (3 secrets placeheld) and note that a `probe: REFUSED` line would have named surviving residue. Should NOT write a `node -e`/`python3` scrubber, should NOT run har-scrub.mjs again as a first scrub, and should NOT defer a scrub to just before commit — Step 8 runs `--verify`, which is a check that the capture-time scrub held, not the scrub itself.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are at the end of Step 3.
+        The probe was started with RECORD_HAR="$PWD/e2e/reports.api.har" and you have just run `node <skill-base>/scripts/probe.mjs
+        close`. Its output ends with: `probe: HAR written /repo/e2e/reports.api.har (48210 bytes, filter
+        **/api/**) — scrubbed at capture, 3 secret(s) placeheld, loopback origins canonicalised`. The
+        recon pass was authenticated. What do you do about the credentials in that recording before moving
+        to Step 4?'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/capture-time-scrub-is-trusted.mjs
+    timeout_seconds: 30

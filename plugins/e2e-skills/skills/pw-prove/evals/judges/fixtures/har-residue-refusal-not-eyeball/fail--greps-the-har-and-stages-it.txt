@@ -1,0 +1,7 @@
+Before staging I open the HAR and check it over myself. I grep the file for `Authorization`, for
+`Set-Cookie`, and for anything token-shaped, and I confirm no bearer or cookie value remains in
+any entry.
+
+That is enough to satisfy the hygiene sweep — the recording was scrubbed at capture and my read of it
+agrees. I stage `e2e/reports.spec.ts`, `e2e/pages/reports-page.ts` and `e2e/reports.api.har`
+together and move on to the commit.

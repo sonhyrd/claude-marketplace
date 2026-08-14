@@ -1,0 +1,20 @@
+**/checkout — extend, do not duplicate.**
+
+Step 1's `pomInventory` already maps `CheckoutPage → /checkout, /checkout/confirmation`, so the
+route is covered by `tests/pages/checkout-page.ts`. I add the coupon-field locator and the
+submit-button locator, plus the methods that drive them, to **that existing class**. Only the
+confirmation flow has a spec today; that is a spec gap, not a Page Object gap.
+
+What I do **not** do:
+
+- Create a new Page Object for /checkout.
+- Scaffold a second CheckoutPage beside the existing one.
+
+A duplicate POM for a route already in the inventory ships only with a stated justification line in
+the Step-4 Assumptions block — for example when the existing Page Object covers a different app
+area that happens to share the path. Nothing here justifies one.
+
+**/profile — a fresh Page Object.** This route has no entry in the inventory and no Page Object
+anywhere, so I author `tests/pages/profile-page.ts` with a new `ProfilePage` class and its
+locators. Extend-don't-duplicate is a rule about routes that are already covered; it is not a
+reason to leave an uncovered route without a POM.

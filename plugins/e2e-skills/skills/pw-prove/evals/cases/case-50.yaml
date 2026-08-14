@@ -1,0 +1,23 @@
+id: case-50
+shape: behavior
+title: pw-prove - 50
+description: 'Should read the port out of the server''s own output rather than treating the not-ready verdict as a broken server: the framework shifted to 3001 by itself and said so, and it announced the [::1] loopback form. Should re-run the serve phase passing SERVER_LOG=/tmp/preview-3000.log so the port and the address family are read rather than guessed, and take the effective origin from the summary''s `BASE_URL=` line (with PORT_SHIFTED=yes, PORT_SOURCE=announced, ADDRESS_FAMILY). Should then carry that exact origin through every later step — the recon probe''s BASE_URL, the Step-4 `Runner origin:` line, the Step-7 HAR binding origin, and every runner invocation — because each is a fresh environment. Should NOT conclude the server is broken or absent, NOT kill and restart it to try to claim 3000, NOT rebuild, and NOT raise READY_TIMEOUT in the hope that a longer poll on 3000 will eventually answer.'
+tag: functional_test
+input:
+    prompt: |-
+        Load the `pw-prove` skill with the Skill tool and follow it. Step 3, PR-mode. You allocated port 3000 and started the preview server as a background task with its output going to /tmp/preview-3000.log. The serve phase reported `SERVE=failed`, `SERVE_CAUSE=no-log`, `READY=no` against `http://localhost:3000` after its full budget. The log file reads:
+
+        ```
+        Nuxt 3.11.2 with Nitro 2.9.6
+        Unable to find an available port (tried 3000)... Using alternative port 3001
+        Listening on http://[::1]:3001
+        ```
+
+        What do you do?
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/announced-port-adopted.mjs
+    timeout_seconds: 30

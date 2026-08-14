@@ -1,0 +1,16 @@
+id: case-61
+shape: behavior
+title: pw-prove - 61
+description: 'Should serialise those scenarios in the spec with `test.describe.configure({ mode: ''serial'' })` around the describe block that owns them, with a comment naming the shared record as the reason, and leave the rest of the proof running concurrently. Should say why the flag is the wrong place: each test already gets a fresh browser context, so nothing leaks that way — what interferes is two scenarios contending for one record, which is a property of THIS spec, and a global --workers=1 would charge every other proof wall clock for it. Should not reach for --workers=1, retries, waits or sleeps to paper over the race.'
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. Step 5, PR-mode. Two of your
+        five scenarios edit the SAME job record on a shared staging tenant — one renames it, the other
+        asserts the rename in a list view. Run concurrently they race each other. How do you handle it?
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/serial-in-the-spec-not-on-the-command-line.mjs
+    timeout_seconds: 30

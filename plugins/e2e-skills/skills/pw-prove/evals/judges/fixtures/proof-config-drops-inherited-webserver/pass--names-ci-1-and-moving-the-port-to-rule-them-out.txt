@@ -1,0 +1,35 @@
+The committed proof config spreads `...base`, and **that copies `webServer` in along with
+everything else.** So this proof run would try to boot `pnpm dev` and wait on
+`http://127.0.0.1:3000`. Nothing is listening there — my preview server is on **4173** — and with
+`reuseExistingServer: !process.env.CI` the run would start a *development* server and prove the
+change against it. That is not the built target, so the proof would be about the wrong artifact.
+
+**The migration, once, in place:**
+
+```ts
+export default defineConfig({
+  ...base,
+  webServer: undefined,
+  use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' },
+})
+```
+
+One key added after the spread. Everything else in the file is left exactly as it was, and the
+migrated config is **staged with this run** so the next proof does not rediscover the same problem.
+
+**Why dropping Playwright's own readiness wait is safe here:** pw-prove owns the server lifecycle.
+`preflight.mjs` already gated the three bring-up phases — config, build and serve — and the serve
+phase does not report `READY=yes` until the origin answers. Playwright waiting a second time on a
+server it did not start adds nothing.
+
+**What I do not do:**
+
+- I do not edit the project's own `playwright.config.ts`. That file describes how the team runs
+  their tests, and `webServer` is correct there.
+- I do not rewrite or regenerate the proof config wholesale. It exists, it is committed, and ADR 0008
+  says a committed proof config is reused rather than reissued; a one-key migration is the smallest
+  change that fixes it.
+- I do not set `CI=1` to force the already-in-use error into view. That changes behaviour to
+  produce a symptom instead of removing the cause.
+- I do not move the preview server onto port 3000 as a workaround. That leaves the inheritance in
+  place for the next run and silently couples the proof to a port number.

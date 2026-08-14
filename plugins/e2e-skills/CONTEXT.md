@@ -268,3 +268,71 @@ The deterministic PR-mode tail — pw-prove's Step 8: publish the evidence → h
 spec+POM to the PR branch → push → PR comment (creating a PR when none exists) → completion report.
 The report format is the run's exit gate, structurally invalid in PR-mode without its Proof page,
 Mutation, Committed, Pushed and PR comment lines.
+
+# Eval vocabulary
+
+The second half of this glossary. Everything above names part of a proof; everything below names part
+of the **instrument that measures the skill** — the skill-up suite under `skills/pw-prove/evals/`.
+Nothing here describes pw-prove's behaviour, and nothing above is an eval concept. `docs/adr/0018`
+records the runtime the instrument runs on, and why it is not a container.
+
+## Trigger case
+An eval case whose prompt is a **realistic top-of-task request** — the job asked for the way a user
+asks for it, naming no skill. Whether pw-prove loads at all is the measurement, so a case that fails
+to load is a defect in the skill's `description:` frontmatter, *recorded* as one. Its prompt is never
+edited until it loads: that deletes the only signal the case produces. The complement of a
+[behavior case](#behavior-case); every case file declares which it is in `shape:`, and
+`skills/pw-prove/evals/prompt-shapes.md` carries the classification.
+
+## Behavior case
+An eval case whose prompt presupposes **mid-run context** — a step number, a preflight exit code, a
+pasted server log. Nothing about such a prompt would ever trip the skill's trigger, so it opens with
+the [placement line](#placement-line) and a failure is about the body rather than the frontmatter.
+The bulk of the suite: 46 of 50 case files.
+
+## Placement line
+The one sentence that puts a [behavior case](#behavior-case)'s agent inside the skill — *"Load the
+`pw-prove` skill with the Skill tool and follow it."* — leading the first thing the agent is handed.
+One wording, so the mechanism is greppable and no case invents a weaker one. **Role injection is not
+placement**: asserting a persona ("You are pw-prove.") puts no line of the body in context, which is
+what `evals/judges/skill-loaded.mjs` reads, and `b01` carried exactly that through two runs while
+reading NOT LOADED in both.
+
+## Wet case
+An eval case that runs pw-prove against a repository fixture and judges what the run **did** — the
+files it wrote, the server it brought up — rather than what it said. The expensive tier, scoped
+deliberately narrow (one behaviour per case, never a whole proof) so a red verdict names one
+behaviour instead of one of eight steps. Wet cases are why the runtime is `docs/adr/0018`'s `none`:
+their verdicts come from file assertions, and file assertions are what `docker` cannot answer
+truthfully. Each is paired with a [dry case](#dry-case) twin, so a divergence between doing and
+saying is measurable rather than inferred.
+
+## Dry case
+An eval case that puts a prompt to the agent and judges the response text. The bulk of the suite, and
+cheap enough to be the default. It can only ever establish that the skill *describes* the right
+behaviour — a green dry case is not evidence that a run performs it, which is the gap its
+[wet](#wet-case) twin exists to close.
+
+## Trusted core
+The set of cases whose verdicts may be **acted on**: each carries a recorded pass rate from
+[characterization](#characterization), a recorded uplift over running with no skill, and a named
+SKILL.md section it guards. Membership is earned at admission and recorded in the **registry**
+(`skills/pw-prove/evals/REGISTRY.md`) — the one file listing every case with its pass rate, uplift,
+guarded section and status, enforced by nothing. A case file sitting on disk is inventory, not
+coverage: after three batches of triage, #75's re-measurement and #69's two wet cases the core is
+**21** cases of 50 on disk, and a case outside the core is not a weaker guard but no guard at all.
+
+## Characterization
+The measurement that decides whether a case joins the [trusted core](#trusted-core): three runs of
+the same case, admitted only on **3/3** (a guard) or **0/3** (a confirmed defect, which becomes a
+ticket). Anything between is quarantined rather than left active, because a case that flips is a
+random verdict and a green built on one is worse than no reading. A case is *characterized*, never
+merely "passing" — the word carries the n and the strictness with it.
+
+## Blast radius
+The cases a SKILL.md edit obliges you to re-[characterize](#characterization): the ones the registry
+maps to the edited section. **Computed from the registry at the moment of the edit, never declared as
+a list** — there is deliberately no fixed fast tier, because a named tier is a second artifact that
+falls out of sync with the map it was derived from. What this buys is that a re-baseline costs one to
+three cases instead of the whole suite; what it costs is that the registry's section map has to be
+right, which is why it is the registry's load-bearing column.

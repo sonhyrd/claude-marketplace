@@ -1,0 +1,21 @@
+`SERVE_CAUSE=no-log` isn't a verdict about the server — it says the serve phase never read a log, so it couldn't rule out a port shift. The log shows exactly that shift: the server is alive on **3001**, IPv6 loopback (`http://[::1]:3001`). Nothing is wrong with the server; the invocation was missing `SERVER_LOG`.
+
+What I do — re-run the same serve phase, this time pointing it at the log:
+
+```bash
+BASE_URL="http://localhost:3000" SERVER_LOG=/tmp/preview-3000.log \
+  node <skill-base>/scripts/preflight.mjs serve
+```
+
+The poll re-reads the log each round, picks up the announced port 3001, and tries it on every loopback form (which is what handles the `[::1]` bind). Then I take the summary's `BASE_URL=` line — the origin that actually answered, expected `PORT_SOURCE=announced`, `PORT_SHIFTED=true`, `ADDRESS_FAMILY=ipv6` — and carry **that** origin everywhere from here on: the probe, `PLAYWRIGHT_BASE_URL`/whatever the config interpolates, the HAR bind `--origin`, and every runner invocation in Steps 6–7. Each is a fresh environment; setting it in one shell isn't setting it.
+
+Then step 5 of bring-up: curl the literal `webServer.url`/`use.baseURL` string the config resolves to and confirm *that exact string* answers, since it still carries 3000.
+
+What I explicitly do **not** do:
+
+- Poll longer on 3000 — the server already told us it isn't there.
+- Rebuild — the build phase passed; this is a serve-phase read gap.
+- Kill the server to reclaim 3000 — a shifted port the server announced is still my server. Re-allocating and restarting would be fighting my own server's announcement.
+- Re-allocate a fresh free port and restart.
+
+One thing I'd carry into the Step 4 Assumptions block: the port shifted from 3000 to 3001, so something else was on 3000 — worth a line, and worth fingerprinting the served asset paths if any later behavior looks like a sibling worktree's app rather than mine.

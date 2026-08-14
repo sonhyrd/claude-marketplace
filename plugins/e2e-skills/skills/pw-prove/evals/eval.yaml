@@ -1,0 +1,143 @@
+schema_version: v1alpha1
+
+# Runtime is `none` deliberately. The docker runtime cannot see files the agent writes:
+# `expect.files_exist` and judge-level `files_exist` both report "does not exist" for a file
+# that demonstrably exists and is collected into outputs/workspace/. Every wet case would
+# silently fail. See docs/adr/0018. Do not "fix" this back to docker.
+environment:
+    type: none
+
+skills:
+    - source: local_path
+      path: .
+      include: [SKILL.md, "*.md", "scripts/**"]
+
+engine:
+    name: claude_code
+    # The agent UNDER TEST. Judges are separate and stay on sonnet-4-6 (see `judge:`
+    # below and each case file). skill-up has no effort field, so the reasoning
+    # effort that pairs with this model is set as an env var in ../.skill-up.yaml.
+    model:
+        provider: anthropic
+        name: claude-opus-5
+
+cases:
+    files:
+        # The runtime gate. Runs the same judge the post-run sweep runs, so the in-band mechanism
+        # — a script judge reading $EVAL_TRANSCRIPT_PATH under `environment.type: none` — is
+        # exercised by every run rather than trusted. Unknown eval.yaml keys are accepted
+        # silently, so a wiring that is never exercised is a wiring nobody has checked.
+        - evals/cases/gate-skill-loaded.yaml
+        #
+        # `case-1`, `case-2` and `case-3` were repaired onto this same judge by #63 and characterized
+        # beside it, and they are NOT in this list. A realistic "analyse this project's coverage gaps"
+        # request does not trip the trigger, because the `description:` frontmatter advertises nothing
+        # about the Coverage-gap mode the body implements. That is a defect against the frontmatter
+        # (#73, #74) and is never repaired by editing a trigger prompt — their case files stay on
+        # disk, quarantined, until it is fixed. evals/REGISTRY.md has their pass rates.
+        # --- the admitted P0 behaviors ---
+        # Every one is judged by a script under evals/judges/, and every one of those scripts is
+        # covered by a must-PASS / must-FAIL fixture pair in scripts/ci/test-eval-judges.sh. They
+        # were rule_based `output_contains` until #59: a bare substring fires when the model names
+        # the forbidden thing IN ORDER TO REJECT IT, which is what produced seven of the nine
+        # failures in the 2026-08-13 run. Do not reintroduce one over discursive output.
+        #
+        # Every case in this list is admitted on evidence — 3/3 over three iterations AND a non-zero
+        # uplift measured against a baseline that was genuinely skill-free.
+        #
+        # evals/REGISTRY.md is the source of truth for every number: pass rate, uplift, the SKILL.md
+        # section each case guards, and the reason for every case that is NOT here. Do not restate a
+        # figure in this file; a number in two places drifts. #63 took six cases out of this list —
+        # b32-dwell-inline, case-43, case-44, case-30, case-28 and case-48 — rather than leave one as
+        # a permanent red or an unproven guard, and DELETED b49-untrusted-page-content outright for
+        # zero uplift. The registry says which reason applies to which.
+        #
+        # Do not re-add one without re-characterizing it and updating its row. A guard whose pass
+        # rate is a coinflip is what caused a shipped fix to be committed and then reverted.
+        - evals/cases/b01-confirmation-gate.yaml
+        - evals/cases/b05-handoff-stale.yaml
+        - evals/cases/case-50.yaml
+        - evals/cases/case-15.yaml
+        - evals/cases/case-60.yaml
+        # Admitted by #75, once their baseline arms were provably skill-free: both were quarantined
+        # on a `void` uplift, and both measure +1 against a baseline the sweep certifies.
+        - evals/cases/case-28.yaml
+        - evals/cases/case-48.yaml
+        # --- admitted by batch 2 (#64) ---
+        # Thirteen cases were measured; these two are what survived. Both are 3/3 at n=3 with a
+        # non-zero uplift, and both close a coverage gap batch 1 recorded as unreached.
+        #
+        # The other eleven are quarantined and stay OUT of this list. Six of them are 3/3 and would
+        # look admissible from the pass rate alone — their uplift baselines read the skill body off
+        # the host (#75), so there is no difference to read. evals/REGISTRY.md says which reason
+        # applies to which; do not re-add one on the strength of its pass rate.
+        #
+        # Those six were measured on the PRE-#75 runner: this branch was cut before the seal landed,
+        # so their baselines are void by construction rather than by bad luck. They are re-measurable
+        # on the sealed runner, and #78 owns that.
+        - evals/cases/case-11.yaml
+        - evals/cases/case-16.yaml
+        # The suite's first WET case (#69), and the first case of any kind to reference evals/files/.
+        # It is graded on what the run PRODUCED — the `serve.log` a real server wrote, and the port in
+        # it — rather than on what it said, which is why the runtime above is `none` and must stay
+        # `none`. Its dry twin `case-50` guards the same section, it is scoped to ONE phase so a red
+        # verdict names one behaviour, and it is admitted on the same evidence as everything else
+        # here: 3/3 at n=3 with a `+1` uplift over a baseline the sweep certified skill-free.
+        #
+        # Its sibling `w02-auth-cookie-from-app` is NOT here: 3/3 with the skill, but its skill-free
+        # baseline passed one arm in two, so it has no `+1` to be admitted on. REGISTRY.md says why,
+        # and the why is about the fixture rather than about the case.
+        - evals/cases/w01-bringup-own-port.yaml
+        # --- admitted by batch 3 (#65) ---
+        # Twenty-one cases were measured — everything left on disk from `case-33` on. Eleven are
+        # here: 3/3 at n=3 AND a non-zero uplift. Nine had a baseline the sweep certified SKILL-FREE;
+        # `case-38` had a CONTAMINATED baseline first; it was re-measured on a certified SKILL-FREE
+        # one and came back +1. `case-51` was re-measured the same way and its clean baseline PASSED
+        # — zero uplift — so it was RETIRED rather than admitted. See REGISTRY.md, *the direction-safe
+        # reading is not sound*: do not admit a row on a contaminated baseline that merely failed.
+        #
+        # Four of these close holes batch 1 and batch 2 recorded as unguarded: Step 6 ›
+        # Clip-fidelity (case-34/35/37 — "the largest hole batch 1 leaves"), Step 7 › Mutation check
+        # artifact isolation (case-52), Step 7 › the inherited webServer (case-45), and Step 4 ›
+        # Effective viewport's deliberate branch (case-36, the DRY twin of `case-22`, which is void
+        # under #76 and cannot be read until that lands).
+        #
+        # The other ten batch-3 cases are quarantined and stay OUT of this list. Five of them are
+        # 3/3 and would look admissible on pass rate alone — both arms of their uplift run failed,
+        # so there is no difference to read, which is the `case-30` reading. REGISTRY.md says which
+        # reason applies to which.
+        - evals/cases/case-33.yaml
+        - evals/cases/case-34.yaml
+        - evals/cases/case-35.yaml
+        - evals/cases/case-36.yaml
+        - evals/cases/case-37.yaml
+        - evals/cases/case-38.yaml
+        - evals/cases/case-45.yaml
+        - evals/cases/case-46.yaml
+        - evals/cases/case-52.yaml
+        - evals/cases/case-57.yaml
+        # The remaining imported cases stay on disk but OUT of this list until their placeholder
+        # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
+        # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those
+        # cases carry no `criteria:` key at all, so `skill-up validate` rejects them outright.
+    defaults:
+        timeout_seconds: 300
+        max_turns: 10
+    parallelism: 2
+
+# The criteria COUNT is part of an agent_judge's contract, not a free parameter. `agent_judge`
+# scores passed_criteria / total_criteria against a 0.7 default threshold, so a fourth criterion
+# silently loosens the other three from 3/3 to 3/4 — a case can start passing with a criterion it
+# used to have to satisfy. State the count wherever you set criteria, and re-read the threshold
+# before adding one. Every active case uses a `script` judge instead, so this default is a
+# placeholder: one criterion, threshold irrelevant, never expected to be reached.
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6
+    criteria:
+        # 1 criterion. See the note above before adding a second.
+        - Cases define their own judges; this default is never expected to be reached.
+
+report:
+    formats: [json, html]
+    artifacts: [transcript]

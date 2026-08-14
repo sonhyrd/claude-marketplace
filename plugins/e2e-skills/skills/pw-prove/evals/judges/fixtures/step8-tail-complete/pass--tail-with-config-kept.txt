@@ -1,0 +1,42 @@
+**What remains before I may emit the Complete report** — all of it unasked; Step 8 is
+deterministic and has no questions in it.
+
+1. **Hygiene sweep.**
+   - `rm -rf test-results playwright-report` — the litter, after the publish, since the clips live
+     in test-results/.
+   - Remove `/tmp/pw-prove-mutation`, the mutation run's isolated output.
+   - Stop the preview server this run started (port 4173) and record it in the report.
+   - Revert the codegen churn: `git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'`.
+   - Prove the HAR clean: `node <skill-base>/scripts/har-scrub.mjs e2e/consent.api.har --verify`.
+2. **Commit** the spec + POM + scrubbed `api.har` to `feat/consent-banner`.
+3. **Push**, then `gh pr comment 88` with the share link, the AC table and the mutation verdict.
+
+One thing the sweep must **not** touch: `playwright.proof.config.ts`. It is a deliverable, not
+litter — deletion applies to the `test-results/`/`playwright-report/` litter and to any legacy
+`.pw-prove.proof.config.*` throwaway, and nothing else.
+
+```
+## pw-prove — Complete
+
+Generated:
+- <POM path> (new | modified)
+- <spec path> (new, N scenarios)
+- <api.har path> (scoped **/api/**, scrubbed at capture, --verify clean)
+
+ACs: <N proven> / <M total>
+Preview server: stopped (port 4173)
+e2e-reviewer: N P0 (fixed), N P1
+Tests: N passed · hermetic (carve-outs: none | <list>)
+Mutation: RED (spec guards the change)
+Clips: N inspected — <what each frame showed>
+Proof page: https://clips.paulsjob.ai/share/abc123 (N chapters)
+Committed: <short-sha> on feat/consent-banner
+Pushed: origin/feat/consent-banner
+PR comment: <url>
+```
+
+A report missing any of those lines is structurally invalid in PR-mode.
+
+**Prose-argument run on a branch with no PR:** identical, except there is no PR to comment on yet.
+Push the branch, run `gh pr create` with the AC table as the body, and post the comment on the pull
+request that creates.

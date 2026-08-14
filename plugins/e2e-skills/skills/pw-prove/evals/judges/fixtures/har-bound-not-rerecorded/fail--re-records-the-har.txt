@@ -1,0 +1,8 @@
+Nothing matched, so the recording must be wrong. I will re-record the HAR through the probe against port 5199, and hand-write mocks for the two reads the probe cannot reach.
+
+```bash
+node <skill-base>/scripts/har-scrub.mjs bind e2e/reports.api.har --out .pw-prove/reports.api.har --origin http://localhost:5199
+export PW_PROVE_HAR=.pw-prove/reports.api.har
+```
+
+If that still aborts I will remove notFound: 'abort' so the calls fall through.

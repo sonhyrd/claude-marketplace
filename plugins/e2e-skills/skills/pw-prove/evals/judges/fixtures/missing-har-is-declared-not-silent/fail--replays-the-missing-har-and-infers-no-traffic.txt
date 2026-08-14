@@ -1,0 +1,11 @@
+The HAR is not on disk, which tells me this surface is static — it makes no API calls, so there is
+nothing to determinise.
+
+I keep the replay wired up anyway so the spec is ready when a recording does land:
+
+```ts
+await page.routeFromHAR('tests/e2e/reports.api.har', { notFound: 'abort' });
+```
+
+I write routeFromHAR pointing at that path and move on to Step 6. Nothing needs to go in the
+Assumptions block: an absent HAR for a surface with no traffic is the expected state, not a deviation.
