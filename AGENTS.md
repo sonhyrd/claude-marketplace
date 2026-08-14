@@ -24,9 +24,25 @@ local marketplace (`~/work/claude-marketplace`) as an editable git subtree at
 list. This repo is the source of truth for skill *content* only, and propagation is one-directional:
 
 ```bash
-# from the MARKETPLACE checkout, never from here
-git subtree pull --prefix plugins/e2e-skills <path-or-url-to-this-repo> main --squash
+# from the MARKETPLACE checkout, never from here.
+# <ref> is the branch that actually carries the content — NOT reflexively `main`.
+git subtree pull --prefix plugins/e2e-skills <path-or-url-to-this-repo> <ref> --squash
 ```
+
+Two things make a propagation land, and doing only the first is how a runtime ends up serving a
+version nobody shipped:
+
+- **Pull from the branch that has the content.** `main` here lags whatever working branch the change
+  lives on until that branch merges; #70 found the runtime serving pw-prove `0.1.0` because #55 had
+  pulled `main` while the fix sat on a working branch. Check the skill's `metadata.version` in the
+  subtree after pulling; if it did not move, you pulled the wrong ref.
+- **A directory marketplace serves whatever is checked out.** Manifest commits on a branch nobody has
+  checked out are not live, and a later branch switch silently reverts them — that is how #55/#56's
+  `1.1.0`/`1.2.0` bumps existed in the marketplace repo while the host served `1.0.0`. Land the bump
+  on the marketplace's own `main` and get it into the checked-out branch, then verify against
+  `~/.claude/plugins/cache/<marketplace>/<plugin>/`: it should hold the new version directory and no
+  superseded ones. The cache is keyed by version string, so a bump that never moved re-serves the
+  stale copy from cache no matter what is on disk.
 
 There is deliberately no plugin manifest, no host adapter, no installer script and no git hook here.
 Manifest, marketplace and cross-host parity are not concepts this repo has. Changes you make land in

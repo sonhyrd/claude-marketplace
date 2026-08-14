@@ -141,6 +141,18 @@ new work, and mistaking it for one wastes a full wait cycle. Ack with
 The output is also a **stream of concatenated JSON objects**, not one document — `json.load` dies
 with "Extra data". Parse with a `raw_decode` loop.
 
+### Coordinator note: a worker's `question` expires, and merging is when you will miss it
+
+A `question` blocks its sender and **times out** — #70's timed out after 15 minutes while the
+coordinator was resolving a merge, so the worker chose its own recommended option unsupervised. It
+chose correctly, which is luck, not a process.
+
+The failure mode is structural: a merge-back is the longest stretch a coordinator spends not
+checking mail, and it is also when live workers are most likely to hit something that needs a
+decision. So **check the mailbox before starting a merge and again before the post-merge gate**,
+rather than only when waiting for the next `worker_done`. Waiting is not the only state in which
+mail arrives; it is merely the only one in which you were looking.
+
 ## Baseline
 
 - **Commit**: `aae5e82` · **Measured**: 2026-08-05
