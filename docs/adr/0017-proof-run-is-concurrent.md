@@ -118,7 +118,9 @@ maximum.* in red beneath them, nothing occluded and nothing mid-transition.
 individual test faster — N browsers share the machine, so each one is slower, and a clip records for
 as long as its test holds a page open. Mean clip length goes from 12–15 s serialised to 18–20 s at
 four workers, and to 31–33 s at six. The payoff hold is a fixed 2.5 s at the end, so every added
-second is lead-in a reviewer watches before the beat. That is a fair trade at the default and stops
+second is lead-in a reviewer watches before the beat. At six workers a six-scenario proof would
+concatenate to roughly three minutes of film where the serialised run gives about seventy-five
+seconds, and the extra two minutes are all dead air before each payoff. That is a fair trade at the default and stops
 being one above it — which is the same place the wall-clock gain stops, so one boundary serves both.
 
 Trade-offs weighed. **Pinning `workers: 1` in the committed proof config** was rejected in 0010 and is

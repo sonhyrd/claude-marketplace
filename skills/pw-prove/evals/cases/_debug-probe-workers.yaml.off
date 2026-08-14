@@ -19,7 +19,9 @@ judge:
     success:
         - turn_response_contains:
             turn: 1
-            contains_any: ["NO --workers flag"]
+            # #67 removed the flag string from SKILL.md; the comment above the proof-run
+            # command now reads "Concurrency is Playwright's to choose".
+            contains_any: ["Concurrency is Playwright's to choose"]
         - turn_response_not_contains:
             turn: 2
             not_contains: ["--workers"]

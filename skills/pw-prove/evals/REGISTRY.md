@@ -124,7 +124,7 @@ skill-free.
 | `b05-handoff-stale` | behavior | Step 4 › *Assumptions* › the Handoff line (and the Step-2 handoff verdict it reports) | **3/3** | **+1** (clean) | **active** |
 | `case-15` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (baseline read the body and failed anyway — direction safe, reading not clean; #75) | **active** |
 | `case-50` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** → **3/3** after #66 (see below) | **+1** (clean) | **active** |
-| `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** | **+1** (clean) | **active** |
+| `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
 | `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
 | `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | 3/3 | **void** — baseline read the body off the host (#75) | quarantined |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
@@ -194,6 +194,17 @@ de-contaminated. A previous session committed a prose fix for the same finding, 
 and reverted it (`d717e05` → `2b04ade`). **#67 is claimed as a legibility change and as nothing
 else**: the skill named the retired flag six times while instructing the agent never to write it, and
 steering by prohibition keeps the forbidden string inside the agent's reachable context.
+
+**Measured after the change: `3/3`, and the sweep read `LOADED via skill-tool, skill-body`** — the
+prediction above, held. Measured **twice**, and both are recorded because the second is the one that
+counts: the first n=3 ran against a draft whose diagnostic bullet said only "one serialised re-run of
+the same spec, unchanged", which code-review caught as **unexecutable** — the sole serialisation
+mechanism the body names is a spec edit, which that sentence forbids. The bullet now names `-j 1`,
+Playwright's own shorthand for the same option, scoped to the diagnostic and to nothing else, and the
+n=3 was re-run over the final text. Both runs are 3/3, LOADED, uncontaminated. The rate did not move because it had nowhere to move to, and nothing here
+says the removal reads better to a model than the prohibition did; the suite cannot see that. Uplift
+was **not** re-measured: #75 is in flight against a baseline-contamination defect that affects uplift
+rather than pass-rate characterization, so the `+1` from #63 stands unrevised.
 
 ### The retirements, each with its reason
 
