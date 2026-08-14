@@ -72,10 +72,11 @@ function findSkillMd(fromTranscript) {
   return '';
 }
 
-const argv = process.argv.slice(2).filter((a) => a !== '--baseline');
+const rawArgv = process.argv.slice(2);
+const argv = rawArgv.filter((a) => a !== '--baseline');
 const BASELINE =
   /^(1|true|yes)$/i.test(process.env.PWPROVE_EXPECT_SKILL_FREE ?? '') ||
-  process.argv.includes('--baseline');
+  rawArgv.length !== argv.length;
 
 const transcriptPath = process.env.EVAL_TRANSCRIPT_PATH || argv[0] || '';
 
@@ -170,6 +171,21 @@ if (rawTranscript.trimStart().startsWith('[')) {
 // job, which is the run this instrument is trying to produce.
 const DENIAL = /has been denied|denied by your permission settings|Permission to use \w+ with/i;
 
+// The discount applies only to a result that is WHOLLY a refusal. Matching the phrase anywhere in
+// the result would hand the transcript a way to hide the body: one Bash call whose output carries
+// both real body lines and the string "has been denied" would take the entire result out of the
+// scan — down the exact route (Bash) the deny rules cannot close and this gate is the only cover
+// for. So every substantial string in the result has to be the refusal; short scaffolding
+// (`tool_result`, an id, `true`) does not count against it.
+function isWhollyDenial(strings) {
+  const substantial = strings.filter((s) => s.trim().length > 24);
+  if (substantial.length === 0) return false;
+  // A refusal is one line. Anything with a second line is a result that merely MENTIONS a refusal.
+  if (!substantial.every((s) => !s.includes('\n') && DENIAL.test(s))) return false;
+  // And whatever else it is, a result carrying a line of the body under test is never discounted.
+  return !strings.some((s) => marks.some((m) => s.includes(m)));
+}
+
 // And a `find` LISTING is not a read either. Under the deny rules an agent that cannot open a copy
 // will still enumerate the disk, so the path lands in a tool result while not one line of the file
 // does. What separates the two is the shape of the result: a listing is paths and nothing else.
@@ -224,7 +240,7 @@ for (const line of lines) {
         if (b?.type === 'tool_result') {
           const bucket = [];
           collect(b, bucket);
-          if (bucket.some((s) => DENIAL.test(s))) denied.add(b.tool_use_id);
+          if (isWhollyDenial(bucket)) denied.add(b.tool_use_id);
           else structural.push(...bucket.filter((s) => !isPathListing(s)));
           continue;
         }

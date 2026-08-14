@@ -77,8 +77,9 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **n=3, trigger cases** | the same, `--include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | the pass rate of the three trigger cases #63 repaired and activated. 9 runs |
 | **uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` | one `with_skill` and one `without_skill` arm per case, over the 10 cases still active at that point — the 13 that started the batch, minus `b32` (0/3), `case-43` (0/3) and `case-44` (2/3), which the characterization run had already disqualified. 20 runs |
 | **uplift re-measurement (#75)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --include-case-name case-28 --include-case-name case-48` | the two `void` rows, re-taken through the sealed runner. 8 runs over three attempts — see *What the sealed re-measurement cost* below |
+| **`case-28` re-characterization (#75)** | `bash scripts/run-evals-isolated.sh --iteration 3 --include-case-name case-28` | a clean pass rate to replace the 3/3 whose iteration 3 was CONTAMINATED. 3 runs, **3/3, all three iterations LOADED and clean** |
 
-76 agent runs in total.
+79 agent runs in total.
 
 **The gate held, with one exception.** Across the 39 characterization runs the skill under test
 reached the model every time (`LOADED via skill-tool, skill-body`), 0 not loaded. **One run was
@@ -127,6 +128,12 @@ assuming:
 3. **Third attempt**, with `$TMPDIR` censused and those stale installs denied: SKILL-FREE, and the
    baseline failed its judge → `+1`.
 
+`case-28`'s **pass rate** was re-taken as well, and for a reason that would otherwise have been
+carried over unexamined: the 3/3 it was admitted on came from the characterization run whose
+iteration 3 is recorded above as CONTAMINATED. A 3/3 containing an iteration this instrument would
+now fail is not a clean 3/3. Re-run through the sealed runner it is 3/3 with all three iterations
+LOADED and clean, so the row stands on its own evidence rather than on the earlier run's.
+
 Twice the deny rules held against everything the census had seen and the agent still found a copy the
 census had not. Read that as the standing risk of `environment.type: none` (`docs/adr/0018`) and as
 the reason the sweep — not the deny list — is the binding assertion.
@@ -151,7 +158,7 @@ instrument certified as skill-free.
 | `case-15` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (baseline read the body and failed anyway — direction safe, reading not clean; #75) | **active** |
 | `case-50` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** | **+1** (clean) | **active** |
 | `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** | **+1** (clean) | **active** |
-| `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
+| `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
 | `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |

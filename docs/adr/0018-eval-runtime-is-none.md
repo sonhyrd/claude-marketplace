@@ -88,7 +88,7 @@ pw-prove`, and two of them were about to be retired for zero uplift on a baselin
 skill. One of thirty-nine *with-skill* runs reached a marketplace plugin path the same way, by
 search rather than by injection — so this is a property of the runtime, not of the baseline arm.
 
-Two things follow, and neither is optional:
+Three things follow, and none of them is optional:
 
 - **Reduce, then assert.** `scripts/run-evals-isolated.sh` censuses the host copies and writes one
   Claude Code deny rule per copy into the isolated home. Deny rules are enforced under

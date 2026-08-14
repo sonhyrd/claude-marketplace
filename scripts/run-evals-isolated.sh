@@ -73,6 +73,11 @@ GATE="$SKILL_DIR/evals/judges/skill-loaded.mjs"
 # — and made a deny rule over `skills/pw-prove/**` impossible, because it would have covered the
 # workspace too. Keyed by the checkout's directory name so two worktrees do not share one.
 WORKSPACE="${PWPROVE_EVAL_WORKSPACE:-${TMPDIR:-/tmp}/pw-prove-workspace/$(basename "$REPO_ROOT")}"
+# Both guards that keep the workspace out of a checkout — the census exclusion and
+# assert_workspace_outside — are prefix matches, so a relative path or a trailing slash would walk
+# straight past them. Normalise once, here, rather than at each comparison.
+case "$WORKSPACE" in /*) ;; *) WORKSPACE="$PWD/$WORKSPACE" ;; esac
+while [ "$WORKSPACE" != "/" ] && [ "${WORKSPACE%/}" != "$WORKSPACE" ]; do WORKSPACE="${WORKSPACE%/}"; done
 
 MODE=run
 SWEEP_DIR=""
@@ -107,7 +112,15 @@ scrub_path() {
 # that names a different skill is not a copy of the body under test and must not be denied.
 is_pw_prove_body() {
   [ -f "$1" ] || return 1
-  head -20 "$1" | grep -qE '^name:[[:space:]]*pw-prove[[:space:]]*$'
+  # Process substitution rather than a pipe: `grep -q` exits at the matching line, `head` takes
+  # SIGPIPE, and under `set -o pipefail` the pipeline returns non-zero — dropping a real copy out of
+  # the census for succeeding too early.
+  grep -qE '^name:[[:space:]]*pw-prove[[:space:]]*$' < <(head -20 "$1")
+}
+
+# usage: bundle_of <path to a .../skills/pw-prove/SKILL.md> — the bundle root that carries it.
+bundle_of() {
+  dirname "$(dirname "$(dirname "$1")")"
 }
 
 # usage: skill_copies <exclude-prefix> <root>...
@@ -168,7 +181,7 @@ deny_rules() {
       *)
         # Any other copy is a whole bundle nobody in this run has business reading — not its body,
         # not its scripts, not the eval fixtures beside it. `<bundle>/skills/pw-prove/SKILL.md`.
-        bundle="$(dirname "$(dirname "$(dirname "$copy")")")"
+        bundle="$(bundle_of "$copy")"
         printf 'Read(/%s/**)\n' "$bundle"
         ;;
     esac
@@ -199,7 +212,7 @@ assert_workspace_outside() {
   local ws="$1"; shift
   local copy bundle
   for copy in "$@"; do
-    bundle="$(dirname "$(dirname "$(dirname "$copy")")")"
+    bundle="$(bundle_of "$copy")"
     case "$ws/" in
       "$bundle"/*)
         echo "run-evals-isolated.sh: the workspace $ws is inside $bundle, which holds a copy of the body under test" >&2
@@ -341,7 +354,7 @@ run_census() {
   local r c
   ROOTS=(); COPIES=(); RULES=()
   while IFS= read -r r; do [ -n "$r" ] && ROOTS+=("$r"); done < <(census_roots | sort -u)
-  while IFS= read -r c; do [ -n "$c" ] && COPIES+=("$c"); done < <(skill_copies "$WORKSPACE" "${ROOTS[@]}")
+  while IFS= read -r c; do [ -n "$c" ] && COPIES+=("$c"); done < <(skill_copies "$WORKSPACE" ${ROOTS[@]+"${ROOTS[@]}"})
   # A census that finds nothing is not a clean machine — this repository's own copy is right there,
   # by definition. It is a census that stopped working, and proceeding on one would report an
   # isolated run that nothing checked.
@@ -352,7 +365,7 @@ run_census() {
     echo "run-evals-isolated.sh: the census did not find $mine — it cannot see copies of the body, refusing to run" >&2
     return 1
   fi
-  while IFS= read -r r; do [ -n "$r" ] && RULES+=("$r"); done < <(deny_rules "$REPO_ROOT" "${COPIES[@]}")
+  while IFS= read -r r; do [ -n "$r" ] && RULES+=("$r"); done < <(deny_rules "$REPO_ROOT" ${COPIES[@]+"${COPIES[@]}"})
   assert_workspace_outside "$WORKSPACE" ${COPIES[@]+"${COPIES[@]}"} || return 1
   return 0
 }
@@ -596,6 +609,7 @@ echo "-- isolated home: $ISO (no plugins, no user skills, no host settings) --"
 echo "-- PATH: $dropped marketplace plugin entr(ies) dropped --"
 echo "-- host copies of the body: ${#COPIES[@]} found, ${#RULES[@]} deny rule(s) written (Read-route only; Bash is covered by the sweep) --"
 echo "-- workspace: $WORKSPACE (outside every checkout) --"
+echo "-- suite: $EVAL_YAML --"
 
 # --config and --output-dir are passed explicitly: skill-up discovers .skill-up.yaml from $PWD only
 # (it carries the reasoning effort the model under test is meant to run at), and the default
@@ -606,9 +620,18 @@ echo "-- workspace: $WORKSPACE (outside every checkout) --"
 EXTRA=()
 if args_have_baseline "$@"; then
   p="$(requested_parallelism "$@")"
-  if [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; then
-    echo "run-evals-isolated.sh: --baseline with --parallelism $p — a concurrent with_skill arm installs the body where the baseline arm can read it, refusing" >&2
-    exit 1
+  if [ -n "$p" ]; then
+    # A value this cannot read is refused rather than ignored: falling through would leave the run
+    # concurrent AND unflagged, which is the failure this check exists to prevent.
+    case "$p" in
+      1) ;;
+      *[!0-9]*|'')
+        echo "run-evals-isolated.sh: --baseline with --parallelism '$p' — not a number, refusing rather than guessing" >&2
+        exit 1 ;;
+      *)
+        echo "run-evals-isolated.sh: --baseline with --parallelism $p — a concurrent with_skill arm installs the body where the baseline arm can read it, refusing" >&2
+        exit 1 ;;
+    esac
   fi
   # The suite's own `cases.parallelism` is 2, so serialising has to be said out loud rather than
   # left to the default.
