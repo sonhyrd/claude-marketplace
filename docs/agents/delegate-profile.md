@@ -90,13 +90,36 @@ Treat a lone drift-smoke failure as suspect, not as a verdict: **re-run before a
 second failure, or one that names a file the branch touched, is real and must be investigated.
 Do not add a retry to the script to make this go away — that would hide the real case too.
 
-### Dispatch note: `worker-release` does not know low-level dispatches
+### Dispatch note: the whole `worker-*` family does not know low-level dispatches
 
 Workers launched with the engine argv go through `terminal create --command …` plus
 `orchestration dispatch --inject`, not `worker-start`. `worker-release --dispatch <id>` therefore
 returns `dispatch_not_found` for them even though `dispatch-show` reports the dispatch `completed`,
 and `terminal close` returns `runtime_error`. Settled panes stay idle and harmless; do not chase
 them, and never reach for `orchestration reset` to tidy up while other workers are live.
+
+**`worker-show` and `worker-read` fail the same way** (measured 2026-08-14), so there is no
+`worker-*` progress signal on this dispatch path at all. To check whether a low-level worker is
+alive, use the two things that do work:
+
+```bash
+orca terminal read --terminal <handle> --json      # result.terminal.status + result.terminal.tail
+git -C <worktree> log --oneline <integration-head>..HEAD
+```
+
+Note the pane text is at `result.terminal.tail`, **not** `result.lines` — reading the wrong key
+returns empty and looks exactly like a dead worker.
+
+### Coordinator note: `check --wait` replays unacked mail, and prints more than one JSON object
+
+`check --wait` returns every delivery that has not been acknowledged, so a coordinator that
+processes a `worker_done` without acking gets the same message again on the next wait — with
+`replayed: true` and a fresh `deliveryId`. Read those two fields **first**; a replayed batch is not
+new work, and mistaking it for one wastes a full wait cycle. Ack with
+`check --ack <delivery_id> --wait …` in the same call that starts the next wait.
+
+The output is also a **stream of concatenated JSON objects**, not one document — `json.load` dies
+with "Extra data". Parse with a `raw_decode` loop.
 
 ## Baseline
 
