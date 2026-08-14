@@ -97,6 +97,12 @@ cases:
         # baseline passed one arm in two, so it has no `+1` to be admitted on. REGISTRY.md says why,
         # and the why is about the fixture rather than about the case.
         - evals/cases/w01-bringup-own-port.yaml
+        # Re-admitted by #71, which is the first row here whose uplift was taken at n=3 PER ARM
+        # rather than n=1: 3/3 with the skill against 0/3 skill-free, every baseline arm certified
+        # SKILL-FREE. It went out at 0/3 in #63 on four wrong-unit defects in its own judge, and two
+        # of those four made the BASELINE pass — read literally, the admission rule would have
+        # deleted the case for zero uplift. REGISTRY.md, *`b32` was four defects, not one*, has them.
+        - evals/cases/b32-dwell-inline.yaml
         # --- admitted by batch 3 (#65) ---
         # Twenty-one cases were measured — everything left on disk from `case-33` on. Eleven are
         # here: 3/3 at n=3 AND a non-zero uplift. Nine had a baseline the sweep certified SKILL-FREE;

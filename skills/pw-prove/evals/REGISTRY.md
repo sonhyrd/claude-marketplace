@@ -34,8 +34,10 @@ regression in the skill and is retired.
 
 **A case that is not admitted has no uplift row, and that is the rule rather than a hole.** Uplift is
 measured *at admission*; measuring it for a case whose pass rate already disqualifies it would spend
-a run to learn nothing. `case-44`, `case-2`, `b32`, `case-43`, `case-1` and `case-3` therefore read
+a run to learn nothing. `case-44`, `case-2`, `case-43`, `case-1` and `case-3` therefore read
 `not measured`, and each is re-measured when its ticket is fixed and it is put back up for admission.
+`b32` is the worked example of that last clause: #71 fixed its judge, re-characterized it 0/3 → 3/3,
+and measured the uplift it had never had.
 
 It is only sound under isolation. skill-up's own `benchmark.enabled` baseline skips its **own**
 install and not an ambient marketplace plugin, so every baseline taken before #58 measured a
@@ -208,12 +210,12 @@ instrument certified as skill-free.
 | `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
 | `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
 | `w01-bringup-own-port` | behavior (**wet**) | Step 3 › *Bring the environment up* — bullet 1, the packaged serve script that hard-codes a port | **3/3** | **+1** (clean; the discriminating half is the gate, see #69 below) | **active** |
+| `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** → **3/3** (re-characterized under #71, once its judge stopped reading a tool preamble as turn 1) | **+1** (clean, and measured at **n=3 per arm** rather than n=1: 3/3 with the skill against **0/3** skill-free, all three baseline arms certified SKILL-FREE by the sweep) | **active** |
 
 | `w02-auth-cookie-from-app` | behavior (**wet**) | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* — the ladder as written code | **3/3**, and 2/2 more with-skill arms over the final fixture | **unstable** — 1 of 2 skill-free baseline arms passed, so there is no `+1` to admit on and no clean `0` to retire on | quarantined — see #69 below |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
 | `case-2` | trigger | frontmatter `description:` — a "plan the tests for this route" request | **2/3** (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined |
-| `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** | not measured | quarantined — **#71** |
 | `case-43` | behavior | Step 7 › *Verify* — the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** | not measured | quarantined — **#72** |
 | `case-1` | trigger | frontmatter `description:` — a coverage-gap request over a POM repo | **0/3** NOT LOADED (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined — **#73** |
 | `case-3` | trigger | frontmatter `description:` — a coverage-gap request over a flat-spec repo | **0/3** NOT LOADED (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined — **#74** |
@@ -465,8 +467,8 @@ measured, 10 were admitted, 10 are quarantined and 1 was deleted.** The wet pair
 quarantined.
 
 Across all three batches plus the wet pair, and after #76 re-characterized `case-22` and `case-23`:
-**64 triaged — 26 active, 23 quarantined, 15 deleted**, over **49** case files on disk. The
-arithmetic closes twice: 26 + 23 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
+**64 triaged — 27 active, 22 quarantined, 15 deleted**, over **49** case files on disk. The
+arithmetic closes twice: 27 + 22 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
 64. **Every case file on disk carries a registry row**, and every case that did not make it is
 recorded with a reason rather than a shrug. That is the expected shape: the goal is a core whose
 verdicts can be believed, not a high keep rate.
@@ -742,16 +744,63 @@ script being rewritten, and both would.
 
 Neither is a plain "the skill is wrong" result, and the tickets say so.
 
-- **`b32` (#71) is a judge defect.** Turn 1 of every iteration says exactly what the judge reports it
-  never says. `dwell-inline-per-test.mjs` takes turn 1 to be `turns[0]`, the first assistant *text
-  block* — and since #60 gave every behavior case a placement line, that block is a one-line preamble
-  (`I'll load the skill first.`) emitted before the Skill tool call. The answer is in `turns[1]`.
-  Its committed fixtures cannot see this: they are hand-authored with one block per turn.
+- **`b32` (#71) is a judge defect — four of them, and #71 fixed all four.** Turn 1 of every iteration
+  said exactly what the judge reported it never says. `dwell-inline-per-test.mjs` took turn 1 to be
+  `turns[0]`, the first assistant *text block* — and since #60 gave every behavior case a placement
+  line, that block is a one-line preamble (`I'll load the skill first.`) emitted before the Skill tool
+  call. The answer is in `turns[1]`. Its committed fixtures could not see this: they are hand-authored
+  with one block per turn. See *`b32` was four defects, not one* below for the other three, which the
+  re-characterization surfaced one at a time — each hidden behind the one before it. With all four
+  fixed the case is **3/3 at n=3 with a clean `+1`** and is back in the active list.
 - **`case-43` (#72) is a real defect in the emitted artifact.** The diagnosis is right every time, and
   the command block drops the `bind` subcommand — `har-scrub.mjs <har> --out … --origin …` runs in
   scrub mode and binds nothing. Contributing factor: none of the case's premise artifacts exist on
   disk under `environment.type: none`, so the answer degrades into a stop report and the command
   becomes illustrative.
+
+### `b32` was four defects, not one (#71)
+
+Repairing the turn segmentation did not make the case green; it made the *next* wrong-unit defect
+visible, and so on three more times. Each one was invisible while the one in front of it was firing,
+which is why "fix the judge and re-run" had to be "fix, re-run, read the transcript, fix again". All
+four are one family — a judge matching on the wrong unit — and all four now carry a fixture pair.
+
+| # | The unit it got wrong | What it did to a correct answer |
+|---|---|---|
+| 1 | **block vs. turn** | `turns[0]` was the placement-line preamble, so turn 1 "never" said `inline` — 0/3 |
+| 2 | **clause vs. actor** | the skill's own doc comment says "eleven sessions hit it and four agents worked around it by joining the two lines"; a correct answer quotes that history *to reject it*, and the judge read the citation as the plan — 2 of 3 iterations |
+| 3 | **phrase vs. paraphrase** | `collapse (?:it )?onto one line` matched a one-word object only, so "either collapse each pair onto one line or brace the block" — verbatim the churn this case guards — scored the **skill-free** arm a PASS |
+| 4 | **substring vs. verdict** | "If I ran something and told you it passed, I'd be inventing the result" matched on `passed`, so a baseline arm that explicitly *declined* to give a verdict was graded as reaching one |
+
+Defects 3 and 4 are the ones worth remembering, because they ran the other way: they made the
+BASELINE pass. Read literally, the admission rule would then have retired and deleted `b32` for zero
+uplift — a case retired for a defect in its own judge. A near-zero uplift is now treated as a reason
+to read the baseline transcript before acting on the number, not as a verdict on its own.
+
+Two further scope errors were fixed inside the same judge, and both belong to the family: a refusal
+binds its **clause**, not its sentence (`rather than guessing` was excusing a churn proposal three
+clauses later), and a `would` that NEGATED excuses as rejection is a *commitment* when the subject is
+the answerer (`I'd resolve that by … collapsing each pair onto one line`).
+
+The sweep judge carried a fifth, of the same family and one level up — see
+*A fingerprint the prompt supplied is not contact with the body* below.
+
+### A fingerprint the prompt supplied is not contact with the body (#71)
+
+`b32`'s first uplift run reported **BASELINE DIRTY** on an arm whose agent had said "there is no
+`pw-prove` skill available", never opened a file, and reached nothing. The case prompt quotes
+`if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);` verbatim to set the scene, and at
+58 characters that is a fingerprint line of the body — so `skill-loaded.mjs` read the case handing
+the model a line as the model having read the body. `skill-loaded.mjs`'s own comment had asserted the
+opposite ("No case prompt does"), which had stopped being true.
+
+It over-counts in both directions: the same line would have reported `skill-body` — LOADED — in an
+arm that loaded nothing. The gate now discounts any fingerprint that appears in the case's own
+prompt, and says how many it discounted. The discount is prompt prose only: a skill **injection**
+also arrives as a `role: user` record (`isMeta`, `Base directory for this skill: …`, then the whole
+body), and exempting that would blind the gate to the route contamination actually takes. The
+existing `pass--body-injected-without-skill-tool` fixture went red the moment the first draft did
+exempt it, which is the fixture set doing its job.
 
 ### `case-44` and `case-2` are unstable for a reason worth naming
 
@@ -1043,11 +1092,11 @@ case away — and #78 is that fix arriving. Three of the four are now guarded (`
 on a measured zero uplift. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29`
 and is blocked on #77 instead.
 
-**Twenty-three sections are guarded by twenty-six active cases.** Three sections carry a second guard
+**Twenty-three sections are guarded by twenty-seven active cases.** Four sections carry a second guard
 beside the first, and none of them moved the count of guarded sections. One is *wet* —
-`w01-bringup-own-port` beside `case-50`; one is the pair `case-8` and `case-5` over Step 8; and one is
+`w01-bringup-own-port` beside `case-50`; one is the pair `case-8` and `case-5` over Step 8; one is
 `case-22` beside `case-36` over the `deliberate:` viewport branch, a fixture-staging case beside its
-dry twin. That is deliberate: a second case on a section already covered is a second axis, not new
+dry twin; and one is `b32-dwell-inline` beside `case-35` over the Step-6 clip-fidelity audit. That is deliberate: a second case on a section already covered is a second axis, not new
 coverage, and reading it as new coverage would shrink the gap table without closing anything in it.
 
 1. the frontmatter `description:` trigger surface — `gate-skill-loaded`
@@ -1065,7 +1114,7 @@ Batch 3 added ten, and they cluster where the earlier batches were thinnest — 
 
 11. Step 5 › *HAR-first mocking* — a recon pass that produced no HAR — `case-33`
 12. `code-rules.md` § *Clip Fidelity* — the filming law — `case-34`
-13. Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 — `case-35`
+13. Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 — `case-35`, with `b32-dwell-inline` (#71) as the second axis on the same section: `case-35` guards the gate's exit code, `b32` guards the authoring shape the gate checks for — the dwell inline in each `test()` body rather than hoisted into a helper
 14. Step 4 › *Effective viewport* — the `deliberate:` branch — `case-36`, with `case-22` (#76) as the second axis on the same section: `case-36` states the premise in prose, `case-22` stages the config as a repo fixture and must read the `viewport:` key off disk
 15. Step 7 › the clip inspection — diagnose, fix, re-film once — `case-37`
 16. Step 7 › the frame extract — exit 6 is a skip — `case-38`

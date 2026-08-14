@@ -138,6 +138,10 @@ if (marks.length === 0) {
 // write would blind the gate to the very route contamination takes. The cost is that a case prompt
 // naming a plugin path would read as contaminated. No case prompt does; an injected plugin body is
 // the thing we cannot afford to miss.
+//
+// For the FINGERPRINT question specifically there is a third bucket, `seeded` — see it below. A
+// prompt that quotes a line of the body is not a plugin path: it is the case handing the model a
+// mark, and counting it as contact is the over-count #71 found on `b32-dwell-inline`.
 const prose = [];
 const structural = [];
 
@@ -215,6 +219,19 @@ const toolUses = [];
 // an attempt, and its argument is not evidence that anything was read.
 const attempted = new Map();
 const denied = new Set();
+// A THIRD bucket: the case's own prompt. Every turn of a case file is enqueued and then replayed as
+// a plain user message, and a line the case HANDED the model is not evidence about what the model
+// READ. `b32-dwell-inline`'s turn 1 quotes `if (process.env.PW_PROVE_CLIP) await
+// page.waitForTimeout(2500);` verbatim to set the scene, which is a 58-character line of the body —
+// so its baseline arm read BASELINE DIRTY on a transcript whose agent said "there is no `pw-prove`
+// skill available" and never opened a file (#71). The over-count runs the other way too: the same
+// line would have reported `skill-body` in an arm that loaded nothing.
+//
+// This is the provenance half of the wrong-unit family the rest of #71 is about: presence of a mark
+// is not contact with the body, and where it came from decides which. The bucket is deliberately
+// only user PROSE — a tool result and a skill injection both arrive as non-assistant content too,
+// and exempting those would blind the gate to the route contamination actually takes.
+const seeded = [];
 let records = 0;
 for (const line of lines) {
   if (!line.trim()) continue;
@@ -224,6 +241,21 @@ for (const line of lines) {
 
   const msg = rec?.message;
   const content = msg?.content;
+  // The enqueued prompt, before it is replayed as a user message. Claude Code writes one
+  // `queue-operation` record per turn of the case file.
+  if (rec?.type === 'queue-operation' && typeof rec.content === 'string') seeded.push(rec.content);
+  // …and its replay as a user message. Two guards keep an INJECTION out of this bucket, because an
+  // injected body arrives as a user record too and exempting it would blind the gate outright:
+  // `isMeta`, which is how Claude Code marks content the user did not type, and the injection
+  // wrapper itself. A tool result is excluded by the same reasoning and is handled below.
+  if (msg?.role === 'user' && rec?.isMeta !== true) {
+    const texts = typeof content === 'string'
+      ? [content]
+      : Array.isArray(content) && !content.some((b) => b?.type === 'tool_result')
+        ? content.filter((b) => b?.type === 'text' && typeof b.text === 'string').map((b) => b.text)
+        : [];
+    for (const t of texts) if (!/<(?:skill|system-reminder|command-name|local-command)\b/i.test(t)) seeded.push(t);
+  }
   if (msg?.role === 'assistant' && typeof content === 'string') {
     // skill-up's own serialization: the assistant's turn arrives as one flat string, and all of it
     // is prose the assistant wrote.
@@ -276,6 +308,21 @@ if (records === 0) {
 
 const all = prose.concat(structural);
 
+// Only a fingerprint the case did NOT supply is evidence about what the model read. `marks` stays
+// whole for the denial and deny-rule discounts above, which are conservative on purpose: a refusal
+// message that carries ANY line of the body is not wholly a refusal, whoever wrote the line.
+const seedText = seeded.join('\n');
+const evidence = marks.filter((m) => !seedText.includes(m));
+const seedSupplied = marks.length - evidence.length;
+if (evidence.length === 0) {
+  console.error(`FAIL: every fingerprint line of ${skillMdPath} appears in this case's own prompt`);
+  console.error('   the gate would report the prompt back as the body — there is nothing left to detect with');
+  process.exit(1);
+}
+const fingerprintNote = () =>
+  `   (fingerprinted ${evidence.length} line(s) of ${skillMdPath} against ${records} transcript record(s)` +
+  `${seedSupplied ? `; ${seedSupplied} discounted as supplied by the case prompt` : ''})`;
+
 // --- contamination --------------------------------------------------------------------------------
 // A marketplace install lives under ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/ and
 // its marketplaces checkout beside it. Either path in the structural half means the run saw a
@@ -318,7 +365,7 @@ const namespaced = toolUses.filter(
 // measurement the arm exists to take, so it outranks the path it took to get there, which the
 // verdict names on its own line rather than dropping.
 if (BASELINE) {
-  const dirty = marks.find((m) => all.some((s) => s.includes(m)));
+  const dirty = evidence.find((m) => all.some((s) => s.includes(m)));
   if (dirty) {
     console.error('FAIL: BASELINE DIRTY — the without_skill arm carried the body under test');
     console.error(`   line of the body in context: "${dirty.slice(0, 88)}${dirty.length > 88 ? '…' : ''}"`);
@@ -355,7 +402,7 @@ if (BASELINE) {
   if (toolUses.some((t) => t?.name === 'Skill' && String(t?.input?.skill ?? '') === 'pw-prove')) {
     console.log('   the Skill tool was called and no body followed it — the expected baseline shape');
   }
-  console.log(`   (fingerprinted ${marks.length} line(s) of ${skillMdPath} against ${records} transcript record(s))`);
+  console.log(fingerprintNote());
   process.exit(0);
 }
 
@@ -369,13 +416,13 @@ if (toolUses.some((t) => t?.name === 'Skill' && String(t?.input?.skill ?? '') ==
 // the file. Deliberately NOT "a tool argument mentioned pw-prove/SKILL.md" — a Read that errored, or
 // a grep whose pattern names the path, mentions it without a single line of the body reaching the
 // model, and reporting that as LOADED is the same over-count this gate exists to end.
-const hit = marks.find((m) => all.some((s) => s.includes(m)));
+const hit = evidence.find((m) => all.some((s) => s.includes(m)));
 if (hit) routes.push('skill-body');
 
 if (routes.length === 0) {
   console.error('FAIL: NOT LOADED — the SKILL.md under test never reached the model in this case');
   console.error('   no Skill tool call, and no line of the body under test anywhere in the transcript');
-  console.error(`   (fingerprinted ${marks.length} line(s) of ${skillMdPath} against ${records} transcript record(s))`);
+  console.error(fingerprintNote());
   process.exit(1);
 }
 

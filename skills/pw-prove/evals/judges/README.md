@@ -130,3 +130,43 @@ last one.
 
 An absent input is never a pass. skill-up only *warns* when it has no transcript to hand over, so a
 judge that shrugged there would report a vacuous pass on every case in the run.
+
+### A turn is a conversation turn, never an assistant block
+
+A judge that numbers turns must group **every assistant block between two user prompts** and judge
+the joined text — by the `turn` field where skill-up's serialization carries one, otherwise by the
+count of user prompts seen. A record with `role: "user"` whose content is a `tool_result` is not a
+user prompt and must not open a turn.
+
+The reason is #60: every behavior case now opens with a placement line, so the agent's first
+assistant block is routinely a one-line preamble ("I'll load the skill first.") emitted before it
+calls the Skill tool, with the substantive answer in a later block of the *same* turn. Indexing
+blocks reads that preamble as turn 1. That is what made `b32-dwell-inline` score 0/3 in the
+2026-08-14 run on three answers that were correct in every particular (#71) — the sixth appearance
+of one defect, a judge matching on the wrong unit: lexical (#59), positional (#63), under a list
+header (#66), across a hard line wrap (#64), title-versus-body (#77), block-versus-turn (#71).
+
+Audited at #71, and the standing inventory — every judge that touches `$EVAL_TRANSCRIPT_PATH`:
+
+| Judge | What it treats as its unit | Verdict |
+|---|---|---|
+| `dwell-inline-per-test.mjs` | turn 1 and the last turn, grouped by `turn` field / user-prompt count | fixed at #71; was `turns[0]`/`turns[n-1]` over assistant blocks |
+| `skill-loaded.mjs` | the whole transcript — every string and tool record, no index | not affected |
+| `auth-code-drives-app-entry.mjs` | workspace artifacts; the transcript is only proof a run happened | not affected |
+| `served-on-allocated-port.mjs` | workspace artifacts; same existence check | not affected |
+
+Every other judge reads `$EVAL_FINAL_MESSAGE` alone, which is one turn by construction and cannot
+carry this defect. A judge that grows a second turn joins the table above.
+
+### A mark the prompt supplied is not contact with the body
+
+`skill-loaded.mjs` fingerprints long lines of the SKILL.md under test and looks for them in the
+transcript. A case prompt that quotes one of those lines hands the model the mark, and counting it
+reports LOADED for an arm that loaded nothing — or, in a `--baseline` run, BASELINE DIRTY for an arm
+that read nothing. `b32-dwell-inline`'s prompt quotes `if (process.env.PW_PROVE_CLIP) await
+page.waitForTimeout(2500);` to set the scene, which is exactly that (#71). The gate now discounts
+fingerprints that appear in the case's own prompt and reports the count it discounted.
+
+The discount is **prompt prose only**. A skill injection arrives as a `role: user` record too —
+`isMeta`, opening `Base directory for this skill: …` and carrying the whole body — and exempting
+that would blind the gate to the route contamination actually takes.
