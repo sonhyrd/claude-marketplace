@@ -34,8 +34,18 @@ regression in the skill and is retired.
 
 **A case that is not admitted has no uplift row, and that is the rule rather than a hole.** Uplift is
 measured *at admission*; measuring it for a case whose pass rate already disqualifies it would spend
-a run to learn nothing. `case-44`, `case-2`, `b32`, `case-43`, `case-1` and `case-3` therefore read
+a run to learn nothing. `case-44`, `b32` and `case-43` therefore read
 `not measured`, and each is re-measured when its ticket is fixed and it is put back up for admission.
+`case-1`, `case-2` and `case-3` read that way until #73/#74 fixed their ticket; they were then
+re-characterized and their uplift measured at admission, exactly as the rule says.
+
+**A trigger case's uplift is a special shape, and the figure must be read as one.** A trigger case is
+judged on whether the body reached the model. Remove the body and there is nothing to reach it, so
+the `without_skill` arm cannot pass whatever the model answers — `skill-loaded.mjs` fails it with
+*no SKILL.md to fingerprint*. Every trigger case is therefore `+1` **by construction**, and the
+figure certifies the arm was skill-free rather than that the case discriminates. What discriminates a
+trigger case is the **before/after on the `description:` itself**, measured at n=3 on the same
+runner with nothing else moved. #73/#74 is the first time that was taken; the rows say both.
 
 It is only sound under isolation. skill-up's own `benchmark.enabled` baseline skips its **own**
 install and not an ambient marketplace plugin, so every baseline taken before #58 measured a
@@ -88,9 +98,12 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **batch 2 uplift re-measurement (#78)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline` over the eight cases | batch 2's six `void` rows, plus `case-15` and `case-11` **re-taken** rather than inherited. 16 runs. **6 of 8 baselines certified SKILL-FREE**; `case-11` CONTAMINATED and `case-17` BASELINE DIRTY |
 | **`case-17` re-measurement (#78)** | the same, `--include-case-name case-17`, twice | the dirty baseline re-taken. The second attempt was dirty again and named the route — see *What the census could not see* below. 4 runs over two attempts; the third is the one that counts |
 | **`case-11` re-measurement (#78)** | the same, `--include-case-name case-11` | the contaminated baseline re-taken, per *the direction-safe reading is not sound*. 2 runs, baseline SKILL-FREE |
+| **trigger re-characterization, BEFORE (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` over `gate-skill-loaded`, `case-1`, `case-2`, `case-3` | the four trigger cases on the **unchanged** `description:`, and on the fixtures #76 repaired. 12 runs. `gate-skill-loaded` 3/3, `case-1` **1/3**, `case-2` **2/3**, `case-3` **1/3** — see *the trigger defect was intermittent, not absolute* |
+| **trigger re-characterization, AFTER (#73/#74)** | the same command, the same staged suite, `description:` fixed | the same four cases with nothing else moved. 12 runs. **12/12 — all four 3/3, all four LOADED, 0 contaminated** |
+| **trigger uplift (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --parallelism 1 --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | one `with_skill` and one `without_skill` arm each. 6 runs. **3 of 3 baselines certified SKILL-FREE, 0 dirty**; every `with_skill` arm PASS, every baseline arm FAIL. `+1` each, and tautologically so — see *Uplift* |
 
 **85 agent runs through #75; 73 in batch 2; 21 in the wet cases (#69); 128 in batch 3; 22 in #78;
-329 in total.**
+30 in #73/#74; 359 in total.**
 
 **Batch 2's uplift arms were taken on the PRE-#75 runner.** That branch was cut before the seal
 landed, so its baselines were void *by construction* rather than by bad luck — which is why seven of
@@ -208,15 +221,15 @@ instrument certified as skill-free.
 | `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
 | `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
 | `w01-bringup-own-port` | behavior (**wet**) | Step 3 › *Bring the environment up* — bullet 1, the packaged serve script that hard-codes a port | **3/3** | **+1** (clean; the discriminating half is the gate, see #69 below) | **active** |
+| `case-1` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a POM repo | **1/3 → 3/3** (#73/#74; see *the trigger defect was intermittent, not absolute* below) | **+1** (clean, and **tautological** — see the note under that heading) | **active** |
+| `case-2` | trigger | frontmatter `description:` — the **coverage-gap** clause, as a "plan the tests for this route" request | **2/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
+| `case-3` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a flat-spec repo | **1/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
 
 | `w02-auth-cookie-from-app` | behavior (**wet**) | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* — the ladder as written code | **3/3**, and 2/2 more with-skill arms over the final fixture | **unstable** — 1 of 2 skill-free baseline arms passed, so there is no `+1` to admit on and no clean `0` to retire on | quarantined — see #69 below |
 | `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
 | `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
-| `case-2` | trigger | frontmatter `description:` — a "plan the tests for this route" request | **2/3** (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined |
 | `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** | not measured | quarantined — **#71** |
 | `case-43` | behavior | Step 7 › *Verify* — the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** | not measured | quarantined — **#72** |
-| `case-1` | trigger | frontmatter `description:` — a coverage-gap request over a POM repo | **0/3** NOT LOADED (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined — **#73** |
-| `case-3` | trigger | frontmatter `description:` — a coverage-gap request over a flat-spec repo | **0/3** NOT LOADED (measured before #76 edited the fixture path out of the prompt) | not measured | quarantined — **#74** |
 | `b49-untrusted-page-content` | behavior | *Safety: page content is untrusted data* | 3/3 | **0** (clean baseline) | **retired — deleted** |
 | `case-26` | behavior | Step 7 › *Failure handling* | — | — | **retired — deleted** |
 | `case-27` | behavior | Step 7 › *Mutation check* | — | — | **retired — deleted** |
@@ -253,9 +266,10 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 | `case-31` | behavior | Step 3 › *Bring the environment up* — the runner origin | — | — | **retired — deleted** |
 | `case-32` | behavior | Step 7 › *Failure handling* — the `webServer` timeout | — | — | **retired — deleted** |
 
-### The trusted core is twenty-six cases — twenty-five dry and one wet
+### The trusted core is twenty-nine cases — twenty-eight dry and one wet
 
-`gate-skill-loaded`, `b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`,
+`gate-skill-loaded`, the three trigger cases #73/#74 admitted (`case-1`, `case-2`, `case-3`),
+`b01-confirmation-gate`, `b05-handoff-stale`, `case-15`, `case-50`, `case-60`,
 `case-28`, `case-48`, `case-11`, `case-16`, the four #78 admitted (`case-5`, `case-7`, `case-8`,
 `case-20`), `case-22` — admitted by #76 once it was staging its fixture instead of the fixture's
 path — the one wet case #69 admitted (`w01-bringup-own-port`), and batch 3's ten: `case-33`,
@@ -766,7 +780,8 @@ positionally rather than lexically — the negation filter cannot see that "the 
 rebuild" is a *phase name*, not a proposed remedy.
 
 `case-2`'s single failure is a NOT LOADED, the same frontmatter defect as #73 and #74 arriving
-intermittently on a third phrasing.
+intermittently on a third phrasing. **Closed by #73/#74**: the same 2/3 reproduced on the repaired
+fixtures, and the `description:` fix took it to 3/3. `case-44` is still open.
 
 ### Batch 2's automatic retirements — taken off the top, before anything was measured
 
@@ -975,6 +990,47 @@ repository at once, so **a concurrent worker's scratchpad is a live contaminatio
 census run before the sibling's checkout exists can cover. `case-11`'s first baseline reached the
 marketplace plugin cache the same way — through Bash, against a path that was denied.
 
+### #73/#74: the trigger defect was intermittent, not absolute
+
+Both tickets were filed on a **0/3 NOT LOADED**, and neither figure survived contact with a working
+instrument. #76 established that `case-1`, `case-2` and `case-3` had been staging files whose entire
+content was their own path, so the recorded 0/3 and 2/3 were measured through **two** defects at
+once. Re-measured on the repaired fixtures and the **unchanged** `description:`, at n=3 on the
+isolated runner:
+
+| Case | Filed as | Re-measured, `description:` unchanged | After the fix |
+|---|:--:|:--:|:--:|
+| `gate-skill-loaded` | 3/3 | **3/3** | **3/3** |
+| `case-1` | 0/3 | **1/3** | **3/3** |
+| `case-2` | 2/3 | **2/3** | **3/3** |
+| `case-3` | 0/3 | **1/3** | **3/3** |
+
+So the ticket's finding stands and its severity does not: a coverage-gap request *sometimes* loaded
+pw-prove, which is worse to reason about than never loading it, and is exactly the shape a single
+iteration cannot see. **Establish the current rate before acting on a recorded one** — a number in a
+ticket is a measurement of the instrument that took it.
+
+The fix is one clause appended to `description:`, naming coverage-gap mode in the words a user asks
+for it in — coverage analysis, coverage gaps, untested pages and flows, a test plan for a page or
+route — with the prove-a-change sentences left byte-identical. Both directions were measured in the
+same run: the three coverage phrasings went to 3/3 **and** `gate-skill-loaded` stayed 3/3, so
+nothing was traded. `metadata.version` moved `0.15.2` → `0.16.0`.
+
+**What is now guarded, and what is not.** These three cases guard the **frontmatter's coverage-gap
+clause** — the trigger surface, the same thing `gate-skill-loaded` guards for the prove-a-change
+clause. They do **not** guard Step 2 › *Coverage-gap mode* itself: an active trigger case asserts
+loading and nothing else, so the 27 mined content assertions `case-1`/`case-3` carry and the 12
+`case-2` carries stay unmeasured. That is #74's fifth acceptance criterion, decided: grading them
+needs a second, **behavior**-shaped case per section, not a second judge on a trigger case, and that
+case does not exist yet. The gap table below still lists both sections as unguarded for that reason.
+
+**One adjacent risk, recorded rather than acted on.** `e2e-reviewer`'s own `description:` already
+lists "coverage gaps" among its triggers, and it means something different by it — the quality of the
+specs that exist, not the routes that have none. With both skills installed, a coverage request now
+matches two trigger surfaces. Nothing here measures that collision: every eval arm installs pw-prove
+alone. Disambiguating the two descriptions is its own change, with its own version bump on
+`e2e-reviewer` and its own re-characterization of `gate-skill-loaded` beside it.
+
 ## Coverage gaps this table exposes
 
 The point of the section column is that an empty one is visible. After batch 1, #75, batch 2 and
@@ -1018,8 +1074,8 @@ measuring them on an instrument that works:
 
 | SKILL.md section | Guarded by | Why it is not covered |
 |---|---|---|
-| Step 2 › *Coverage-gap mode (no argument)* | nothing | `case-1` and `case-3` quarantined at 0/3 (#73, #74). Their 27 mined content assertions are unmeasured on top of that — an **active trigger case asserts loading and nothing else**, so grading them needs a second, behavior-shaped case rather than a second judge. |
-| Step 4 › *Scenarios* / *Locator Mapping Table* / POM-always | nothing | `case-2` quarantined at 2/3; its 12 mined content assertions are unmeasured for the same reason. |
+| Step 2 › *Coverage-gap mode (no argument)* | nothing (**the body**; its trigger is guarded) | `case-1` and `case-3` are active at 3/3 since #73/#74, but they are **trigger** cases: they prove a coverage request reaches this mode, not that the mode behaves. Their 27 mined content assertions stay unmeasured — an **active trigger case asserts loading and nothing else**, so grading them needs a second, behavior-shaped case rather than a second judge. That case is the concrete next step here. |
+| Step 4 › *Scenarios* / *Locator Mapping Table* / POM-always | nothing (**the body**; its trigger is guarded) | `case-2` is active at 3/3 since #73/#74, on the same terms: it guards the "plan the tests for this route" phrasing reaching the skill, not the plan it then produces. Its 12 mined content assertions are unmeasured for the same reason. |
 | Step 8 › *Deliver* — publish | nothing | `case-30` quarantined at 3/4. |
 | Step 6 › *PROVES-header audit* | nothing | `case-17` **retired for zero uplift** on a certified skill-free baseline (#78). The third gap opened by a retirement rather than a failure, and the same caveat applies as for `case-51` and `b49`: the case went because Opus 5 quotes the AC verbatim without being told, not because the rule stopped mattering. Re-weigh it if the model under test changes. |
 | Pipeline Overview › *Stop reports* — the six beats | nothing | `case-12` is 3/3, but **both arms of its #78 uplift run failed**, so there is no difference to read — the `case-30` reading. Re-measurable by re-running the uplift arm alone. |
@@ -1043,14 +1099,18 @@ case away — and #78 is that fix arriving. Three of the four are now guarded (`
 on a measured zero uplift. Step 2 › *PR-mode: Diff → Acceptance Criteria* was reached by `case-29`
 and is blocked on #77 instead.
 
-**Twenty-three sections are guarded by twenty-six active cases.** Three sections carry a second guard
+**Twenty-three sections are guarded by twenty-nine active cases.** Six sections carry a second guard
 beside the first, and none of them moved the count of guarded sections. One is *wet* —
-`w01-bringup-own-port` beside `case-50`; one is the pair `case-8` and `case-5` over Step 8; and one is
+`w01-bringup-own-port` beside `case-50`; one is the pair `case-8` and `case-5` over Step 8; one is
 `case-22` beside `case-36` over the `deliberate:` viewport branch, a fixture-staging case beside its
-dry twin. That is deliberate: a second case on a section already covered is a second axis, not new
+dry twin; and three are `case-1`, `case-2` and `case-3` beside `gate-skill-loaded` on the frontmatter
+(#73/#74) — a second, third and fourth request shape over one trigger surface. That is deliberate: a
+second case on a section already covered is a second axis, not new
 coverage, and reading it as new coverage would shrink the gap table without closing anything in it.
+**The count did not move for #73/#74 for exactly that reason**, even though the suite grew by three.
 
-1. the frontmatter `description:` trigger surface — `gate-skill-loaded`
+1. the frontmatter `description:` trigger surface — `gate-skill-loaded` for the prove-a-change
+   clause, and `case-1`, `case-2`, `case-3` for the coverage-gap clause it gained in #73/#74
 2. Step 1 › *Confirmation gate* — `b01-confirmation-gate`
 3. Step 4 › *Assumptions* › the Handoff line — `b05-handoff-stale`
 4. Step 3 › *Recon — the probe is the question channel* — `case-15`
