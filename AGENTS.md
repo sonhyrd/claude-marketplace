@@ -213,12 +213,13 @@ records the occasion, not the derivation: it can only make somebody look.
 
 **pw-prove is evaluated by the `skill-up` CLI, and that suite is the skill's eval
 surface.** There is exactly one eval format for this skill; the `evals.json` predecessor
-was mined and retired in #61. The surface is seven things:
+was mined and retired in #61. The surface is eight things:
 
 | Path | What it is |
 |---|---|
-| `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **49 on disk, 33 active** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
+| `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults. Installs pw-prove **alone** |
+| `skills/pw-prove/evals/eval.collision.yaml` | The **two-skill arm** (#81), identical to `eval.yaml` except that its `skills:` list installs pw-prove **and** e2e-reviewer. Its three cases are judged on *which* skill a request reached, which no single-skill arm can ask. Run it by name with `PWPROVE_EVAL_YAML=…` |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **52 on disk, 33 active in `eval.yaml` and 3 in `eval.collision.yaml`** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`, which copies the directory's **contents** to the workspace **root** — so a prompt says "your current working directory", never "evals/files/x/". **`context.files` is `{workspace_path: INLINE CONTENT}`** (established from skill-up's `internal/evaluator/fixtures.go`, #76): the value is written verbatim as the file's body, so `p: p` stages a one-line file containing its own path and the case answers a different question. `scripts/ci/test-case-shapes.sh` fails on all three mistakes. Note also that a fixture written in a didactic voice is read by the skill-free baseline arm too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
@@ -267,6 +268,15 @@ plugin needs both its cache **and** an `enabledPlugins` entry in `settings.json`
 home carries neither, which is why the route was refused in the run that found it. `docs/adr/0018`
 carries the probe table.
 
+That rule form has one edge, measured by #81 when a suite first installed a second skill: a plugin id
+that is a **prefix of a skill name** takes the skill with it. `Skill(e2e:*)` blocks a bare
+`e2e-reviewer` — measured both ways against the live runtime — so the two-skill arm was, at first,
+measuring a run whose neighbour skill could never load. The runner now reads which skills the suite
+installs and denies a colliding namespace **skill by skill**, enumerated from the plugin's own
+install; every other namespace keeps the wide rule, so `eval.yaml`'s rule set is unchanged. Installing
+a second skill **from the working tree, through the suite** is not a breach of the seal: the seal is
+against copies the runner did not put there, and a suite's own `skills:` list is the measurement.
+
 Afterwards the runner sweeps every retained transcript through
 `skills/pw-prove/evals/judges/skill-loaded.mjs` and prints one verdict per case **arm** — LOADED (and
 by which route), NOT LOADED, or CONTAMINATED. A contaminated case fails the sweep, so isolation is
@@ -289,7 +299,15 @@ not contact, the same distinction #71 drew for tool arguments.
 Note skill-up's config discovery is `$PWD`-only, so `.skill-up.yaml` is ignored without complaint
 unless you are in `skills/pw-prove/` or pass it as `--config`. The runner handles this for you.
 
-Six things to know before you touch any of it:
+Seven things to know before you touch any of it:
+
+- **A question that spans two skills needs an arm that installs two skills.** `eval.yaml` installs
+  pw-prove alone, so nothing in it can see one skill's `description:` claiming another's words —
+  which is how #73/#74 shipped a coverage clause that collided with `e2e-reviewer`'s and measured
+  green. `eval.collision.yaml` is that arm, its cases are judged by `evals/judges/routes-to-*.mjs` on
+  *which* skill a request reached, and a `Skill(<plugin-id>:*)` deny rule can silently take the
+  second skill with it (see the isolation section above). When you widen either skill's
+  `description:`, run this suite as well as the trigger cases.
 
 - **Every case declares a `shape:`, and the shape decides what a prompt may say.** A `trigger` case
   carries a realistic top-of-task request and never names the skill — whether pw-prove loads is the

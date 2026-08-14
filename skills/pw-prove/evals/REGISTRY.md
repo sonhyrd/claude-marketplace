@@ -108,10 +108,13 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **trigger uplift (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --parallelism 1 --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | one `with_skill` and one `without_skill` arm each. 6 runs. **3 of 3 baselines certified SKILL-FREE, 0 dirty**; every `with_skill` arm PASS, every baseline arm FAIL. `+1` each, and tautologically so — see *Uplift* |
 | **`case-43` attribution (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3`, then the same `--baseline` | the same case with its premise staged as a `repo_fixture` and its prompt otherwise untouched, to see whether the missing `bind` survived the staging. **It did not, in any of six with-skill arms.** 3 + 12 runs |
 | **`case-43` re-characterization (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --iteration 3`, twice | the repaired case — premise staged, prompt asking for the commands. **3/3 and 3/3 with the skill, 0/3 and 0/3 skill-free, six of six baseline arms certified SKILL-FREE.** 24 runs |
+| **collision arm, BEFORE (#81)** | `PWPROVE_EVAL_YAML=skills/pw-prove/evals/eval.collision.yaml bash scripts/run-evals-isolated.sh --iteration 3` | the first arm in this suite's history with **two** skills installed, on the **unchanged** descriptions. 9 runs (6 + 3, the ambiguous case added after the first pair returned clean). **3/3, 3/3, 3/3 — no collision observed.** A further 6 runs were spent before these on a judge that could not load: see *a judge is copied alone* |
+| **collision arm, AFTER (#81)** | the same command, both `description:` fields disambiguated | the same three cases with nothing else moved. 9 runs. **9/9, 0 contaminated** — the wording repair costs the routing nothing |
+| **trigger re-characterization (#81)** | `bash scripts/run-evals-isolated.sh --iteration 3 --include-case-name gate-skill-loaded --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | the #73/#74 blast radius after editing the frontmatter both cases guard. 12 runs. **12/12 — all four 3/3, 4/4 LOADED, 0 contaminated** |
 | **`case-43` confirmation (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3` | the pass rate taken **in-band against the final judge**, so the admitted 3/3 is not only a re-judge of arms recorded against an earlier one. 3 runs, **3/3, 3/3 LOADED** |
 
 **85 agent runs through #75; 73 in batch 2; 21 in the wet cases (#69); 128 in batch 3; 22 in #78;
-30 in #73/#74; 42 in #72; 5 in #77; 406 in total.**
+30 in #73/#74; 42 in #72; 5 in #77; 36 in #81; 442 in total.**
 
 **Batch 2's uplift arms were taken on the PRE-#75 runner.** That branch was cut before the seal
 landed, so its baselines were void *by construction* rather than by bad luck — which is why seven of
@@ -233,6 +236,9 @@ instrument certified as skill-free.
 | `case-1` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a POM repo | **1/3 → 3/3** (#73/#74; see *the trigger defect was intermittent, not absolute* below) | **+1** (clean, and **tautological** — see the note under that heading) | **active** |
 | `case-2` | trigger | frontmatter `description:` — the **coverage-gap** clause, as a "plan the tests for this route" request | **2/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
 | `case-3` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a flat-spec repo | **1/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
+| `case-81-untested-routes` | trigger (**collision arm**) | frontmatter `description:` — pw-prove's coverage clause **against e2e-reviewer's**, an untested-routes request | **3/3** before the wording repair, **3/3** after (#81) | **+1** by construction, and the discriminating before/after is **flat** — see *the collision was in the text, not in the behaviour* | **active** in `eval.collision.yaml` |
+| `case-81-spec-quality` | trigger (**collision arm**) | frontmatter `description:` — e2e-reviewer's, and the pw-prove clause that must NOT swallow it | **3/3** before, **3/3** after (#81) | as above | **active** in `eval.collision.yaml` |
+| `case-81-ambiguous-coverage` | trigger (**collision arm**) | frontmatter `description:` — the bare phrase *"coverage gaps"*, which both skills claimed | **3/3** before, **3/3** after (#81) | as above | **active** in `eval.collision.yaml` |
 | `case-43` | behavior | Step 7 › *Verify* — item 1b, the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** → **3/3** (re-characterized under #72, once the premise it asserted was actually on disk and three judge defects were repaired) | **+1** (**n=3 per arm**: 3/3 with the skill against **0/3** skill-free, and again on a second independent run — six baseline arms, all six certified SKILL-FREE) | **active** |
 
 
@@ -490,10 +496,11 @@ measured, 10 were admitted, 10 are quarantined and 1 was deleted.** The wet pair
 quarantined.
 
 Across all three batches plus the wet pair, and after #76 re-characterized `case-22` and `case-23`:
-**64 triaged — 33 active, 16 quarantined, 15 deleted**, over **49** case files on disk (#72 moved
-`case-43`, #77 moved `case-29` and #82 moved `case-53` from quarantined to active). The arithmetic
-closes twice: 33 + 16 + 15 = 64, and 21 + 20 + 21 + 2 = 64; and 49 on disk + 15 deleted =
-64. **Every case file on disk carries a registry row**, and every case that did not make it is
+**67 triaged — 36 active, 16 quarantined, 15 deleted**, over **52** case files on disk (#72 moved
+`case-43`, #77 moved `case-29` and #82 moved `case-53` from quarantined to active; #81 added the
+three collision cases, which are active in `eval.collision.yaml` rather than in `eval.yaml`). The
+arithmetic closes twice: 36 + 16 + 15 = 67, and 21 + 20 + 21 + 2 + 3 = 67; and 52 on disk + 15
+deleted = 67. **Every case file on disk carries a registry row**, and every case that did not make it is
 recorded with a reason rather than a shrug. That is the expected shape: the goal is a core whose
 verdicts can be believed, not a high keep rate.
 
@@ -1331,12 +1338,64 @@ loading and nothing else, so the 27 mined content assertions `case-1`/`case-3` c
 needs a second, **behavior**-shaped case per section, not a second judge on a trigger case, and that
 case does not exist yet. The gap table below still lists both sections as unguarded for that reason.
 
-**One adjacent risk, recorded rather than acted on.** `e2e-reviewer`'s own `description:` already
-lists "coverage gaps" among its triggers, and it means something different by it — the quality of the
-specs that exist, not the routes that have none. With both skills installed, a coverage request now
-matches two trigger surfaces. Nothing here measures that collision: every eval arm installs pw-prove
-alone. Disambiguating the two descriptions is its own change, with its own version bump on
-`e2e-reviewer` and its own re-characterization of `gate-skill-loaded` beside it.
+**One adjacent risk, since acted on by #81 — and the arm now exists.** `e2e-reviewer`'s own
+`description:` also listed "coverage gaps" among its triggers and meant something different by it:
+the quality of the specs that exist, not the routes that have none. Nothing here could measure that,
+because every arm in `eval.yaml` installs pw-prove alone. #81 built the arm that can — a second suite,
+`evals/eval.collision.yaml`, identical to this one except that its `skills:` list installs **both**
+bodies — and settled the ownership: **an untested-routes request is pw-prove's, a spec-quality
+request is e2e-reviewer's, and the bare phrase "coverage gaps" is pw-prove's.** Both descriptions now
+say so and each names the other as the neighbour case (`pw-prove` 0.17.0 → 0.18.0, `e2e-reviewer`
+1.9.0 → 1.10.0). What that arm measured is below, and the headline is that it did not find what it
+was built to find.
+
+### the collision was in the text, not in the behaviour
+
+Three trigger prompts, none naming a skill, run with both skills installed, judged on **which** skill
+the request reached: an untested-routes audit, a spec-quality review, and the bare unqualified phrase
+*"find the coverage gaps in our E2E tests"* over a fixture where either reading is real work. On the
+**unchanged** descriptions — the collided ones — all three came back 3/3, each request reaching
+exactly one skill and the right one. On the repaired descriptions, 9/9. The before/after is flat.
+
+So the honest statement of this ticket's result is: **the two `description:` fields did overlap in
+their words, and the host did not route on the overlap.** The repair removes a claim `e2e-reviewer`
+cannot honour and gives each skill a neighbour pointer; it is a durability change, and it was not
+observed to fix a live misrouting. Anyone reading this later should not cite #81 as evidence that
+description collisions do not matter — three phrasings at n=3 on one model is what was measured, and
+the three that were measured are the three named above.
+
+The instrument's red is real even though no run produced one. `routes-to-pw-prove.mjs` and
+`routes-to-e2e-reviewer.mjs` each carry a must-FAIL fixture for **COLLISION** (both skills reached
+the model, exit 4) and for **WRONG OWNER** (only the neighbour did, exit 3), checked at the process
+boundary by `scripts/ci/test-eval-judges.sh`. A judge that cannot go red proves nothing; these can,
+and the fixtures are where that is shown.
+
+### the isolation seal denied the run its own second skill
+
+The first attempt at the arm measured nothing, and the reason is worth keeping. `e2e-reviewer` was
+invoked by the agent and came back `Skill execution blocked by permission rules` — from the runner's
+**own** deny rules. #83 writes one `Skill(<plugin-id>:*)` rule per installed plugin, this host has a
+marketplace plugin whose id is `e2e`, and that id is a **prefix** of the skill name `e2e-reviewer`.
+Measured both ways in an isolated home against the live runtime: with `Skill(e2e:*)` present the bare
+`e2e-reviewer` call is blocked; with it replaced by the enumerated `Skill(e2e:e2e-reviewer)`,
+`Skill(e2e:pw-prove)`, `Skill(e2e:playwright-debugger)` the same call is served. Invisible for the
+whole life of the single-skill suite, because nothing else this runner installs is named after a
+plugin id.
+
+`skill_deny_rules` now denies a colliding namespace **skill by skill**, enumerated from the plugin's
+own install, and leaves every non-colliding namespace on the wide rule — so `eval.yaml`'s rule set is
+byte-identical to what every earlier measurement carried. The suite says which skills it installs;
+the runner reads that from the suite rather than being told.
+
+### a judge is copied alone
+
+Six agent runs were spent before any of the above on a judge that could not start: the routing core
+lived in `judges/lib/skill-routing.mjs` and each judge imported it. skill-up copies **the judge file
+and nothing else** to a temp directory before running it, so the import resolved to nothing and every
+case failed with `ERR_MODULE_NOT_FOUND` — a red that says nothing about the skill. `judges/README.md`
+already said this; the core is now duplicated verbatim into both judges, with
+`scripts/ci/test-eval-judges.sh` comparing the copies, exactly as it does for `offenders()` and the
+wet judges' workspace preamble.
 
 ## Coverage gaps this table exposes
 
