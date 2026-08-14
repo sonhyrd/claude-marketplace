@@ -177,8 +177,15 @@ const DENIAL = /has been denied|denied by your permission settings|Permission to
 // scan — down the exact route (Bash) the deny rules cannot close and this gate is the only cover
 // for. So every substantial string in the result has to be the refusal; short scaffolding
 // (`tool_result`, an id, `true`) does not count against it.
+//
+// A real tool_use_id is 30 characters (`toolu_01EngPMVf8ECsBeRkp4DaUD3`), so the length threshold
+// alone does NOT hold it back — and #69's first baseline run is where that showed: a denied
+// `ls -d ~/.claude/plugins/cache/*/*/*/` was read as contamination because its own id defeated the
+// discount. Every fixture here was hand-authored with `t1`-shaped ids, which is exactly why no
+// fixture could see it. Ids are named rather than measured now.
+const TOOL_ID = /^toolu_[A-Za-z0-9_-]+$/;
 function isWhollyDenial(strings) {
-  const substantial = strings.filter((s) => s.trim().length > 24);
+  const substantial = strings.filter((s) => s.trim().length > 24 && !TOOL_ID.test(s.trim()));
   if (substantial.length === 0) return false;
   // A refusal is one line. Anything with a second line is a result that merely MENTIONS a refusal.
   if (!substantial.every((s) => !s.includes('\n') && DENIAL.test(s))) return false;
@@ -248,6 +255,12 @@ for (const line of lines) {
         collect(b, structural);
       }
       const { message: _m, ...meta } = rec;
+      // Claude Code MIRRORS the tool result at the record level in `toolUseResult`, so a refusal the
+      // block-level discount has just taken out of the scan walks straight back in as metadata.
+      // #69's first baseline run failed on exactly that mirror and on nothing else. The mirror is
+      // dropped only when it is wholly the refusal — a real result stays structural, and a mirror
+      // carrying a line of the body is never discounted (`isWhollyDenial` decides both).
+      if (typeof meta.toolUseResult === 'string' && isWhollyDenial([meta.toolUseResult])) delete meta.toolUseResult;
       collect(meta, structural);
     } else {
       collect(rec, structural);
@@ -268,10 +281,24 @@ const all = prose.concat(structural);
 // its marketplaces checkout beside it. Either path in the structural half means the run saw a
 // plugin at all, which under an isolated runtime it must not.
 const PLUGIN_PATH = /\.claude\/plugins\/(?:cache|marketplaces)\//;
-const contaminatedBy = structural.filter((s) => PLUGIN_PATH.test(s));
+
+// The runner's OWN deny list is not contact with a plugin, and #69 is where that bit. #75 writes one
+// `Read(<copy>/**)` rule per host copy into the isolated home's settings.json — so every marketplace
+// path the census found now lives inside the run's own home, and a baseline agent that cannot find
+// the skill reads that settings file while hunting for it. The whole deny list then lands in a tool
+// result and the run reads CONTAMINATED: the remedy failing the run for working. Both wet-case
+// baseline arms did exactly this, and neither had read a line of any body.
+//
+// Discounted is exactly the rule form the runner writes — `Read(…/plugins/…/**)`, a glob inside a
+// permission rule, never a bare path — and, as with every other discount here, never a string that
+// also carries a line of the body under test.
+const DENY_RULE = /\bRead\(\/*[^)\n]*\.claude\/plugins\/(?:cache|marketplaces)\/[^)\n]*\)/g;
+const withoutDenyRules = (s) => (marks.some((m) => s.includes(m)) ? s : s.replace(DENY_RULE, ' '));
+const contaminatedBy = structural.filter((s) => PLUGIN_PATH.test(withoutDenyRules(s)));
 const pluginPaths = () => {
   const paths = new Set();
-  for (const s of contaminatedBy) {
+  for (const raw of contaminatedBy) {
+    const s = withoutDenyRules(raw);
     const m = s.match(/[^\s"']*\.claude\/plugins\/(?:cache|marketplaces)\/[^\s"']*/);
     paths.add(m ? m[0] : s.slice(0, 160));
   }
