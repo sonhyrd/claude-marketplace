@@ -47,7 +47,7 @@ brought with it afterwards.
 ```
 
 `ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity,
-**skill version bump**, security, evals, public skill surface, framework scope, link integrity,
+**skill version bump**, security, public skill surface, framework scope, link integrity,
 docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
 **the probe HAR contract**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
@@ -67,7 +67,7 @@ docs orphan check, language,
 │   │   ├── SKILL.md        # Required: skill frontmatter + body
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
-│   │   ├── evals/evals.json
+│   │   ├── evals/          # NOT shipped — skill-up suite: eval.yaml + cases/*.yaml
 │   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
 │   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
@@ -75,8 +75,7 @@ docs orphan check, language,
 │   └── playwright-debugger/
 ├── scripts/                # NOT shipped — repo CI tooling, stays shell
 │   ├── ci/                 # parity, security, corpus golden, per-script process-boundary suites
-│   ├── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
-│   └── validate-evals.sh
+│   └── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
 ├── tests/pattern-corpus/   # one hit + one JUSTIFIED twin per check, and the golden
 ├── docs/                   # taxonomy, framework scope, ADRs, specs, agent workflow config
 └── README.md
@@ -140,7 +139,6 @@ bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context cl
 bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
-bash scripts/validate-evals.sh      # eval JSON schema
 bash scripts/ci/pre-push-security.sh
 node skills/e2e-reviewer/scripts/scan.mjs path/to/tests   # standalone scanner
 
@@ -170,7 +168,7 @@ judge, the defect behind seven of the nine failures in the 2026-08-13 run.
 1. **Update parity surfaces in lock-step.** Adding or renaming a pattern means touching: `skills/e2e-reviewer/SKILL.md` (Quick Reference), `skills/e2e-reviewer/references/pattern-reference.md` (per-pattern contract — CI Checks 3b/3c validate this file), `docs/e2e-test-smells.md`, `README.md` 24 Patterns table, `skills/e2e-reviewer/references/grep-patterns.md`, and `skills/e2e-reviewer/scripts/scan.mjs`. CI fails fast if any one is out of step.
 2. **Re-run the drift smoke test.** `scripts/ci/test-parity.sh` mutates known-bad versions of the files and asserts the parity check catches each one — keep it green when you add new parity rules.
 2b. **Give the new pattern a corpus fixture and refresh the golden.** `tests/pattern-corpus/` holds one deliberate hit and one `// JUSTIFIED:` twin per check; `scripts/ci/test-corpus.sh` freezes the scanner's output over it. Add both fixtures, run `bash scripts/ci/test-corpus.sh --update`, and **read the diff before committing it** — the golden only protects you if a moved line makes you stop and look. A pattern with no fixture is a pattern nothing is testing. Never run `--update` to clear a red run you did not intend to cause.
-3. **Add or update evals when behavior changes.** Each skill has an `evals/evals.json`. Eval IDs must follow the skill's naming convention (CI validates). Each new smell or behavior change should add at least two assertions: one true positive that must be flagged, and one false-positive guard that names the exact line and why it must not be flagged.
+3. **Add or update evals when behavior changes.** pw-prove's eval surface is the skill-up suite — `skills/pw-prove/evals/eval.yaml` plus one `cases/<id>.yaml` per case, run by hand with `skill-up run` and never by CI. Its retired `evals.json` predecessor is gone; the assertions that file carried were mined into `skills/pw-prove/evals/mined-assertions.md`, which is where you look before hand-authoring a judge for a dormant case. `e2e-reviewer` and `playwright-debugger` still carry the older `evals/evals.json`. **No eval schema or convention is checked by CI, in any skill, by decision** — see issue #54; the one surviving CI read of an `evals/` file is the F-code taxonomy parity check on `playwright-debugger`, which guards the taxonomy and not the eval format. Each new smell or behavior change should still add at least two assertions: one true positive that must be flagged, and one false-positive guard that names the exact line and why it must not be flagged.
 4. **Respect severity contracts.** P0 entries should be silent-always-pass smells; don't downgrade. P1/P2 should not creep into P0 just because they're easier to grep.
 5. **Keep subagent wiring delegation-aware.** The `agents/` subagents (`e2e-finding-verifier`, `e2e-failure-classifier`) are discovered only when the bundle is installed as a Claude Code plugin (i.e. through the
 marketplace subtree) — a plain skill copy never sees them. So any skill that delegates to a subagent MUST also carry an inline fallback that reaches an **identical** verdict from the same source of truth (`skills/e2e-reviewer/references/pattern-reference.md` for reviewer findings; `skills/playwright-debugger/SKILL.md`'s F1–F15 tables for failures). Never make a subagent the only path to a verdict.
