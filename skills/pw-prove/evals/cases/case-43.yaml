@@ -8,12 +8,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ["PW_PROVE_HAR"]
-            any: ['har-scrub\.mjs bind', "(?i)bind"]
-            not: ["(?i)the recording is (too )?short"]
-    failure:
-        - output_contains:
-            any: ["re-record", "record the HAR again", "hand-write mocks for", "widen the url filter", "remove notFound"]
+    type: script
+    script_path: evals/judges/har-bound-not-rerecorded.mjs
+    timeout_seconds: 30

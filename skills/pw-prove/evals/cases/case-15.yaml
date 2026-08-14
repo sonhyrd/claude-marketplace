@@ -8,11 +8,6 @@ context: {}
 constraints: {}
 expect: {}
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ['probe\.mjs', "exit 2"]
-            any: ["(?i)assumption"]
-    failure:
-        - output_contains:
-            any: ["_recon.spec.ts", "zz-debug", "write a throwaway spec", "run it through npx playwright test"]
+    type: script
+    script_path: evals/judges/no-throwaway-recon-spec.mjs
+    timeout_seconds: 30

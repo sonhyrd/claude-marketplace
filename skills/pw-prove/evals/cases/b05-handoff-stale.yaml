@@ -14,21 +14,7 @@ input:
       "detail":"Clicking Reset leaves the chip rendered."}],"fixes_applied":[]}`.
       `git rev-parse HEAD` returns `c3a77d18e4b5f6071829304a5b6c7d8e9f0a1b2c`. What do you do with
       the handoff, and what appears in the plan?
-
 judge:
-    type: rule_based
-    success:
-        - output_matches:
-            all: ["(?i)stale"]
-            any: ["(?i)delete", "(?i)remove(d)? the file", "(?i)drop(ped)? it"]
-        - output_matches:
-            any: ["(?i)assumption"]
-        - output_matches:
-            all: ["9f1c4ae", "c3a77d1"]
-    failure:
-        - output_contains:
-            any:
-                - "findings folded into the AC table"
-                - "handoff is current"
-                - "fold its findings"
-                - "additive context"
+    type: script
+    script_path: evals/judges/stale-handoff-deleted.mjs
+    timeout_seconds: 30

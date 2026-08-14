@@ -1,0 +1,22 @@
+Exit 4 is the CONFIGURATION gate, not a build failure and not a serve failure. preflight printed
+`MISSING_KEYS=NUXT_PUBLIC_AUTH_URL` within a second, which means the config phase refused before the
+build command ever ran.
+
+That fixes what is known: the build never ran, so nothing about the build or about the preview server
+is established yet. A production build also does not supply the development defaults that used to
+hide this key.
+
+What I do not do: I do not re-run the gate unchanged hoping it passes, and I do not raise
+READY_TIMEOUT — there is no exit 5 and no SERVE_CAUSE to read here, because no server was ever
+started, and no poll budget was ever spent. I do not kill a port, and I do not rebuild, since nothing
+was built.
+
+What I do: set NUXT_PUBLIC_AUTH_URL in the environment the build and the preview server will both run
+under (or in the dotenv file they load), then re-run the same two phases:
+
+```bash
+ENV_CONTRACT=.env.example BUILD_COMMAND='pnpm build' node <skill-base>/scripts/preflight.mjs config build
+```
+
+If the value cannot be sourced from the repo, CI, or you, I stop and report the key by name rather
+than guessing one.

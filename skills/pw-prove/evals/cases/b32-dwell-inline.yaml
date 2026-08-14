@@ -24,22 +24,7 @@ input:
             on one line and `  await page.waitForTimeout(2500);` on the next. The viewport pin
             is committed and matches the Assumptions block. Run the clip-fidelity audit and say
             what happens next.
-
 judge:
-    type: rule_based
-    success:
-        - turn_response_contains:
-            turn: 1
-            contains_any: ["inline", "in each test", "into every test"]
-        - turn_response_not_contains:
-            turn: 1
-            not_contains: ["there is no dwell"]
-        - turn_response_contains:
-            turn: 2
-            contains_any: ["exit 0", "passes", "already satisfies", "no change"]
-        - turn_response_not_contains:
-            turn: 2
-            not_contains: ["reformat"]
-    failure:
-        - output_contains:
-            any: ["collapse it onto one line", "put it on a single line to satisfy"]
+    type: script
+    script_path: evals/judges/dwell-inline-per-test.mjs
+    timeout_seconds: 30
