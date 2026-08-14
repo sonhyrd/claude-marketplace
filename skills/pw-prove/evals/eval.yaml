@@ -29,12 +29,18 @@ cases:
         # silently, so a wiring that is never exercised is a wiring nobody has checked.
         - evals/cases/gate-skill-loaded.yaml
         #
-        # `case-1`, `case-2` and `case-3` were repaired onto this same judge by #63 and characterized
-        # beside it, and they are NOT in this list. A realistic "analyse this project's coverage gaps"
-        # request does not trip the trigger, because the `description:` frontmatter advertises nothing
-        # about the Coverage-gap mode the body implements. That is a defect against the frontmatter
-        # (#73, #74) and is never repaired by editing a trigger prompt — their case files stay on
-        # disk, quarantined, until it is fixed. evals/REGISTRY.md has their pass rates.
+        # The other three trigger cases, admitted by #73/#74 once the defect they recorded was fixed.
+        # A realistic "analyse this project's coverage gaps" request did not trip the trigger, because
+        # the `description:` frontmatter advertised nothing about the Coverage-gap mode the body
+        # implements at Step 2. That was a defect against the frontmatter, never repaired by editing a
+        # trigger prompt; the frontmatter now names the coverage-gap surface and all three are 3/3
+        # with the prove-a-change gate above still 3/3 in the same run. Their uplift is `+1` on a
+        # certified skill-free baseline and it is a TAUTOLOGY — a case judged on loading cannot pass
+        # an arm with nothing to load. The discriminating figure is the before/after on the
+        # description itself, and evals/REGISTRY.md carries both.
+        - evals/cases/case-1.yaml
+        - evals/cases/case-2.yaml
+        - evals/cases/case-3.yaml
         # --- the admitted P0 behaviors ---
         # Every one is judged by a script under evals/judges/, and every one of those scripts is
         # covered by a must-PASS / must-FAIL fixture pair in scripts/ci/test-eval-judges.sh. They

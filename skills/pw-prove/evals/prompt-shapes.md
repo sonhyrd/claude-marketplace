@@ -52,7 +52,7 @@ it is noise.
 
 ## The classification
 
-50 case files: **4 trigger, 46 behavior.** 21 are active in `eval.yaml`; the other 29 are
+49 case files: **4 trigger, 45 behavior.** 29 are active in `eval.yaml`; the other 20 are
 quarantined. **None of them is inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every
 file on disk, and #69's two wet cases carry rows of their own, so every file has a status and the
 evidence behind it.
@@ -72,7 +72,8 @@ evidence behind it.
 > contradiction; what was left was the residue that survived two passes of exactly that filter. The
 > file count moved 49 → 48 and the active count 8 → 20.
 
-**Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3` (quarantined).
+**Trigger (4)** — `gate-skill-loaded`, `case-1`, `case-2`, `case-3`, **all four active** since
+#73/#74 fixed the defect the last three recorded.
 
 `case-1`/`case-2`/`case-3` ask for coverage analysis or a test plan against a fixture repo, in a
 user's words. What changed in #63 is their judges; what changed in #76 is one clause each, and the
@@ -90,6 +91,22 @@ frontmatter advertises proving a change and says nothing about the Coverage-gap 
 implements at Step 2. Filed as **#73** and **#74**; the three cases are quarantined, and none of
 their prompts was touched **as a repair**, because a trigger case is never repaired by editing its
 prompt.
+
+**#73/#74 closed both tickets, and the rule is what fixed them.** The repair landed in
+`description:` — one clause naming coverage analysis, coverage gaps, untested pages and flows, and a
+test plan for a page or route, with the prove-a-change sentences untouched — and never in a prompt.
+Measured at n=3 on the isolated runner with nothing else moved, the three cases went **1/3 → 3/3**,
+**2/3 → 3/3** and **1/3 → 3/3**, while `gate-skill-loaded` held **3/3** in the same run, so the
+existing trigger was not traded for the new one. All four are active.
+
+Two things that run established are worth carrying forward. First, **the filed 0/3s did not
+reproduce**: re-measured on the fixtures #76 repaired and the *unchanged* description, `case-1` and
+`case-3` were 1/3, not 0/3. The defect was intermittent, which is harder to reason about than a hard
+miss and is invisible at one iteration — establish the current rate before acting on a recorded one.
+Second, **a trigger case's uplift is `+1` by construction**: remove the body and there is nothing for
+a loading judge to find, so the `without_skill` arm cannot pass. The figure certifies the baseline
+was skill-free; what discriminates a trigger case is the before/after on the `description:` itself.
+`REGISTRY.md` carries both readings.
 
 #### The one permitted prompt edit
 

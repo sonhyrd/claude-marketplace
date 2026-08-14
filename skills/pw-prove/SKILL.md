@@ -1,10 +1,10 @@
 ---
 name: pw-prove
-description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast — for pages, flows, components. The default for E2E-verifying a change end to end (owns server bring-up, auth, live-DOM recon); evidence is a byproduct of the proof run (trace/video), not a hosted film."
+description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast — for pages, flows, components. The default for E2E-verifying a change end to end (owns server bring-up, auth, live-DOM recon); evidence is a byproduct of the proof run (trace/video), not a hosted film. With no change to prove it runs coverage-gap mode instead: analyze a project's E2E test coverage, map its routes and pages to the existing specs, identify which pages and flows are untested, and plan how the missing tests should be structured (scenarios, locators, Page Objects) before writing any. Use it for a coverage analysis, a coverage-gap report, an untested-routes audit, or a test plan for a page or route."
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.15.2"
+  version: "0.16.0"
 ---
 
 # pw-prove
