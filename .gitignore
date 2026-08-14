@@ -46,3 +46,6 @@ Thumbs.db
 # Test artifacts
 tests/**/__pycache__/
 tests/**/.pytest_cache/
+
+# skill-up eval run artifacts
+plugins/*/skills/*-workspace/

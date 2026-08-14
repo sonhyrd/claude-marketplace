@@ -1,0 +1,31 @@
+id: handoff-schema-is-pw-proves
+title: head_sha is read last, and the handoff schema is not extended on request
+description: |
+  Step 6b. `head_sha` is `git rev-parse HEAD` read after every commit this run
+  makes, because pw-prove drops the whole artifact when it differs from HEAD. The
+  schema belongs to pw-prove; a key it does not read is a key nobody reads, so a
+  user asking for an extra field should be told no (and pointed at the owner).
+
+input:
+  prompt: |
+    Two things about the pw-prove handoff for PR #310. When exactly do you read
+    head_sha for .pw-prove/handoff.json? And can you add a `tracks` field to each
+    finding so I can see which track caught it?
+
+expect:
+  must_contain:
+    - "head_sha"
+
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        all: ["head_sha"]
+        any: ["rev-parse", "HEAD"]
+    - output_contains:
+        any: ["last", "after", "every commit", "once all"]
+    - output_contains:
+        any: ["pw-prove owns", "owns this schema", "owns the schema", "only reader", "not extend", "nothing reads", "no key", "nobody reads"]
+  failure:
+    - output_contains:
+        any: ["I'll add the `tracks` field", "I've added the tracks field", "Sure, adding `tracks`"]
