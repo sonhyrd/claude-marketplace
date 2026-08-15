@@ -52,8 +52,8 @@ it is noise.
 
 ## The classification
 
-49 case files: **4 trigger, 45 behavior.** 31 are active in `eval.yaml`; the other 18 are
-quarantined. **None of them is inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every
+52 case files: **7 trigger, 45 behavior.** 31 are active in `eval.yaml`, 3 in `eval.collision.yaml`;
+the other 18 are quarantined. **None of them is inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every
 file on disk, and #69's two wet cases carry rows of their own, so every file has a status and the
 evidence behind it.
 
@@ -72,8 +72,18 @@ evidence behind it.
 > contradiction; what was left was the residue that survived two passes of exactly that filter. The
 > file count moved 49 → 48 and the active count 8 → 20.
 
-**Trigger (4)** — `gate-skill-loaded`, `case-1`, `case-2`, `case-3`, **all four active** since
-#73/#74 fixed the defect the last three recorded.
+**Trigger (7)** — `gate-skill-loaded`, `case-1`, `case-2`, `case-3`, **all four active** since
+#73/#74 fixed the defect the last three recorded, plus the three **collision-arm** cases #81 added:
+`case-81-untested-routes`, `case-81-spec-quality`, `case-81-ambiguous-coverage`.
+
+**The collision-arm three are trigger cases with a second question.** They are the only cases that
+run with two skills installed (`eval.collision.yaml`), and their judges — `routes-to-pw-prove.mjs`
+and `routes-to-e2e-reviewer.mjs` — ask not *did pw-prove load* but *which of the two did*. Everything
+the trigger shape requires still holds and holds harder: the prompt names no skill at all, not even
+the one that is meant to lose, and a red is a defect in one of the two `description:` fields rather
+than something to fix by rewording the prompt. `case-81-spec-quality` is the first case in the suite
+pw-prove is required **not** to answer, which is why the post-run sweep reports it NOT LOADED on a
+passing run — the sweep asks pw-prove's question, and this case's answer to it is supposed to be no.
 
 `case-1`/`case-2`/`case-3` ask for coverage analysis or a test plan against a fixture repo, in a
 user's words. What changed in #63 is their judges; what changed in #76 is one clause each, and the

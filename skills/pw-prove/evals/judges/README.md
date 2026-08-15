@@ -10,6 +10,15 @@ pass rate in `REGISTRY.md` is only re-readable if the instrument that produced i
 Batch 3 (#65) wrote twenty-one judges for twenty-one cases and eleven of those cases were admitted;
 the other ten keep theirs against the ticket that will decide them.
 
+**A judge is copied to a temp directory alone, so it cannot import a sibling.** skill-up copies the
+single `.mjs` and runs it from `/tmp/skill-up-judge-*/`; a relative import of `./lib/x.mjs` resolves
+to nothing and every case in the run dies with `ERR_MODULE_NOT_FOUND` — a red that says nothing about
+the skill, and one #81 paid six agent runs to rediscover. Shared code is therefore **duplicated
+verbatim** and the copies are compared by `scripts/ci/test-eval-judges.sh`: `commitments()`/
+`offenders()` across the judgment-call judges, the workspace preamble across the wet judges, and the
+routing core (between the `// >>> routing core` markers) across `routes-to-pw-prove.mjs` and
+`routes-to-e2e-reviewer.mjs`. Edit one copy and the suite names the other.
+
 **These are not shipped.** `evals/` is eval-engine material — it is excluded from the skill's
 `include:` list and does not trigger the `Skill version bump` check. It is still zero-dependency ESM
 Node, for the same reason everything else here is: no build step, no install, `node <path>.mjs`.
@@ -158,6 +167,8 @@ Audited at #71, and the standing inventory — every judge that touches `$EVAL_T
 |---|---|---|
 | `dwell-inline-per-test.mjs` | turn 1 and the last turn, grouped by `turn` field / user-prompt count | fixed at #71; was `turns[0]`/`turns[n-1]` over assistant blocks |
 | `skill-loaded.mjs` | the whole transcript — every string and tool record, no index | not affected |
+| `routes-to-pw-prove.mjs` | the whole transcript, per skill: served Skill calls and body fingerprints | not affected |
+| `routes-to-e2e-reviewer.mjs` | the same, with owner and neighbour swapped | not affected |
 | `auth-code-drives-app-entry.mjs` | workspace artifacts; the transcript is only proof a run happened | not affected |
 | `served-on-allocated-port.mjs` | workspace artifacts; same existence check | not affected |
 

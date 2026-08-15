@@ -1,0 +1,33 @@
+id: case-81-ambiguous-coverage
+shape: trigger
+title: The bare phrase "coverage gaps" reaches one skill, not two
+description: >-
+    Trigger case, and the sharpest of the three in `evals/eval.collision.yaml` — the only one whose
+    prompt uses the exact words BOTH descriptions claimed. Its two siblings ask the question in a
+    user's own vocabulary and each leans one way; this one leans neither way on purpose. "Find the
+    coverage gaps in our E2E tests" is the request #81 was filed about, and its fixture is built so
+    that either reading is a real job to do: routes with no spec at all AND a spec that would pass
+    with the feature removed.
+
+    The decision this case records is that pw-prove owns it. A user who says "coverage gaps" without
+    qualification is asking what is not covered; the quality of the specs that do exist is
+    e2e-reviewer's job and is asked for in different words ("these pass but I do not believe them"),
+    which `case-81-spec-quality` carries.
+
+    The judge is `routes-to-pw-prove.mjs`. COLLISION (exit 4) is the verdict this case exists to
+    catch: the request reaching both skills means the two `description:` fields still leave the
+    question undecided. It names no skill, so a red here is a defect in one of the two frontmatters
+    and is recorded rather than repaired by editing the prompt.
+
+tag: functional_test
+input:
+    prompt: Can you find the coverage gaps in our E2E tests? The app's routes are in src/routes.ts and what we have under tests/ is all there is.
+context:
+    repo_fixture: evals/files/project-mixed-coverage
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/routes-to-pw-prove.mjs
+    timeout_seconds: 30
+derived_from_prompt: 8d9406c82261

@@ -1,0 +1,74 @@
+# The TWO-SKILL arm (issue #81). Run it by name:
+#
+#   PWPROVE_EVAL_YAML=skills/pw-prove/evals/eval.collision.yaml bash scripts/run-evals-isolated.sh
+#
+# Every arm in `eval.yaml` installs pw-prove alone, and that is why #73/#74 could not see the defect
+# #81 was filed for: with one skill present, "pw-prove's coverage clause fires" and "pw-prove's
+# coverage clause fires and no other skill claims the same request" are the same reading. They are
+# different questions, and the marketplace bundle ships pw-prove, e2e-reviewer and
+# playwright-debugger together — so the second one is the configuration users actually have.
+#
+# This suite differs from `eval.yaml` in exactly one respect: the `skills:` list installs BOTH
+# bodies whose descriptions collided. Nothing else moves — same runtime, same engine, same model,
+# same judge defaults — so a verdict here and a verdict there differ because of the installed set
+# and for no other reason.
+#
+# THIS DOES NOT DEFEAT THE RUNNER'S ISOLATION, and the distinction is the whole reason the arm is
+# admissible. `run-evals-isolated.sh` seals the run against copies of these bodies it did not put
+# there — the operator's marketplace install, other checkouts, a previous run's leftovers under
+# $TMPDIR, and the plugin-namespaced Skill route. What arrives here arrives through skill-up's own
+# install, from the working tree, at a version this repository can name. A second skill installed
+# deliberately by the suite is the measurement; a second copy arriving by accident is the
+# contamination. The routing judges still exit 2 on a plugin-namespaced invocation of either skill.
+#
+# playwright-debugger is deliberately NOT installed. It shares no trigger words with either of these
+# two, so adding it would widen the arm without sharpening the question.
+schema_version: v1alpha1
+
+# Runtime is `none` for the same reason `eval.yaml`'s is. See docs/adr/0018; do not "fix" it back to
+# docker.
+environment:
+    type: none
+
+skills:
+    - source: local_path
+      path: .
+      include: [SKILL.md, "*.md", "scripts/**"]
+    # The neighbour. `references/**` comes along because e2e-reviewer's body reads its pattern
+    # reference on demand, and a skill installed without the files its body opens is a skill that
+    # behaves differently here than it does in the bundle.
+    - source: local_path
+      path: ../e2e-reviewer
+      include: [SKILL.md, "*.md", "references/**", "scripts/**"]
+
+engine:
+    name: claude_code
+    model:
+        provider: anthropic
+        name: claude-opus-5
+
+cases:
+    files:
+        # Two requests, two owners, neither prompt naming a skill. One must reach pw-prove and not
+        # e2e-reviewer; the other must reach e2e-reviewer and not pw-prove. A case that reaches BOTH
+        # is the collision, reported as exit 4 by its judge.
+        - evals/cases/case-81-untested-routes.yaml
+        - evals/cases/case-81-spec-quality.yaml
+        # …and the phrase itself, unqualified, over a fixture where either reading is real work.
+        # This is the one that can go COLLISION on wording alone.
+        - evals/cases/case-81-ambiguous-coverage.yaml
+    defaults:
+        timeout_seconds: 300
+        max_turns: 10
+    parallelism: 2
+
+judge:
+    type: agent_judge
+    model: anthropic/claude-sonnet-4-6
+    criteria:
+        # 1 criterion. Both cases define script judges; this default is never expected to be reached.
+        - Cases define their own judges; this default is never expected to be reached.
+
+report:
+    formats: [json, html]
+    artifacts: [transcript]
