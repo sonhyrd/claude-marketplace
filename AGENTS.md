@@ -195,8 +195,9 @@ rule from `tests/pattern-corpus/` applied to judges. That twin is what catches t
 judge, the defect behind seven of the nine failures in the 2026-08-13 run.
 
 `test-case-shapes.sh` stays out for the same reason, and holds the prompt-shape rule described under
-*The Eval Suite* below, plus the fixture-staging checks from #76 and the re-derivation record from
-#82. Run it by name whenever you add or edit a case prompt or a case's `context:`. It is the one
+*The Eval Suite* below, plus the fixture-staging checks from #76, the re-derivation record from
+#82, and the `step:` key every case carries naming the SKILL.md section it guards. Run it by name
+whenever you add or edit a case prompt or a case's `context:`. It is the one
 hand-run suite that is *also* wired somewhere: `run-evals-isolated.sh` calls it as a pre-run gate and
 refuses the run when it is red, because the #76 defect is silent in the run itself and the run is
 what pays for it. `PWPROVE_SKIP_STAGING_GATE=1` bypasses that gate and says so out loud.
@@ -219,7 +220,7 @@ was mined and retired in #61. The surface is eight things:
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults. Installs pw-prove **alone** |
 | `skills/pw-prove/evals/eval.collision.yaml` | The **two-skill arm** (#81), identical to `eval.yaml` except that its `skills:` list installs pw-prove **and** e2e-reviewer. Its three cases are judged on *which* skill a request reached, which no single-skill arm can ask. Run it by name with `PWPROVE_EVAL_YAML=…` |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **52 on disk, 33 active in `eval.yaml` and 3 in `eval.collision.yaml`** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **52 on disk, 33 active in `eval.yaml` and 3 in `eval.collision.yaml`** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift. An id names what the case guards (`case-33-missing-har-declared`), the file name matches the id, and a `step:` key names the SKILL.md section — so a body edit's blast radius is readable from the case files as well as from `REGISTRY.md` |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`, which copies the directory's **contents** to the workspace **root** — so a prompt says "your current working directory", never "evals/files/x/". **`context.files` is `{workspace_path: INLINE CONTENT}`** (established from skill-up's `internal/evaluator/fixtures.go`, #76): the value is written verbatim as the file's body, so `p: p` stages a one-line file containing its own path and the case answers a different question. `scripts/ci/test-case-shapes.sh` fails on all three mistakes. Note also that a fixture written in a didactic voice is read by the skill-free baseline arm too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
