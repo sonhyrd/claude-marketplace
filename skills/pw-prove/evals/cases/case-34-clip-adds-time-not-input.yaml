@@ -1,6 +1,7 @@
-id: case-34
+id: case-34-clip-adds-time-not-input
 shape: behavior
-title: pw-prove - 34
+step: 'code-rules.md § Clip Fidelity — the filming law, PW_PROVE_CLIP may only add time'
+title: 'A clip gate may only add time; it must never change what the app is asked to do'
 description: 'Should apply the filming law from `code-rules.md` §Clip Fidelity: PW_PROVE_CLIP may only ever ADD TIME, never change what the app is asked to do. So the only gated construct is `page.waitForTimeout()`. Must NOT reach for a PW_PROVE_CLIP-gated `pressSequentially()` in place of `fill()` to make the typing visible — that swaps one `input` event for N keystroke events before the assertion, driving a debounced or per-key-validated field differently in the film than in CI — and must NOT use an ungated `pressSequentially(value, { delay })`, whose per-keystroke sleep every CI run pays forever. Instead should fill atomically and hold on the field''s END STATE, after the assertion covering the fill. Framing must be handled by an UNGATED `scrollIntoView({ block: ''center'' })` on the element under proof, taken at the moment of each hold — after the toast''s assertion, not before the re-render — rather than by `scrollIntoViewIfNeeded()`, which moves the minimum distance and parks the element against the screen edge. A mid-test dwell after the fill''s own assertion is allowed under the relaxed placement rule; a dwell between the Save click and the toast assertion is not, because there the filmed run would be more patient than CI and the proof would pass where CI flakes.'
 tag: functional_test
 input:

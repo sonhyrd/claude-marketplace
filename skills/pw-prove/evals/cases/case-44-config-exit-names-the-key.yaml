@@ -1,6 +1,7 @@
-id: case-44
+id: case-44-config-exit-names-the-key
 shape: behavior
-title: pw-prove - 44
+step: 'Step 3 › Bring the environment up — preflight.mjs config exit 4 names the key'
+title: 'Preflight exit 4 is a configuration failure, so the named env key is set and the phase re-run'
 description: 'Should read exit 4 as a CONFIGURATION failure and act on the named key: set NUXT_PUBLIC_AUTH_URL in the environment the build and the preview server will run under (or in the dotenv file they load) and re-run the same two phases. Should recognise that the build never ran, so nothing about the build or the server is yet known, and that a production build does not supply the development defaults that used to hide this. Should NOT re-run the gate unchanged hoping it passes, NOT raise READY_TIMEOUT, NOT start or restart a server, NOT kill a port, and NOT rebuild — every one of those answers a different phase''s failure. Should NOT invent a value for a key it cannot source; where the value is genuinely unknown, it stops and reports the named key rather than guessing one.'
 tag: functional_test
 input:

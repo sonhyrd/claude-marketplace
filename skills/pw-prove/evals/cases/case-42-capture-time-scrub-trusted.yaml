@@ -1,6 +1,7 @@
-id: case-42
+id: case-42-capture-time-scrub-trusted
 shape: behavior
-title: pw-prove - 42
+step: 'Step 3 › the capture-time scrub is trusted, not repeated'
+title: 'A HAR the probe already scrubbed at capture time needs no second scrub step'
 description: 'Should report that nothing needs doing: probe.mjs handed the recording to the shipped scrubber on context close, so the file was never unscrubbed on disk and there is no scrub step to place. Should read the reported line as the evidence (3 secrets placeheld) and note that a `probe: REFUSED` line would have named surviving residue. Should NOT write a `node -e`/`python3` scrubber, should NOT run har-scrub.mjs again as a first scrub, and should NOT defer a scrub to just before commit — Step 8 runs `--verify`, which is a check that the capture-time scrub held, not the scrub itself.'
 tag: functional_test
 input:

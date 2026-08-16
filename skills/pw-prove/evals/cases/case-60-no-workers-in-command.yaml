@@ -1,6 +1,7 @@
-id: case-60
+id: case-60-no-workers-in-command
 shape: behavior
-title: pw-prove - 60
+step: 'Step 7 › Verify — the proof-run command'
+title: 'The proof command passes no --workers flag; ADR 0017 retired that mandate'
 description: 'The command clears test-results/ first, then runs the spec through the proof config with PW_PROVE_CLIP=1 and PW_PROVE_W/PW_PROVE_H carrying the effective viewport, --project=chromium and --reporter=html. It passes NO --workers flag at all: docs/adr/0017 retired the --workers=1 mandate on 31 measured runs, so the scenarios run concurrently at Playwright''s default of cores/2. It must not substitute a literal worker count either — the default is a machine fact Playwright already computes, and a number that fits an 8-core box is wrong on the next one. It must not pin workers in the committed proof config or in the project''s playwright.config.'
 tag: functional_test
 input:

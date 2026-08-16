@@ -1,6 +1,7 @@
-id: case-2
+id: case-2-test-plan-request-triggers
 shape: trigger
-title: A "plan the tests for this route" request in a user's words trips the trigger
+step: 'frontmatter description: — the coverage-gap clause, as a "plan the tests for this route" request'
+title: 'A "plan the tests for this route" request in a user''s words trips the trigger'
 description: >-
     Trigger case. The prompt is a realistic top-of-task request for a test plan over a POM project —
     scenarios, locators, POM structure, no code yet — and it names no skill. What is graded is whether

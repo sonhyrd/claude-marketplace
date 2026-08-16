@@ -1,6 +1,7 @@
-id: case-47
+id: case-47-changed-signature-spends-budget
 shape: behavior
-title: pw-prove - 47
+step: 'Step 7 › Failure handling — a moved signature is a converging run'
+title: 'A changed failure signature means the run is converging, so the last attempt is spent'
 description: 'Should continue the fix loop and use the third attempt: the failure signature changed on both axes (error class TimeoutError -> assertion failure, and a different failing locator), so each fix moved the failure and the run is converging. Should fix the assertion''s expected value for attempt 3, rerun only the failing test with -g, and run the full spec once after the last fix as the gate. Should NOT invoke the no-progress checkpoint, should NOT take the handover stop, and should NOT post a PR comment or a stop report while an attempt remains and the failure is still changing.'
 tag: functional_test
 input:

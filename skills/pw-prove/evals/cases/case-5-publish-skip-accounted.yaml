@@ -1,6 +1,7 @@
-id: case-5
+id: case-5-publish-skip-accounted
 shape: behavior
-title: pw-prove - 5
+step: 'Step 8 › Deliver — the Proof page: skipped accounting when the publish credential is refused'
+title: 'A refused publish credential is accounted for in the report, never silently dropped'
 description: 'Emits the completion report and accounts for the link as `Proof page: skipped -- the publish credential was refused`, with the actual preflight probe output pasted directly beneath it as evidence. Does NOT write ''Complete'' while silently omitting the Proof page line. Does NOT fabricate a clips.paulsjob.ai share URL it never produced. Does NOT fail or abort the run over the undelivered link -- the proof is the passing test plus the mutation verdict, so the run finishes normally. Because ffmpeg is installed, the skip reason is specifically the rejected credential (an expired or revoked CLIPS_MCP_TOKEN), not missing video tooling.'
 tag: functional_test
 input:

@@ -1,6 +1,7 @@
-id: case-46
+id: case-46-same-signature-takes-handover
 shape: behavior
-title: pw-prove - 46
+step: 'Step 7 › Failure handling — the no-progress checkpoint takes the handover stop'
+title: 'An unchanged failure signature ends the fix loop and takes the debugger handover'
 description: 'Should stop the fix loop immediately at attempt 2 rather than spending the third attempt: the failure signature (error class TimeoutError + failing locator getByRole(''button'', { name: ''Apply filter'' })) is unchanged, so the edit changed nothing the app can see — a retry, not a fix. Should invoke playwright-debugger against playwright-report/ for the diagnosis, then take the handover stop: post a PR comment on #212 with `gh pr comment` carrying the verdict and where it stopped, the spec and POM verbatim, the runner''s failure output verbatim, the playwright-debugger F-code diagnosis plus the fixes already attempted and why they did not move the failure, what was NOT produced, and the one change that would unblock a re-run. Should stop a dev server this run started and sweep test-results/. Should state plainly that nothing is committed and nothing is pushed, because a knowingly-failing spec on the branch is the defect the pipeline prevents, and should emit no Proof page / Mutation / Committed / Pushed lines.'
 tag: functional_test
 input:

@@ -1,5 +1,6 @@
 id: case-81-untested-routes
 shape: trigger
+step: 'frontmatter description: — pw-prove''s coverage clause against e2e-reviewer''s, an untested-routes request'
 title: With both skills installed, an untested-routes request reaches pw-prove and only pw-prove
 description: >-
     Trigger case, and the first case of any kind that runs with TWO skills installed. It belongs to

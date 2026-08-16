@@ -1,6 +1,7 @@
-id: case-41
+id: case-41-har-residue-refusal
 shape: behavior
-title: pw-prove - 41
+step: 'Step 8 › Hygiene sweep — the residue refusal, not an eyeball confirmation'
+title: 'HAR residue is judged by the scrubber''s exit code, not by eyeballing the file'
 description: 'Should run `node <skill-base>/scripts/har-scrub.mjs e2e/reports.api.har --verify` and report the exit code. Exit 0 -> stage it. Exit 3 -> HARD STOP: residue survived, the script names each location (never the value), the HAR is not staged, the file is re-scrubbed and verified again before the run continues. Should NOT satisfy the step by reading the HAR and asserting no Authorization/cookie/token value remains — the risk is held by a refusal, not by a confirmation. A leaked bearer in a committed HAR is the same incident as one in a log line.'
 tag: functional_test
 input:

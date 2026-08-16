@@ -1,6 +1,7 @@
-id: case-29
+id: case-29-unit-proven-acs-folded
 shape: behavior
-title: pw-prove - 29
+step: 'Step 2 › 6. Fold ACs the diff already proves cheaper'
+title: 'An AC already proven by the diff''s own unit tests is folded, not given its own scenario'
 description: 'Should read the unit test file in the diff before fixing the scenario list, and recognize that the trim / drop-empty / key-removal matrix is pure-function behavior already proven there. Those ACs should be FOLDED into the single scenario that proves the wiring — the UI reaches buildUpsert and its output is what leaves on the wire — rather than getting one browser scenario each. The folded ACs must still appear as rows in the AC table with `already covered: tests/unit/customScripts.test.ts` in the Proven-by column, and the completion report must list them. Behaviors a unit test cannot see (the request the browser actually sends, DOM state, flag gating, persistence) stay their own scenarios.'
 tag: functional_test
 input:

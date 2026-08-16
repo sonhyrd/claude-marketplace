@@ -1,6 +1,7 @@
-id: case-15
+id: case-15-no-throwaway-recon-spec
 shape: behavior
-title: pw-prove - 15
+step: 'Step 3 › Recon — the probe is the question channel, the test run is the validator (ADR 0004)'
+title: 'Recon goes through the probe, never a throwaway spec used as a REPL'
 description: 'Refuse the throwaway spec: non-deliverable spec probes are forbidden — the test runner is not a REPL. Use probe.mjs: start it once from the app root in a background shell (BASE_URL set; it reuses ONE persistent browser context via the project''s pinned Playwright and self-closes on idle), then send one batched round trip — e.g. [{"cmd":"navigate","url":"/settings"},{"cmd":"snapshot"},{"cmd":"network-summary"}] — which answers both questions with compact aria and network summaries, never raw DOM dumps; close it when recon is done. In a browserless environment the probe refuses cleanly (exit 2) and recon falls back to source reading + the heal loop — never install a floated Playwright to force a browser open. The heal loop''s bounds are unchanged: rerun only the failing test, full suite once at the end.'
 tag: functional_test
 input:

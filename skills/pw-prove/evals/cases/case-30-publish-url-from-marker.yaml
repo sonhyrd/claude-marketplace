@@ -1,6 +1,7 @@
-id: case-30
+id: case-30-publish-url-from-marker
 shape: behavior
-title: pw-prove - 30
+step: 'Step 8 › Deliver — the publish URL is read from the PWPROVE_URL marker'
+title: 'The share URL is read from the PWPROVE_URL marker, not from line 1 of mixed output'
 description: 'Should capture the URL from the `PWPROVE_URL ` marker line (e.g. `sed -n ''s/^PWPROVE_URL //p'' | head -n1`), not with a bare `head -n1`, because npm/ffmpeg chatter reaches line 1 as soon as anything merges the streams -- this exact failure cost a real run five URLs and a repeat upload. Should send stderr to a log file and, if the captured URL is empty, distinguish the two cases before acting: exit 0 with a `PWPROVE_PROOF_FILE` marker line means the publish was UNDELIVERED and the kept file should be attached by hand (the run stays alive), while a gate exit (3, 6, 8 or 9) means the artifact is wrong, no file is offered, and the gate must be reported from the log rather than the publish blindly re-run. Step 8''s hygiene sweep must leave that kept file alone -- it is the only remaining copy of the evidence, so deleting it destroys the fallback moments after it was created.'
 tag: functional_test
 input:

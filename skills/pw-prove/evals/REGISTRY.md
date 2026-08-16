@@ -7,6 +7,13 @@ tier — the selection derived from this table *is* the fast tier.
 
 Nothing in CI reads this file, by decision (#54). It is maintained by hand, by whoever runs a batch.
 
+**Case ids gained descriptive slugs on 2026-08-16.** `case-33` is now
+`case-33-missing-har-declared`, and the file name matches the id as it always did. The numeric part
+is unchanged and stays the shorthand this file's prose uses; row identifiers and every
+`--include-case-name` command name the full id, because that is what the runner matches. Rows for
+retired cases keep the bare numeric id they were retired under — those files are gone and there is
+no slug to give them.
+
 ## Status vocabulary
 
 | Status | Means | Admission evidence |
@@ -86,11 +93,11 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | Run | Command | What it produced |
 |---|---|---|
 | **n=3 characterization** | `bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3` | the pass rate of the 13 cases that were active before this batch. 39 runs. **39/39 LOADED**, 1 CONTAMINATED (see below) |
-| **n=3, trigger cases** | the same, `--include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | the pass rate of the three trigger cases #63 repaired and activated. 9 runs |
+| **n=3, trigger cases** | the same, `--include-case-name case-1-coverage-request-triggers --include-case-name case-2-test-plan-request-triggers --include-case-name case-3-flat-spec-coverage-triggers` | the pass rate of the three trigger cases #63 repaired and activated. 9 runs |
 | **uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` | one `with_skill` and one `without_skill` arm per case, over the 10 cases still active at that point — the 13 that started the batch, minus `b32` (0/3), `case-43` (0/3) and `case-44` (2/3), which the characterization run had already disqualified. 20 runs |
-| **#66 re-characterization** | `bash scripts/run-evals-isolated.sh --include-case-name case-50 --iteration 3`, run twice | `case-50` after the announced-port co-location. **2/3 against the judge as it stood, then 3/3 against the repaired judge.** 6 runs, 6/6 LOADED. See *#66: the rate did not move, and the one red was the judge* |
-| **uplift re-measurement (#75)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --include-case-name case-28 --include-case-name case-48` | the two `void` rows, re-taken through the sealed runner. 8 runs over three attempts — see *What the sealed re-measurement cost* below |
-| **`case-28` re-characterization (#75)** | `bash scripts/run-evals-isolated.sh --iteration 3 --include-case-name case-28` | a clean pass rate to replace the 3/3 whose iteration 3 was CONTAMINATED. 3 runs, **3/3, all three iterations LOADED and clean** |
+| **#66 re-characterization** | `bash scripts/run-evals-isolated.sh --include-case-name case-50-announced-port-adopted --iteration 3`, run twice | `case-50` after the announced-port co-location. **2/3 against the judge as it stood, then 3/3 against the repaired judge.** 6 runs, 6/6 LOADED. See *#66: the rate did not move, and the one red was the judge* |
+| **uplift re-measurement (#75)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --include-case-name case-28-hermetic-audit-not-hand-parsed --include-case-name case-48-dev-guarded-rung-skipped` | the two `void` rows, re-taken through the sealed runner. 8 runs over three attempts — see *What the sealed re-measurement cost* below |
+| **`case-28` re-characterization (#75)** | `bash scripts/run-evals-isolated.sh --iteration 3 --include-case-name case-28-hermetic-audit-not-hand-parsed` | a clean pass rate to replace the 3/3 whose iteration 3 was CONTAMINATED. 3 runs, **3/3, all three iterations LOADED and clean** |
 | **batch 2 characterization** | `bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3` over the 13 batch-2 candidates | the pass rate of every batch-2 case that survived static triage. 39 runs. **13/13 LOADED, 0 contaminated** |
 | **batch 2 re-characterization** | the same, over `case-4`, `case-7`, `case-11`, `case-16`, `case-24`, `case-29` | those six after their judges were repaired against the answers the first run recorded. 18 runs, 6/6 LOADED |
 | **batch 2 uplift** | `bash scripts/run-evals-isolated.sh --baseline --parallelism 3` over the eight 3/3 cases | one `with_skill` and one `without_skill` arm each. 16 runs. **Seven of the eight baselines were not skill-free** — see below |
@@ -99,18 +106,18 @@ All runs through `scripts/run-evals-isolated.sh`, never bare `skill-up run`. Eng
 | **batch 3 uplift** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline` over the sixteen 3/3 cases | one `with_skill` and one `without_skill` arm each. 32 runs. **14 of 16 baselines certified SKILL-FREE**; 2 CONTAMINATED and both failed anyway |
 | **batch 2 uplift re-measurement (#78)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline` over the eight cases | batch 2's six `void` rows, plus `case-15` and `case-11` **re-taken** rather than inherited. 16 runs. **6 of 8 baselines certified SKILL-FREE**; `case-11` CONTAMINATED and `case-17` BASELINE DIRTY |
 | **`case-17` re-measurement (#78)** | the same, `--include-case-name case-17`, twice | the dirty baseline re-taken. The second attempt was dirty again and named the route — see *What the census could not see* below. 4 runs over two attempts; the third is the one that counts |
-| **`case-11` re-measurement (#78)** | the same, `--include-case-name case-11` | the contaminated baseline re-taken, per *the direction-safe reading is not sound*. 2 runs, baseline SKILL-FREE |
+| **`case-11` re-measurement (#78)** | the same, `--include-case-name case-11-greenfield-bootstrap-pinned` | the contaminated baseline re-taken, per *the direction-safe reading is not sound*. 2 runs, baseline SKILL-FREE |
 | **trigger re-characterization, BEFORE (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` over `gate-skill-loaded`, `case-1`, `case-2`, `case-3` | the four trigger cases on the **unchanged** `description:`, and on the fixtures #76 repaired. 12 runs. `gate-skill-loaded` 3/3, `case-1` **1/3**, `case-2` **2/3**, `case-3` **1/3** — see *the trigger defect was intermittent, not absolute* |
 | **trigger re-characterization, AFTER (#73/#74)** | the same command, the same staged suite, `description:` fixed | the same four cases with nothing else moved. 12 runs. **12/12 — all four 3/3, all four LOADED, 0 contaminated** |
 | **`case-29` re-characterization (#77)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3` | `case-29` on the repaired judge, which reads the Proven-by column instead of scenario titles. 3 runs. **3/3, 3/3 LOADED, 0 contaminated** — and the three retained 2026-08-14 transcripts had already flipped to PASS offline, before the run |
 | **`case-29` uplift (#77)** | the same staged suite, `--baseline --parallelism 1` | one `with_skill` and one `without_skill` arm. 2 runs. Baseline **certified SKILL-FREE**, `with_skill` PASS, baseline FAIL → **`+1`**. The baseline failed for a nameable reason — see *the baseline refused rather than folded wrongly* |
 | **`case-29` re-judge (#77, no spend)** | the five retained responses replayed through the judge as code review left it | the judge was refined **after** the two runs above (a blank Proven-by cell is no longer read as a wrapped one; the reader anchors on the separator row so a pipe-less GFM table is not a false red; the prose vocabulary tolls are gone). Every verdict held — 4 PASS, 1 FAIL — so the 3/3 and the `+1` are figures the shipped judge produces, not an earlier draft's |
-| **trigger uplift (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --parallelism 1 --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | one `with_skill` and one `without_skill` arm each. 6 runs. **3 of 3 baselines certified SKILL-FREE, 0 dirty**; every `with_skill` arm PASS, every baseline arm FAIL. `+1` each, and tautologically so — see *Uplift* |
+| **trigger uplift (#73/#74)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --parallelism 1 --include-case-name case-1-coverage-request-triggers --include-case-name case-2-test-plan-request-triggers --include-case-name case-3-flat-spec-coverage-triggers` | one `with_skill` and one `without_skill` arm each. 6 runs. **3 of 3 baselines certified SKILL-FREE, 0 dirty**; every `with_skill` arm PASS, every baseline arm FAIL. `+1` each, and tautologically so — see *Uplift* |
 | **`case-43` attribution (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3`, then the same `--baseline` | the same case with its premise staged as a `repo_fixture` and its prompt otherwise untouched, to see whether the missing `bind` survived the staging. **It did not, in any of six with-skill arms.** 3 + 12 runs |
 | **`case-43` re-characterization (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --baseline --iteration 3`, twice | the repaired case — premise staged, prompt asking for the commands. **3/3 and 3/3 with the skill, 0/3 and 0/3 skill-free, six of six baseline arms certified SKILL-FREE.** 24 runs |
 | **collision arm, BEFORE (#81)** | `PWPROVE_EVAL_YAML=skills/pw-prove/evals/eval.collision.yaml bash scripts/run-evals-isolated.sh --iteration 3` | the first arm in this suite's history with **two** skills installed, on the **unchanged** descriptions. 9 runs (6 + 3, the ambiguous case added after the first pair returned clean). **3/3, 3/3, 3/3 — no collision observed.** A further 6 runs were spent before these on a judge that could not load: see *a judge is copied alone* |
 | **collision arm, AFTER (#81)** | the same command, both `description:` fields disambiguated | the same three cases with nothing else moved. 9 runs. **9/9, 0 contaminated** — the wording repair costs the routing nothing |
-| **trigger re-characterization (#81)** | `bash scripts/run-evals-isolated.sh --iteration 3 --include-case-name gate-skill-loaded --include-case-name case-1 --include-case-name case-2 --include-case-name case-3` | the #73/#74 blast radius after editing the frontmatter both cases guard. 12 runs. **12/12 — all four 3/3, 4/4 LOADED, 0 contaminated** |
+| **trigger re-characterization (#81)** | `bash scripts/run-evals-isolated.sh --iteration 3 --include-case-name gate-skill-loaded --include-case-name case-1-coverage-request-triggers --include-case-name case-2-test-plan-request-triggers --include-case-name case-3-flat-spec-coverage-triggers` | the #73/#74 blast radius after editing the frontmatter both cases guard. 12 runs. **12/12 — all four 3/3, 4/4 LOADED, 0 contaminated** |
 | **`case-43` confirmation (#72)** | `PWPROVE_EVAL_YAML=<staged> bash scripts/run-evals-isolated.sh --iteration 3 --parallelism 3` | the pass rate taken **in-band against the final judge**, so the admitted 3/3 is not only a re-judge of arms recorded against an earlier one. 3 runs, **3/3, 3/3 LOADED** |
 
 **85 agent runs through #75; 73 in batch 2; 21 in the wet cases (#69); 128 in batch 3; 22 in #78;
@@ -226,25 +233,25 @@ instrument certified as skill-free.
 | `gate-skill-loaded` | trigger | frontmatter `description:` — the trigger surface | **3/3** | **+1** (clean) | **active** |
 | `b01-confirmation-gate` | behavior | Step 1 › *Confirmation gate — model-invoked runs only* | **3/3** | **+1** (clean) | **active** |
 | `b05-handoff-stale` | behavior | Step 4 › *Assumptions* › the Handoff line (and the Step-2 handoff verdict it reports) | **3/3** | **+1** (clean) | **active** |
-| `case-15` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (re-taken under #78; baseline SKILL-FREE and failed — the inference it was admitted on is now a measurement) | **active** |
-| `case-50` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** → **3/3** after #66 (see below) | **+1** (clean) | **active** |
-| `case-60` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
-| `case-28` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
-| `case-48` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
+| `case-15-no-throwaway-recon-spec` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (re-taken under #78; baseline SKILL-FREE and failed — the inference it was admitted on is now a measurement) | **active** |
+| `case-50-announced-port-adopted` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** → **3/3** after #66 (see below) | **+1** (clean) | **active** |
+| `case-60-no-workers-in-command` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
+| `case-28-hermetic-audit-not-hand-parsed` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
+| `case-48-dev-guarded-rung-skipped` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
 | `w01-bringup-own-port` | behavior (**wet**) | Step 3 › *Bring the environment up* — bullet 1, the packaged serve script that hard-codes a port | **3/3** | **+1** (clean; the discriminating half is the gate, see #69 below) | **active** |
 | `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** → **3/3** (re-characterized under #71, once its judge stopped reading a tool preamble as turn 1) | **+1** (clean, and measured at **n=3 per arm** rather than n=1: 3/3 with the skill against **0/3** skill-free, all three baseline arms certified SKILL-FREE by the sweep) | **active** |
-| `case-1` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a POM repo | **1/3 → 3/3** (#73/#74; see *the trigger defect was intermittent, not absolute* below) | **+1** (clean, and **tautological** — see the note under that heading) | **active** |
-| `case-2` | trigger | frontmatter `description:` — the **coverage-gap** clause, as a "plan the tests for this route" request | **2/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
-| `case-3` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a flat-spec repo | **1/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
+| `case-1-coverage-request-triggers` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a POM repo | **1/3 → 3/3** (#73/#74; see *the trigger defect was intermittent, not absolute* below) | **+1** (clean, and **tautological** — see the note under that heading) | **active** |
+| `case-2-test-plan-request-triggers` | trigger | frontmatter `description:` — the **coverage-gap** clause, as a "plan the tests for this route" request | **2/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
+| `case-3-flat-spec-coverage-triggers` | trigger | frontmatter `description:` — the **coverage-gap** clause, over a flat-spec repo | **1/3 → 3/3** (#73/#74) | **+1** (clean, tautological) | **active** |
 | `case-81-untested-routes` | trigger (**collision arm**) | frontmatter `description:` — pw-prove's coverage clause **against e2e-reviewer's**, an untested-routes request | **3/3** before the wording repair, **3/3** after (#81) | **+1** by construction, and the discriminating before/after is **flat** — see *the collision was in the text, not in the behaviour* | **active** in `eval.collision.yaml` |
 | `case-81-spec-quality` | trigger (**collision arm**) | frontmatter `description:` — e2e-reviewer's, and the pw-prove clause that must NOT swallow it | **3/3** before, **3/3** after (#81) | as above | **active** in `eval.collision.yaml` |
 | `case-81-ambiguous-coverage` | trigger (**collision arm**) | frontmatter `description:` — the bare phrase *"coverage gaps"*, which both skills claimed | **3/3** before, **3/3** after (#81) | as above | **active** in `eval.collision.yaml` |
-| `case-43` | behavior | Step 7 › *Verify* — item 1b, the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** → **3/3** (re-characterized under #72, once the premise it asserted was actually on disk and three judge defects were repaired) | **+1** (**n=3 per arm**: 3/3 with the skill against **0/3** skill-free, and again on a second independent run — six baseline arms, all six certified SKILL-FREE) | **active** |
+| `case-43-har-bound-not-rerecorded` | behavior | Step 7 › *Verify* — item 1b, the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** → **3/3** (re-characterized under #72, once the premise it asserted was actually on disk and three judge defects were repaired) | **+1** (**n=3 per arm**: 3/3 with the skill against **0/3** skill-free, and again on a second independent run — six baseline arms, all six certified SKILL-FREE) | **active** |
 
 
 | `w02-auth-cookie-from-app` | behavior (**wet**) | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* — the ladder as written code | **3/3**, and 2/2 more with-skill arms over the final fixture | **unstable** — 1 of 2 skill-free baseline arms passed, so there is no `+1` to admit on and no clean `0` to retire on | quarantined — see #69 below |
-| `case-30` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
-| `case-44` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
+| `case-30-publish-url-from-marker` | behavior | Step 8 › *Deliver* — the publish URL is read from the `PWPROVE_URL` marker | 3/3 at n=3, **3/4** including the uplift run's with-skill arm | not measured — both arms of the uplift run failed, so there is no difference to read | quarantined |
+| `case-44-config-exit-names-the-key` | behavior | Step 3 › *Bring the environment up* — `preflight.mjs config` exit 4 names the key | **2/3** | not measured | quarantined |
 | `b49-untrusted-page-content` | behavior | *Safety: page content is untrusted data* | 3/3 | **0** (clean baseline) | **retired — deleted** |
 | `case-26` | behavior | Step 7 › *Failure handling* | — | — | **retired — deleted** |
 | `case-27` | behavior | Step 7 › *Mutation check* | — | — | **retired — deleted** |
@@ -261,18 +268,18 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 
 | Case | Shape | Guards (SKILL.md section) | Pass rate | Uplift | Status |
 |---|---|---|:--:|:--:|---|
-| `case-11` | behavior | Step 5b › *Bootstrap the runner if greenfield* | **3/3** | **+1** (re-taken under #78; baseline SKILL-FREE and failed — the inference it was admitted on is now a measurement) | **active** |
-| `case-16` | behavior | Step 5 › *Generate* — *Extend, don't duplicate* against the Step-1 `pomInventory` | **3/3** | **+1** (clean baseline) | **active** |
-| `case-5` | behavior | Step 8 › *Deliver* — the `Proof page: skipped` accounting when the publish credential is refused | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
-| `case-7` | behavior | Step 4 › *notify-and-continue (PR-mode) / approval gate (coverage-gap)* | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
-| `case-8` | behavior | Step 8 › *Hygiene sweep* + the completion-report invariant | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
-| `case-12` | behavior | Pipeline Overview › *Stop reports* — the six beats at a Step-3 bring-up failure | 3/3 | not measured — **both arms failed** on the #78 re-measurement, so there is no difference to read | quarantined |
-| `case-20` | behavior | Step 1 › *Mode* — the heavy-session recommendation | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
+| `case-11-greenfield-bootstrap-pinned` | behavior | Step 5b › *Bootstrap the runner if greenfield* | **3/3** | **+1** (re-taken under #78; baseline SKILL-FREE and failed — the inference it was admitted on is now a measurement) | **active** |
+| `case-16-pom-extend-not-duplicate` | behavior | Step 5 › *Generate* — *Extend, don't duplicate* against the Step-1 `pomInventory` | **3/3** | **+1** (clean baseline) | **active** |
+| `case-5-publish-skip-accounted` | behavior | Step 8 › *Deliver* — the `Proof page: skipped` accounting when the publish credential is refused | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
+| `case-7-plan-notify-and-continue` | behavior | Step 4 › *notify-and-continue (PR-mode) / approval gate (coverage-gap)* | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
+| `case-8-step8-tail-complete` | behavior | Step 8 › *Hygiene sweep* + the completion-report invariant | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
+| `case-12-bringup-stop-report` | behavior | Pipeline Overview › *Stop reports* — the six beats at a Step-3 bring-up failure | 3/3 | not measured — **both arms failed** on the #78 re-measurement, so there is no difference to read | quarantined |
+| `case-20-fresh-context-recommended-once` | behavior | Step 1 › *Mode* — the heavy-session recommendation | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
 | `case-17` | behavior | Step 6 › *PROVES-header audit* | 3/3 | **0** (re-measured under #78, third attempt; baseline SKILL-FREE and **passed**) | **retired — deleted** |
-| `case-23` | behavior | Step 4 › *Effective viewport* — a desktop descriptor is scaffold boilerplate | **2/3** (re-characterized on a real fixture, #76 — the 3/3 it used to carry was on a fixture it never read) | baseline **0/3**, both arms certified skill-free | quarantined |
-| `case-4` | behavior | Step 3 › *Auth* — the token-source ladder exhausted, and the public-route false positive | **2/3** | not measured | quarantined |
-| `case-24` | behavior | Step 7 › *Proof run* — a committed proof config is reused, not rewritten (ADR 0008) | **2/3** | not measured | quarantined |
-| `case-29` | behavior | Step 2 › *6. Fold ACs the diff already proves cheaper* | **3/3** (re-characterized under #77, on a judge that reads the Proven-by column; the 0/3 was the judge reading scenario titles) | **+1** (baseline SKILL-FREE and failed) | **active** |
+| `case-23-viewport-descriptor-pinned` | behavior | Step 4 › *Effective viewport* — a desktop descriptor is scaffold boilerplate | **2/3** (re-characterized on a real fixture, #76 — the 3/3 it used to carry was on a fixture it never read) | baseline **0/3**, both arms certified skill-free | quarantined |
+| `case-4-auth-ladder-exhausted-stops` | behavior | Step 3 › *Auth* — the token-source ladder exhausted, and the public-route false positive | **2/3** | not measured | quarantined |
+| `case-24-proof-config-reused` | behavior | Step 7 › *Proof run* — a committed proof config is reused, not rewritten (ADR 0008) | **2/3** | not measured | quarantined |
+| `case-29-unit-proven-acs-folded` | behavior | Step 2 › *6. Fold ACs the diff already proves cheaper* | **3/3** (re-characterized under #77, on a judge that reads the Proven-by column; the 0/3 was the judge reading scenario titles) | **+1** (baseline SKILL-FREE and failed) | **active** |
 | `case-9` | behavior | Step 7 › *Hermetic audit* | — | — | **retired — deleted** |
 | `case-13` | behavior | Step 3 › *Auth* — the server-set cookie rung | — | — | **retired — deleted** |
 | `case-19` | behavior | Step 7 › *Token diet* | — | — | **retired — deleted** |
@@ -310,28 +317,28 @@ must-FAIL fixture pair before it could run at all.
 
 | Case | Shape | Guards (SKILL.md section) | Pass rate | Uplift | Status |
 |---|---|---|:--:|:--:|---|
-| `case-33` | behavior | Step 5 › *HAR-first mocking* — a recon pass that produced no HAR | **3/3** (after judge repair) | **+1** (clean) | **active** |
-| `case-34` | behavior | `code-rules.md` § *Clip Fidelity* — the filming law, PW_PROVE_CLIP may only add time | **3/3** | **+1** (clean) | **active** |
-| `case-35` | behavior | Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 | **3/3** | **+1** (clean) | **active** |
-| `case-36` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, agreed by the Step-6 audit | **3/3** | **+1** (clean) | **active** |
-| `case-22` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, resolved from a config **read off disk** | **3/3** (#76, and *after* the judge lost two out-of-branch assertions — 1/3 before, on reds that resolved the viewport correctly) | **+1** — baseline 0/2 on the arms the sweep certified skill-free (a third arm read the body by `bash` and passed; counted, it is still 3/3 vs 1/3) | **active** |
-| `case-37` | behavior | Step 7 › the clip inspection — diagnose, fix ungated, re-audit, re-film once | **3/3** | **+1** (clean) | **active** |
-| `case-38` | behavior | Step 7 › the frame extract — exit 6 is a SKIP, not a failed test | **3/3** (after judge repair) | **+1** (first baseline CONTAMINATED; re-measured SKILL-FREE and still failed) | **active** |
-| `case-45` | behavior | Step 7 › *Proof run* — the committed proof config must not inherit `webServer` (ADR 0008) | **3/3** | **+1** (clean) | **active** |
-| `case-46` | behavior | Step 7 › *Failure handling* — the no-progress checkpoint takes the handover stop | **3/3** (after judge repair) | **+1** (clean) | **active** |
+| `case-33-missing-har-declared` | behavior | Step 5 › *HAR-first mocking* — a recon pass that produced no HAR | **3/3** (after judge repair) | **+1** (clean) | **active** |
+| `case-34-clip-adds-time-not-input` | behavior | `code-rules.md` § *Clip Fidelity* — the filming law, PW_PROVE_CLIP may only add time | **3/3** | **+1** (clean) | **active** |
+| `case-35-clip-audit-blocks-step7` | behavior | Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 | **3/3** | **+1** (clean) | **active** |
+| `case-36-clip-audit-respects-deliberate` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, agreed by the Step-6 audit | **3/3** | **+1** (clean) | **active** |
+| `case-22-viewport-deliberate-respected` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, resolved from a config **read off disk** | **3/3** (#76, and *after* the judge lost two out-of-branch assertions — 1/3 before, on reds that resolved the viewport correctly) | **+1** — baseline 0/2 on the arms the sweep certified skill-free (a third arm read the body by `bash` and passed; counted, it is still 3/3 vs 1/3) | **active** |
+| `case-37-illegible-clip-refilmed-once` | behavior | Step 7 › the clip inspection — diagnose, fix ungated, re-audit, re-film once | **3/3** | **+1** (clean) | **active** |
+| `case-38-frames-skip-is-not-a-failure` | behavior | Step 7 › the frame extract — exit 6 is a SKIP, not a failed test | **3/3** (after judge repair) | **+1** (first baseline CONTAMINATED; re-measured SKILL-FREE and still failed) | **active** |
+| `case-45-proof-config-drops-webserver` | behavior | Step 7 › *Proof run* — the committed proof config must not inherit `webServer` (ADR 0008) | **3/3** | **+1** (clean) | **active** |
+| `case-46-same-signature-takes-handover` | behavior | Step 7 › *Failure handling* — the no-progress checkpoint takes the handover stop | **3/3** (after judge repair) | **+1** (clean) | **active** |
 | `case-51` | behavior | Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` is a server fault | **3/3** | **0** (re-measured on a certified SKILL-FREE baseline, which **passed**) | **retired — deleted** |
-| `case-52` | behavior | Step 3 › build reuse **and** Step 7 › *Mutation check* — artifact isolation | **3/3** (after judge repair) | **+1** (clean) | **active** |
-| `case-57` | behavior | Step 4 › *Recon* — a string `expression` is evaluated, not called | **3/3** | **+1** (clean) | **active** |
-| `case-47` | behavior | Step 7 › *Failure handling* — a moved signature is a converging run | **3/3** (after judge repair) | not measured — **both arms failed**, so there is no difference to read | quarantined |
-| `case-54` | behavior | Step 8 › *Hygiene sweep* — `har-scrub` exit 6 is over-scrub, not residue | **3/3** | not measured — both arms failed | quarantined |
-| `case-55` | behavior | Step 7 › *Mutation check* — `RESTART=unproven` has no verdict to read | **3/3** | not measured — both arms failed | quarantined |
-| `case-58` | behavior | Step 4 › *Recon* — the eval `arg` carries JSON data, not a page handle | **3/3** (after judge repair) | not measured — both arms failed | quarantined |
-| `case-59` | behavior | Step 7 › *Verify* — serialise once as a diagnostic (ADR 0017) | **3/3** | not measured — both arms failed | quarantined |
-| `case-41` | behavior | Step 8 › *Hygiene sweep* — the residue refusal, not an eyeball confirmation | **1/3** | not measured | quarantined |
-| `case-42` | behavior | Step 3 › the capture-time scrub is trusted, not repeated | **1/3** | not measured | quarantined |
-| `case-56` | behavior | Step 7 › *Mutation check* — a proven restart is proven | **1/3** | not measured | quarantined |
-| `case-53` | behavior | Step 3 › *Recon* — the probe's verb surface | **3/3** (#82, after the **judge** was repaired — 2/3 at #79, 0/3 before that; 3/3 again on an independent n=3 in #82) | **+3** — baseline 0/3, all three arms certified SKILL-FREE (#79 run) | **active** — admitted **#82** |
-| `case-61` | behavior | Step 5 › *Generate* — serialisation belongs in the spec, not the command line | **2/3** (#82, after the vestigial judge clause was removed — 0/3 at #80; 3/3 on the #79-run responses replayed through the same final judge) | **+2** — baseline 0/3, all three arms certified SKILL-FREE | quarantined — **#82**, short of 3/3 on the fresh run |
+| `case-52-build-reuse-mutation-rebuilds` | behavior | Step 3 › build reuse **and** Step 7 › *Mutation check* — artifact isolation | **3/3** (after judge repair) | **+1** (clean) | **active** |
+| `case-57-eval-expression-evaluated` | behavior | Step 4 › *Recon* — a string `expression` is evaluated, not called | **3/3** | **+1** (clean) | **active** |
+| `case-47-changed-signature-spends-budget` | behavior | Step 7 › *Failure handling* — a moved signature is a converging run | **3/3** (after judge repair) | not measured — **both arms failed**, so there is no difference to read | quarantined |
+| `case-54-overscrub-is-rerecorded` | behavior | Step 8 › *Hygiene sweep* — `har-scrub` exit 6 is over-scrub, not residue | **3/3** | not measured — both arms failed | quarantined |
+| `case-55-unproven-restart-no-verdict` | behavior | Step 7 › *Mutation check* — `RESTART=unproven` has no verdict to read | **3/3** | not measured — both arms failed | quarantined |
+| `case-58-eval-arg-carries-data` | behavior | Step 4 › *Recon* — the eval `arg` carries JSON data, not a page handle | **3/3** (after judge repair) | not measured — both arms failed | quarantined |
+| `case-59-serialise-once-to-diagnose` | behavior | Step 7 › *Verify* — serialise once as a diagnostic (ADR 0017) | **3/3** | not measured — both arms failed | quarantined |
+| `case-41-har-residue-refusal` | behavior | Step 8 › *Hygiene sweep* — the residue refusal, not an eyeball confirmation | **1/3** | not measured | quarantined |
+| `case-42-capture-time-scrub-trusted` | behavior | Step 3 › the capture-time scrub is trusted, not repeated | **1/3** | not measured | quarantined |
+| `case-56-proven-restart-is-the-red` | behavior | Step 7 › *Mutation check* — a proven restart is proven | **1/3** | not measured | quarantined |
+| `case-53-probe-vocabulary-one-batch` | behavior | Step 3 › *Recon* — the probe's verb surface | **3/3** (#82, after the **judge** was repaired — 2/3 at #79, 0/3 before that; 3/3 again on an independent n=3 in #82) | **+3** — baseline 0/3, all three arms certified SKILL-FREE (#79 run) | **active** — admitted **#82** |
+| `case-61-serial-in-the-spec` | behavior | Step 5 › *Generate* — serialisation belongs in the spec, not the command line | **2/3** (#82, after the vestigial judge clause was removed — 0/3 at #80; 3/3 on the #79-run responses replayed through the same final judge) | **+2** — baseline 0/3, all three arms certified SKILL-FREE | quarantined — **#82**, short of 3/3 on the fresh run |
 
 ### Why batch 3 retired nothing, and why that is the expected shape
 
@@ -393,14 +400,14 @@ an unstaged fixture #76, and here as **vocabulary**).
 
 | Case | What the answer said | What the judge demanded |
 |---|---|---|
-| `case-41` | "Re-run `har-scrub.mjs` over the file, then `--verify` again" | the literal `re-scrub` |
-| `case-41` | the exit codes in a **markdown table**, arriving as `\| **3** \|` cells | `exit 3` as running prose |
-| `case-52` | `git checkout -- <file>` | the word `revert` |
-| `case-58` | passed the row **id** as the arg and did the lookup in the page | the selector string as the arg |
-| `case-42` | opened "Nothing. The recording is already scrubbed." | `nothing to do` / `no further action` |
-| `case-46` | "Commit nothing, push nothing." | `nothing is committed` |
-| `case-33` | took the **re-record** branch | the re-record branch **and** the deviation declaration |
-| `case-38` | prose about the **hermetic audit** ("undeclared LIVE call fails the run") | — it tripped a forbidden pattern belonging to a different step |
+| `case-41-har-residue-refusal` | "Re-run `har-scrub.mjs` over the file, then `--verify` again" | the literal `re-scrub` |
+| `case-41-har-residue-refusal` | the exit codes in a **markdown table**, arriving as `\| **3** \|` cells | `exit 3` as running prose |
+| `case-52-build-reuse-mutation-rebuilds` | `git checkout -- <file>` | the word `revert` |
+| `case-58-eval-arg-carries-data` | passed the row **id** as the arg and did the lookup in the page | the selector string as the arg |
+| `case-42-capture-time-scrub-trusted` | opened "Nothing. The recording is already scrubbed." | `nothing to do` / `no further action` |
+| `case-46-same-signature-takes-handover` | "Commit nothing, push nothing." | `nothing is committed` |
+| `case-33-missing-har-declared` | took the **re-record** branch | the re-record branch **and** the deviation declaration |
+| `case-38-frames-skip-is-not-a-failure` | prose about the **hermetic audit** ("undeclared LIVE call fails the run") | — it tripped a forbidden pattern belonging to a different step |
 
 Eleven judges were widened once, to the phrasing correct answers actually used; none asks for less
 than it did. Re-characterized, six moved to 3/3.
@@ -886,10 +893,10 @@ number an earlier draft produced is not a number the shipped judge produces):
 
 | | #79/#80 run, replayed | #82 run, fresh |
 |---|---|---|
-| `case-53` with skill | **3/3** | **3/3** |
-| `case-53` baseline | 0/3, all SKILL-FREE | 0/3, all **CONTAMINATED** |
-| `case-61` with skill | **3/3** | **2/3** |
-| `case-61` baseline | 0/3, all SKILL-FREE | 0/3, all SKILL-FREE |
+| `case-53-probe-vocabulary-one-batch` with skill | **3/3** | **3/3** |
+| `case-53-probe-vocabulary-one-batch` baseline | 0/3, all SKILL-FREE | 0/3, all **CONTAMINATED** |
+| `case-61-serial-in-the-spec` with skill | **3/3** | **2/3** |
+| `case-61-serial-in-the-spec` baseline | 0/3, all SKILL-FREE | 0/3, all SKILL-FREE |
 
 `case-53` is **admitted**: 6/6 with the skill across two independent runs, `+3` against a baseline
 whose three arms are certified SKILL-FREE — the #79 run. The fresh run's own baseline is unusable and
@@ -1088,12 +1095,12 @@ Every batch-2 judge was written fresh, with a hand-authored must-PASS twin. Six 
 
 | Case | The sentence that fired | The defect |
 |---|---|---|
-| `case-7` | *"I present the scenarios … and **stop until you explicitly approve**."* | The case has two branches and that sentence is the **coverage-gap** answer. The PR-mode negatives ran over the whole reply. |
-| `case-4` | *"treating them as a real login is inventing a credential"* | A rejection carrying no `NEGATED` token at all — the refusal lives in the sentence's shape. |
-| `case-16` | ``## `/profile` — scaffold new, into the existing POM dir`` | `commitments()` strips inline code, so the row for the **uncovered** route arrived as a bare "scaffold new … POM". |
-| `case-11` | *"added with the repo's own package manager so it lands pinned"* | The judge demanded the literal `pnpm add -D` string from an answer the prompt asked to be a **plan**. |
-| `case-24` | *"gets **no line** in the `Generated` block"* | A one-directional proximity window that could only see the omission stated *after* the word it anchored on. |
-| `case-29` | *"Scenario 1: saved scripts arrive trimmed and pruned"* | The judge reads scenario **titles**; the fold it is looking for is a **table** fact two lines below. |
+| `case-7-plan-notify-and-continue` | *"I present the scenarios … and **stop until you explicitly approve**."* | The case has two branches and that sentence is the **coverage-gap** answer. The PR-mode negatives ran over the whole reply. |
+| `case-4-auth-ladder-exhausted-stops` | *"treating them as a real login is inventing a credential"* | A rejection carrying no `NEGATED` token at all — the refusal lives in the sentence's shape. |
+| `case-16-pom-extend-not-duplicate` | ``## `/profile` — scaffold new, into the existing POM dir`` | `commitments()` strips inline code, so the row for the **uncovered** route arrived as a bare "scaffold new … POM". |
+| `case-11-greenfield-bootstrap-pinned` | *"added with the repo's own package manager so it lands pinned"* | The judge demanded the literal `pnpm add -D` string from an answer the prompt asked to be a **plan**. |
+| `case-24-proof-config-reused` | *"gets **no line** in the `Generated` block"* | A one-directional proximity window that could only see the omission stated *after* the word it anchored on. |
+| `case-29-unit-proven-acs-folded` | *"Scenario 1: saved scripts arrive trimmed and pruned"* | The judge reads scenario **titles**; the fold it is looking for is a **table** fact two lines below. |
 
 Five were repaired against the answers the run recorded — those six answers are now the must-PASS
 twins, which is the README's own preference (*"prefer a real answer from a retained run transcript"*)
@@ -1208,8 +1215,8 @@ staged workspace, so no post-run sweep can see what the agent was handed.
 
 | case | with skill | baseline | verdict |
 |---|---|---|---|
-| `case-22` | **3/3** | 0/2 certified skill-free (third arm BASELINE DIRTY, and it passed) | **admitted**, `+1` |
-| `case-23` | 2/3 | 0/3, all certified skill-free | **quarantined** |
+| `case-22-viewport-deliberate-respected` | **3/3** | 0/2 certified skill-free (third arm BASELINE DIRTY, and it passed) | **admitted**, `+1` |
+| `case-23-viewport-descriptor-pinned` | 2/3 | 0/3, all certified skill-free | **quarantined** |
 
 `case-23`'s single miss is a real one: the answer resolved `pinned: 1600x900` and named the
 descriptor, then never emitted the `test.use({ viewport })` line, so the pin lived nowhere. That is
@@ -1247,9 +1254,9 @@ repo's `SKILL.md`, exactly as #75's issue body documents, and found **7 of 8**:
 
 | Case | Baseline verdict | Baseline result | Reading |
 |---|---|---|---|
-| `case-16` | `LOADED via skill-tool` — the call errored, no body | **failed** | **`+1`, clean** |
-| `case-11` | `LOADED via skill-tool, skill-body` | **failed** | **`+1`** — a genuinely skill-free run has strictly less to work with and cannot do better, so the direction is safe and the reading is conservative rather than wrong |
-| `case-5`, `case-7`, `case-8`, `case-12`, `case-17`, `case-20` | `LOADED via skill-tool, skill-body` | passed | **void.** The pass may be Opus 5's own capability or may be the body it just read, and this run cannot tell them apart |
+| `case-16-pom-extend-not-duplicate` | `LOADED via skill-tool` — the call errored, no body | **failed** | **`+1`, clean** |
+| `case-11-greenfield-bootstrap-pinned` | `LOADED via skill-tool, skill-body` | **failed** | **`+1`** — a genuinely skill-free run has strictly less to work with and cannot do better, so the direction is safe and the reading is conservative rather than wrong |
+| `case-5-publish-skip-accounted`, `case-7`, `case-8`, `case-12`, `case-17`, `case-20` | `LOADED via skill-tool, skill-body` | passed | **void.** The pass may be Opus 5's own capability or may be the body it just read, and this run cannot tell them apart |
 
 Six 3/3 cases were therefore quarantined on a **void** uplift and not retired for zero uplift — the
 distinction batch 1 drew for `case-28` and `case-48`, applied at six times the scale.
@@ -1261,8 +1268,8 @@ quarantined rather than guessed:
 
 | Case | Baseline verdict | Baseline result | Reading |
 |---|---|---|---|
-| `case-5`, `case-7`, `case-8`, `case-20` | `SKILL-FREE` | **failed** | **`+1`, clean → admitted** |
-| `case-12` | `SKILL-FREE` | failed, **and so did the with-skill arm** | **not measured** — no difference to read, the `case-30` reading |
+| `case-5-publish-skip-accounted`, `case-7`, `case-8`, `case-20` | `SKILL-FREE` | **failed** | **`+1`, clean → admitted** |
+| `case-12-bringup-stop-report` | `SKILL-FREE` | failed, **and so did the with-skill arm** | **not measured** — no difference to read, the `case-30` reading |
 | `case-17` | `SKILL-FREE` (third attempt) | **passed** | **zero uplift → retired, deleted** |
 
 **Four of six admit, one retires, one cannot be read.** Had the batch-2 worker treated the dirty
@@ -1315,9 +1322,9 @@ isolated runner:
 | Case | Filed as | Re-measured, `description:` unchanged | After the fix |
 |---|:--:|:--:|:--:|
 | `gate-skill-loaded` | 3/3 | **3/3** | **3/3** |
-| `case-1` | 0/3 | **1/3** | **3/3** |
-| `case-2` | 2/3 | **2/3** | **3/3** |
-| `case-3` | 0/3 | **1/3** | **3/3** |
+| `case-1-coverage-request-triggers` | 0/3 | **1/3** | **3/3** |
+| `case-2-test-plan-request-triggers` | 2/3 | **2/3** | **3/3** |
+| `case-3-flat-spec-coverage-triggers` | 0/3 | **1/3** | **3/3** |
 
 So the ticket's finding stands and its severity does not: a coverage-gap request *sometimes* loaded
 pw-prove, which is worse to reason about than never loading it, and is exactly the shape a single

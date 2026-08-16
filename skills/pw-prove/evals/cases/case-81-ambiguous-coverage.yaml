@@ -1,5 +1,6 @@
 id: case-81-ambiguous-coverage
 shape: trigger
+step: 'frontmatter description: — the bare phrase "coverage gaps", which both skills claimed'
 title: The bare phrase "coverage gaps" reaches one skill, not two
 description: >-
     Trigger case, and the sharpest of the three in `evals/eval.collision.yaml` — the only one whose

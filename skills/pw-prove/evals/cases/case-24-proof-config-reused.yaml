@@ -1,6 +1,7 @@
-id: case-24
+id: case-24-proof-config-reused
 shape: behavior
-title: pw-prove - 24
+step: 'Step 7 › Proof run — a committed proof config is reused, not rewritten (ADR 0008)'
+title: 'An existing proof config is reused verbatim, not rewritten or swept away'
 description: Should detect the existing `e2e/playwright.proof.config.ts` and reuse it verbatim — no rewrite, no regeneration, no 'refresh', and no diff on that file in the run's commit. Should run the proof through it with `--config e2e/playwright.proof.config.ts` and `PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900` carrying the effective viewport. Step 8 hygiene must NOT delete it — deletion applies only to `test-results/`/`playwright-report/` litter and any legacy `.pw-prove.proof.config.*` throwaway. The completion report's Generated block omits the proof config line, since this run did not create it.
 tag: functional_test
 input:

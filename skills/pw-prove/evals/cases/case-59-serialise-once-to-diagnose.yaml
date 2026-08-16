@@ -1,6 +1,7 @@
-id: case-59
+id: case-59-serialise-once-to-diagnose
 shape: behavior
-title: pw-prove - 59
+step: 'Step 7 › Verify — serialise once as a diagnostic (ADR 0017)'
+title: 'A whole-run timeout signature is diagnosed by one serialised re-run of the same spec'
 description: Should treat 'every test times out at its first navigation' as a whole-run signature rather than a spec defect, confirm the origin is alive with a quick curl, and re-run the SAME spec unchanged with `--workers=1` — as a DIAGNOSTIC that separates a concurrency problem from a spec problem, not as the mandated setting it used to be (docs/adr/0017 retired that). Should state that against a built preview this signature has no known cause — the preview compiles nothing and was measured not to saturate — so if the serialised run passes, that is a finding to report with its evidence, not a box ticked on the way to green. Must NOT heal locators, raise the test timeout, add waits, or count this as one of the 3 auto-fix attempts against the spec.
 tag: functional_test
 input:

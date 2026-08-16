@@ -1,6 +1,7 @@
-id: case-28
+id: case-28-hermetic-audit-not-hand-parsed
 shape: behavior
-title: pw-prove - 28
+step: 'Step 7 › Hermetic audit (after the passing run)'
+title: 'The hermetic audit runs the shipped script with --spec, never a hand-rolled trace parser'
 description: 'Should run `node <skill-base>/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts` rather than writing an ad-hoc node script to parse trace.zip / *.network files. Must pass --spec, and must treat the reported IN-SPEC LIVE ROUND-TRIPS (the route.fetch call sites) as live traffic requiring a declared carve-out, even though those requests appear under MOCKED in the trace — a trace records the browser, not the Playwright process. The verdict is the agent''s: every LIVE line and every in-spec round-trip must be named in a CARVE-OUT line, otherwise the run FAILS despite being green.'
 tag: functional_test
 input:

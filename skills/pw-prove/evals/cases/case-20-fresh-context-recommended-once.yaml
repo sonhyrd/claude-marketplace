@@ -1,6 +1,7 @@
-id: case-20
+id: case-20-fresh-context-recommended-once
 shape: behavior
-title: pw-prove - 20
+step: 'Step 1 › Mode — the heavy-session recommendation'
+title: 'A heavy session earns one fresh-context recommendation, never a self-backgrounded run'
 description: Before entering the pipeline, recommend the user start a fresh session or dispatch this run to a background agent — the pipeline is long and does better with a clean context. If they decline or do not answer, continue the run INLINE in the current session. Never self-background the run or spawn a background agent on your own; the recommendation is offered once and the user decides.
 tag: functional_test
 input:

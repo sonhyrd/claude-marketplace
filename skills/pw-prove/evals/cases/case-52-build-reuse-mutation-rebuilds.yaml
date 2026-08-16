@@ -1,6 +1,7 @@
-id: case-52
+id: case-52-build-reuse-mutation-rebuilds
 shape: behavior
-title: pw-prove - 52
+step: 'Step 3 › build reuse and Step 7 › Mutation check — artifact isolation'
+title: 'A reused build satisfies the Step-3 gate, and the mutation check forces a rebuild'
 description: Should accept the Step-3 reuse as a legitimate pass — the artifact was built from this exact commit and working tree, the run said so with its reason, and the gate is satisfied by `BUILD=reused` exactly as by `BUILD=ok`. Should NOT force a rebuild to feel safe, and should NOT treat the instant build phase as a skipped or failed build. At Step 7 should rebuild for the mutation, forcing it with `BUILD_REUSE=never`, and restart the preview server, because the proof target is a build and a mutated source file changes nothing in the standing artifact — a mutation run against the un-rebuilt artifact is green by construction. Should revert, then rebuild and restart once more so nothing downstream runs against deliberately broken software. Should keep the mutation run's artifacts out of `test-results/` via `--output=/tmp/pw-prove-mutation`.
 tag: functional_test
 input:

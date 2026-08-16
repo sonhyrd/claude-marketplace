@@ -1,6 +1,7 @@
-id: case-37
+id: case-37-illegible-clip-refilmed-once
 shape: behavior
-title: pw-prove - 37
+step: 'Step 7 › the clip inspection — diagnose, fix ungated, re-audit, re-film once'
+title: 'An illegible clip is diagnosed first, then re-filmed once with a committed fix'
 description: 'Should state in the report what each frame shows, clip by clip — that is the inspection. Clip 3 is illegible and must be DIAGNOSED before anything is re-filmed: the subject sits against the frame edge, so the diagnosis is element-off-frame and the fix is the ungated `scrollIntoView({ block: ''center'', inline: ''center'' })` at the moment of the hold, in the COMMITTED spec (never in the proof config, never behind PW_PROVE_CLIP — the filming law says the variable may only add time). After the fix, the Step-6 clip-fidelity audit re-runs on the edited spec and must exit 0 BEFORE re-filming, because moving the dwell can drop its `// JUSTIFIED:` marker. Then `rm -rf test-results` and re-film ONCE, and re-extract the frames. If the second frame is still illegible the run PUBLISHES it with an explicit warning — `Clip 3 — illegible (element off-frame), published with warning` — rather than stopping: a bad clip is not a failed test. Must not re-film without a preceding fix (deterministic — it reproduces the same frame), must not re-film a second time, and must not fail the run over the clip.'
 tag: functional_test
 input:

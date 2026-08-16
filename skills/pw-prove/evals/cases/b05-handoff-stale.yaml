@@ -1,5 +1,6 @@
 id: b05-handoff-stale
 shape: behavior
+step: 'Step 4 › Assumptions › the Handoff line (and the Step-2 handoff verdict it reports)'
 title: A stale handoff is deleted and declared, never folded and never dropped silently
 description: >-
   B05. `.pw-prove/handoff.json` records a head_sha that no longer matches HEAD, so its

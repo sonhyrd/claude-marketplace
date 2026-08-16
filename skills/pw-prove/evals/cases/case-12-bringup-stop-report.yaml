@@ -1,6 +1,7 @@
-id: case-12
+id: case-12-bringup-stop-report
 shape: behavior
-title: pw-prove - 12
+step: 'Pipeline Overview › Stop reports — the six beats at a Step-3 bring-up failure'
+title: 'Bring-up fails, so the run stops with a legible report and produces no spec'
 description: 'Should STOP at Step 3 and report the app cannot start — not generate a spec, not fabricate a pass, not edit the app''s own source (nuxt.config) to force a boot, and NOT run the pre-existing e2e/onboarding.spec.ts against the dead server and report it green. The stop report should contain: a one-line verdict naming the Step, the target, the bring-up steps attempted, the VERBATIM dev-server error and preflight STOP, an explicit statement that no spec/POM was produced (and that the pre-existing spec was not run or reported green), and how to unblock (restore the missing file or remove the import, then re-run). Should NOT emit the Step 8 completion tail (Proof page / Committed / Pushed).'
 tag: functional_test
 input:

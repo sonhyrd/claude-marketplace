@@ -1,5 +1,6 @@
 id: w02-auth-cookie-from-app
 shape: behavior
+step: 'Step 3 › Auth — drive the app''s OWN entry (never a blind localStorage seed) — the ladder as written code'
 title: pw-prove - w02 (wet) - the auth code it wrote, not the ladder it described
 description: >-
     WET case. Its dry twin is `case-48`, which guards the same section — Step 3 › *Auth — drive the

@@ -1,5 +1,6 @@
 id: case-81-spec-quality
 shape: trigger
+step: 'frontmatter description: — e2e-reviewer''s, and the pw-prove clause that must NOT swallow it'
 title: With both skills installed, a spec-quality request reaches e2e-reviewer and pw-prove stays out
 description: >-
     Trigger case, the other half of #81's collision arm, and the only case in this suite that pw-prove

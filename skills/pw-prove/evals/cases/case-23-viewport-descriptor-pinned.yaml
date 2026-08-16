@@ -1,6 +1,7 @@
-id: case-23
+id: case-23-viewport-descriptor-pinned
 shape: behavior
-title: pw-prove - 23
+step: 'Step 4 › Effective viewport — a desktop descriptor is scaffold boilerplate'
+title: 'A device-descriptor viewport is scaffold boilerplate, so the proof pins 1600x900'
 description: 'The chromium project spreads `...devices["Desktop Chrome"]` (which carries 1280x720) and the config has no explicit `viewport:` key anywhere. The agent must resolve this to a `pinned: 1600x900` verdict rather than `deliberate: 1280x720` — a desktop device-descriptor viewport is scaffold boilerplate, not a project decision. Externally: the generated spec must contain `test.use({ viewport: { width: 1600, height: 900 } })`, and the proof run must carry `PW_PROVE_W=1600 PW_PROVE_H=900`. Failing this branch is the regression that would silently nullify the legibility fix on nearly every real project, since almost every scaffolded config spreads a descriptor.'
 tag: functional_test
 input:

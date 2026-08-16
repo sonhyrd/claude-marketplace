@@ -1,6 +1,7 @@
-id: case-3
+id: case-3-flat-spec-coverage-triggers
 shape: trigger
-title: A coverage request against a flat-spec repo trips the trigger
+step: 'frontmatter description: — the coverage-gap clause, over a flat-spec repo'
+title: 'A coverage request against a flat-spec repo trips the trigger'
 description: >-
     Trigger case. The prompt is a realistic top-of-task request for coverage analysis over a Next.js
     project whose existing specs are flat, and it names no skill. What is graded is whether the

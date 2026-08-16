@@ -1,6 +1,7 @@
-id: case-56
+id: case-56-proven-restart-is-the-red
 shape: behavior
-title: pw-prove - 56
+step: 'Step 7 › Mutation check — a proven restart is proven'
+title: 'RESTART=proven makes the failed assertion the mutation check''s RED, and it is not re-litigated'
 description: 'Should record this as the mutation check''s RED: the restart was proven by an announcement written after the restart mark, so the server under test is the one holding the artifact just built, and the failed assertion on the hint the mutation removed is exactly the evidence the step wants. Should continue with the step — revert the file exactly, rebuild and restart the preview once more (again with SERVE_RESTART=1 and a fresh mark), and verify the tree is unchanged. Should NOT treat a fast restart as suspicious, NOT re-poll, restart again, or kill anything to ''make sure'' the server is fresh, and NOT downgrade the RED to ''unproven'' — RESTART=proven is the evidence, and an announcement that arrived before the poll began is the ordinary case, not a stale one.'
 tag: functional_test
 input:

@@ -1,6 +1,7 @@
-id: case-61
+id: case-61-serial-in-the-spec
 shape: behavior
-title: pw-prove - 61
+step: 'Step 5 › Generate — serialisation belongs in the spec, not the command line'
+title: 'Serialisation belongs in the spec''s describe block, not on the proof command line'
 description: 'The premise is a DECLARED CARVE-OUT, so the hermetic answer is already spent: mocking both sides would make the mock the thing that makes the cross-view assertion pass, which is why the prompt states it is unavailable. Should therefore serialise those scenarios in the spec with `test.describe.configure({ mode: ''serial'' })` around the describe block that owns them, with a comment naming the shared record as the reason, and leave the rest of the proof running concurrently. Should say why the flag is the wrong place: each test already gets a fresh browser context, so nothing leaks that way — what interferes is two scenarios contending for one record, which is a property of THIS spec, and a global --workers=1 would charge every other proof wall clock for it. Should not reach for --workers=1, retries, waits or sleeps to paper over the race.'
 tag: functional_test
 input:

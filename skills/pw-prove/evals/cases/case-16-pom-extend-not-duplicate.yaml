@@ -1,6 +1,7 @@
-id: case-16
+id: case-16-pom-extend-not-duplicate
 shape: behavior
-title: pw-prove - 16
+step: 'Step 5 › Generate — Extend, don''t duplicate against the Step-1 pomInventory'
+title: 'A route already in the POM inventory extends that POM instead of duplicating it'
 description: 'For /checkout: because pomInventory already maps CheckoutPage to /checkout, EXTEND the existing CheckoutPage class (add the coupon-field and submit-button locators/methods there) — do NOT scaffold a second Page Object for the same route. A duplicate POM for a route already in the inventory is allowed only with a stated justification line in the Step 4 Assumptions block (e.g. the existing POM is a different app area sharing the path). For /profile: it has no POM in the inventory, so a fresh ProfilePage is created — extend-don''t-duplicate does not mean refusing to author a POM for an uncovered route.'
 tag: functional_test
 input:

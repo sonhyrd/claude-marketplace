@@ -38,9 +38,9 @@ cases:
         # certified skill-free baseline and it is a TAUTOLOGY — a case judged on loading cannot pass
         # an arm with nothing to load. The discriminating figure is the before/after on the
         # description itself, and evals/REGISTRY.md carries both.
-        - evals/cases/case-1.yaml
-        - evals/cases/case-2.yaml
-        - evals/cases/case-3.yaml
+        - evals/cases/case-1-coverage-request-triggers.yaml
+        - evals/cases/case-2-test-plan-request-triggers.yaml
+        - evals/cases/case-3-flat-spec-coverage-triggers.yaml
         # --- the admitted P0 behaviors ---
         # Every one is judged by a script under evals/judges/, and every one of those scripts is
         # covered by a must-PASS / must-FAIL fixture pair in scripts/ci/test-eval-judges.sh. They
@@ -62,13 +62,13 @@ cases:
         # rate is a coinflip is what caused a shipped fix to be committed and then reverted.
         - evals/cases/b01-confirmation-gate.yaml
         - evals/cases/b05-handoff-stale.yaml
-        - evals/cases/case-50.yaml
-        - evals/cases/case-15.yaml
-        - evals/cases/case-60.yaml
+        - evals/cases/case-50-announced-port-adopted.yaml
+        - evals/cases/case-15-no-throwaway-recon-spec.yaml
+        - evals/cases/case-60-no-workers-in-command.yaml
         # Admitted by #75, once their baseline arms were provably skill-free: both were quarantined
         # on a `void` uplift, and both measure +1 against a baseline the sweep certifies.
-        - evals/cases/case-28.yaml
-        - evals/cases/case-48.yaml
+        - evals/cases/case-28-hermetic-audit-not-hand-parsed.yaml
+        - evals/cases/case-48-dev-guarded-rung-skipped.yaml
         # --- admitted by batch 2 (#64), and by #78 re-measuring it ---
         # Thirteen cases were measured. #64 admitted two on the evidence it had; its other six 3/3
         # cases had baselines that read the skill body off the host, so their uplift was `void` and
@@ -82,16 +82,16 @@ cases:
         # anyway — the "direction-safe" reading. Batch 3's `case-51` refuted that inference, so #78
         # re-took both rather than inheriting them. Both baselines came back SKILL-FREE and failed,
         # so both +1s stand as measurements. No case in this list rests on that reading any more.
-        - evals/cases/case-11.yaml
-        - evals/cases/case-16.yaml
+        - evals/cases/case-11-greenfield-bootstrap-pinned.yaml
+        - evals/cases/case-16-pom-extend-not-duplicate.yaml
         # The four #78 unvoided. Each closes a coverage gap the registry named twice: Step 8's
         # hygiene sweep and its report invariant (case-8), the `Proof page: skipped` accounting on
         # the same section (case-5), Step 4's notify-and-continue / approval gate (case-7), and
         # Step 1's heavy-session recommendation (case-20).
-        - evals/cases/case-5.yaml
-        - evals/cases/case-7.yaml
-        - evals/cases/case-8.yaml
-        - evals/cases/case-20.yaml
+        - evals/cases/case-5-publish-skip-accounted.yaml
+        - evals/cases/case-7-plan-notify-and-continue.yaml
+        - evals/cases/case-8-step8-tail-complete.yaml
+        - evals/cases/case-20-fresh-context-recommended-once.yaml
         # The suite's first WET case (#69), and the first case of any kind to reference evals/files/.
         # It is graded on what the run PRODUCED — the `serve.log` a real server wrote, and the port in
         # it — rather than on what it said, which is why the runtime above is `none` and must stay
@@ -127,16 +127,16 @@ cases:
         # 3/3 and would look admissible on pass rate alone — both arms of their uplift run failed,
         # so there is no difference to read, which is the `case-30` reading. REGISTRY.md says which
         # reason applies to which.
-        - evals/cases/case-33.yaml
-        - evals/cases/case-34.yaml
-        - evals/cases/case-35.yaml
-        - evals/cases/case-36.yaml
-        - evals/cases/case-37.yaml
-        - evals/cases/case-38.yaml
-        - evals/cases/case-45.yaml
-        - evals/cases/case-46.yaml
-        - evals/cases/case-52.yaml
-        - evals/cases/case-57.yaml
+        - evals/cases/case-33-missing-har-declared.yaml
+        - evals/cases/case-34-clip-adds-time-not-input.yaml
+        - evals/cases/case-35-clip-audit-blocks-step7.yaml
+        - evals/cases/case-36-clip-audit-respects-deliberate.yaml
+        - evals/cases/case-37-illegible-clip-refilmed-once.yaml
+        - evals/cases/case-38-frames-skip-is-not-a-failure.yaml
+        - evals/cases/case-45-proof-config-drops-webserver.yaml
+        - evals/cases/case-46-same-signature-takes-handover.yaml
+        - evals/cases/case-52-build-reuse-mutation-rebuilds.yaml
+        - evals/cases/case-57-eval-expression-evaluated.yaml
         # --- admitted by #76, once it was staging its fixture instead of the fixture's path ---
         # `context.files` is {path: INLINE CONTENT}, so this case had been reading a 49-byte file
         # containing its own path and answering a different question. It guards the same rule as
@@ -144,7 +144,7 @@ cases:
         # not a config the prompt describes, so it is also the only case that goes red if fixture
         # staging silently breaks again. Its numbers, and the judge repair that preceded them, are
         # in evals/REGISTRY.md.
-        - evals/cases/case-22.yaml
+        - evals/cases/case-22-viewport-deliberate-respected.yaml
         # --- re-admitted by #72, as a CASE repair rather than a body repair ---
         # It went out at 0/3 in #63 for emitting `har-scrub.mjs <har> --out … --origin …` with the
         # `bind` subcommand missing. #72 staged the premise the case had only ever asserted — no
@@ -156,7 +156,7 @@ cases:
         # instead of emitting one, and this case is graded on the artifact. 3/3 in-band with a
         # certified skill-free 0/3 baseline; three judge defects were repaired on the way, each with
         # a fixture pair. evals/REGISTRY.md has all of it.
-        - evals/cases/case-43.yaml
+        - evals/cases/case-43-har-bound-not-rerecorded.yaml
         # --- admitted by #77, once its judge read the table instead of the scenario titles ---
         # `case-29` was 0/3 for three runs and the skill was right in all of them: the judge matched
         # scenario TITLES, and the one scenario that survives a fold is supposed to name the
@@ -165,7 +165,7 @@ cases:
         # column, where a folded AC says `already covered: <test file>`. 3/3, `+1`. Its baseline
         # failed by refusing to produce a plan at all rather than by folding wrongly — REGISTRY.md
         # says what that does and does not license.
-        - evals/cases/case-29.yaml
+        - evals/cases/case-29-unit-proven-acs-folded.yaml
         # --- admitted by #82, once its judge stopped grading spelling ---
         # `case-53` guards Step 3 › Recon's verb surface and was 0/3, then 2/3 after #79 repaired
         # its premise. The residue was three judge patterns, all of the bare-substring family in its
@@ -177,7 +177,7 @@ cases:
         # n=3, `+3` against three certified SKILL-FREE arms. Its sibling `case-61` came out of the
         # same ticket at 2/3 and stays quarantined; REGISTRY.md says why, and why that red is a
         # candidate finding against the body rather than the instrument.
-        - evals/cases/case-53.yaml
+        - evals/cases/case-53-probe-vocabulary-one-batch.yaml
         # The remaining imported cases stay on disk but OUT of this list until their placeholder
         # judges are replaced. An unrepaired case does NOT report a vacuous pass — it reports a
         # config error: `judge.criteria` is required when `judge.type` is `agent_judge`, and those
