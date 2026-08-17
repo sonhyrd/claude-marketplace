@@ -7,6 +7,15 @@ description: |
   logged runs, producing hybrids like `medium·bug` and one agent writing "Real
   bug, but Medium by policy."
 
+  The `failure` rules are **regexes over the grading sentence**, not substrings,
+  and they must stay that way. Substring keys failed correct answers twice: a bare
+  `Critical` or `promote` matched prose explaining what the run is *not* doing
+  ("don't promote it to Critical"), and `is Critical` matched "OCR's apply
+  threshold is Critical/High/Medium". The regexes require a *subject* — `O6` or
+  "the finding" — next to the grading verb, which is what a wrong answer has and a
+  correct one does not. Verified against three correct answers (no match) and five
+  wrong phrasings (all matched).
+
 input:
   prompt: |
     Fix stage on PR #377. The OCR track returned O6 with `severity: medium,
@@ -22,5 +31,9 @@ judge:
     - output_contains:
         any: ["category", "not a severity", "verbatim", "as reported", "never re-graded", "OCR's severity"]
   failure:
+    - output_matches:
+        any:
+          - '(?i)(O6|this finding|the finding)[^.\n]{0,60}\b(is|becomes|graded|promoted to|bumped to|escalated to)\b[^.\n]{0,30}Critical'
+          - '(?i)treat(ed|ing)? (O6|the finding|this finding) as Critical'
     - output_contains:
-        any: ["Critical", "medium·bug", "Medium/bug", "Medium by policy", "described, not applied", "out of policy", "promote"]
+        any: ["O6 is described", "describe O6", "out of policy", "Real bug, but Medium"]

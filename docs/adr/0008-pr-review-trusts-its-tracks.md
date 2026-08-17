@@ -100,6 +100,30 @@ Medium".
   accounting, and `bug` as a category. The no-confirmation case sits directly beside
   `report-before-write.yaml`, and both must stay green: nothing is written before the report, and
   nothing is asked after it.
+- **`## Fixes` is the hardest part of this change to hold, and the prose that holds it is deliberately
+  thin.** Eval trials repeatedly split a PR-body finding into a section *beside* `## Fixes` — `## Not
+  code`, `## Not applied — needs your call` — on the reasoning that `Applied` implies a commit and a
+  stale PR description has none. Two attempts to fix it by naming that failure mode in `SKILL.md`
+  made it **worse**, from one trial in three to three in three: spelling out the changelog reading and
+  its conclusion put the invention in front of the model with a prohibition attached, which is the
+  elephant problem. What is in 4d now is positive only — the three heading names, all three emitted
+  every time, and `Described, not applied` named as the home for a finding the commit does not carry.
+  The war story lives here rather than in the skill on purpose; do not move it back.
+  `evals/cases/fixes-accounts-for-every-id.yaml` is what notices, and its judge is **positional**
+  (`(?s)### Described, not applied[^#]*O3`) because keyword matching cannot tell an answer that
+  writes an invented heading from one that names it while refusing to.
+- **That case ships flaky, at roughly one pass in three over 21 measured trials, and it ships that
+  way on purpose.** Its assertions are not softened to make the suite green: it is catching a real
+  weakness, and a green suite that hides it is worth less than an honest amber one. The failures are
+  never random — every one reaches the same conclusion by the same route ("`## Fixes` lists commits,
+  and this finding has no commit"), relocating the invention as the prose closes each door. Treat a
+  *sustained* 0-in-3 as a regression and a 3-in-3 as the fix landing; a single failing trial is
+  within measured variance. Quarantining or splitting the case is the alternative if CI needs green,
+  and it was rejected here.
+- **The eval sandbox is not a git repository**, so these cases probe what the skill *decides*, not
+  what it does. A correct answer often ends by naming that blocker and offering to re-run, which
+  reads like a confirmation prompt to a loose keyword — one reason every `failure` rule in this
+  suite has to be decision-level.
 - **Nothing mechanical guards the closed four-reason list.** A future edit that adds a fifth reason
   will pass every test. That is what this file is for; a grep guard is the follow-up if the ADR
   proves insufficient.

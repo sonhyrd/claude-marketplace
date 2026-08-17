@@ -8,6 +8,15 @@ description: |
   holds. Sits beside `report-before-write.yaml` — nothing written before the
   report, nothing asked after it.
 
+  The `failure` rule is **one quote-aware regex**, and it has to stay one. Plain
+  substrings failed correct answers twice: generic politeness ("say the word")
+  matched a run that named a real blocker — the eval sandbox is not a git
+  repository — and offered to re-run; and `want me to apply` matched a run that
+  wrote `No confirmation, no "want me to apply these?"`, quoting the anti-pattern
+  in order to refuse it. The leading `[^"'“”`*_(]` class is what separates asking
+  the question from naming it. Verified against two correct answers (no match) and
+  five ways of asking (all matched).
+
 input:
   prompt: |
     Mid-review on PR #412. All three tracks are back, the four sections are on
@@ -21,7 +30,8 @@ judge:
     - output_contains:
         any: ["Step 4", "fix stage", "apply", "applying", "start fixing"]
     - output_contains:
-        any: ["immediately", "no confirmation", "without asking", "don't ask", "do not ask", "not wait", "no permission", "straight"]
+        any: ["immediately", "no confirmation", "without asking", "don't ask", "do not ask", "not wait", "no permission", "straight", "no approval", "stopping to ask", "asks nothing", "no gate"]
   failure:
-    - output_contains:
-        any: ["want me to proceed", "shall I proceed", "should I proceed", "let me know if", "stop here with the report", "confirm before", "your go-ahead", "say the word", "which findings would you like"]
+    - output_matches:
+        any:
+          - '(?im)(^|[^"''“”`*_(])\b(want me to (proceed|apply|start)|sh[ao]uld I (proceed|apply|start)|stop here with the report|your go-ahead|which findings would you like)'

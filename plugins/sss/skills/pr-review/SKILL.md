@@ -209,7 +209,15 @@ Then re-run whatever the repo documents as its own gate — its validation targe
 
 ### 4d. Report the boundary
 
-A fifth section, underneath the four. Every finding ID Step 3 emitted appears here exactly once:
+A fifth section, underneath the four. **`## Fixes` is the run's accounting of its findings, and it has exactly three `###` headings, verbatim:**
+
+1. `Applied`
+2. `Described, not applied`
+3. `OCR Low — described only`
+
+Emit all three every time, empty ones included, and place every finding ID Step 3 emitted under exactly one of them.
+
+**`Described, not applied` is where a finding the commit does not carry belongs** — the misreading, the fix that reaches beyond the hunks, the PR-body finding under reason 4 carrying its suggested rewrite inline. That is the heading that keeps `Applied` an honest list of what landed while the accounting still adds up to Step 3's own count.
 
 ```markdown
 ## Fixes
@@ -223,8 +231,6 @@ A fifth section, underneath the four. Every finding ID Step 3 emitted appears he
 ### OCR Low — described only
 - <ID> · <severity> · <tracks> · <file:line> — the finding
 ```
-
-**Three headings, and no fourth.** An ID that fits none of them is a disposition not yet decided, not a new category — "dropped on verification" is reason 2 under *Described*.
 
 **A later fix pass re-emits all three headings in full**, superseding this section rather than appending a delta to it. Step 6b builds `fixes_applied` from the Applied list, so a partial section ships a stale artifact.
 
@@ -364,7 +370,7 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
   permit it. A rule that yields to the first request it refuses was never a rule.
 - **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
 - **Report before you write — and then write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence. Asking permission after it has printed costs the user a turn to re-state a policy 4c already holds; the two rules are separate and both hold.
-- **The fix stage never moves the working tree.** No stash, no `switch`, no `checkout` — not before the gate re-run, not to get a clean index for it. The three tracks reviewed this tree as it stands, and Step 1 already resolved everything that needed resolving; a stage that tidies the tree is a stage that fixes files nobody reviewed.
+- **The fix stage edits the tree in place, exactly as Step 1 left it.** Step 1 owns every move the run makes, and by Step 4 the tree is already the one all three tracks read — including for the gate re-run, which runs against the fixes where they sit. Tidying it first would fix files nobody reviewed.
 - **`matt:code-review` calls its smell baseline "always a judgement call", and 4c applies it anyway.** That tension is real and deliberate: the caution is calibrated for a skill that only reports, and `pr-review` cross-checks the same diff against two other tracks before it acts. `docs/adr/0008-pr-review-trusts-its-tracks.md` is where a reader who notices should land. Nothing in `matt:code-review` is edited — it is a verbatim subtree, and what changed is how this skill treats its output.
 - **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.
 - **Step 5 may push, and that is not a contradiction of Step 4.** Step 4 commits and never pushes because a third pusher makes the history unreadable; `translation-sync` owns its own empty re-trigger commit and push, which is exactly the "later stages own the pushing" Step 4 defers to. It pushes only when it actually applied something, on a non-default branch, with a clean index — so a run whose sync changed nothing ends with the fix commit still local, and that is the correct outcome, not a stage that failed.
