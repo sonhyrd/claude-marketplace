@@ -31,8 +31,8 @@ judge:
         all: ["### Applied", "### Described, not applied", "### OCR Low"]
     - output_matches:
         all: ["(?s)### Described, not applied[^#]*O3"]
-    - output_contains:
-        any: ["PR metadata", "metadata", "PR body", "title or body"]
+    - output_matches:
+        any: ['(?i)PR metadata', '(?i)metadata', '(?i)PR body', '(?i)title or body']
   failure:
     - output_matches:
         any: ["(?m)^#{2,4} *(Not code|Not a code change|Not applied|Noted|Two things|Deferred|Dropped|Needs you|Not addressed)"]

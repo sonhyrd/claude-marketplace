@@ -27,10 +27,22 @@ input:
 judge:
   type: rule_based
   success:
-    - output_contains:
-        any: ["Step 4", "fix stage", "apply", "applying", "start fixing"]
-    - output_contains:
-        any: ["immediately", "no confirmation", "without asking", "don't ask", "do not ask", "not wait", "no permission", "straight", "no approval", "stopping to ask", "asks nothing", "no gate"]
+    - output_matches:
+        any: ['(?i)Step 4', '(?i)fix stage', '(?i)\bapply', '(?i)applying', '(?i)start fixing']
+    - output_matches:
+        any:
+          - '(?i)immediately'
+          - '(?i)no confirmation'
+          - '(?i)without asking'
+          - '(?i)don''t ask'
+          - '(?i)do not ask'
+          - '(?i)not wait'
+          - '(?i)no permission'
+          - '(?i)straight'
+          - '(?i)no approval'
+          - '(?i)stopping to ask'
+          - '(?i)asks nothing'
+          - '(?i)no gate'
   failure:
     - output_matches:
         any:

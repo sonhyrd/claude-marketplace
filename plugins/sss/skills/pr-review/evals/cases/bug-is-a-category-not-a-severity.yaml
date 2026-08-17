@@ -25,11 +25,18 @@ input:
 judge:
   type: rule_based
   success:
-    - output_contains:
-        all: ["Medium"]
-        any: ["applied", "apply", "fix it", "fixing it"]
-    - output_contains:
-        any: ["category", "not a severity", "verbatim", "as reported", "never re-graded", "OCR's severity"]
+    - output_matches:
+        all: ['(?i)medium']
+    - output_matches:
+        any: ['(?i)applied', '(?i)\bapply', '(?i)fix it', '(?i)fixing it']
+    - output_matches:
+        any:
+          - '(?i)category'
+          - '(?i)not a severity'
+          - '(?i)verbatim'
+          - '(?i)as reported'
+          - '(?i)never re-graded'
+          - '(?i)OCR''s severity'
   failure:
     - output_matches:
         any:

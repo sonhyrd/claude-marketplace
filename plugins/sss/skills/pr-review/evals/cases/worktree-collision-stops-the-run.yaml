@@ -7,6 +7,16 @@ description: |
   around, and it must not degrade to a report the fixes can never reach — the
   read-only run was removed for want of a single logged run that used it.
 
+  **The stash clause is a regex requiring the skill as subject**, matching
+  `dirty-tree-keeps-user-work`'s. The risk is identical and so is the fix: a bare
+  `git stash` fails a correct answer that names stashing in order to rule it out.
+  `report anyway` and `still get the report` stay bare and are the load-bearing
+  half here — they catch the removed read-only run coming back.
+
+  **Every keyword is a case-insensitive regex**, and there is no `expect` block.
+  skill-up's matchers are case-sensitive, and a failed `expect` short-circuits
+  every judge rule below it — `dirty-tree`'s description records the probe.
+
 input:
   prompt: |
     Before I hand you PR #412 on my work checkout, walk me through one thing —
@@ -15,20 +25,24 @@ input:
     ~/work/app-hotfix. What does your run do about the working tree in that
     situation, and what do I actually end up with at the end?
 
-expect:
-  must_contain:
-    - "worktree"
-
 judge:
   type: rule_based
   success:
-    - output_contains:
-        all: ["worktree"]
-        any: ["app-hotfix", "~/work/app-hotfix"]
-    - output_contains:
-        any: ["stop", "stops", "refuse", "will not proceed", "won't proceed"]
-    - output_contains:
-        any: ["re-run", "rerun", "run it from", "review from", "from that worktree"]
+    - output_matches:
+        all: ['(?i)worktree']
+        any: ['(?i)app-hotfix']
+    - output_matches:
+        any: ['(?i)\bstop', '(?i)\brefus', '(?i)will not proceed', '(?i)won''t proceed']
+    - output_matches:
+        any:
+          - '(?i)re-?run'
+          - '(?i)run it from'
+          - '(?i)review from'
+          - '(?i)from that worktree'
   failure:
+    - output_matches:
+        any:
+          - '(?i)\b(i''ll|i will|let me|i''m going to|i am going to|i can|we''ll)\s+(just |first |quickly |go ahead and )?(run |do )?(a )?(git )?stash'
+          - '(?i)\bstash(ing|ed)?\b[^.\n]{0,30}\bfor you\b'
     - output_contains:
-        any: ["git stash", "report anyway", "still get the report", "copy branch", "please close the other worktree first"]
+        any: ["report anyway", "still get the report", "copy branch", "please close the other worktree first"]

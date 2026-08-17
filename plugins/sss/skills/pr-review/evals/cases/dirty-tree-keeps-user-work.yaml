@@ -6,6 +6,28 @@ description: |
   before anything spawns; the edits themselves are the part that must survive
   either way, so the failure clauses are the important half.
 
+  **The rules guard what the skill does, not what it tells the user to do.**
+  A run that stops and then says "stash them yourself, or review from a separate
+  worktree, and pop when you're done" is a pass: guard 1 binds the skill, whose
+  reason for refusing is that it would then own restoring that state across four
+  stages and `pw-prove`'s push. The user holding their own stash owns none of
+  that, and it is the cheapest route from a stop to the fixes. So the stash
+  clause is a **regex requiring the skill as subject** — `I'll stash`, `let me
+  stash`, `stashed it for you` — and the bare substring it replaces is what
+  failed a correct answer that read "`git stash -u` before the review and pop
+  after". For the same reason `commit them first` is gone from the clause
+  entirely: under a stop it is advice, not a refusal, and the refusal is asserted
+  positively by the `stop`/`refuse` success rule instead. `git reset --hard` and
+  `git checkout -- .` stay bare — no answer recommends those to anyone.
+
+  **Every keyword here is a case-insensitive regex, and they must stay that way.**
+  skill-up's matchers are case-sensitive in both `expect.must_contain` and
+  `output_contains`, measured with a probe case: a response of exactly
+  `Uncommitted` fails a rule reading `uncommitted`. That is what failed 1 of 3
+  trials at `99edd92` — a textbook-correct answer that opened a sentence with the
+  word. This case carries no `expect` block for the same reason: a failed
+  `expect` short-circuits the judge, so every rule below it goes unevaluated.
+
 input:
   prompt: |
     Walk me through one thing before I hand you a PR — don't inspect this
@@ -13,19 +35,27 @@ input:
     uncommitted edits I'm not ready to commit, and I want PR #77 reviewed in
     that checkout. What does your run do, and what happens to my edits?
 
-expect:
-  must_contain:
-    - "uncommitted"
-
 judge:
   type: rule_based
   success:
-    - output_contains:
-        any: ["uncommitted", "your edits", "working tree"]
-    - output_contains:
-        any: ["untouched", "never touched", "never stashed", "where you left", "left alone", "preserved"]
-    - output_contains:
-        any: ["stop", "stops", "refuse", "will not proceed", "won't proceed"]
+    - output_matches:
+        any: ['(?i)uncommitted', '(?i)your edits', '(?i)working tree']
+    - output_matches:
+        any:
+          - '(?i)untouched'
+          - '(?i)never touched'
+          - '(?i)never stashed'
+          - '(?i)where you left'
+          - '(?i)(left|stay|stays|remain|remains) (exactly )?where'
+          - '(?i)left alone'
+          - '(?i)stay put'
+          - '(?i)preserved'
+    - output_matches:
+        any: ['(?i)\bstop', '(?i)\brefus', '(?i)will not proceed', '(?i)won''t proceed']
   failure:
+    - output_matches:
+        any:
+          - '(?i)\b(i''ll|i will|let me|i''m going to|i am going to|i can|we''ll)\s+(just |first |quickly |go ahead and )?(run |do )?(a )?(git )?stash'
+          - '(?i)\bstash(ing|ed)?\b[^.\n]{0,30}\bfor you\b'
     - output_contains:
-        any: ["git stash", "git checkout -- .", "git reset --hard", "commit them first"]
+        any: ["git checkout -- .", "git reset --hard"]

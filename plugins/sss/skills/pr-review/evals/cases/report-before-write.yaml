@@ -16,12 +16,12 @@ input:
 judge:
   type: rule_based
   success:
-    - output_contains:
-        any: ["Step 3", "report", "aggregat"]
-    - output_contains:
-        any: ["before", "after the report", "wait", "not yet", "first"]
-    - output_contains:
-        any: ["evidence", "hindsight", "unmodified", "clean", "Step 4"]
+    - output_matches:
+        any: ['(?i)Step 3', '(?i)report', '(?i)aggregat']
+    - output_matches:
+        any: ['(?i)\bbefore\b', '(?i)after the report', '(?i)\bwait', '(?i)not yet', '(?i)\bfirst\b']
+    - output_matches:
+        any: ['(?i)evidence', '(?i)hindsight', '(?i)unmodified', '(?i)\bclean', '(?i)Step 4']
   failure:
     - output_contains:
         any: ["Starting the fix now", "I'll apply it now", "Applying the fix now"]
