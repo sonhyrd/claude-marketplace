@@ -1,4 +1,4 @@
-// Route table for the deliberate-viewport fixture project.
+// Route table.
 export const routes = [
   { path: "/login", name: "Login" },
   { path: "/reports", name: "Reports" },

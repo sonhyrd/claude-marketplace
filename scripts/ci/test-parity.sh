@@ -245,17 +245,29 @@ assert_absent "Version bump — a change to one skill does not implicate another
 restore "$file"
 
 # Case 20: a skill's shipped scripts changed, version left alone. Both this case and Case 18 need a
-# skill whose version has NOT already moved on the branch under test; if a future branch bumps
-# e2e-reviewer or playwright-debugger these go red loudly rather than passing on nothing, and the
-# fix is to point the case at a skill that is still at its base version.
-file="skills/e2e-reviewer/scripts/scan.mjs"
-backup "$file"
-append "$file" "
-// drift smoke: a shipped-script change with no version bump
-"
+# skill whose version has NOT already moved on the branch under test — and this one used to append to
+# `skills/e2e-reviewer/scripts/scan.mjs`, which made it silently untestable on any branch that bumped
+# e2e-reviewer. #81 was such a branch, so the case now ADDS a script to the one skill with no
+# `scripts/` directory of its own: an added file under `scripts/` is a shipped-script change by the
+# same rule an edited one is, and the fixture no longer depends on which skills a branch happens to
+# have bumped. It still depends on playwright-debugger's version standing still, exactly as Case 18
+# does; if a branch bumps that one, both go red loudly rather than passing on nothing.
+file="skills/playwright-debugger/scripts/drift-smoke.mjs"
+mkdir -p "$(dirname "$file")"
+printf '// drift smoke: a shipped script added with no version bump\n' > "$file"
 assert_fails "Version bump — shipped scripts changed without a bump" \
-  "skills/e2e-reviewer: body and/or shipped scripts changed but metadata.version is still"
-restore "$file"
+  "skills/playwright-debugger: body and/or shipped scripts changed but metadata.version is still"
+rm -rf "$(dirname "$file")"
+
+# Case 21: .skill-up.yaml is the eval engine's config — test material like evals/, not the shipped
+# instruction surface — so touching it must not demand a version bump. Without this the check
+# conflates "how the evals run" with "what the skill instructs", and a branch that only pins an eval
+# model cannot go green without a version that means nothing.
+file="skills/playwright-debugger/.skill-up.yaml"
+printf 'name: drift-smoke\n' > "$file"
+assert_absent "Version bump — an eval-config change demands no bump" \
+  "skills/playwright-debugger: body and/or shipped scripts changed"
+rm -f "$file"
 
 # ---------------------------------------------------------------------------
 # Scanner detection smoke — fixture-based and offline: eslint auto-download is

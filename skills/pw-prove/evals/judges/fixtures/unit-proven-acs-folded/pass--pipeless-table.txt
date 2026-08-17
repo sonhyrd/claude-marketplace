@@ -1,0 +1,15 @@
+The diff ships `tests/unit/customScripts.test.ts` (+51 lines, 23 assertions) over `buildUpsert()`'s
+matrix, so all three PR bullets fold into the one scenario that proves the wiring — the component
+reaches `buildUpsert()` and its output is what leaves on the wire.
+
+AC | Source | Proven by
+--- | --- | ---
+Saving the editor sends the built upsert payload | diff-inferred | E2E scenario 1
+Whitespace is trimmed from every value | PR body bullet | already covered: `tests/unit/customScripts.test.ts`
+Empty locales are dropped from the payload | PR body bullet | already covered: `tests/unit/customScripts.test.ts`
+A key whose locales are all empty is removed | PR body bullet | already covered: `tests/unit/customScripts.test.ts`
+
+### Scenario 1: the save request carries trimmed, pruned scripts
+- Given: the editor with one padded value and one blank locale
+- When: the user saves
+- Then: the intercepted request body is what `buildUpsert()` returned

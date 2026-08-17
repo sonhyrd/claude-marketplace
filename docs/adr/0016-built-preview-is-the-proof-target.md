@@ -93,6 +93,5 @@ behaviour nobody had yet observed under the new target: it rests on a documented
 failure, so it was to be retired on evidence from real runs against a preview server, not on the
 reasoning that its cause is gone. **That evidence arrived (issue #48) and the mandate is now
 retired** — 31 runs, 120 test instances, 1.76–1.89× faster concurrent with zero failures and zero
-flaky verdicts, and a preview server that did not saturate even unmocked. See `docs/adr/0017` and
-`docs/studies/proof-concurrency-pr2866.md`. The staging was still the right call: the runs, not the
-reasoning, are what closed it.
+flaky verdicts, and a preview server that did not saturate even unmocked. See `docs/adr/0017`. The
+staging was still the right call: the runs, not the reasoning, are what closed it.

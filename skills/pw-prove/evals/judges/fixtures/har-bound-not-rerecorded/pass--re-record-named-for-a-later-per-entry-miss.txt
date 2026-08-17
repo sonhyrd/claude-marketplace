@@ -1,0 +1,26 @@
+## Diagnosis
+
+The HAR was never bound to this run — Step 7 item 1b was skipped. The recording itself is fine.
+
+`PW_PROVE_HAR` is unset and `.pw-prove/` does not exist, so the spec fell through to its default and replayed the committed file. That file is canonical and portless, because `probe.mjs` canonicalises loopback origins at capture:
+
+```
+GET http://localhost/api/reports?workspace=acme
+```
+
+Live requests go to `http://localhost:5199/api/…`, and `routeFromHAR` matches on exact request-URL string equality (`harBackend.js`: `candidate.request.url !== url`). Zero of two entries match, so `notFound: 'abort'` aborts every read. Every read aborting is the binding signature; a single read aborting would be something else.
+
+## Commands
+
+```bash
+mkdir -p .pw-prove
+node <skill-base>/scripts/har-scrub.mjs bind e2e/reports.api.har \
+  --out .pw-prove/reports.api.har --origin "http://localhost:5199"
+export PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har"
+```
+
+Carry `PW_PROVE_HAR` on every runner invocation from here — each is a fresh environment.
+
+If a *particular* call aborts after this — as opposed to all of them — that one is a genuine recording miss and needs a re-record through the probe. That is a different failure from this one, and it is not what is happening here.
+
+I am not widening the URL filter, not relaxing `notFound: 'abort'`, and not hand-writing mocks for the reads.

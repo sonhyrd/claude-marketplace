@@ -1,0 +1,19 @@
+id: case-22
+shape: behavior
+title: pw-prove - 22
+description: 'Should read the explicit `viewport: { width: 1440, height: 900 }` key in the chromium project''s `use` block, classify it as a DELIBERATE project decision, and respect it. Must NOT pin 1600x900 and must not emit a `test.use({ viewport: ... })` override in the spec. The recording size must match the project''s own viewport, passed as `PW_PROVE_W=1440 PW_PROVE_H=900` on the proof command — the proof config file itself stays static with its 1600x900 default untouched, since the size is the one per-run value and it travels on the command line. The dwell and the PW_PROVE_CLIP gating are unchanged by this branch, and the judge is scoped to match: it grades the viewport verdict, the absence of a pin, and the two size variables, and asserts nothing about the clip flag or the proof config, so a red verdict names one behaviour.'
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. You are running pw-prove in PR-mode
+        against the project in your current working directory, proving a change to the /reports surface.
+        Generate the proof spec and the Step 7 proof run. State the effective viewport you resolved and
+        which branch of the rule produced it.
+context:
+    repo_fixture: evals/files/project-viewport
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/viewport-deliberate-respected.mjs
+    timeout_seconds: 30
+derived_from_prompt: 2d3950f2c330

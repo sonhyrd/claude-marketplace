@@ -1,0 +1,9 @@
+I do not unzip trace.zip, I do not pipe the `*.network` files through jq, and I am not hand-rolling a parser: the audit is a script that ships with the skill and already implements this contract.
+
+```bash
+node <skill-base>/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts
+```
+
+`--spec` is not optional. Without it the audit cannot attribute the in-spec round trips, and those are the whole question here: the section GET is patched in flight with `const response = await route.fetch()` followed by `route.fulfill`, so the browser only ever sees a fulfilled response and the trace files it under MOCKED. A trace records the browser, not the Playwright process — the `route.fetch()` call leaves the runner and hits the real server, so it is live traffic.
+
+The verdict is mine, not the script's. Every LIVE line and every IN-SPEC LIVE ROUND-TRIP the audit reports must be named in a CARVE-OUT line in the spec header. The header declares one carve-out, for the live auth bootstrap, and it does not cover the `route.fetch()` section GET. Unless that carve-out is added and justified, this run FAILS the hermetic audit despite being green.

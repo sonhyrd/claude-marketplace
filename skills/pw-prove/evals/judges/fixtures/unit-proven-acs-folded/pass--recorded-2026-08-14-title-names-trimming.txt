@@ -1,0 +1,31 @@
+Repo isn't present in this working directory (`/tmp/skill-up-3698230561` contains only `.claude/`), so Step 3's live pass can't run. Here are the Step 2 AC table and Step 4 scenario list derived from the diff description — the part you asked for.
+
+## Step 2 — AC → surface table
+
+| AC | Source | Touched surface | Changed files | Proven by |
+|---|---|---|---|---|
+| Saving custom scripts sends the built payload — the component reaches `buildUpsert()` and its output is what leaves on the wire | diff-inferred (wiring) | custom-scripts settings surface | `composables/customScripts.ts`, calling component | E2E scenario 1 |
+| Clearing every locale for a script removes that key from the persisted payload and the UI reflects it after the save round-trip | PR body bullet (key removal), at the browser layer | custom-scripts settings surface | calling component, `composables/customScripts.ts` | E2E scenario 2 |
+| Values are trimmed | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+| Empty locales are dropped | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+| Top-level key is removed when all locales are empty | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+
+**Folding rationale.** The three PR bullets are one pure function's input→output matrix, and the diff ships 23 assertions across +51 lines covering exactly those three behaviors. Re-running that matrix through an authenticated page load buys no new guarantee at one page load per case. What the unit tests cannot see is the *wiring* — that the component actually calls `buildUpsert()` and ships its result — so that becomes scenario 1. Scenario 2 is not the matrix again: it asserts the request the browser sends plus the DOM state after the round-trip, both invisible to a unit test.
+
+Folded rows are kept, not deleted, so a reviewer can see they were considered and where they live.
+
+## Step 4 — scenarios
+
+**Scenario 1: saved scripts arrive trimmed and pruned**
+- **Given:** the custom-scripts editor, with at least one script key and two locales
+- **When:** the user enters a value padded with whitespace in one locale, leaves the second locale blank, and saves
+- **Then:** the save request body carries the trimmed value under that key with only the populated locale present — the blank locale is absent — and the UI shows the save succeeded
+
+**Scenario 2 (edge): clearing every locale removes the key**
+- **Given:** a script key that currently has values in one or more locales
+- **When:** the user clears every locale's value for that key and saves
+- **Then:** the save request body contains no entry for that key at all, and after the round-trip the editor shows the key with no values rather than the stale prior content
+
+Coverage floor check: the diff touches no locale/i18n files, so no non-default-locale scenario is required — locale here is script data, not app translation. Both scenarios' locators must still be role/testid-based per selector priority.
+
+**What I did not produce:** no locator mapping table (it requires live probe recon — Step 3's rule is never guess selectors from source alone), no assumptions block values that depend on the app (viewport, auth rung, HAR scope), no spec, no POM. Point me at the actual repo and PR and I'll run the full pipeline from Step 3.

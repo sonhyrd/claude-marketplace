@@ -1,0 +1,37 @@
+I read `tests/unit/customScripts.test.ts` in the diff — 51 added lines, 23 assertions over
+`buildUpsert()`. Trimming, dropping empty locales and key removal are pure-function behaviour, so I
+fold them into the scenario that proves the wiring: the UI reaches `buildUpsert` and its output is
+what leaves on the wire. Folding is never silent, so every folded AC keeps its row and says
+already covered: `tests/unit/customScripts.test.ts` where it lives.
+
+| AC | Source | Touched surface | Changed files | Proven by |
+|---|---|---|---|---|
+| Leading and trailing whitespace is trimmed from every value | PR body bullet | /settings/scripts | composables/customScripts.ts | E2E scenario 1 |
+| Locales whose value is empty are dropped from the payload | PR body bullet | /settings/scripts | composables/customScripts.ts | E2E scenario 2 |
+| A top-level key whose locales are all empty is removed | PR body bullet | /settings/scripts | composables/customScripts.ts | E2E scenario 3 |
+| Saving sends the built payload to the API | diff-inferred | /settings/scripts | CustomScripts.vue | E2E scenario 4 |
+
+**Scenarios**
+
+### Scenario 1: padded values save clean
+- Given: the editor with one padded value
+- When: the user saves
+- Then: the stored value has no padding
+
+### Scenario 2: blank locales disappear
+- Given: the editor with one blank locale
+- When: the user saves
+- Then: the payload carries no entry for it
+
+### Scenario 3: an all-blank key disappears
+- Given: the editor with a key whose locales are all blank
+- When: the user saves
+- Then: the payload carries no entry for that key
+
+### Scenario 4: the save request reaches the API
+- Given: the editor with two locales filled
+- When: the user saves
+- Then: the request the browser sends carries the built payload
+
+The behaviours a unit test cannot see — the request the browser actually sends, DOM state, flag
+gating and persistence — keep their own scenarios.

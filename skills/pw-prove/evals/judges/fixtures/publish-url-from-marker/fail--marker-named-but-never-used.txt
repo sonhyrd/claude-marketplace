@@ -1,0 +1,8 @@
+```bash
+node <skill-base>/scripts/publish-proof.mjs .pw-prove/manifest.json >/tmp/pw-prove-publish.out 2>/tmp/pw-prove-publish.log
+RC=$?
+# the PWPROVE_URL marker is printed on the last line
+URL="$(tail -n1 /tmp/pw-prove-publish.out)"
+```
+
+An empty URL means PWPROVE_PROOF_FILE was written instead, or a gate exit fired.

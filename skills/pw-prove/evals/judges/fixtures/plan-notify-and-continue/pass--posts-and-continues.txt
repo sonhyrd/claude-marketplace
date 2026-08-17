@@ -1,0 +1,26 @@
+**PR-mode (#412) — I post the plan and go straight to Step 5.**
+
+The plan is the audit trail, not a question. I post the two scenarios and the Locator Mapping Table
+to the conversation, and then continue immediately to Step 5. Silence is consent here.
+
+**Assumptions**
+
+- Structure: POM always — a Page Object is scaffolded even though every existing spec in this repo
+  is flat. The flat siblings are left alone.
+- Worktree: it was dirty; Step 3 ran `git stash -u` and will restore after the proof.
+- Locators: the coupon input carries a placeholder and no label, so it maps to
+  `getByPlaceholder(...)` rather than `getByLabel`.
+- Network: hermetic — the HAR replays reads, the mutation under assertion is hand-mocked.
+- Auth: the Step-3 token-source ladder.
+
+Questions I will **not** ask, because each one already resolves from the contract:
+
+- POM or flat?
+- Should I stash the dirty worktree?
+- Which selector for the label-less input?
+
+I do not wait for a reply, I do not enter plan mode, and I ask zero questions. The user interrupts
+if they want to redirect.
+
+**Coverage-gap run (no argument):** the opposite branch. There the plan *is* the question — I
+present it and stop until I have explicit approval, and I write no code before that approval lands.

@@ -19,14 +19,30 @@ Guidance for AI coding agents working in this repository.
 ### Distribution: subtree out, nothing in
 
 This repo is not independently installable and will not be made so. It is grafted into the private
-local marketplace (`~/SonDev/claude-marketplace`) as an editable git subtree at
+local marketplace (`~/work/claude-marketplace`) as an editable git subtree at
 `plugins/e2e-skills`; **that** repo owns the plugin manifests, the version, and the shipped-skill
 list. This repo is the source of truth for skill *content* only, and propagation is one-directional:
 
 ```bash
-# from the MARKETPLACE checkout, never from here
-git subtree pull --prefix plugins/e2e-skills <path-or-url-to-this-repo> main --squash
+# from the MARKETPLACE checkout, never from here.
+# <ref> is the branch that actually carries the content — NOT reflexively `main`.
+git subtree pull --prefix plugins/e2e-skills <path-or-url-to-this-repo> <ref> --squash
 ```
+
+Two things make a propagation land, and doing only the first is how a runtime ends up serving a
+version nobody shipped:
+
+- **Pull from the branch that has the content.** `main` here lags whatever working branch the change
+  lives on until that branch merges; #70 found the runtime serving pw-prove `0.1.0` because #55 had
+  pulled `main` while the fix sat on a working branch. Check the skill's `metadata.version` in the
+  subtree after pulling; if it did not move, you pulled the wrong ref.
+- **A directory marketplace serves whatever is checked out.** Manifest commits on a branch nobody has
+  checked out are not live, and a later branch switch silently reverts them — that is how #55/#56's
+  `1.1.0`/`1.2.0` bumps existed in the marketplace repo while the host served `1.0.0`. Land the bump
+  on the marketplace's own `main` and get it into the checked-out branch, then verify against
+  `~/.claude/plugins/cache/<marketplace>/<plugin>/`: it should hold the new version directory and no
+  superseded ones. The cache is keyed by version string, so a bump that never moved re-serves the
+  stale copy from cache no matter what is on disk.
 
 There is deliberately no plugin manifest, no host adapter, no installer script and no git hook here.
 Manifest, marketplace and cross-host parity are not concepts this repo has. Changes you make land in
@@ -47,7 +63,7 @@ brought with it afterwards.
 ```
 
 `ci-local.sh` is the single source of truth for what CI runs (shell syntax, **Node syntax**, parity,
-**skill version bump**, security, evals, public skill surface, framework scope, link integrity,
+**skill version bump**, security, public skill surface, framework scope, link integrity,
 docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
 **the probe HAR contract**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
@@ -67,15 +83,18 @@ docs orphan check, language,
 │   │   ├── SKILL.md        # Required: skill frontmatter + body
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
-│   │   ├── evals/evals.json
+│   │   ├── evals/          # NOT shipped — skill-up suite: eval.yaml + cases/*.yaml
+│   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
+│   │   ├── evals/files/    # NOT shipped — repo fixtures the wet cases run pw-prove against
+│   │   ├── evals/prompt-shapes.md # NOT shipped — the trigger/behavior rule and the classification
 │   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   └── playwright-debugger/
 ├── scripts/                # NOT shipped — repo CI tooling, stays shell
 │   ├── ci/                 # parity, security, corpus golden, per-script process-boundary suites
-│   ├── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
-│   └── validate-evals.sh
+│   ├── run-evals-isolated.sh # eval runs: isolated $HOME + the per-case skill-loaded sweep
+│   └── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
 ├── tests/pattern-corpus/   # one hit + one JUSTIFIED twin per check, and the golden
 ├── docs/                   # taxonomy, framework scope, ADRs, specs, agent workflow config
 └── README.md
@@ -113,7 +132,7 @@ Everything under `scripts/` is repo-only tooling and stays shell.
 - **Severity-first organization**: tables in SKILL.md, README, and `docs/e2e-test-smells.md` group by P0/P1/P2 in the same order.
 - **Run ledger**: every shipped-script entry point emits one `PWPROVE_RUN {json}` line through `skills/pw-prove/scripts/pwprove-run.mjs` and appends it to `~/.ptg/ledger.jsonl` (`PWPROVE_LEDGER` overrides). Telemetry never fails a run. Records carry a `schema`; read it before reading anything else, because fields are added over time (schema 2 added `session`/`session_src`).
 - **Session id**: a proof is many processes, so each record carries the session that produced it — `$PWPROVE_SESSION` (explicit override), else `$CLAUDE_CODE_SESSION_ID` (the host runtime's own id), else a cwd-keyed `$TMPDIR` nonce that expires after 30 idle minutes; `session_src` names which. Count *proofs* by distinct `session`, not by record.
-- **Version bumps**: bump the `metadata.version` in a skill's SKILL.md whenever you change its body or its shipped scripts. The ledger's stale-install detection leans on that field, and a version that never moves detects nothing — pw-prove sat at `0.1.0` across 638 recorded runs and 14 distinct installs. This is enforced, not merely stated: `review.sh`'s `Skill version bump` check compares the working tree against the merge base with `main` and fails, naming the skill, when a body or a shipped script moved and the version did not. SKILL.md counts only below its frontmatter; sibling and reference `.md` files and `scripts/` count in full; `evals/` does not.
+- **Version bumps**: bump the `metadata.version` in a skill's SKILL.md whenever you change its body or its shipped scripts. The ledger's stale-install detection leans on that field, and a version that never moves detects nothing — pw-prove sat at `0.1.0` across 638 recorded runs and 14 distinct installs. This is enforced, not merely stated: `review.sh`'s `Skill version bump` check compares the working tree against the merge base with `main` and fails, naming the skill, when a body or a shipped script moved and the version did not. SKILL.md counts only below its frontmatter; sibling and reference `.md` files and `scripts/` count in full; `evals/` and the eval engine's own `.skill-up.yaml` do not.
 - **English-only public surface**: SKILL.md, README, and `docs/` are English. CI enforces this (`Language` check).
 
 ## Frameworks in Scope
@@ -139,7 +158,7 @@ bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context cl
 bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
-bash scripts/validate-evals.sh      # eval JSON schema
+bash scripts/run-evals-isolated.sh --self-test # the eval runtime's own seam (no API calls)
 bash scripts/ci/pre-push-security.sh
 node skills/e2e-reviewer/scripts/scan.mjs path/to/tests   # standalone scanner
 
@@ -150,12 +169,188 @@ node skills/e2e-reviewer/scripts/scan.mjs testbed/cal.diy
 
 `ci-local.sh` runs all of the above and must be green before you commit.
 
+Two suites are deliberately **outside** that list, and must stay outside it:
+
+```bash
+bash scripts/ci/test-eval-judges.sh  # eval judge scripts: fixture in, exit code + printed verdict out
+bash scripts/ci/test-case-shapes.sh  # every case classified trigger|behavior, its prompt matches, and its fixture is staged
+```
+
+`test-case-shapes.sh` is the one script here that needs **python3 with PyYAML** — it reads case files
+as YAML rather than grepping them, so a case that moved a key still reads correctly. It refuses with
+a named reason when either is missing rather than skipping; an instrument that skips proves nothing.
+
+A judge fixture is a `.txt` (fed as `$EVAL_FINAL_MESSAGE`) or a `.jsonl` (fed as
+`$EVAL_TRANSCRIPT_PATH`, the serialized session transcript skill-up hands a script judge under
+`environment.type: none`). A sibling `<slug>.env` — or a directory-wide `_fixtures.env`, with
+`$EVAL_FIXTURE_DIR` already exported — adds environment for that fixture only; that is how a
+transcript judge is kept hermetic against a fixture-local SKILL.md instead of the shipped one.
+
+CI is the contract for the shipped surface; the eval suite is an instrument operated by hand, so
+wiring this into `ci-local.sh` would give CI an eval dependency it should not have. Run it by name
+whenever you add or change a judge under `skills/pw-prove/evals/judges/`. Every judge needs a
+fixture directory carrying both halves — a must-FAIL input, and a must-PASS input that is *a
+correct answer naming the forbidden thing in order to reject it*, which is the one-hit-one-JUSTIFIED-twin
+rule from `tests/pattern-corpus/` applied to judges. That twin is what catches the bare-substring
+judge, the defect behind seven of the nine failures in the 2026-08-13 run.
+
+`test-case-shapes.sh` stays out for the same reason, and holds the prompt-shape rule described under
+*The Eval Suite* below, plus the fixture-staging checks from #76 and the re-derivation record from
+#82. Run it by name whenever you add or edit a case prompt or a case's `context:`. It is the one
+hand-run suite that is *also* wired somewhere: `run-evals-isolated.sh` calls it as a pre-run gate and
+refuses the run when it is red, because the #76 defect is silent in the run itself and the run is
+what pays for it. `PWPROVE_SKIP_STAGING_GATE=1` bypasses that gate and says so out loud.
+
+**A prompt repair is a judge repair.** Every case carries a `derived_from_prompt:` digest of the
+prompt its judge's assertions were written against, and check 9 goes red when the prompt moves and
+the digest does not. Re-stamp with `python3 scripts/ci/derive-stamp.py <case-id>` **after** re-reading
+the judge against the new prompt — some assertions become unreachable and some become free. #80
+repaired `case-61`'s premise and left an assertion the repair had made meaningless, which scored the
+case 0/3 across three correct answers; #79 did the milder version of it to `case-53`. The check
+records the occasion, not the derivation: it can only make somebody look.
+
+## The Eval Suite
+
+**pw-prove is evaluated by the `skill-up` CLI, and that suite is the skill's eval
+surface.** There is exactly one eval format for this skill; the `evals.json` predecessor
+was mined and retired in #61. The surface is eight things:
+
+| Path | What it is |
+|---|---|
+| `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults. Installs pw-prove **alone** |
+| `skills/pw-prove/evals/eval.collision.yaml` | The **two-skill arm** (#81), identical to `eval.yaml` except that its `skills:` list installs pw-prove **and** e2e-reviewer. Its three cases are judged on *which* skill a request reached, which no single-skill arm can ask. Run it by name with `PWPROVE_EVAL_YAML=…` |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **52 on disk, 33 active in `eval.yaml` and 3 in `eval.collision.yaml`** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift |
+| `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
+| `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`, which copies the directory's **contents** to the workspace **root** — so a prompt says "your current working directory", never "evals/files/x/". **`context.files` is `{workspace_path: INLINE CONTENT}`** (established from skill-up's `internal/evaluator/fixtures.go`, #76): the value is written verbatim as the file's body, so `p: p` stages a one-line file containing its own path and the case answers a different question. `scripts/ci/test-case-shapes.sh` fails on all three mistakes. Note also that a fixture written in a didactic voice is read by the skill-free baseline arm too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
+| `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |
+| `skills/pw-prove/evals/REGISTRY.md` | **The registry.** One row per triaged case: pass rate, uplift, the SKILL.md section it guards, and status (active / quarantined / retired). It is also the case → section map that makes a blast-radius re-characterization a lookup |
+| `skills/pw-prove/.skill-up.yaml` | User config for the run (e.g. the agent-under-test's effort level) |
+
+### Running the eval suite
+
+Run it by hand, and **always through the isolated runner — never `skill-up run` directly**:
+
+```bash
+bash scripts/run-evals-isolated.sh                       # the active cases
+bash scripts/run-evals-isolated.sh --include-case-name 'b01-*'
+bash scripts/run-evals-isolated.sh --baseline             # uplift: both arms, baseline judged
+bash scripts/run-evals-isolated.sh --census              # the host copies and plugin ids a run must not reach
+bash scripts/run-evals-isolated.sh --sweep-only <workspace>  # re-judge an existing run
+bash scripts/run-evals-isolated.sh --self-test           # no API calls, no spend
+```
+
+It gives the run a fresh `$HOME` carrying credentials and nothing else — no `plugins/`, no
+user-level `skills/`, no host `settings.json` — because skill-up launches the agent against the
+operator's real home, where a marketplace install of this very bundle also lives. Two cases in the
+2026-08-13 run were graded against that plugin copy. Deleting the stale copy fixed that run and not
+the next one; isolation is a property of the runtime, not of what the cache happens to hold today.
+Isolate by `HOME`, not `CLAUDE_CONFIG_DIR`: the latter moves the session transcript out from under
+skill-up, which then has none to hand a script judge.
+
+`$HOME` and `PATH` are two of four routes. The third is the **filesystem** (#75): every checkout,
+worktree, clone and plugin cache of this repo is a copy of the body a case can `find` and `cat`, and
+`environment.type: none` has no sandbox. So before the run the runner censuses those copies
+(`--census` prints the list) and writes one Claude Code deny rule per copy into the isolated home —
+enforced even under `bypassPermissions`, covering Read/Grep/Glob and **not** Bash. It refuses when
+the census cannot even find this repo's own copy, and when the workspace sits inside a checkout. The
+workspace therefore defaults **outside** the repo now; `PWPROVE_EVAL_WORKSPACE` overrides it, and
+`PWPROVE_EVAL_YAML` points the run at a staged suite when you need to characterize a quarantined case
+without editing the active list.
+
+The fourth is the **Skill tool** (#83), and it uses no path at all: a marketplace install of this
+bundle can be invoked by its namespaced id, `e2e:pw-prove`, which the path census cannot see and the
+Read/Grep/Glob rules cannot cover. So the census has a second half — every installed plugin **by
+id**, read from `installed_plugins.json` — and the run carries one `Skill(<id>:*)` rule per install.
+That rule form was **measured** against the host runtime, not read off the docs: it blocks under
+`bypassPermissions`, and it leaves the unnamespaced `pw-prove` skill-up installs untouched, so the
+defence costs the with_skill arm nothing. It is defence in depth rather than the first line — a
+plugin needs both its cache **and** an `enabledPlugins` entry in `settings.json`, and the isolated
+home carries neither, which is why the route was refused in the run that found it. `docs/adr/0018`
+carries the probe table.
+
+That rule form has one edge, measured by #81 when a suite first installed a second skill: a plugin id
+that is a **prefix of a skill name** takes the skill with it. `Skill(e2e:*)` blocks a bare
+`e2e-reviewer` — measured both ways against the live runtime — so the two-skill arm was, at first,
+measuring a run whose neighbour skill could never load. The runner now reads which skills the suite
+installs and denies a colliding namespace **skill by skill**, enumerated from the plugin's own
+install; every other namespace keeps the wide rule, so `eval.yaml`'s rule set is unchanged. Installing
+a second skill **from the working tree, through the suite** is not a breach of the seal: the seal is
+against copies the runner did not put there, and a suite's own `skills:` list is the measurement.
+
+Afterwards the runner sweeps every retained transcript through
+`skills/pw-prove/evals/judges/skill-loaded.mjs` and prints one verdict per case **arm** — LOADED (and
+by which route), NOT LOADED, or CONTAMINATED. A contaminated case fails the sweep, so isolation is
+proven per run rather than assumed. A case that never loaded the skill is not measuring the skill,
+whatever its own judge said; the gate makes that visible, and non-invocation stays a FAIL.
+
+A `--baseline` run's `without_skill` arm is judged with the question **inverted**: there the body
+under test must be absent, and a fingerprint line in it reads BASELINE DIRTY and fails the run.
+That is what closes the Bash route the deny rules cannot, and it is why an uplift figure taken
+through this runner can be believed — three of ten baseline arms in the 2026-08-14 run had read the
+skill off another checkout, and nothing said so at the time.
+
+A baseline arm *served* a plugin-namespaced skill reads BASELINE DIRTY on the **invocation**, not on
+a fingerprint, and the verdict names the route and says no path was traversed. Two reasons: that
+route delivers the plugin's *published* body, which can be a version behind the working tree the
+marks come from, and it is invisible in the transcript's file reads. A **refused** invocation —
+`Unknown skill`, or blocked by the deny rule — is a printed note and not a verdict; an attempt is
+not contact, the same distinction #71 drew for tool arguments.
+
+Note skill-up's config discovery is `$PWD`-only, so `.skill-up.yaml` is ignored without complaint
+unless you are in `skills/pw-prove/` or pass it as `--config`. The runner handles this for you.
+
+Seven things to know before you touch any of it:
+
+- **A question that spans two skills needs an arm that installs two skills.** `eval.yaml` installs
+  pw-prove alone, so nothing in it can see one skill's `description:` claiming another's words —
+  which is how #73/#74 shipped a coverage clause that collided with `e2e-reviewer`'s and measured
+  green. `eval.collision.yaml` is that arm, its cases are judged by `evals/judges/routes-to-*.mjs` on
+  *which* skill a request reached, and a `Skill(<plugin-id>:*)` deny rule can silently take the
+  second skill with it (see the isolation section above). When you widen either skill's
+  `description:`, run this suite as well as the trigger cases.
+
+- **Every case declares a `shape:`, and the shape decides what a prompt may say.** A `trigger` case
+  carries a realistic top-of-task request and never names the skill — whether pw-prove loads is the
+  measurement, and a failure there is a defect in the `description:` frontmatter, *recorded* rather
+  than repaired by editing the prompt. A `behavior` case presupposes mid-run context (a step, an exit
+  code, a pasted log), which would never trip the trigger, so it opens with the placement line
+  ("Load the pw-prove skill with the Skill tool and follow it.") and its failures are about the body.
+  Read `skills/pw-prove/evals/prompt-shapes.md`, and run `bash scripts/ci/test-case-shapes.sh`.
+
+- **`environment.type: none` is fixed, and it is not a sandbox.** `docker` cannot see the files the
+  run produces, so every wet case would fail for a reason that reads as a skill defect; `none` means
+  the agent runs `--permission-mode=bypassPermissions` against the **real host filesystem**. Read
+  `docs/adr/0018` before running the suite, and do not "fix" the runtime back to `docker`.
+- **No CI check reads the eval suite, in any skill, by decision** (#54). Nothing will catch a broken
+  case, a reverted runtime, or a case list that drifted. `scripts/ci/test-eval-judges.sh` covers the
+  judge scripts only, and is run by name — see the section above for why it stays out of
+  `ci-local.sh`.
+- **`evals/` and `.skill-up.yaml` are eval-engine material, not the shipped instruction surface**, so
+  neither triggers the `Skill version bump` check. Do not add a bump to pay a toll that is not owed.
+- **Before hand-authoring a judge for a dormant case, read
+  `skills/pw-prove/evals/mined-assertions.md`** — it holds the assertions the migration to case files
+  dropped, so repairing a case is recovery rather than invention.
+- **A case is admitted on evidence, and `REGISTRY.md` is where that evidence lives.** 3/3 over three
+  iterations admits a guard; 0/3 admits a confirmed defect, filed as its own ticket; anything in
+  between is quarantined and never left active. Uplift is measured once at admission, with the skill
+  installed and removed, and **zero uplift retires the case** — a case that cannot go red when the
+  skill regresses is not a guard. Retired cases are **deleted**, not left dormant: dormancy is what
+  produced 49 unusable files. Never add a case to `eval.yaml`'s active list without characterizing
+  it and adding its row.
+
+The vocabulary — **wet case, dry case, trusted core, characterization, blast radius** — is defined
+once in `CONTEXT.md` under *Eval vocabulary*. Use those words for those things.
+
+`e2e-reviewer` and `playwright-debugger` are unaffected: they still carry the older
+`evals/evals.json` array format, and nothing here applies to them.
+
 ## When You Edit Skills
 
 1. **Update parity surfaces in lock-step.** Adding or renaming a pattern means touching: `skills/e2e-reviewer/SKILL.md` (Quick Reference), `skills/e2e-reviewer/references/pattern-reference.md` (per-pattern contract — CI Checks 3b/3c validate this file), `docs/e2e-test-smells.md`, `README.md` 24 Patterns table, `skills/e2e-reviewer/references/grep-patterns.md`, and `skills/e2e-reviewer/scripts/scan.mjs`. CI fails fast if any one is out of step.
 2. **Re-run the drift smoke test.** `scripts/ci/test-parity.sh` mutates known-bad versions of the files and asserts the parity check catches each one — keep it green when you add new parity rules.
 2b. **Give the new pattern a corpus fixture and refresh the golden.** `tests/pattern-corpus/` holds one deliberate hit and one `// JUSTIFIED:` twin per check; `scripts/ci/test-corpus.sh` freezes the scanner's output over it. Add both fixtures, run `bash scripts/ci/test-corpus.sh --update`, and **read the diff before committing it** — the golden only protects you if a moved line makes you stop and look. A pattern with no fixture is a pattern nothing is testing. Never run `--update` to clear a red run you did not intend to cause.
-3. **Add or update evals when behavior changes.** Each skill has an `evals/evals.json`. Eval IDs must follow the skill's naming convention (CI validates). Each new smell or behavior change should add at least two assertions: one true positive that must be flagged, and one false-positive guard that names the exact line and why it must not be flagged.
+3. **Add or update evals when behavior changes.** pw-prove's eval surface is the skill-up suite — `skills/pw-prove/evals/eval.yaml` plus one `cases/<id>.yaml` per case, run by hand through `scripts/run-evals-isolated.sh` (never bare
+`skill-up run`, which the operator's own plugins contaminate) and never by CI. Its retired `evals.json` predecessor is gone; the assertions that file carried were mined into `skills/pw-prove/evals/mined-assertions.md`, which is where you look before hand-authoring a judge for a dormant case. `e2e-reviewer` and `playwright-debugger` still carry the older `evals/evals.json`. **No eval schema or convention is checked by CI, in any skill, by decision** — see issue #54; the one surviving CI read of an `evals/` file is the F-code taxonomy parity check on `playwright-debugger`, which guards the taxonomy and not the eval format. Each new smell or behavior change should still add at least two assertions: one true positive that must be flagged, and one false-positive guard that names the exact line and why it must not be flagged.
 4. **Respect severity contracts.** P0 entries should be silent-always-pass smells; don't downgrade. P1/P2 should not creep into P0 just because they're easier to grep.
 5. **Keep subagent wiring delegation-aware.** The `agents/` subagents (`e2e-finding-verifier`, `e2e-failure-classifier`) are discovered only when the bundle is installed as a Claude Code plugin (i.e. through the
 marketplace subtree) — a plain skill copy never sees them. So any skill that delegates to a subagent MUST also carry an inline fallback that reaches an **identical** verdict from the same source of truth (`skills/e2e-reviewer/references/pattern-reference.md` for reviewer findings; `skills/playwright-debugger/SKILL.md`'s F1–F15 tables for failures). Never make a subagent the only path to a verdict.

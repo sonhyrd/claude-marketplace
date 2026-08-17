@@ -1,0 +1,8 @@
+A 400ms restart is too fast to be a real restart, so the announcement in the log is probably the old
+server's. I treat this as unproven rather than proven.
+
+I kill whatever is on 36495, restart the preview again, and re-poll the log to make sure the line I am
+reading was written by the new process. Only once I have watched a restart take a plausible amount of
+time do I re-run the guarding test.
+
+The assertion failure is set aside for now — I cannot record a RED off a server I am not sure about.

@@ -1,0 +1,33 @@
+This is a rules question about two specific beats, so here's what I'd do at each — no run started.
+
+## Step 3 — `BUILD=reused`, `BUILD_REUSE=hit`, instant
+
+**Accept it and move on to the serve phase. Do nothing else.**
+
+The Step 3 completion gate reads `CONFIG=ok` (or `CONFIG=undeclared`), **`BUILD=ok` *or* `BUILD=reused`**, `SERVE=ok`. `reused` is a first-class pass, not a degraded one: the stamp says the artifact was produced from this exact commit *and* this exact working tree, which is the definition of "the artifact under proof." A second proof against the same PR in an untouched worktree is precisely the case the reuse check was built for — the ~104–201s build is paid once per batch instead of once per proof.
+
+What I would **not** do:
+- Not force `BUILD_REUSE=never` "to be safe." That throws away the whole point and buys nothing — the fingerprint already covers staged, unstaged, and untracked changes since the build.
+- Not treat instant completion as suspicious. Fast *is* the signal here; the reason string is the evidence, and it goes in the transcript.
+- Not reach for the framework's own build cache as a substitute.
+
+I'd carry one Assumptions-block-adjacent note into Step 4: `Build: reused (BUILD_REUSE=hit, commit-and-tree-unchanged) — artifact from this afternoon's first proof, same commit and tree.` The serve phase still runs normally, and I still take `BASE_URL=` from the serve summary rather than assuming the first run's origin — the preview server may have been stopped by that run's Step 8 hygiene, and a fresh start can land on a different port.
+
+## Step 7 — mutating one line, then re-running the guarding test
+
+**This is the one run in the pipeline that must never inherit an artifact.** The reuse that was correct at Step 3 becomes a false green here: a mutated *source* file changes nothing a preview server serves until it is rebuilt, so a mutation run against the standing artifact passes by construction and proves nothing about whether the spec guards anything.
+
+Sequence, in order:
+
+1. `git status --porcelain > /tmp/pre.status && git diff > /tmp/pre.patch`
+2. Mutate the one line in the changed component.
+3. **`MARK=$(wc -c < <preview log>)`** — taken *before* stopping the server.
+4. **`BUILD_REUSE=never`** forced rebuild. Not optional, even though the mutation moves the fingerprint on its own; belt and braces point the same way, and this is ~635s against the built target — budgeted, not avoided.
+5. Stop the preview server, start it again on the same port, then poll with **`SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK"`**. An answer on the port is not evidence of a restart: if the new process lost the bind, the *old* one keeps answering the pre-mutation artifact. Only `RESTART=proven` licenses reading the result at all. `SERVE_CAUSE=restart-port-in-use` or `restart-unannounced` is not a verdict — kill whatever holds the port and redo the restart.
+6. Run **only** the guarding test: `-g "<title>"`, `--output=/tmp/pw-prove-mutation`, **no `PW_PROVE_CLIP`**. The isolated output directory is what keeps the mutation run from overwriting `test-results/` — publishing footage of deliberately broken software is the worst artifact this pipeline could emit.
+7. Read the verdict: **Red** → done. **Green** → strengthen the terminal assertion, repeat **once**. Green again with another layer independently preserving the outcome → `unguardable at <layer>`, naming the masking layer. Never a third cycle.
+8. `git checkout -- <file>`, then **fresh `MARK`, forced rebuild, `SERVE_RESTART=1` restart, proven again**. This restart is the one whose staleness would poison every later step.
+9. `diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch` — real residue is a hard stop.
+10. `ls test-results/*/video.webm | wc -l` equals the scenario count, confirming the passing run's clips survived.
+
+**The short version of the contrast:** Step 3's reuse is legitimate because nothing changed; Step 7 forces a rebuild because I just changed something on purpose, twice. The same check answers both correctly — the only error would be extending the morning's cheap build across the mutation.

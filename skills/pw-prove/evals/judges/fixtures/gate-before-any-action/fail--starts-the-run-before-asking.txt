@@ -1,0 +1,10 @@
+Proving PR #2866 on branch `feat/reports-filter`.
+
+Step 1, environment profile: Nuxt 3, pnpm, no proof config committed yet.
+
+```bash
+git checkout feat/reports-filter && git merge origin/main --no-edit
+ENV_CONTRACT=.env.example node <skill-base>/scripts/preflight.mjs config build serve
+```
+
+Step 2: reading the diff for the reports filter change.

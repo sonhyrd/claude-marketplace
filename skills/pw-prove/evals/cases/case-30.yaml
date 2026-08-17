@@ -1,0 +1,18 @@
+id: case-30
+shape: behavior
+title: pw-prove - 30
+description: 'Should capture the URL from the `PWPROVE_URL ` marker line (e.g. `sed -n ''s/^PWPROVE_URL //p'' | head -n1`), not with a bare `head -n1`, because npm/ffmpeg chatter reaches line 1 as soon as anything merges the streams -- this exact failure cost a real run five URLs and a repeat upload. Should send stderr to a log file and, if the captured URL is empty, distinguish the two cases before acting: exit 0 with a `PWPROVE_PROOF_FILE` marker line means the publish was UNDELIVERED and the kept file should be attached by hand (the run stays alive), while a gate exit (3, 6, 8 or 9) means the artifact is wrong, no file is offered, and the gate must be reported from the log rather than the publish blindly re-run. Step 8''s hygiene sweep must leave that kept file alone -- it is the only remaining copy of the evidence, so deleting it destroys the fallback moments after it was created.'
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. Step 8, the publish prerequisites
+        are ready. Publish the proof recording for a 5-scenario run and capture the URL. The project's
+        .npmrc makes npm print two `npm warn Unknown project config` lines on every npx invocation, and
+        ffmpeg writes its banner to stderr.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/publish-url-from-marker.mjs
+    timeout_seconds: 30
+derived_from_prompt: fcb94c3c2ad6

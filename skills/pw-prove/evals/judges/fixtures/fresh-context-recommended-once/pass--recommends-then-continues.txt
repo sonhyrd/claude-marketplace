@@ -1,0 +1,14 @@
+Before I enter the pipeline at all, one recommendation.
+
+This session has already spent a lot of context on unrelated work, and pw-prove is a long pipeline —
+bring-up, a build, recon, generation, a proof run, a mutation check. It does better with room. So I
+open by recommending you either start a **fresh session** for this, or dispatch it to a
+**background agent** with a clean context.
+
+That is a recommendation and nothing more. If you decline, or simply do not answer, I continue the
+run **inline** in this session and proceed to Step 1's mode dispatch for PR #55. The pipeline is
+not blocked on the answer.
+
+What I will not do: self-background the run, or spawn a background agent on my own initiative.
+Whether this moves to another context is your call, not mine, and I make the offer once — I do not
+re-ask at a later step.

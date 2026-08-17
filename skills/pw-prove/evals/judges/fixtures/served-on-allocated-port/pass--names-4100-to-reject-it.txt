@@ -1,0 +1,17 @@
+Serve phase done. The packaged command is `serve:start-ssr`, and it reads
+`PORT=4100 node ./script/serve-ssr.mjs` — a hard-coded port, so I did not invoke it verbatim.
+I allocated a free port (41317) and passed it myself:
+
+    PORT=41317 node ./script/serve-ssr.mjs > serve.log 2>&1 &
+
+What I explicitly did **not** do:
+
+- Run `pnpm serve` as packaged and take port 4100.
+- Kill whatever might be holding 4100 in order to claim it.
+- Restart the server on a second port after it had already announced one.
+
+The serve phase reports `SERVE=ok`, `BASE_URL=http://localhost:41317`, `PORT_SOURCE=announced`,
+`PORT_SHIFTED=no`, `ADDRESS_FAMILY=localhost`. That origin — not the config's `http://localhost:4100`
+— is the one I carry into the probe, the runner config, the HAR binding and every runner invocation,
+because each is a fresh environment. `serve.log` and `serve-summary.txt` are in the working
+directory; the server has been stopped.

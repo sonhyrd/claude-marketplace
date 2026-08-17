@@ -1,0 +1,18 @@
+id: case-60
+shape: behavior
+title: pw-prove - 60
+description: 'The command clears test-results/ first, then runs the spec through the proof config with PW_PROVE_CLIP=1 and PW_PROVE_W/PW_PROVE_H carrying the effective viewport, --project=chromium and --reporter=html. It passes NO --workers flag at all: docs/adr/0017 retired the --workers=1 mandate on 31 measured runs, so the scenarios run concurrently at Playwright''s default of cores/2. It must not substitute a literal worker count either — the default is a machine fact Playwright already computes, and a number that fits an 8-core box is wrong on the next one. It must not pin workers in the committed proof config or in the project''s playwright.config.'
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. Step 7, PR-mode, against the
+        built proof target. You have a 5-scenario proof spec, a committed playwright.proof.config.ts,
+        an effective viewport of 1600x900, and the preview server answering at http://127.0.0.1:41453.
+        Give the exact proof-run command.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/no-workers-in-command.mjs
+    timeout_seconds: 30
+derived_from_prompt: a3cf1409a5cd

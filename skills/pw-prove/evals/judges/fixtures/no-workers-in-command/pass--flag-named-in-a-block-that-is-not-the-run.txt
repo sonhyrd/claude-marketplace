@@ -1,0 +1,20 @@
+First, confirm nothing in the repo still pins concurrency — this is the check `docs/adr/0017`
+leaves behind, and it names the flag because it is grepping for it:
+
+```bash
+rg -n -- '--workers' playwright.config.ts playwright.proof.config.ts package.json
+```
+
+With that clean, the proof run is:
+
+```bash
+rm -rf test-results/
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
+  npx playwright test tests/proof/pr-2866.proof.spec.ts \
+  --config=playwright.proof.config.ts \
+  --project=chromium \
+  --reporter=html
+```
+
+The run command carries no concurrency flag at all; Playwright picks cores/2 on the machine it is
+running on.

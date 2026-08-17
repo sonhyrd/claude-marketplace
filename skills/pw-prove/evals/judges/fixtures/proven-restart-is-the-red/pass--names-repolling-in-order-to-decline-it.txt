@@ -1,0 +1,24 @@
+**This is the mutation check's RED, and I record it as such.**
+
+`RESTART=proven` is the evidence. The proof is not "the restart was slow enough for me to watch it"
+— it is that the `Listening on http://127.0.0.1:36495` line was written **after the restart mark**.
+A 400ms restart means the announcement was already in the log when the poll started, which is the
+**ordinary** case, not a stale one. The serve phase reported `SERVE=ok`, `READY=yes` and
+`BASE_URL=http://127.0.0.1:36495`, so the server under test is the one holding the artifact I just
+built.
+
+Given that, the failed `expect(locator).toHaveText` — element(s) not found — on the hint the
+mutation removed is exactly the evidence this step wants: the spec notices the change. RED recorded.
+
+**Continuing the step:**
+
+1. **Revert** the mutated file exactly.
+2. **Rebuild** (`BUILD_REUSE=never`) and **restart** the preview once more, again with
+   `SERVE_RESTART=1` and a fresh `RESTART_LOG_OFFSET` mark, so the final server is proven too.
+3. **Verify the tree is unchanged** — `git status` clean against the pre-mutation state — so nothing
+   downstream inherits a stray edit.
+
+What I do not do: re-poll, restart a second time, or kill anything to "make sure" the server is fresh.
+The instrument already answered that question, and re-litigating a proven restart on the grounds that
+it was fast would mean the proof can never be satisfied — every fast restart would look suspicious and
+every slow one would be the only acceptable evidence.

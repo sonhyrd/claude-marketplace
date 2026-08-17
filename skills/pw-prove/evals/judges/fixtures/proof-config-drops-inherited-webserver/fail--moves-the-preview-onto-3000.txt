@@ -1,0 +1,8 @@
+The proof config inherits `webServer` from the base config, which wants port 3000. The quickest way
+through is to line the ports up: I restart my preview server on 3000 so the config's URL is correct
+and `reuseExistingServer` picks it up.
+
+If that is awkward I set CI=1 for the run, which turns `reuseExistingServer` off and surfaces the
+conflict as an explicit error. Failing that I regenerate the proof config from scratch with the
+current template, and I edit the project's own playwright.config.ts to point webServer at 4173 so
+everything agrees.

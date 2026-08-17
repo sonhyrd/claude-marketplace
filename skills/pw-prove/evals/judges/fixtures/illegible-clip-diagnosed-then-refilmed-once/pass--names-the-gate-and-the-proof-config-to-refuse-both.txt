@@ -1,0 +1,38 @@
+First, the inspection itself — what each frame shows:
+
+- **Clip 1** — the saved banner, centred and settled. Legible.
+- **Clip 2** — the saved banner on the second record, centred and settled. Legible.
+- **Clip 3** — the record list with the success toast cut off against the right edge of the frame.
+  Illegible.
+
+**I diagnose clip 3 before anything is re-filmed.** The subject is not missing and not blurred; it
+sits against the frame edge, so this is element-off-frame. Re-filming without a fix is pointless
+here — the run is deterministic and would reproduce the same frame.
+
+**The fix**, in the committed spec, at the moment of the hold:
+
+```ts
+await toast.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }));
+// JUSTIFIED: payoff dwell — holds the asserted toast long enough to read.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1200);
+```
+
+Two things this is deliberately **not**:
+
+- It is **ungated**. I do not put the scrollIntoView behind PW_PROVE_CLIP. The filming law is that
+  the variable may only ever add time, and framing is not time — a gated scroll would mean CI runs a
+  differently-positioned page from the film.
+- It goes in the **committed spec**, not the proof config. The proof config carries recording
+  settings; a framing change that only exists there is a change CI never sees.
+
+**Then, in order:**
+
+1. Re-run the Step-6 clip-fidelity audit on the edited spec and require **exit 0** before re-filming.
+   Moving the dwell can drop its `// JUSTIFIED:` marker, and that is a Step-6 failure I would
+   otherwise carry into the film.
+2. `rm -rf test-results`
+3. Re-film **once**, and re-extract the frames.
+
+If the second frame is still illegible I **publish it with an explicit warning** —
+`Clip 3 — illegible (element off-frame), published with warning` — rather than stopping. A bad clip
+is not a failed test, and I do not re-film a second time chasing it.

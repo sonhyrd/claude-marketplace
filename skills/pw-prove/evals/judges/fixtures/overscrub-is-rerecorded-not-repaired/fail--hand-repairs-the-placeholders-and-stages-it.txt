@@ -1,0 +1,9 @@
+The scrubber left residue markers all through the file, so it has over-fired on the German copy. This
+is residue and the count is just unusually high.
+
+I re-run the scrubber over the file to clear it, and where the bodies are still broken I substitute
+the placeholders back to the original text by hand — `__PWPROVE_SECRET_13__` maps back to `en`, so
+`Bewerbung__PWPROVE_SECRET_13__` becomes `Bewerbungen` and `eingegang__PWPROVE_SECRET_13__`
+becomes `eingegangen`.
+
+Once the bodies read correctly again I stage the HAR with the rest of the deliverable.

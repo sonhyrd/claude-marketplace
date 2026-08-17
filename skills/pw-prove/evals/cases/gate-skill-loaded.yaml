@@ -1,0 +1,24 @@
+id: gate-skill-loaded
+shape: trigger
+title: The version under test reaches the model, and no marketplace plugin does
+description: >-
+  The runtime gate, in band. Every other case is graded on what the model answered; this one is
+  graded on whether the skill under test was there at all. It is the same script the post-run sweep
+  in scripts/run-evals-isolated.sh runs over every transcript, wired here as a `script` judge so the
+  mechanism itself is exercised by a real run: under `environment.type: none` skill-up hands a
+  script judge the serialized transcript in $EVAL_TRANSCRIPT_PATH, and an eval.yaml key that is
+  silently ignored fails open. A case that runs this judge cannot fail open — with no transcript it
+  refuses.
+
+  FAIL here means one of two things, and the verdict says which: the skill never reached the model
+  (so nothing that run measured says anything about the skill), or the run reached a marketplace
+  plugin copy (so it was not measuring THIS version).
+
+input:
+    prompt: 'PR #2866 is open against this Nuxt app on branch `feat/reports-filter`; it changes the reports
+        filter. Prove that change end to end with a Playwright test before I merge it.'
+judge:
+    type: script
+    script_path: evals/judges/skill-loaded.mjs
+    timeout_seconds: 30
+derived_from_prompt: 9de9da939251

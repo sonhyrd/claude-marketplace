@@ -1,0 +1,30 @@
+All five scenarios failing at `page.goto` on their **first** navigation is a whole-run signature, not
+five spec defects. Nothing about five independent locators is wrong at once; something about the run
+or the origin is.
+
+**First, confirm the origin is actually alive:**
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:41453/
+```
+
+**Then the diagnostic — the same spec, unchanged, with one worker:**
+
+```bash
+npx playwright test e2e/reports.spec.ts --config playwright.proof.config.ts -j 1
+```
+
+That is one command, one worker, **that run only**. It separates a concurrency problem from a spec
+problem and it is a **diagnostic, not a fix**: `docs/adr/0017` retired the `--workers=1` mandate on
+31 measured runs, so a worker count never enters the proof run, the committed proof config, or the
+project's `playwright.config`.
+
+**And the result is read carefully.** Against the built preview target this signature has **no known
+cause** — the preview compiles nothing and was measured not to saturate at any concurrency from 1 to
+6. So if the serialised run passes, that is a **finding to report with its evidence**, not a box
+ticked on the way to green. I write it up as an unexplained concurrency sensitivity against a target
+that should not have one.
+
+What I do **not** do, because none of them addresses a whole-run signature: heal locators, raise the
+test timeout, add waits, or count this against the three auto-fix attempts. The spec is not what
+failed.

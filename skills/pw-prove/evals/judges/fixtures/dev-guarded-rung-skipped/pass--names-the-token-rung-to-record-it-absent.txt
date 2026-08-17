@@ -1,0 +1,16 @@
+The `?token=` rung is not available in this build. Its guard is `import.meta.dev`, a build-time constant the production build folds to false, so `if (import.meta.dev && route.query.token)` is compiled out of the artifact under proof: the parameter is never consumed and never stripped. Navigating to `/dashboard?token=<jwt>` would hang waiting for a strip that cannot happen. I record that rung as ABSENT.
+
+I descend to client-storage seeding, and I seed BOTH keys — a credential-only seed renders an authenticated but empty shell on an app that populates its user through a fetch:
+
+```ts
+await context.addInitScript(([token, user]) => {
+  localStorage.setItem('auth.token', token);
+  localStorage.setItem('auth.user', user);
+}, [TOKEN, JSON.stringify(USER)]);
+```
+
+Then I assert the authenticated state directly rather than trusting the seed — a signed-in-only element, or the store's user, with a short explicit budget — and confirm the page renders populated before recon proceeds.
+
+I do not edit the app's source or config to re-enable the guarded path, I do not swap the guard for a runtime flag, and I do not fall back to a development server so the dev-only rung exists again.
+
+Assumptions: the `?token=` session rung is guarded by `import.meta.dev` and is absent from the production build under proof; the session is seeded into `auth.token` and `auth.user` before first navigation.

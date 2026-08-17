@@ -1,0 +1,10 @@
+The frame extract failed because ffprobe is missing, so I install the tooling and retry the extract:
+
+```bash
+npm i -D ffmpeg-static
+node <skill>/scripts/clip-fidelity.mjs frames test-results/*/video.webm
+```
+
+If that still does not work the run fails at Step 7 — an unverified clip is an unverified proof. The
+report will say the two clips show the saved banner centred and settled, which is what the earlier
+runs looked like.

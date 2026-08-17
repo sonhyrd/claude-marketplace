@@ -1,0 +1,18 @@
+id: case-41
+shape: behavior
+title: pw-prove - 41
+description: 'Should run `node <skill-base>/scripts/har-scrub.mjs e2e/reports.api.har --verify` and report the exit code. Exit 0 -> stage it. Exit 3 -> HARD STOP: residue survived, the script names each location (never the value), the HAR is not staged, the file is re-scrubbed and verified again before the run continues. Should NOT satisfy the step by reading the HAR and asserting no Authorization/cookie/token value remains — the risk is held by a refusal, not by a confirmation. A leaked bearer in a committed HAR is the same incident as one in a log line.'
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. You are at Step 8 of a PR-mode
+        run, at the hygiene sweep before staging. The deliverable is `e2e/reports.spec.ts`, `e2e/pages/reports-page.ts`
+        and `e2e/reports.api.har`. The HAR was recorded through the Step-3 probe with RECORD_HAR. Say
+        exactly what you do about the HAR before you stage it, and what each outcome means.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/har-residue-refusal-not-eyeball.mjs
+    timeout_seconds: 30
+derived_from_prompt: a8ff632c0473

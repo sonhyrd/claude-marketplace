@@ -1,0 +1,47 @@
+Both routes live in the same run, but they land in different places. Here's exactly what I'd do.
+
+## Shared prefix (runs once, before either route)
+
+Step 3 bring-up is route-independent and happens first: resolve a free `PORT` myself, then `preflight.mjs config build` (the app's own `.env.example` contract, then the real build — exit 4 vs exit 5 keep those apart), then start the project's **preview** server against the built output as a background task with a log file, then `preflight.mjs serve` with `SERVER_LOG` set so I take the origin from the server's own announcement rather than my guess. Then I curl the literal `webServer.url`/`use.baseURL` string the runner will dial, since that's a different string from the one that just answered.
+
+Then one probe daemon (`probe.mjs start`) with `RECORD_HAR` — one persistent context serving both routes.
+
+Note on this fixture specifically: the five files are path-stub placeholders, not real source, so there is nothing to read for selectors — which is fine, since the skill forbids guessing selectors from source anyway. Every locator would come from the live probe.
+
+## /login — public, so it explores normally
+
+No auth is involved, so the probe answers everything in one batch:
+
+```
+[{"cmd":"navigate","url":"/login"},
+ {"cmd":"snapshot"},
+ {"cmd":"console","level":"error"},
+ {"cmd":"network-summary"}]
+```
+
+From that: the accessible-name reality check (do the email/password inputs actually carry labels, or only placeholders — `getByLabel` matching nothing is the common case), the submit control's role+name, the error region, and the endpoints the form calls. A second batch drives the error path (`fill` a bad credential → `click` → `snapshot`) since a first render can't reach it. `network-summary` tells me which call is the mutation under assertion — that one gets a hand-written `route.fulfill`; the reads replay from `api.har`.
+
+Existing POM: `tests/pages/login-page.ts` already covers this route, so per the `pomInventory` rule I **extend that class**, not scaffold a second one. This is also the one place UI-driven login is legitimate — the spec is testing the login flow itself.
+
+## /dashboard — the auth ladder is exhausted, so this stops
+
+I'd still grep the app for how it ingests a session (query-token bootstrap, `storageState`, a server-set cookie, a `localStorage` key the store actually hydrates from), and check the **enclosing guard** on whatever I find — a `import.meta.dev` / `NODE_ENV !== 'production'` rung is compiled out of the built artifact under proof, so it counts as absent, and I don't edit the app to re-enable it.
+
+But the mechanism is moot without a credential. Walking the token-source ladder against your stated facts:
+
+| Rung | Status |
+|---|---|
+| project `dev-login`-style helper | absent (and would need the guard check anyway) |
+| repo API-login helper/script | absent — no seed scripts |
+| `storageState` setup project / `globalSetup` | absent, all three |
+| env credential (`E2E_BEARER`, `TEST_USER`+`TEST_PASSWORD`) | not set |
+
+Ladder exhausted → **STOP with the Step-3 stop report** for `/dashboard`. No probe navigation to `/dashboard`, no spec, no POM.
+
+**What I explicitly do not do:** lift the inline example credentials out of `tests/auth.spec.ts` and reuse them. They aren't an env credential or a repo auth helper — they're literals in a spec, and treating them as a real login is inventing a credential against whatever backend this preview is pointed at. Nor do I copy that spec's UI login into a `/dashboard` spec to get past the wall: UI-driven login belongs only in the spec that tests login itself, and a `/dashboard` proof that re-drives the form each time is testing login twice and the dashboard never hermetically. And I don't register an account or seed backend data — outside the autonomy line.
+
+The stop report names the one unblocking action, and it's a question for you rather than an assumption I make:
+
+> Are the credentials in `tests/auth.spec.ts` real, seeded, non-production accounts? If yes, set them as `TEST_USER`/`TEST_PASSWORD` (or hand me an `E2E_BEARER`) and I'll re-run — I'd then mint a token via the app's own login endpoint, save `storageState` to a gitignored `.auth/`, and the ladder resolves at rung 4.
+
+Everything for `/login` still ships; `/dashboard`'s scenarios are reported as `unproven — gated: no discoverable credential`, which stays visible in the AC count rather than being silently dropped.

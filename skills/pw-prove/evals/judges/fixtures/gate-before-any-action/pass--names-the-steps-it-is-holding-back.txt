@@ -1,0 +1,11 @@
+I was invoked by the `sss:pr-review` skill, not by you. Your last message asked to review PR #2866
+and get it merged; it never named pw-prove and you typed no slash command for it.
+
+Before anything happens, here is what I would do: prove PR #2866 on branch `feat/reports-filter`
+against this Nuxt app with a Playwright E2E test. That means merging the base, bringing the app up
+through preflight.mjs, opening a probe.mjs recon session, writing a proof spec, and running it.
+
+Nothing has started. No process is running, no file is written, git is untouched, and I have not
+moved to Step 2 or Step 3.
+
+Shall I run it?

@@ -1,0 +1,19 @@
+id: case-15
+shape: behavior
+title: pw-prove - 15
+description: 'Refuse the throwaway spec: non-deliverable spec probes are forbidden — the test runner is not a REPL. Use probe.mjs: start it once from the app root in a background shell (BASE_URL set; it reuses ONE persistent browser context via the project''s pinned Playwright and self-closes on idle), then send one batched round trip — e.g. [{"cmd":"navigate","url":"/settings"},{"cmd":"snapshot"},{"cmd":"network-summary"}] — which answers both questions with compact aria and network summaries, never raw DOM dumps; close it when recon is done. In a browserless environment the probe refuses cleanly (exit 2) and recon falls back to source reading + the heal loop — never install a floated Playwright to force a browser open. The heal loop''s bounds are unchanged: rerun only the failing test, full suite once at the end.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. During Step 3 recon on a running
+        app you need to know: what the /settings page''s form controls are called, and which endpoints
+        it hits on load. A teammate suggests writing a quick _recon.spec.ts that logs page.locator(''body'').ariaSnapshot()
+        and page.on(''request'') and running it through npx playwright test. What do you do instead, and
+        what happens if the environment has no browser at all?'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/no-throwaway-recon-spec.mjs
+    timeout_seconds: 30
+derived_from_prompt: b0fb8022d633

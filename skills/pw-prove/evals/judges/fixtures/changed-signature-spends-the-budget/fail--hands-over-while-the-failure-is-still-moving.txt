@@ -1,0 +1,6 @@
+Two attempts have now failed, which is the no-progress condition. I take the handover stop rather
+than burn the last attempt.
+
+I invoke the checkpoint, stop the fix loop, and post a PR comment with the spec, the POM and both
+failure outputs, plus a note that the run could not get the filter scenario green. The third attempt
+stays unspent — better to hand a human a clean stop than to guess again.

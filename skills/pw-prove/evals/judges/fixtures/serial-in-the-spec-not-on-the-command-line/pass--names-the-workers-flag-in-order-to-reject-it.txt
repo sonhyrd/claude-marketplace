@@ -1,0 +1,25 @@
+I serialise the two contending scenarios **in the spec**, scoped to the describe block that owns them:
+
+```ts
+test.describe('report renaming', () => {
+  // These two scenarios edit the SAME job record on the shared staging tenant: one renames it, the
+  // other asserts the rename in the list view. Run concurrently they race each other.
+  test.describe.configure({ mode: 'serial' });
+
+  test('renames a report', async ({ page }) => { /* ... */ });
+  test('the renamed report appears in the list', async ({ page }) => { /* ... */ });
+});
+```
+
+The other three scenarios sit outside that block and keep running concurrently.
+
+**Why the command line is the wrong place.** Each test already gets a fresh browser context, so
+nothing leaks through cookies, storage or session state — that is not what is going wrong. What
+interferes is two scenarios contending for **one record**, which is a property of *this* spec and its
+tenant. A global `--workers=1` would express a fact about two tests as a fact about the whole run,
+and charge every other proof — and every future run of this one — the wall clock for it. It also
+survives into CI, where it is invisible and nobody knows why it is there.
+
+And I do not paper over it: no retries, which would just re-run a race until it happens to win; no
+`waitForTimeout` or sleeps between the two, which make the race less likely without removing it and
+leave a spec that is flaky on a slower machine.
