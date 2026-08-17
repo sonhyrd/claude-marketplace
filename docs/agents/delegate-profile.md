@@ -3,53 +3,266 @@
 Read by `/delegate-tickets` (step 1). Amended by the coordinator when a merge-back reveals a new
 baseline, known-noise test, or environment trap.
 
-- **Remote**: `sonhyrd/claude-marketplace` — the origin this profile describes. Step 1 compares it
-  against `git remote get-url origin` and warns on mismatch. This is a self-check, not a key: the
-  profile is found by being in this repo, not by matching a list.
-- **Branch prefix**: `ticket/` — per-ticket branches are `ticket/<ticket-slug>`.
-- **Post-merge check**: `make validate`. Baseline **3/3 passing, 0 failures** as of `fa20228`
-  (2026-08-07): File Structure, JSON Manifest, YAML Frontmatter. No known-noise failures — any
-  failure is a regression. `make validate` is static and offline; it deliberately excludes
-  `make check-e2e-subtree`, which fetches the fork. A ticket touching `plugins/e2e-skills/` must run
-  `make check-e2e-subtree` and `make test-e2e-subtree-check` itself.
-- **Commit policy**: scoped subject lines matching the existing log — `sss: …`, `sss(<skill>): …`,
-  `fix(e2e): …`, `docs(changelog): …`. Imperative mood, no trailing period. A body explaining *why*
-  where the subject cannot carry it. **No AI attribution**: no `Co-Authored-By: Claude`, no
-  `Generated with Claude Code`, no emoji trailer. User-facing changes get a line under
-  `## [Unreleased]` in `CHANGELOG.md`, skill-specific lines prefixed `<skill-name> skill:`.
-- **Prohibitions**: carried verbatim into every worker brief.
-  1. Never run bare `git stash` — the stash is shared across all worktrees of this repo, and popping
-     it in the wrong one silently moves another worker's uncommitted work.
-  2. Never `git push`, open a PR, or push tags. The coordinator merges back and owns all pushing.
-     Pushing to the `e2e-fork` remote requires the coordinator's approval per push; when granted, it
-     is a **targeted push** (`git push e2e-fork <sha>:main` from a commit carrying only the paths the
-     fork owns), never `git subtree push`, which lands the two plugin manifests on a fork that
-     deliberately ships none. `docs/adr/0005` records the measurement.
-  3. Never edit anything under `plugins/mattpocock-skills/`. It is a vendored copy of an upstream
-     repo; edits there are destroyed by the next subtree pull.
-  4. Never run `pnpm -r run test`, `turbo run test`, or any recursive sweep without capping **both**
-     `--workspace-concurrency` and the runner's worker count. Sibling worktrees each size their pool
-     from total machine cores; unbounded sweeps oversubscribe the box and starve every other worker.
-  5. Never `git checkout`, `git switch`, or `git rebase` onto another worker's `ticket/` branch, and
-     never `git worktree remove` a directory you did not create. Each worker owns exactly one
-     worktree.
-  6. Never `git commit --amend`, `git reset --hard`, or force-push a commit that is already on your
-     branch's merge-base — the coordinator diffs against that base and rewritten history reads as a
-     revert.
-  7. Never edit `docs/agents/delegate-profile.md`. The coordinator owns it; a worker editing it
-     conflicts on every merge-back.
-  8. Never bump the version in `.claude-plugin/marketplace.json` or any `plugin.json`, and never add
-     a `## [x.y.z]` heading to `CHANGELOG.md`. Releases are cut separately; five workers each
-     claiming the next version is five conflicts.
-  9. `make sync-codex-plugins` regenerates **all 59 generated files, for every plugin**, not just
-     yours. Stage only the manifests your own skill owns and `git checkout` the rest. Committing a
-     sibling plugin's regenerated manifest conflicts on merge-back and carries a description
-     generated from a tree that is already stale — exactly what happened between #9 and #10 in this
-     run.
-  10. Never mark your own ticket closed on GitHub. Report completion; the coordinator closes it
-      after the merge-back check passes.
-- **Conventions**: `CLAUDE.md` at the repo root — and do not reformat, re-indent, or lint-fix a file
-  you did not otherwise change, especially under `plugins/*/scripts/`, which the lint targets
-  deliberately exclude. Read `CLAUDE.md` in full before your first edit — it owns
-  the subtree rules, the plugin-vs-directory naming distinction, the MCP tool-namespacing rule, and
-  the pointers to `docs/agents/`.
+- **Remote**: `sonhyrd/e2e-skills` — the origin this profile describes, and the only remote the repo
+  carries. Step 1 compares it against `git remote get-url origin` and warns on mismatch. If a second
+  remote is ever present, it is never a push target.
+
+- **Branch prefix**: `sonhyrd/` — Orca prefixes worktree branches with the GitHub account, so a
+  worktree named `ticket-34-dwell-region` produces branch `sonhyrd/ticket-34-dwell-region`. Do not
+  fight it; merge by the real branch name that `orca worktree create` reports, not by the name you
+  asked for. (Measured 2026-08-13. An earlier revision of this line said `sss/`.)
+
+- **Post-merge check**:
+
+  ```
+  bash scripts/ci/ci-local.sh
+  bash scripts/ci/pre-push-security.sh
+  ```
+
+  `ci-local.sh` is the single source of truth for what CI runs; if you change a check, update that
+  script first. **Measured baseline: see the Baseline section below.**
+
+- **Commit policy**: conventional commits, scoped to the skill or area touched, matching existing
+  history (`fix(pw-prove): …`, `feat(e2e): …`). The subject describes the behaviour change from a
+  reader's perspective, not the files edited. **No AI attribution, no co-author trailers, no
+  "Generated with" lines.** Never bare `git stash` in a shared worktree.
+
+- **Worker constraints** — every worker brief carries these verbatim:
+
+  1. **Shipped scripts are zero-dependency ESM Node.** Everything under `skills/*/scripts/` runs
+     inside someone else's repository on the Node standard library. Never add an npm dependency, a
+     build step, or anything installed into a user's project. Invoke with `node <path>.mjs`, never
+     `bash`.
+  2. **Never make a private CLI a runtime dependency of a shipped script.** Scripts read
+     environment variables; they never spawn `agent-native` or any other ecosystem-specific tool.
+     Permitted subprocesses are the ones already assumed present: `rg`, `eslint`, `ast-grep`,
+     `ffmpeg`, `ffprobe`, `git`, `gh`, `curl`, `npx playwright`.
+  3. **Never print a credential.** Do not echo a bearer, do not write one to a log, and never paste
+     a decoded token payload containing `sub`. Individual routing claims (`aud`, `iss`, `jti`) may
+     be printed when diagnosing.
+  4. **Do not rewrite the Tier-3 PCRE2 patterns as JS RegExp.** At least one is load-bearing on a
+     possessive quantifier JS cannot express; rewriting it silently inverts the check. See
+     `tests/pattern-corpus/README.md`.
+  5. **No state-changing `gh` commands against third-party repos.** Cloning into `testbed/` and
+     running the scanner locally is fine; pushing to forks, opening PRs or issues, and posting
+     comments are not. `gh` inside some checkouts resolves to the wrong upstream — always pass
+     `--repo`.
+  6. **Never run `pnpm -r run test` (or turbo/nx) without capping both parallelism layers** —
+     workspace concurrency *and* the runner's workers. Check `uptime` first.
+  7. **Every new `docs/**/*.md` must be linked from `README.md`** or named in a `scripts/**/*.sh`,
+     or the docs orphan check in `review.sh` fails.
+  8. **Parity surfaces move in lock-step.** Adding or renaming a pattern touches the reviewer
+     SKILL.md, the pattern reference, the smell taxonomy, the README table, the grep-patterns
+     reference, `scan.mjs`, and all three plugin manifests. CI fails fast on drift.
+  9. **Do not silently change a pattern ID, a severity, or a failure category code.** Downstream
+     evals and adopters depend on them.
+  10. **English-only public surface** — SKILL.md, README and `docs/` are English; CI enforces it.
+
+### Merge-back trap: every parallel pair conflicts on `metadata.version`
+
+Two workers touching the same skill both bump `metadata.version` in its SKILL.md, so the merge
+conflicts on that one line every time — it happened on both of the first two merge-backs (#34 vs
+#36, then #40). This is not a worker mistake; the repo requires the bump. **Resolve it at merge:
+take the highest precedence the combined change earns** — a new shipped script makes it a minor, a
+fix on top of an already-merged minor makes it a patch — and say so in the merge commit. Do not ask
+a worker to skip the bump; the ledger's stale-install detection depends on it moving.
+
+**The dangerous case is the one that does NOT conflict.** When two branches independently pick the
+same next version, git auto-merges the line and the second change ships under the first one's
+number — silently, with no conflict to make you look. #42 did exactly this against #41's `0.4.0`.
+**After every merge-back, check that the version actually moved past what is already on the
+integration branch**, whether or not git raised a conflict.
+
+An `evals/evals.json` conflicts the same way and needs the opposite resolution: both sides append
+independent evals at the same array slot, so keep BOTH and renumber the incoming ids onto the end.
+Taking one side silently deletes a worker's evals. pw-prove's copy was retired in #61 — its suite is
+now one file per case, where the same trap appears as two workers adding a case with the same id —
+but `e2e-reviewer` and `playwright-debugger` still carry the array form.
+
+### Known noise: `test-parity.sh` drift smoke has failed once, unreproducibly
+
+During #50 (2026-08-13) one full `ci-local.sh` run showed a single drift-smoke failure in
+`scripts/ci/test-parity.sh`. It did not touch any file that ticket changed, and it has not
+recurred in **19 subsequent runs** — 5 standalone plus 3 full by the worker, 11 more by the
+coordinator on the merged result, all `24 passed, 0 failed`.
+
+Treat a lone drift-smoke failure as suspect, not as a verdict: **re-run before acting on it.** A
+second failure, or one that names a file the branch touched, is real and must be investigated.
+Do not add a retry to the script to make this go away — that would hide the real case too.
+
+### Dispatch note: the whole `worker-*` family does not know low-level dispatches
+
+Workers launched with the engine argv go through `terminal create --command …` plus
+`orchestration dispatch --inject`, not `worker-start`. `worker-release --dispatch <id>` therefore
+returns `dispatch_not_found` for them even though `dispatch-show` reports the dispatch `completed`,
+and `terminal close` returns `runtime_error`. Settled panes stay idle and harmless; do not chase
+them, and never reach for `orchestration reset` to tidy up while other workers are live.
+
+**`worker-show` and `worker-read` fail the same way** (measured 2026-08-14), so there is no
+`worker-*` progress signal on this dispatch path at all. To check whether a low-level worker is
+alive, use the two things that do work:
+
+```bash
+orca terminal read --terminal <handle> --json      # result.terminal.status + result.terminal.tail
+git -C <worktree> log --oneline <integration-head>..HEAD
+```
+
+Note the pane text is at `result.terminal.tail`, **not** `result.lines` — reading the wrong key
+returns empty and looks exactly like a dead worker.
+
+### Coordinator note: a dispatched worker does not receive mail it never checks for
+
+`orchestration send --to dispatch:<id>` succeeds and returns `ok: true` the moment the message is
+**queued**. A low-level dispatched worker only reads it when it calls `orchestration check`, and a
+worker head-down in a long task may never call it. **A sent message is not a delivered one, and
+`ok: true` is not receipt.**
+
+This cost a real re-measurement (#78): #64 was told to rebase once #75 merged, never checked its
+mail, and measured 16 uplift arms on the superseded runner. Seven of eight came back contaminated.
+
+So: **do not let a dispatched worker's correctness depend on mail you send mid-flight.** If a merge
+invalidates a live worker's premise, either
+
+- verify receipt before relying on it — `terminal read` the pane and look for the worker acting on
+  it, not merely for the send returning `ok`; or
+- accept the branch as-is and re-do the affected work afterwards, which is usually cheaper than it
+  sounds because static triage and pass rates often survive when only one measurement axis is void.
+
+Choosing the second is legitimate. Assuming the first happened is not.
+
+### Coordinator note: `check --wait` replays unacked mail, and prints more than one JSON object
+
+`check --wait` returns every delivery that has not been acknowledged, so a coordinator that
+processes a `worker_done` without acking gets the same message again on the next wait — with
+`replayed: true` and a fresh `deliveryId`. Read those two fields **first**; a replayed batch is not
+new work, and mistaking it for one wastes a full wait cycle. Ack with
+`check --ack <delivery_id> --wait …` in the same call that starts the next wait.
+
+The output is also a **stream of concatenated JSON objects**, not one document — `json.load` dies
+with "Extra data". Parse with a `raw_decode` loop.
+
+### Coordinator note: a worker's `question` expires, and merging is when you will miss it
+
+A `question` blocks its sender and **times out** — #70's timed out after 15 minutes while the
+coordinator was resolving a merge, so the worker chose its own recommended option unsupervised. It
+chose correctly, which is luck, not a process.
+
+The failure mode is structural: a merge-back is the longest stretch a coordinator spends not
+checking mail, and it is also when live workers are most likely to hit something that needs a
+decision. So **check the mailbox before starting a merge and again before the post-merge gate**,
+rather than only when waiting for the next `worker_done`. Waiting is not the only state in which
+mail arrives; it is merely the only one in which you were looking.
+
+## Baseline
+
+- **Commit**: `aae5e82` · **Measured**: 2026-08-05
+- `scripts/ci/review.sh` — **green**: 10 passed, 0 warnings, 0 errors.
+- `scripts/ci/ci-local.sh` — **RED**: fails at `test-publish-proof.sh` (76 passed, 8 failed).
+  All 8 are pre-existing; none is a defect in shipped behaviour. Two causes:
+  - **5 failures — `HOME` is not isolated.** The config-refusal cases unset the `CLIPS_*`
+    variables and assert a refusal, but `clips.mjs` falls back to the credential file at
+    `~/.config/pw-prove-clips.env`. On a machine where that file exists, the script resolves a
+    complete config and proceeds. **One case unsets the origin too, so it publishes to PRODUCTION
+    Clips** — a run on 2026-08-05 created public recording `iAQpP1tuPrDk` this way.
+  - **3 failures — stale tests.** The suite asserts "N clips in, ONE request out" and AC-titled
+    chapters. Commit `ccba214` moved acceptance criteria from chapter titles into per-chapter
+    comments, adding one request per chapter, and did not update the tests.
+
+### Environment trap: the publish tests could reach production — CLOSED
+
+Until the credential-file fallback was removed, **any worker running `ci-local.sh` on a machine with
+`~/.config/pw-prove-clips.env` present created a real, public Clips recording.**
+
+**Closed by #17 (2026-08-06), two ways:** the credential-file mechanism is deleted outright, and the
+publish tests now run under an isolated `HOME`. Both belts matter — keep the isolation even though
+the fallback is gone, because it is what makes an absent-credential test mean what it says.
+
+- **Commit**: `5447df4` · **Measured**: 2026-08-06
+- `ci-local.sh` — **GREEN**, all checks passed, zero `[FAIL]`.
+- `pre-push-security.sh` — **GREEN**, 8 passed, 0 warnings, 0 blockers.
+- Verified: the full run emits **no** `clips.paulsjob.ai` URL, so no production recording is created.
+
+This green baseline supersedes the red one above. Any future failure is a real regression.
+- **Known environment note:** this checkout has **no `.claude-plugin/` or `.codex-plugin/`
+  directory** — the plugin manifests live only in the marketplace subtree copy. Manifest-parity
+  checks therefore do not behave as `AGENTS.md` describes here. Do not "fix" this by recreating the
+  manifests.
+
+### Environment trap: `implement` is not at `~/.claude/skills/implement`
+
+On this machine the Matt Pocock skills ship as a marketplace plugin, not as `~/.claude/skills`
+entries. A worker brief that names `~/.claude/skills/implement/SKILL.md` sends the worker to a path
+that does not exist, and it silently falls back to improvising a process. The real path is:
+
+```
+/home/orca/work/claude-marketplace/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md
+```
+
+(The macOS path this section used to name — under `/Users/sondh0127/SonDev/` — does not exist on
+this machine. Verified absent 2026-08-13; the Linux path above is the live one.)
+
+Every worker brief must name **that** path. (`/implement` itself is `disable-model-invocation:
+true`, so no dispatched worker can Skill-invoke it — path-reading is the only route.)
+
+### Baseline correction: `pre-push-security.sh` reports 7, not 8
+
+Commit `9eb094e` collapsed two manifest checks into one `[OK]` line when it deleted the manifest
+machinery. The green figure is **7 passed, 0 warnings, 0 blockers**. A brief quoting 8 makes a
+worker hunt a regression that is not there.
+
+### Dispatch trap: `orca worktree create` needs `--base-branch` spelled out
+
+Orca branches from its own recorded base, not from where the coordinator is standing — the
+worktree for #27 was cut at `294b24e` while `main` was at `03d2ae0`, one commit behind. **Pass
+`--base-branch <integration-branch>` on every `worktree create`, then verify:** `git -C <worktree>
+merge-base <integration-branch> HEAD` must equal the integration branch head. With the flag passed
+this behaves correctly (verified 2026-08-13 for `#34` and `#36` off `feat/ledger-session-id`), so a
+blind `reset --hard` is not needed — but an omitted flag and an ignored flag fail identically and
+stay invisible until merge-back, which is why the verification is not optional.
+
+- **Commit**: `fbb1ff0` · **Measured**: 2026-08-14 (after the #55 + #57 merge-backs)
+- `ci-local.sh` — **GREEN**, all checks passed. · `pre-push-security.sh` — **GREEN**, 7 passed.
+
+### Dispatch trap: two eval measurements cannot run on this host at once
+
+`scripts/run-evals-isolated.sh` censuses every readable copy of the pw-prove body and **refuses to
+start** when it finds one it cannot account for. A live `skill-up` install under `/tmp/skill-up-*`
+is such a copy, so a second worker taking a measurement is blocked by the first worker's run — the
+directory name even changes between attempts as skill-up cycles installs per arm, which reads like a
+race and is really a neighbour.
+
+The refusal is correct and must not be worked around by narrowing the census: a live install is a
+readable body whoever put it there. **So never schedule two measurement tickets in the same
+frontier.** Pair a measurement ticket with a judge-repair, docs, or triage ticket instead.
+
+When it happens anyway, the fix is ordering rather than waiting: the blocked worker does the whole
+ticket except the run — repair, fixtures, harness green, verified red on revert — and replays the
+recorded transcripts through the repaired judge offline, which predicts most of the measurement for
+free. Then it takes the run once the host is clear.
+
+Tell workers to **ask before deleting anything outside their worktree**, and mean it. `rm -rf
+/tmp/skill-up-*` is the obvious unblock and it destroys a sibling's in-flight measurement. Two
+workers stopped to ask here (#72 on a stale `mkt/` clone, #77 on a live install); one was safe to
+delete and one was not, and neither could have known without the coordinator's view of the frontier.
+
+- **Measured**: 2026-08-14, dispatching #72 and #77 together.
+
+### The eval judge harness is not in `ci-local.sh`, and must not be added
+
+`scripts/ci/test-eval-judges.sh` (**392 checks** after #65 added twenty-one judges and their fixture
+pairs, repaired eleven of them against recorded answers and deleted one with its retired case; 240 after #64 — **corrected from the 214 recorded here previously, which was taken before #64 merged** — added thirteen judges and their fixture pairs, on top of #66's rejection-list pair added to
+`announced-port-adopted` and a cross-judge drift check over `commitments()`/`offenders()`; 127 after
+#63 retired `b49-untrusted-page-content` and
+deleted its judge with it; 136 after #59 rewired all 12 active cases onto script judges, 44 at #58,
+19 at #57) is run **by name**, never by `ci-local.sh`. This is a
+decision, not an oversight: CI is the contract for the shipped surface, and the eval suite is an
+instrument operated by hand. A worker that "helpfully" wires it in is undoing #57's acceptance
+criterion. Run it by hand whenever a brief touches `skills/pw-prove/evals/judges/`.
+
+### `.skill-up.yaml` no longer demands a skill version bump — the rule was fixed, not waived
+
+Both wave-1 workers independently went red on it and fixed it two different ways: one repaired the
+rule in `review.sh`, the other paid the toll with a `0.15.1` bump. The rule fix won and the bump was
+dropped at merge. `evals/` **and** a skill-root `.skill-up.yaml` are eval-engine material, not the
+shipped instruction surface, and drift Case 21 pins that. Do not re-add a bump for eval config —
+the ledger's stale-install detection only works while the version means something.

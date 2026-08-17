@@ -1,397 +1,190 @@
-# Alberto's Claude Marketplace
+# e2e-skills
 
-> A local marketplace for personal Claude Code skills and Codex repo-local skills.
+Three Agent Skills for end-to-end test work on Playwright projects, plus a deterministic scanner.
+Find Playwright/Cypress E2E tests that pass CI while proving little or nothing — and prove a change
+with a test that actually guards it.
 
-A curated collection of Agent Skills for extending Claude Code and Codex capabilities. This marketplace is configured for local use and makes it easy to install and manage custom skills.
+This is a private fork, maintained for one operator. It is **not independently installable**: the
+private local marketplace owns the plugin manifests and decides which skills ship, and this repo is
+the source of truth for skill content only. Propagation is by git subtree, one direction, no
+exceptions — see [Distribution](#distribution).
 
-> [!WARNING]
-> **This is Alberto Leal's personal Claude Code plugin marketplace.** It is built solely for my own workflow, and I am the only intended and supported user. The skills and MCP servers here encode my personal conventions and assumptions, and may change, break, or disappear at any time without notice or migration path.
->
-> You are welcome to read, fork, or borrow from it — but if you are not me, **use it entirely at your own risk.** There are no support, stability, or backward-compatibility guarantees for anyone else.
+| Need | Use |
+| --- | --- |
+| Prove a PR / branch / ticket / diff with a Playwright test | [`pw-prove`](#pw-prove--prove-a-change) |
+| Review existing Playwright/Cypress specs for silent-pass smells | [`e2e-reviewer`](#e2e-reviewer--static-review) |
+| Diagnose a failed `playwright-report/` | [`playwright-debugger`](#playwright-debugger--root-cause-diagnosis) |
+| Run a deterministic local scan | [`scan.mjs`](#standalone-scanner) |
 
-## Claude Code Quick Start
+## Distribution
 
-```bash
-# 1. Add the marketplace
-/plugin marketplace add /path/to/claude-marketplace
+The repo is grafted into `~/work/claude-marketplace` as an editable git subtree at
+`plugins/e2e-skills`. The marketplace's own `.claude-plugin/plugin.json` names the shipped skills
+(`pw-prove`, `e2e-reviewer`) and carries the version. Nothing here is installed by any other route.
 
-# 2. Install skills
-/plugin  # Browse and install plugins → sss-marketplace
-
-# 3. Restart Claude Code to load new skills
-/exit
-```
-
-## Codex Quick Start
-
-Codex can read this repo as a local plugin marketplace. Generate Codex-native plugin manifests and the Codex marketplace file from the Claude marketplace metadata:
+To propagate a change, from the **marketplace** checkout:
 
 ```bash
-./scripts/sync_codex_plugins.py
-# or
-make sync-codex-plugins
+git subtree pull --prefix plugins/e2e-skills <path-or-url-to-this-repo> main --squash
 ```
 
-Then restart Codex or start a new Codex thread from this repo root. Re-run the sync after editing `.claude-plugin/marketplace.json`, plugin skills, or MCP configs:
+There is deliberately no installer script and no git hook in this repo. Two propagation paths is
+how a runtime ends up executing a skill version the repo does not have.
+
+## Verification gate
+
+Both must pass before every commit:
 
 ```bash
-./scripts/sync_codex_plugins.py --check
-# or
-make check-codex-plugins
+bash scripts/ci/ci-local.sh          # the single source of truth for what CI runs
+bash scripts/ci/pre-push-security.sh # secrets and credential-leak guard (manual — no hook)
 ```
 
-The sync writes `.agents/plugins/marketplace.json`, each plugin's `.codex-plugin/plugin.json`, and Codex-specific MCP configs when needed. Generated plugin versions include a content hash so Codex can see a new installable version after plugin files change.
+`ci-local.sh` runs shell/Node syntax sweeps, the review checks (eval schema, skill surface, framework
+scope, link integrity, docs orphan, language, pattern parity), the parity drift smoke test, the
+scanner pattern corpus against its frozen golden, the process-boundary suites over the shipped
+`pw-prove` scripts (preflight, probe, hermetic, probe-HAR, publish-proof, run-ledger),
+and the repo's own smell scan.
 
-The older direct skill symlink flow is still available when you want repo-local `.agents/skills` entries instead of installing plugins:
+**The pattern-corpus golden is a hard invariant.** Never run `test-corpus.sh --update` to make a red
+run green — a golden diff means something moved, and moving it silently is the exact failure this
+repo exists to catch.
+
+## `pw-prove` — prove a change
+
+The fast path from a change to a reviewed, passing Playwright proof. Owns server bring-up, auth and
+live-DOM recon; evidence (trace + one clip per scenario, published as one chaptered recording) is a
+byproduct of the proof run, not a separate production pass.
+
+```
+Step 1  Dispatch + Environment   PR-mode · target mode · coverage-gap mode
+Step 2  Diff -> AC               PR state read, acceptance criteria, touched surfaces
+Step 3  Bring-up + Probe         one live pass: base merge, dev server, auth, recon, api.har
+Step 4  Plan                     PR-mode notify-and-continue · coverage-gap approval gate
+Step 5  Generate                 POM always, HAR-first mocks, PROVES headers, clip fidelity
+Step 6  e2e-reviewer             YAGNI audit + PROVES audit + the reviewer skill as a gate
+Step 7  Verify                   tsc, proof run, a frame per clip the agent reads, hermetic audit, mutation check
+Step 8  Deliver                  publish, commit, push, PR comment, completion report
+```
+
+Invoke it with a PR number/URL, a ticket key, a branch, a route, or nothing at all. Shipped scripts
+(`skills/pw-prove/scripts/`, Node stdlib only, nothing installed into the target project):
+`preflight.mjs`, `probe.mjs`, `har-scrub.mjs`, `hermetic.mjs`, `clip-fidelity.mjs`,
+`publish-proof.mjs`, `clips.mjs`, `video.mjs`, `pwprove-run.mjs`.
+
+## `e2e-reviewer` — static review
+
+Catches E2E tests that pass CI but fail to catch real regressions, in Playwright **and** Cypress
+specs. Every finding is adversarially verified — refute-first — before it is reported.
+
+### 24 Patterns Detected — Grouped by Severity
+
+#### P0 — Must Fix (silent always-pass)
+
+Tests pass when the feature is broken. No real verification is happening.
+
+| # | Pattern | Before | After |
+|---|---------|--------|-------|
+| 1 | **Name-assertion mismatch** | Name says "status" but only checks `toBeVisible()` | Add assertion for status content, or rename to match actual check |
+| 2 | **Missing Then** | Cancel action, verify text restored — but input still visible? | Verify both restored state and dismissed state |
+| 3 | **Error swallowing** | `try/catch` in spec, `.catch(() => {})` in POM | Let errors fail; remove silent catch from POM methods |
+| 3b | **Cypress `uncaught:exception` suppression** | `cy.on('uncaught:exception', () => false)` blanket-swallows app errors | Scope handler to specific known errors; re-throw unknown errors |
+| 4 | **Always-passing assertion** | `toBeGreaterThanOrEqual(0)`; `toBeAttached()` with no comment; `expect(await el.isVisible()).toBe(true)` (one-shot); `expect(await el.textContent()).toBe(x)` (one-shot); `expect(locator).toBeTruthy()` (Locator always truthy); `{ timeout: 0 }` on assertions (disables retry) | `toBeGreaterThan(0)`; `toBeVisible()`; web-first assertions with auto-retry |
+| 5 | **Bypass patterns** (5a P0, 5b P1) | `if (await el.isVisible()) { expect(...) }`; `{ force: true }` without comment | Always assert; move env checks to `beforeEach`; add `// JUSTIFIED:` to force:true |
+| 7 | **Focused test leak** | `test.only(...)` committed — CI runs one test, silently skips the rest | Delete `.only`; use `--grep` or `--spec` for local focus |
+| 8 | **Missing assertion** | `await page.locator('.x');` (discarded); `await el.isVisible();` (boolean thrown away) | Add `await expect(locator).toBeVisible()` or delete the line |
+| 12 | **Missing auth setup** | Protected-route spec navigates to `/dashboard` with no login/`storageState`/auth fixture | Add `beforeEach` login, configure `storageState`, or use auth fixture — otherwise test passes against the login page |
+| 15 | **Missing `await` on `expect()`** | `expect(page.locator('.toast')).toBeVisible()` returns an unobserved Promise | Add `await` so the assertion actually runs |
+| 16 | **Missing `await` on action** | `page.locator('#submit').click()` may not execute before the next line | Add `await` so the action completes |
+
+#### P1 — Should Fix (poor diagnostics / wastes CI time)
+
+Tests work but mislead developers, waste CI time, or set up future regressions.
+
+| # | Pattern | Before | After |
+|---|---------|--------|-------|
+| 6 | **Raw DOM queries** | `document.querySelector` in `evaluate()` | Use framework locator/query APIs (`locator` / `cy.get`) |
+| 9 | **Hard-coded sleep** | `waitForTimeout(2000)` / `cy.wait(2000)` / `waitForLoadState('networkidle')` | Rely on framework auto-wait; use condition-based waits |
+| 10 | **Flaky test patterns** | `items.nth(2)` without comment; `test.describe.serial()` | Use `data-testid` or role selectors; replace serial with self-contained tests |
+| 13 | **Inconsistent POM usage** | POM imported but spec uses raw `page.fill`/`page.click` for POM-owned actions | Route all interactions through the POM so UI changes update in one place |
+| 14 | **Hardcoded credentials** | `loginPage.login('demo-admin', '<literal-password>')` in test code | Use `process.env.TEST_USER`, Playwright config secrets, or test data fixtures |
+| 17 | **Direct `page.click(selector)` API** | `page.click('#submit')` / `page.fill('#input', 'text')` skips the Locator layer | Use `page.locator(selector).click()` for auto-wait and better error messages |
+| 18 | **`expect.soft()` overuse** | All assertions in a test are `expect.soft()` — test never fails early | Ensure at least one hard `expect()` gates per test; use `soft` only for independent details |
+| 19 | **Module-level mutable state in test code** | `let testNotebookSequence = 0;` at column 0 in a test utility — collides across parallel workers and survives retries | Drop the counter; derive uniqueness from `Date.now()` + `Math.random().toString(36).slice(2, 8)`, or move state into `test.beforeEach` |
+| 20 | **Unmocked real-backend writes** | Signup/checkout spec submits real mutations — every CI run creates real accounts/orders | Stub write/credential endpoints with `page.route()` / `cy.intercept()`; one designated real-backend smoke spec max |
+| 22 | **Optimistic UI without call proof** | Like-toggle test asserts `aria-pressed` flip — UI updates optimistically, passes with the POST deleted | Pair UI assertion with `page.waitForRequest()` (armed before the click) or a route-hit flag |
+
+#### P2 — Nice to Fix (maintenance / robustness)
+
+Weak but not wrong — addressed when refactoring.
+
+| # | Pattern | Before | After |
+|---|---------|--------|-------|
+| 11 | **YAGNI + Zombie Specs** | `clickEdit()` never called; empty wrapper class; single-use Util; entire spec duplicated by another | Delete unused members; inline single-use Util methods; delete zombie spec files |
+| 21 | **Manually-captured session-file dependency** | `storageState: 'auth/member.json'` produced only by a manual capture script — absent on CI, silently expires | Regenerate session programmatically (API-login helper or `setup` project); manual files only as a cache with a programmatic fallback |
+| 23 | **Fixture ignores render guards** | Liked-tab fixture seeds `liked: false`; the card component `return null`s every item — empty UI looks like infra flake | Read the item component's early returns/filters before seeding; seed fields to pass every guard for the view under test |
+
+Pattern IDs and severities are frozen. Full taxonomy: [docs/e2e-test-smells.md](docs/e2e-test-smells.md).
+
+## `playwright-debugger` — root-cause diagnosis
+
+Reads a `playwright-report/` directory (local or downloaded from CI) and classifies each failure
+into the frozen `F1`–`F15` taxonomy — flaky timing, selector broken, network dependency, assertion
+mismatch, missing Then, condition branch, isolation failure, environment mismatch, data dependency,
+auth/session, async order, POM drift, error swallowing, animation race, hydration race — with a
+concrete fix per failure. Extract, classify, trace (`trace.zip`), fix.
+
+## Standalone scanner
 
 ```bash
-./scripts/install_codex_skills.py
+node skills/e2e-reviewer/scripts/scan.mjs path/to/tests
 ```
 
-For day-to-day toggling, use the interactive manager:
-
-```bash
-./scripts/manage_codex_skills.py
-# or
-make manage-codex-skills
-```
-
-Useful options:
-
-```bash
-# Preview changes without creating links
-./scripts/install_codex_skills.py --dry-run
-
-# Replace existing symlinks that point somewhere else
-./scripts/install_codex_skills.py --force
-
-# Install links into a personal Codex skills directory
-./scripts/install_codex_skills.py --dest "$HOME/.agents/skills"
-
-# List current Codex skill state
-./scripts/manage_codex_skills.py --list
-
-# Enable, disable, or uninstall individual skills
-./scripts/manage_codex_skills.py --enable ripgrep
-./scripts/manage_codex_skills.py --disable ripgrep
-./scripts/manage_codex_skills.py --uninstall ripgrep
-```
-
-By default, the scripts manage `.agents/skills/<skill>` symlinks back to `plugins/<skill>`. `disable` removes only a managed repo symlink, and `uninstall` removes symlinked entries from the Codex skills directory. Real files and directories are reported as conflicts instead of being deleted.
-
-To check and test the Codex scripts:
-
-```bash
-make test-codex-skills
-```
-
-## opencode Quick Start
-
-[opencode](https://opencode.ai) has no marketplace concept — it discovers skills by recursively scanning configured paths for `**/SKILL.md`, and MCP servers from explicit `mcp:` entries in its config. There is no install script to run; you just point opencode at this repo.
-
-Add an `opencode` block to your global config at `~/.config/opencode/opencode.json` (or `.jsonc`):
-
-```jsonc
-{
-  "$schema": "https://opencode.ai/config.json",
-
-  // 1. Skills — recursive **/SKILL.md scan picks up every plugin under plugins/.
-  //    48 skill plugins are auto-discovered this way. The 4 MCP-only plugins
-  //    (no SKILL.md) are skipped here and wired explicitly under "mcp" below.
-  "skills": {
-    "paths": ["/absolute/path/to/claude-marketplace/plugins"]
-  },
-
-  // 2. MCP servers — opencode does not auto-discover; one entry per server.
-  //    ${CLAUDE_PLUGIN_ROOT} from each plugin's .mcp.json is NOT interpolated
-  //    by opencode, so substitute an absolute script path. "command" is a
-  //    single array of strings, not a separate program + args.
-  "mcp": {
-    "sequential-thinking": {
-      "type": "local",
-      "command": [
-        "uv", "run", "--no-config", "--script",
-        "/absolute/path/to/claude-marketplace/plugins/sequential-thinking/scripts/mcp_sequential_thinking.py"
-      ]
-    },
-    "file-search": {
-      "type": "local",
-      "command": [
-        "uv", "run", "--no-config", "--script",
-        "/absolute/path/to/claude-marketplace/plugins/file-search/scripts/mcp_fd_server.py"
-      ]
-    },
-    "fuzzy-search": {
-      "type": "local",
-      "command": [
-        "uv", "run", "--no-config", "--script",
-        "/absolute/path/to/claude-marketplace/plugins/fuzzy-search/scripts/mcp_fuzzy_search.py"
-      ]
-    },
-    "sqlite": {
-      "type": "local",
-      "command": [
-        "uv", "run", "--no-config", "--script",
-        "/absolute/path/to/claude-marketplace/plugins/sqlite/scripts/mcp_sqlite_server.py"
-      ]
-    }
-  }
-}
-```
-
-Then **quit and restart opencode** — config is loaded once at startup and is not hot-reloaded.
-
-### opencode MCP dependencies
-
-The 4 MCP servers share `uv` and otherwise split their deps:
-
-| Server | Requires | Optional |
-|---|---|---|
-| `sequential-thinking` | `uv` | `DISABLE_THOUGHT_LOGGING=true` env |
-| `file-search` | `uv`, `fd`, `fzf` | — |
-| `fuzzy-search` | `uv`, `rg`, `fzf` | `rga` (for `fuzzy_search_documents`), `pandoc` (for HTML→Markdown in `extract_pdf_pages`) |
-| `sqlite` | `uv` | `MCP_SQLITE_ALLOW_WRITES=true` env, `--db-path <path>` arg |
-
-```bash
-brew install uv fd fzf ripgrep ripgrep-all
-```
-
-`uv` fetches each server's Python deps (`mcp`, `PyMuPDF`) on first run via PEP 723 inline metadata — do not `pip install` them globally.
-
-### Notes
-
-- Skill plugins (the other 48 directories under `plugins/`) are picked up automatically by the recursive `**/SKILL.md` scan; they need no per-plugin wiring. If a skill appears missing on next session, check that its `SKILL.md` has a non-empty `description` in frontmatter — opencode filters out skills without one.
-- If you move this checkout, update the four absolute script paths under `mcp` in lockstep. The `skills.paths` entry only needs the single parent directory.
-- For a curated subset of skills instead of all 48, symlink individual plugin dirs into `~/.config/opencode/skill/<name>/` (opencode auto-loads `~/.config/opencode/skill/*/SKILL.md` and `~/.agents/skills/*/SKILL.md`).
-- Per-project opencode config (`.opencode/opencode.json` in a workspace) deep-merges over the global config, so you can override or extend `skills.paths` / `mcp` per project.
-- Full opencode config schema: <https://opencode.ai/config.json>.
-
-## Available Skills
-
-| Skill | Description | Source |
-|-------|-------------|--------|
-| **matt** | Matt Pocock's agent skills for real engineering — `grilling`, `grill-with-docs`, `grill-me`, `to-spec`, `to-tickets`, `implement`, `tdd`, `code-review`, `codebase-design`, `domain-modeling`, `diagnosing-bugs`, `research`, `prototype`, `triage`, `wayfinder`, `improve-codebase-architecture`, `resolving-merge-conflicts`, `setup-matt-pocock-skills`, `ask-matt`, `handoff`, `teach`, `writing-great-skills`. Vendored via `git subtree` at upstream 1.2.0 (published as `matt`, so skills invoke as `/matt:to-tickets`); keeps upstream's category-nested layout so `git subtree pull` stays conflict-free. | [mattpocock](https://github.com/mattpocock/skills) |
-| **sss** | Personal skill bundle. `jira-ticket` — Story / Task / Bug / Sub-task authoring for the hyrd Jira (project MAMAS). `release-readiness` — read-only report on what is going into the next release. `autoship` — drives an idea or Issue through spec → Issues → Frontier drain to one reviewable PR. `delegate-tickets` — delegates a ticket tree to parallel Orca workers in DAG order. `setup-cursor-worker` — makes `cursor-agent` usable as an Orca worker engine. The last three require the **matt** plugin and an Orca install. | [sonhyrd](https://github.com/sonhyrd/claude-marketplace/tree/master/plugins/sss) |
-| **e2e** | End-to-end test skills. `pw-prove` — prove a PR / branch / ticket / diff with a Playwright E2E test, fast (owns server bring-up, auth and live-DOM recon). `e2e-reviewer` — static review of Playwright/Cypress specs and Page Objects, flagging 24 anti-patterns that let tests pass CI while proving nothing. Both are model-invocable: `e2e-reviewer` so `pw-prove` can chain into it at its Step 6 quality gate, and `pw-prove` so a review skill can hand into it — `pw-prove` asks for confirmation before a model-invoked run instead of being pinned (`docs/adr/0005`). Grafted via `git subtree` from `sonhyrd/e2e-skills` and **editable in place** — push changes back with a **targeted** `git push e2e-fork <sha>:main`, never `git subtree push`, which would carry the two marketplace-only plugin manifests onto a fork that deliberately ships none (`docs/adr/0005`). Three further skills ship as files inside the subtree but are not declared. | [sonhyrd](https://github.com/sonhyrd/e2e-skills) |
-| **ai-friendly-cli** | Build and refactor CLIs for AI agent compatibility. Use when making CLI tools machine-readable with structured JSON output, input hardening, schema introspection, dry-run safety, and MCP surfaces. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/ai-friendly-cli) |
-| **skill-creator** | Create new skills, modify and improve existing skills, and measure skill performance. Use when creating, updating, evaluating, or optimizing skills. | [Anthropic](https://github.com/anthropics/skills/tree/main/skill-creator) |
-| **skill-reviewer** | Review and ensure skills maintain high quality standards. Use when creating new skills, updating existing skills, or auditing skill quality. Checks for progressive disclosure, mental model shift, appropriate scope, and documentation clarity. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/skill-reviewer) |
-| **agent-skill-init** | Create a repo-local Agent Skill following the open [agentskills.io](https://agentskills.io) specification. Use when the user wants to create, scaffold, or initialize a new skill in the current repo, mentions a 'repo-local skill' or the agentskills.io spec, or needs a spec-compliant `SKILL.md` placed under `.agents/skills/` (or `.claude/skills/`). Scaffolds the directory, writes valid `name`/`description` frontmatter, and validates with `skills-ref`. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/agent-skill-init) |
-| **git-absorb** | Automatically fold uncommitted changes into appropriate commits. Use for applying review feedback and maintaining atomic commit history. Tool: [git-absorb](https://github.com/tummychow/git-absorb) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/git-absorb) |
-| **ultrathink** | Invoke deep sequential thinking for complex problem-solving. Use when tackling problems that require careful step-by-step reasoning, planning, hypothesis generation, or multi-step analysis. Trigger with "use ultrathink". | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/ultrathink) |
-| **conventional-commits** | Format git commit messages following the Conventional Commits 1.0.0 specification. Use when creating git commits for consistent, semantic commit messages that support automated changelog generation and semantic versioning. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/conventional-commits) |
-| **git-chain** | Manage and rebase chains of dependent Git branches (stacked branches). Use when working with multiple dependent PRs, feature branches that build on each other, or maintaining clean branch hierarchies. Automates rebasing or merging entire branch chains. Tool: [git-chain](https://github.com/dashed/git-chain) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/git-chain) |
-| **jj** | Jujutsu (jj) version control system - a Git-compatible VCS with automatic rebasing, first-class conflicts, and operation log. Use when working with jj repositories, stacked commits, revsets, or enhanced Git workflows. Tool: [jj](https://github.com/jj-vcs/jj) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/jj) |
-| **fzf** | Command-line fuzzy finder for interactive filtering. Use when searching files, command history (CTRL-R), creating interactive menus, or integrating with ripgrep, fd, and git. Shell keybindings: CTRL-T, CTRL-R, ALT-C, `**` completion. Tool: [fzf](https://github.com/junegunn/fzf) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/fzf) |
-| **playwright** | Browser automation with Playwright for Python. Use when testing websites, taking screenshots, filling forms, scraping web content, or automating browser interactions. Uses uv with PEP 723 inline scripts for self-contained automation. **Requires one-time browser setup** (see below). Tool: [Playwright](https://playwright.dev/python/) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/playwright) |
-| **zellij** | Terminal workspace and multiplexer for interactive CLI sessions. Use when managing terminal sessions, running interactive REPLs, debugging, or automating terminal workflows. Native session management with a simpler model than a classic multiplexer. Tool: [Zellij](https://zellij.dev/) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/zellij) |
-| **design-principles** | Guide AI-assisted UI generation toward enterprise-grade, intentional design. Use when building UIs, creating dashboards, designing SaaS applications, or generating styled frontend code. Enforces 4px grids, typography hierarchies, and consistent depth strategies. | [Dammyjay93](https://github.com/dashed/claude-marketplace/tree/master/plugins/design-principles) |
-| **mermaid-cli** | Generate, validate, and fix diagrams from Mermaid markup using mmdc. Use when creating flowcharts, sequence diagrams, class diagrams, or converting .mmd files to images/SVG/PDF. Also validates and fixes Mermaid syntax. Tool: [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/mermaid-cli) |
-| **walkthrough-to-obsidian** | Convert game walkthroughs and guides from plain text into structured, interlinked Obsidian markdown pages. Use when converting walkthroughs, FAQs, or reference documents into Obsidian vault pages. Supports agent team parallelization for large documents. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/walkthrough-to-obsidian) |
-| **long-form-math** | Write mathematics in a long-form, understanding-focused style with detailed proofs and rich exposition. Three-phase proof workflow, motivation-first exposition, and rigorous writing conventions. Inspired by Cummings' Real Analysis and Chartrand's Mathematical Proofs. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/long-form-math) |
-| **chrome-cdp** | Interact with live Chrome browser sessions via Chrome DevTools Protocol. Use when inspecting, debugging, or interacting with pages open in Chrome — screenshots, accessibility trees, JS evaluation, clicking, navigating. Persistent per-tab daemon, works with 100+ tabs. Based on [pasky/chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill). **Requires Chrome remote debugging** (see below). | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/chrome-cdp) |
-| **react-best-practices** | React and Next.js performance optimization guidelines from Vercel Engineering. 62 rules across 8 categories covering waterfalls, bundle size, server-side, re-renders, and rendering. Use when writing, reviewing, or refactoring React/Next.js code. Source: [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) | [Vercel Engineering](https://github.com/dashed/claude-marketplace/tree/master/plugins/react-best-practices) |
-| **linear** | Managing Linear issues, projects, and teams. Use when working with Linear tasks, creating issues, updating status, querying projects, or managing team workflows. Tool: [Linear SDK](https://github.com/linear/linear) + MCP | [wrsmith108](https://github.com/wrsmith108/linear-claude-skill) |
-| **gogcli** | Drive Google Workspace from the terminal: Gmail, Calendar, Drive, Docs, Sheets, Slides, Chat, Tasks, Contacts, Admin, Keep, Forms, Classroom, Groups, Apps Script. JSON-first, multi-account, script-friendly. Use when sending mail, managing events, moving files, editing spreadsheets, or automating Workspace tasks. Tool: [gogcli](https://github.com/steipete/gogcli) | [steipete](https://github.com/dashed/claude-marketplace/tree/master/plugins/gogcli) |
-| **pup** | Datadog CLI (pup) for observability, monitoring, logs, APM, security, and infrastructure. Use when querying Datadog metrics, searching logs, managing monitors, investigating incidents, or performing Datadog API operations. 49 command groups, 300+ subcommands. Tool: [pup](https://github.com/datadog-labs/pup) | [Datadog](https://github.com/dashed/claude-marketplace/tree/master/plugins/pup) |
-| **style-extractor** | Extract and document writing styles from source texts into reusable style guides. Four-phase workflow analyzing 17 style dimensions, producing a full style guide, voice card, do/don't checklist, and scoring rubric. Works with PDFs, documents, and any readable text. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/style-extractor) |
-| **style-writer** | Write content using stored writing styles from the writing-styles/ collection. Discovers available styles, loads the right guide into context, applies it during writing, and self-evaluates against the style rubric. Companion to style-extractor. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/style-writer) |
-| **anki-flashcards** | Create and manage Anki flashcards via the AnkiConnect API. Use when creating flashcards, managing decks, reviewing statistics, or interacting with Anki. Comprehensive API reference covering 100+ actions, flashcard design best practices. Requires Anki with AnkiConnect add-on. Tool: [AnkiConnect](https://github.com/FooSoft/anki-connect) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/anki-flashcards) |
-| **statusline** | Configure the Claude Code status line with VCS-aware scripts showing git branch, jj change ID, bookmarks, context usage, and costs. Use when setting up a statusline, customizing the status bar, or adding VCS info to the status line. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/statusline) |
-| **hledger** | Plain-text double-entry accounting with hledger. Use when recording transactions, checking balances, generating financial reports, importing CSV bank statements, budgeting, tracking time, managing multiple currencies, or doing year-end closing. Tool: [hledger](https://hledger.org) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/hledger) |
-| **git** | Advanced Git CLI mastery, recovery, and troubleshooting (git 2.54+). Use when recovering lost commits/branches/stashes (reflog, fsck), undoing a bad reset/merge/rebase, rewriting history (interactive rebase, filter-repo), resolving conflicts (rerere), or working with worktrees, bisect, cherry-pick, stash, refspecs, `--force-with-lease`, `.gitattributes`/hooks, git internals, or confusing git errors. Defers to conventional-commits, git-chain, git-absorb, and jj for their niches. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/git) |
-| **sequential-thinking** | MCP server exposing a single `sequentialthinking` tool for dynamic, reflective, step-by-step problem-solving. Use when a task needs structured reasoning, planning, hypothesis generation, branching to explore alternatives, or revising earlier steps while keeping a running chain of thoughts. The marketplace's first MCP-server plugin. **Requires [uv](https://docs.astral.sh/uv/).** | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/sequential-thinking) |
-| **file-search** | MCP server exposing `search_files` (fd regex/glob) and `filter_files` (fzf fuzzy matching) tools for fast file-NAME discovery. Use when locating files by name or partial path — not for searching file contents. **Requires [uv](https://docs.astral.sh/uv/), [fd](https://github.com/sharkdp/fd), and [fzf](https://github.com/junegunn/fzf).** | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/file-search) |
-| **fuzzy-search** | MCP server exposing fuzzy content/file/document search tools (`fuzzy_search_files`, `fuzzy_search_content`, `fuzzy_search_documents`) built on ripgrep + fzf, plus PyMuPDF-backed PDF tools (`extract_pdf_pages`, `get_pdf_outline`, `get_pdf_page_count`, `get_pdf_page_labels`). Use when fuzzy-searching code/files/documents or inspecting/extracting PDF pages. **Requires [uv](https://docs.astral.sh/uv/); `rg`+`fzf` (and `rga` for documents).** | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/fuzzy-search) |
-| **sqlite** | MCP server exposing SQLite database tools (`query`, `execute`, `list_tables`, `describe_table`, `create_table`). Read-only by default; writes are opt-in via `--allow-writes` or `MCP_SQLITE_ALLOW_WRITES=true`. Use when inspecting, querying, or (when enabled) modifying SQLite databases. **Requires [uv](https://docs.astral.sh/uv/).** | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/sqlite) |
-| **fd** | Fast, user-friendly command-line file/directory search with the `fd` tool (a simpler, faster `find` replacement). Use when searching for files/directories by name or regex/glob, filtering by type/extension/size/modified-time, respecting `.gitignore`, or running a command per result with `-x`/`-X`. Includes `(fd X.Y+)` version annotations + a version-features lookup. Tool: [fd](https://github.com/sharkdp/fd) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/fd) |
-| **ripgrep** | Fast, gitignore-aware recursive content search with the `ripgrep` (`rg`) tool — a smarter, faster `grep`. Use when searching code/text for a regex across a tree, filtering by file type/glob, listing/counting matches, search-and-replace previews, or gitignore-aware code search. Includes `(rg X.Y+)` version annotations + a version-features lookup. Tool: [ripgrep](https://github.com/BurntSushi/ripgrep) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/ripgrep) |
-| **fuzzy-filter** | The non-interactive `rg`/`fd`/`rga` → `fzf --filter` pipeline — scan with a regex tool, then fuzzy-rank lines with no TUI (the CLI technique behind the fuzzy-search MCP). Use when fuzzy-matching paths, code lines, or PDF/document text from a script, or piping ranked results to xargs/an editor. Distinct from the **fzf** skill (interactive) and the **fuzzy-search** MCP (tool calls). Tools: [ripgrep](https://github.com/BurntSushi/ripgrep) + [fzf](https://github.com/junegunn/fzf) (+ [rga](https://github.com/phiresky/ripgrep-all) for documents). | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/fuzzy-filter) |
-| **k3s** | The `k3s` lightweight CNCF-certified Kubernetes distribution as a single binary (bundles containerd, flannel, CoreDNS, Traefik, ServiceLB, local-path-provisioner, metrics-server). Use when installing/running a lightweight cluster, bootstrapping single-node or HA control planes, joining agent nodes, choosing embedded etcd vs an external datastore, managing tokens, rotating certs, taking/restoring etcd snapshots, secrets encryption, airgap/private-registry installs, disabling bundled components, or upgrading. Includes `(k3s vX.Y+)` version annotations + a version-features lookup. Tool: [k3s](https://github.com/k3s-io/k3s) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/k3s) |
-| **ansible** | ansible-core — the agentless, push-based SSH automation engine that runs idempotent tasks from declarative YAML playbooks. Use when writing/running playbooks, issuing ad-hoc commands, managing inventory, authoring roles, installing collections with ansible-galaxy, encrypting secrets with Ansible Vault, tuning ansible.cfg, or looking up docs with ansible-doc. Covers the ten `ansible*` CLIs, FQCN, become, variable precedence, and check/diff mode. Includes `(ansible-core X.Y+)` version annotations + a version-features lookup. Tool: [ansible-core](https://github.com/ansible/ansible) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/ansible) |
-| **obsidian-markdown** | Create and edit Obsidian Flavored Markdown — the Obsidian-specific extensions on top of CommonMark/GFM: wikilinks (`[[Note]]`), block IDs, embeds (`![[...]]`), callouts (`> [!type]`), frontmatter properties, tags, comments, highlights, LaTeX math, Mermaid, and footnotes. Use when working with `.md` files in an Obsidian vault, or when the user mentions wikilinks, callouts, frontmatter, tags, embeds, or Obsidian notes. Ported from kepano's obsidian-skills (with minor local accuracy fixes). |
-| **obsidian-bases** | Create and edit Obsidian Bases (`.base` files) — the YAML format that turns notes into database-like table/cards/list/map views with filters, computed formulas, and summary aggregations. Use when working with `.base` files, building database-like views of notes, or when the user mentions Bases, table/card views, filters, or formulas in Obsidian. Ported from kepano's obsidian-skills (with minor local additions from the official docs); includes a complete per-type functions reference. | [kepano](https://github.com/kepano/obsidian-skills/tree/main/skills/obsidian-bases) |
-| **duckdb** | DuckDB — the in-process, columnar OLAP SQL engine in a single zero-dependency binary ("SQLite for analytics"). Use when querying Parquet/CSV/JSON files directly with SQL, using the `duckdb` CLI shell (REPL or `-c`/`-json` one-shots for scripts/agents), writing friendly SQL (FROM-first, `SELECT * EXCLUDE`, `GROUP BY ALL`, `SUMMARIZE`, `PIVOT`), converting CSV↔Parquet↔JSON via `COPY`, reading HTTP/S3 data via httpfs, or `ATTACH`-ing a live Postgres/MySQL/SQLite database. Includes `(duckdb vX.Y+)` version annotations + a version-features lookup. Tool: [duckdb](https://github.com/duckdb/duckdb) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/duckdb) |
-| **jq** | jq — the command-line JSON processor and its filter language for filtering, transforming, and reshaping JSON. Use when extracting fields/nested paths on the CLI, `select`-ing arrays of objects, building new JSON, emitting CSV/TSV with `@csv`/`@tsv`, getting raw strings with `jq -r`, slurping (`-s`) and aggregating (`add`, `group_by`), NDJSON pipelines (`-c`), or injecting shell values with `--arg`/`--argjson`. Includes `(jq 1.X+)` version annotations + a version-features lookup. Tool: [jq](https://github.com/jqlang/jq) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/jq) | [kepano](https://github.com/kepano/obsidian-skills/tree/main/skills/obsidian-markdown) |
-| **psql** | psql — PostgreSQL's interactive terminal client and SQL script runner. Use when connecting to or inspecting a Postgres database from a terminal, running SQL scripts or one-off queries in shells/CI/agents (`-c`/`-f`/`-qAtX`/`--csv`), using meta-commands (`\d` family, `\copy`, `\watch`, `\gexec`, `\if` scripting, `\pset`/`\x`, variables), `.psqlrc`, or fixing connection/auth problems. Includes `(pgNN+)` version annotations + a version-features lookup. Tool: [PostgreSQL](https://github.com/postgres/postgres) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/psql) |
-| **postgres-sql** | The PostgreSQL SQL dialect & data types that set Postgres apart from generic SQL. Use when writing or debugging Postgres-specific SQL — upsert (`ON CONFLICT`), `RETURNING` (incl. `OLD`/`NEW`), `MERGE`, CTEs, window frames, `GROUPING SETS`, `LATERAL`, generated/identity columns, declarative partitioning, `jsonb`/jsonpath/SQL-JSON (`JSON_TABLE`/`IS JSON`), arrays, ranges & multiranges, composite/enum/domain types, `uuidv7()`/`gen_random_uuid()`. Includes `(pgNN+)` version annotations + a version-features lookup. Tool: [PostgreSQL](https://github.com/postgres/postgres) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/postgres-sql) |
-| **postgres-performance** | PostgreSQL query & performance tuning — reading `EXPLAIN`/`EXPLAIN ANALYZE` plans, choosing & designing indexes, fixing planner row-estimate errors with statistics, and diagnosing MVCC bloat/VACUUM. Use when a query is slow, choosing an index type (btree/GIN/GiST/SP-GiST/BRIN/hash) or strategy (partial/expression/covering), autovacuum lags, or tuning planner GUCs (`random_page_cost`, `work_mem`, `effective_cache_size`). Includes `(pgNN+)` version annotations + a version-features lookup. Tool: [PostgreSQL](https://github.com/postgres/postgres) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/postgres-performance) |
-| **postgres-admin** | PostgreSQL server administration & operations (DBA work on a running cluster). Use when configuring a server (`postgresql.conf`, `ALTER SYSTEM`, GUCs), managing roles/privileges, authentication (`pg_hba.conf`, scram-sha-256), backup/restore (`pg_dump`, `pg_basebackup`, incremental, PITR), replication & HA (streaming, logical pub/sub, slots, failover), `pg_upgrade`, or monitoring (`pg_stat_activity`, `pg_stat_io`, `pg_stat_progress_*`). Includes `(pgNN+)` version annotations + a version-features lookup. Tool: [PostgreSQL](https://github.com/postgres/postgres) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/postgres-admin) |
-| **postgres-extensions** | PostgreSQL extension management and the bundled `contrib` catalog. Use when running `CREATE EXTENSION`/`ALTER EXTENSION ... UPDATE`/`DROP EXTENSION`, listing extensions (`\dx`), or choosing which contrib module enables a feature — FDWs (`postgres_fdw`, `dblink`), trigram/fuzzy search (`pg_trgm`, `fuzzystrmatch`), crypto/UUIDs (`pgcrypto`), `hstore`/`ltree`/`citext`/`cube`, query stats (`pg_stat_statements`, `auto_explain`), storage forensics (`pageinspect`, `amcheck`, `pg_surgery`). Covers trusted extensions & `shared_preload_libraries`. Includes `(pgNN+)` version annotations + a version-features lookup. Tool: [PostgreSQL](https://github.com/postgres/postgres) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/postgres-extensions) |
-| **kubernetes** | Author and operate Kubernetes workloads with kubectl and YAML manifests — the kubectl CLI plus core resource authoring (Deployments, StatefulSets, Jobs/CronJobs, Services, Ingress, ConfigMaps/Secrets, PV/PVC, RBAC). Use when writing/debugging manifests, running kubectl (apply/diff/rollout/logs/exec/debug), fixing CrashLoopBackOff/Pending pods, managing contexts/namespaces, generating manifests with `--dry-run=client`, or checking RBAC with `auth can-i`. Includes `(k8s 1.X+)` version annotations + a version-features lookup. For installing/running a lightweight cluster see the **k3s** skill. Tool: [kubernetes](https://github.com/kubernetes/kubernetes) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/kubernetes) |
-| **uv** | uv — Astral's fast Python package & project manager, one binary replacing pip/pipx/pyenv/poetry/virtualenv. Use when managing Python projects with `pyproject.toml` + `uv.lock` (`uv init/add/sync/lock/run`), running PEP 723 inline-dependency scripts, running one-off tools with `uvx`, installing/pinning Python versions (`uv python`), migrating from pip (`uv pip`), building/publishing packages, or configuring indexes/resolution/cache. Includes `(uv 0.X+)` version annotations + a version-features lookup. Tool: [uv](https://github.com/astral-sh/uv) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/uv) |
-| **pytest** | pytest — the Python testing framework and the idioms that set it apart from unittest. Use when writing, running, debugging, or configuring pytest tests — plain `assert` (rewritten for rich introspection), dependency-injected `@pytest.fixture` (scopes/autouse/yield/conftest), `@pytest.mark.parametrize`, `skip`/`skipif`/`xfail` + custom markers, `pytest.raises`/`warns`/`approx`, builtin fixtures (`tmp_path`/`monkeypatch`/`capsys`/`caplog`), the CLI (`-k`/`-m`/`-x`/`--lf`/`--pdb`/node ids), config (`pyproject.toml`/`pytest.ini`, `addopts`, `testpaths`, `--import-mode`), and plugins/hooks (`conftest.py`, xdist/cov/asyncio/mock). Includes `(pytest N.M+)` version annotations + a version-features lookup. Tool: [pytest](https://github.com/pytest-dev/pytest) | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/pytest) |
-| **model-routing** | Install and maintain a "model routing" section in a project's CLAUDE.md that teaches Claude Code which model to use for which work — a per-model cost/intelligence/taste rankings table with defaults-not-limits escalation rules, plus mechanics for reaching each model (Agent/Workflow `model` parameter for Claude models; `codex exec` for GPT models, including the thin-wrapper pattern for using Codex inside workflows and subagents). Use when setting up Codex/GPT as a delegation target or routing subagent work across models. Ships a customizable CLAUDE.md template and a verified `codex exec` flag reference. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/model-routing) |
-| **code-walkthrough** | Create a self-contained interactive HTML document that teaches a code change (branch, PR, diff, or subsystem) to a reviewer with no prior knowledge — before/after code toggles, mermaid diagrams, step-through code walkers, and playground widgets that mirror the logic under study. Use when the user wants to learn or review a code change interactively, asks for a walkthrough/teaching document of a branch or PR, or wants before/after explanations with visuals. Ships a generic HTML shell template (sidebar scrollspy, theme toggle, component library) and a 6-phase pipeline: extract (read-only agent fan-out) → verify claims → spiral structure → author fragments → browser-verify → deliver. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/code-walkthrough) |
-
-### Chrome CDP Setup
-
-The chrome-cdp skill requires Chrome with remote debugging enabled and Python 3.10+ with the `websockets` library:
-
-```bash
-# 1. Enable remote debugging in Chrome
-#    Navigate to chrome://inspect/#remote-debugging and toggle the switch
-
-# 2. Install the websockets dependency
-uv pip install websockets
-```
-
-### Linear Setup
-
-The linear skill requires Node.js dependencies and a Linear API key:
-
-```bash
-# 1. Install dependencies in the plugin cache directory
-cd ~/.claude/plugins/cache/sss-marketplace/linear/2.3.1
-npm install
-
-# 2. Create a Linear API key at https://linear.app/settings/api
-# 3. Add to your shell profile (~/.zshrc or ~/.bashrc)
-export LINEAR_API_KEY="lin_api_..."
-```
-
-Restart Claude Code after setup.
-
-### Playwright Setup
-
-The playwright skill requires a one-time browser installation (~200MB). Claude will suggest these commands but will not run them directly—run them manually:
-
-```bash
-# Install Chromium (recommended, ~200MB)
-uv run --with playwright playwright install chromium
-
-# Or install all browsers
-uv run --with playwright playwright install
-```
-
-## Usage
-
-### Add this marketplace locally
-
-```bash
-/plugin marketplace add /path/to/claude-marketplace
-```
-
-### Update the marketplace
-
-```bash
-/plugin marketplace update sss-marketplace
-```
-
-### Install skills
-
-1. Select `/plugin` and then `Browse and install plugins`
-2. Select `sss-marketplace`
-3. Choose the skills to install
-4. Restart Claude Code
-
-### Install skills for Codex
-
-```bash
-./scripts/sync_codex_plugins.py
-```
-
-Codex can then discover the local plugin marketplace from `.agents/plugins/marketplace.json` when launched from this repository or one of its subdirectories.
-
-For legacy direct skill links:
-
-```bash
-./scripts/install_codex_skills.py
-```
-
-To enable, disable, or uninstall skills interactively:
-
-```bash
-./scripts/manage_codex_skills.py
-# or
-make manage-codex-skills
-```
-
-## Adding Skills to This Marketplace
-
-### Method 1: Add to Marketplace (Recommended)
-
-1. Add your skill directory to `plugins/`
-2. Edit `.claude-plugin/marketplace.json` and add a new entry:
-
-```json
-{
-  "name": "your-skill-name",
-  "source": "./plugins/your-skill-name",
-  "description": "Brief description of what the skill does",
-  "strict": false,
-  "skills": ["./skills"]
-}
-```
-
-**Important:** The `skills` field is required to load skills from the marketplace. It tells Claude Code which directories contain SKILL.md files.
-
-3. Update the CHANGELOG.md
-4. Commit your changes
-5. Re-run `./scripts/sync_codex_plugins.py` if you use Codex with this repo.
-
-### Method 2: Direct Installation
-
-Skills can also be installed directly without using the Claude Code marketplace:
-
-```bash
-# Claude Code personal (available everywhere)
-cp -r plugins/your-skill ~/.claude/skills/
-
-# Claude Code project (shared with team)
-cp -r plugins/your-skill .claude/skills/
-
-# Codex repo-local links
-./scripts/install_codex_skills.py
-
-# Codex plugin marketplace metadata
-./scripts/sync_codex_plugins.py
-
-# Codex personal links
-./scripts/install_codex_skills.py --dest "$HOME/.agents/skills"
-
-# Codex interactive manager
-./scripts/manage_codex_skills.py
-```
-
-## Structure
-
-```
-claude-marketplace/
-├── .agents/
-│   ├── plugins/
-│   │   └── marketplace.json  # Generated Codex plugin marketplace
-│   └── skills/               # Optional generated Codex symlinks
-├── .claude-plugin/
-│   └── marketplace.json      # Marketplace manifest
-├── plugins/
-│   └── skill-creator/        # Plugin directory
-│       ├── .codex-plugin/
-│       │   └── plugin.json   # Generated Codex plugin manifest
-│       └── skills/
-│           └── skill-creator/
-│               ├── SKILL.md      # Skill definition
-│               ├── scripts/      # Optional scripts
-│               └── references/   # Optional documentation
-├── scripts/
-│   ├── install_codex_skills.py # Codex symlink installer
-│   ├── manage_codex_skills.py  # Codex interactive manager
-│   └── sync_codex_plugins.py   # Codex plugin metadata sync
-├── CHANGELOG.md              # Version history
-└── README.md                 # This file
-```
-
-## Resources
-
-- [Claude Code Skills Documentation](https://docs.claude.com/en/docs/claude-code/skills)
-- [Plugin Marketplaces Guide](https://docs.claude.com/en/docs/claude-code/plugin-marketplaces)
-- [Anthropic Skills Repository](https://github.com/anthropics/skills)
-- [OpenAI Codex Skills Documentation](https://developers.openai.com/codex/skills)
-- [OpenAI Codex Plugins Documentation](https://developers.openai.com/codex/plugins)
-- [OpenAI Skills Catalog](https://github.com/openai/skills)
-
-## Version
-
-Current version: **0.47.0**
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+Needs Node 18+ and [ripgrep](https://github.com/BurntSushi/ripgrep) on `PATH`. Installs nothing into
+the target project. It prefers project-local lint tools and otherwise auto-downloads pinned public
+packages via `npx`; set `E2E_SMELL_NO_ESLINT_DOWNLOAD=1` and `E2E_SMELL_NO_AST_GREP_DOWNLOAD=1` to
+run fully offline. `// JUSTIFIED: <reason>` on the line above suppresses a finding.
+
+## Reference
+
+Scope: [framework scope](docs/framework-scope.md) (Playwright and Cypress only) ·
+[24-smell taxonomy](docs/e2e-test-smells.md).
+
+Agent workflow config: [delegation profile](docs/agents/delegate-profile.md) ·
+[issue tracker](docs/agents/issue-tracker.md). Agent guide: [AGENTS.md](./AGENTS.md).
+
+Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md).
+
+Studies: [proof target measurements](docs/studies/proof-target-measurements.md) — development server
+against a built preview, measured, plus the two claims that were verified by running them ·
+[the first live proof](docs/studies/live-proof-pr2866.md) — pw-prove run end to end against a real
+pull request on a real application, with the timings against the numbers this work was justified by
+and the twelve behaviours no fixture shows.
+
+Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
+[0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
+[0003 mock-first with declared carve-out](docs/adr/0003-mock-first-declared-carve-out.md) ·
+[0004 probe-required recon](docs/adr/0004-probe-required-recon.md) ·
+[0005 pw-prove as a lean skill](docs/adr/0005-pw-prove-lean-coexisting-skill.md) ·
+[0006 evidence as byproduct](docs/adr/0006-evidence-as-byproduct-trace-video.md) ·
+[0007 proof clip fidelity](docs/adr/0007-proof-clip-fidelity.md) ·
+[0008 committed proof config](docs/adr/0008-committed-proof-config.md) ·
+[0009 one proof page](docs/adr/0009-one-proof-page.md) ·
+[0010 serialize, isolate, audit](docs/adr/0010-serialize-isolate-audit.md) (serialisation superseded by 0017) ·
+[0011 HAR flush + runner origin](docs/adr/0011-har-flush-and-runner-origin.md) (partially superseded by 0016) ·
+[0012 publish to Clips](docs/adr/0012-publish-to-clips-stream-copy-concat.md) ·
+[0013 the warm lead is a browser](docs/adr/0013-warm-lead-is-a-browser-not-a-curl.md) (superseded by 0016) ·
+[0014 one vaulted bearer over JSON-RPC](docs/adr/0014-one-vaulted-bearer-over-json-rpc.md) ·
+[0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md) ·
+[0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md) ·
+[0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md) ·
+[0018 the eval runtime is `none`](docs/adr/0018-eval-runtime-is-none.md) (and unsandboxed — read it
+before running the suite) ·
+[0019 pw-prove refuses a heavy session](docs/adr/0019-pw-prove-refuses-a-heavy-session.md) ·
+[0020 audit before filming, rebuild when needed](docs/adr/0020-audit-before-filming-rebuild-when-needed.md).
+
+## License
+
+Apache-2.0. Forked from [voidmatcha/e2e-skills](https://github.com/voidmatcha/e2e-skills) &copy;
+voidmatcha; the licence and its attribution are preserved. Fork maintained by
+[sonhyrd](https://github.com/sonhyrd).
