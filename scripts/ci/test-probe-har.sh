@@ -205,11 +205,21 @@ else
       sed 's/^/         /' "$W/cap-v.err" | head -6
     fi
   fi
-  if grep -q 'scrubbed at capture' "$W/daemon.out"; then
-    ok "close reports the scrub, so 'it was scrubbed' is falsifiable from the log"
+  # The verdict comes back over the CLOSE CONNECTION, not out of the daemon's own stderr: `start`
+  # detaches, so the daemon's log is a file nobody is watching, and `probe: REFUSED` is the one line
+  # that decides whether a recording may be committed. It must reach whoever ran `close`.
+  if grep -q 'scrubbed at capture' "$W/close.out"; then
+    ok "close reports the scrub in its own response, so 'it was scrubbed' is falsifiable inline"
   else
-    bad "close never reports the capture-time scrub"
-    sed 's/^/         /' "$W/daemon.out" | head -10
+    bad "close never reports the capture-time scrub to the caller"
+    sed 's/^/         /' "$W/close.out" | head -10
+  fi
+  # ...and the same lines are still in the daemon's log, so a `close` nobody ran leaves a record.
+  if grep -q 'scrubbed at capture' "$SOCK.log"; then
+    ok "the daemon's log carries the same verdict — an idle self-close is not silent"
+  else
+    bad "the daemon's log has no scrub verdict"
+    sed 's/^/         /' "$SOCK.log" | head -10
   fi
   if grep -qF "$CAP_JWT" "$W/daemon.out" "$W/close.out"; then
     bad "the probe echoed the captured bearer into its own output"

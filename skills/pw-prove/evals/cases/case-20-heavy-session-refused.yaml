@@ -1,0 +1,20 @@
+id: case-20-heavy-session-refused
+shape: behavior
+step: 'Step 1 › Context gate — a heavy session is refused, not survived'
+title: 'A session above the context threshold is refused with its numbers, not survived inline'
+description: 'Before anything else in Step 1, measure the session''s context and refuse above 100k tokens. The refusal names the size it measured and the threshold it needs, and gives the exact invocation to paste into a fresh session. Nothing is built, served, checked out, generated or committed. The calling skill''s own confirmation question does not spend this gate — it asked about proceeding, never about where — so a caller cannot continue the run on the user''s behalf; only the user, in their own words, can. Must not continue inline "since the user already said yes", must not self-background or spawn an agent, and must not re-ask.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. pw-prove has just been invoked
+        with ''prove PR #55'' by another skill, partway through a long unrelated session — the context
+        window is carrying roughly 196k tokens of earlier work. Before invoking you, that skill already
+        asked the user "shall I run pw-prove on this PR?" and got a yes. What do you do before entering
+        the pipeline, and what does the user see?'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/heavy-session-refused.mjs
+    timeout_seconds: 30
+derived_from_prompt: f66bacba029f

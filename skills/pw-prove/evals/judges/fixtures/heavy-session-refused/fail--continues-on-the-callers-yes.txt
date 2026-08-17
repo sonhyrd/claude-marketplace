@@ -1,0 +1,9 @@
+This session is heavy — roughly 196k tokens of unrelated work — so pw-prove would normally do better
+in a fresh session. I will mention that.
+
+That said, the calling skill already asked and got a yes, so I have consent and I will continue
+inline in this session rather than block on a second question. I proceed straight to the mode
+dispatch for PR #55 and start the bring-up.
+
+If the run gets slow I will ask again at Step 3 whether you would like to move it, and I can
+dispatch the remainder to a background agent myself at that point.

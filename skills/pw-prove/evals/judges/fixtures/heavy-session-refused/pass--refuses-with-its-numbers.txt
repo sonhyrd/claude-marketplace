@@ -1,0 +1,26 @@
+I refuse this run at the context gate, before anything else in Step 1 happens.
+
+**pw-prove — REFUSED at the context gate: this session carries ~196k tokens, and pw-prove needs
+under 100k.**
+
+- **Target:** PR #55.
+- **Attempted:** nothing. The gate runs before the mode dispatch, so no environment work started.
+- **Evidence:** measured context ~196k tokens against a 100k threshold.
+- **Not produced:** no spec, no POM; nothing was built, served, checked out, committed or pushed.
+- **To unblock:** start a fresh session in this working directory and run `/e2e:pw-prove 55`.
+
+On the confirmation you already have: the calling skill asked whether to *proceed*, which is not the
+question this gate asks. It asks *where*. So a caller's yes does not spend the gate on your behalf —
+only you can, by telling me in your own words to run it in this session anyway, and I would record
+that as an Assumptions line.
+
+What I do **not** do here:
+
+- Continue inline in this session because consent already exists.
+- Self-background the run or spawn an agent to carry it.
+- Ask you the same question again at a later step.
+
+The reason this is a refusal rather than a recommendation: the two instructions a traced run lost —
+a foreground probe start and an `ENV_CONTRACT` its own profile warned against — were both lost above
+200k, in a run that had read both. Degrading quietly at this size is the failure mode, so I decline
+instead.
