@@ -30,7 +30,20 @@ function commitments(t) {
     // "doesn't" with "you're" swallowed the negation between them and turned a correct answer red.
     .replace(/[“"]([^"“”\n]{0,400})[”"]/g, ' ');
 }
-const NEGATED = /\b(?:would|risks?|worse|out of scope|not|never|no|nothing|none|nor|neither|don't|doesn't|didn't|cannot|can't|won't|wouldn't|shouldn't|rather than|instead of|without|avoid\w*|refus\w*|reject\w*|rule[ds]? out|forbidden|pointless|unnecessary|wrong)\b/i;
+// The tail of this alternation is this case's own vocabulary, which is why the cross-judge drift
+// check excludes NEGATED and not the functions around it.
+//
+// A SINGLE NAMED ENTRY excuses the sentence here, because the case forbids abandoning THIS recording
+// for THIS failure and the skill's rule for a *different* failure is "bind it or re-record". A
+// recorded 2026-08-14 answer bound the HAR correctly, emitted the whole command block, and added
+// "If a *particular* call aborts after this — as opposed to all of them — that one is a genuine
+// recording miss and needs a re-record through the probe." The judge scored that correct sentence as
+// abandoning the recording: the #71 family again, a clause matched against the wrong failure.
+//
+// It is scoped to a named single entry rather than to conditionals in general on purpose. A blanket
+// `if` was tried first and swallowed the committed must-FAIL fixture's own offender ("If that still
+// aborts I will remove notFound: 'abort'") — exactly the class this judge exists to catch.
+const NEGATED = /\b(?:would|risks?|worse|out of scope|not|never|no|nothing|none|nor|neither|don't|doesn't|didn't|cannot|can't|won't|wouldn't|shouldn't|rather than|instead of|without|avoid\w*|refus\w*|reject\w*|rule[ds]? out|forbidden|pointless|unnecessary|wrong|that one)\b|\b(?:particular|single|individual|specific)\b[^\n]{0,40}\b(?:call|entry|endpoint|request|read|response)\b/i;
 // A markdown list inherits the negation of the header that introduces it. "What I explicitly do
 // **not** do:" over bare items ("Re-allocate a fresh free port and restart.") carries the negation in
 // the header alone, so judging each item on its own reads a correct answer's rejection list as its
@@ -67,13 +80,29 @@ if (blocks.length === 0) {
   process.exit(1);
 }
 const need = [
-  [/har-scrub\.mjs\s+bind/, 'the emitted command never runs `har-scrub.mjs bind`'],
+  // The optional closing quote is load-bearing. A recorded 2026-08-14 answer put the skill base in a
+  // variable and wrote `node "$SB/scripts/har-scrub.mjs" bind …` — the correct invocation, quoted the
+  // way a path in a variable has to be — and `\.mjs\s+bind` did not match across the quote. Judging
+  // the shell quoting rather than the subcommand is the same wrong-unit family as #71.
+  [/har-scrub\.mjs["']?\s+bind/, 'the emitted command never runs `har-scrub.mjs bind`'],
   [/--origin/, 'the bind never passes --origin, so the HAR stays unbound to the running server'],
-  [/PW_PROVE_HAR/, 'the emitted command never exports PW_PROVE_HAR at the bound copy'],
 ];
 const missing = need.filter(([re]) => !re.test(emitted));
 if (missing.length) {
   console.error('FAIL: ' + missing.map(([, why]) => why).join('; '));
+  process.exit(1);
+}
+// The export is a COMMITMENT, not a second artifact, so it is read from the whole answer rather
+// than from the fenced blocks alone. A recorded 2026-08-14 answer emitted the bind as a block and
+// then wrote `PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har"` in the sentence beneath it, telling
+// the operator to carry it on every runner invocation — the thing this check exists to see — and
+// failed for putting it one line outside a fence. That is the #71 defect in another surface:
+// judging the markdown rather than the commitment.
+//
+// It still has to be an ASSIGNMENT with a value. `PW_PROVE_HAR was unset` is a diagnosis, and an
+// answer that only ever names the variable has not told anyone to set it.
+if (!/(?:export\s+)?PW_PROVE_HAR\s*=\s*\S/.test(text)) {
+  console.error('FAIL: the answer never assigns PW_PROVE_HAR at the bound copy — naming the variable is not setting it');
   process.exit(1);
 }
 // The literal port, or a variable that carries the effective origin. Demanding the literal

@@ -71,20 +71,56 @@ if (bad.length) {
   process.exit(1);
 }
 
+// A check below may be a regexp over the whole answer, or a predicate when the fact it is about is
+// not expressible as one span of text. #82 repaired three of them against recorded 2026-08-14
+// answers that were correct in every particular and went red on spelling alone — the bare-substring
+// family, in its "the value is right and the characters are not" form.
+//
+// Three recorded answers state one fact in three word orders, and the old pattern — the word
+// *viewport* sitting near the word *no* — read only the first of them:
+//
+//   "there is deliberately no `viewport` among them"        the absent verb, negation before noun
+//   "The 390px viewport question I'm not sending"           the refusal, first person
+//   "The 390px viewport is not sent."                       the refusal, passive, no first person
+//
+// So the unit is the LINE, which is what makes it about the viewport request rather than about
+// something else; and within it the test is order-free — a negation, applied either to the act of
+// sending or to the existence of the verb. Requiring a fixed adjacency is requiring a word order.
+const REFUSES_THE_VIEWPORT = (t) =>
+  t.split(/\n/).some((line) => {
+    if (!/\bviewports?\b|\b390\s*-?\s*px\b/i.test(line)) return false;
+    if (/\brefus\w*|\breject\w*|\bdeclin\w*/i.test(line)) return true;
+    if (!/\b(?:not|never|no|none|isn'?t|aren'?t|won'?t|don'?t|doesn'?t|cannot|can'?t|lacks?|without)\b/i.test(line)) return false;
+    return /\b(?:sent|send|sending|issue[ds]?|issuing|ask|asked|asking|run|running|request(?:ed|ing|s)?)\b/i.test(line)
+        || /\b(?:verbs?|commands?|cmds?|vocabulary)\b/i.test(line);
+  });
+
 const checks = [
   [/autostart|started a daemon|daemon/i, "the answer never addresses the autostart, which is the thing that looks like a fault and is not"],
-  [/normal|expected|ordinary|not a (?:fault|failure|problem)/i, "the answer never says the autostart is normal sequencing"],
+  // There was a second autostart check here — the answer had to SAY the autostart was "normal" /
+  // "expected" / "not a fault" — and #82 deleted it rather than widening it. It is case-61's
+  // vestigial clause in this judge: #79's repaired prompt states the environment is settled
+  // ("nothing about the environment is in question"), so an answer that labels the autostart is
+  // restating the premise, and one that simply proceeds from a daemon that is up has read it
+  // correctly. What is actually measurable — that the answer does not re-run or restart — is the
+  // first `offenders()` pattern above, and that pattern is untouched. Two rounds of widening the
+  // vocabulary had already landed here; a third would be fitting the judge to its fixtures.
+  // See judges/README.md, *An assertion is re-derived from the prompt it is about*.
   [/"cmd"\s*:\s*"console"|\bconsole\b/i, "the console question is never asked, and that is where an empty authenticated shell says why"],
-  [/__APP__\.tenant/, "the tenant value is never asked for"],
+  // Optional chaining is the same value. `window.__APP__?.tenant` reads the tenant off `__APP__`
+  // exactly as `window.__APP__.tenant` does — guarded, which on a shell that may not have booted
+  // the global yet is the better probe, not a different question. Bracket access is the same value
+  // too. The check is about which value comes back, so it must not be about which dot spells it.
+  [/__APP__\s*(?:\??\.\s*tenant\b|\[\s*['"]tenant['"]\s*\])/, "the tenant value is never asked for"],
   [/location\.href/, "the URL is never asked for"],
   [/one eval|single eval|named-?map|one batch|same eval/i, "the two values are never gathered in one eval, which is the form the case is about"],
-  [/\bno viewport verb\b|\bthere is (?:\w+ ){0,2}no\b[^\n]{0,30}viewport|\brefus\w*|\bI do not send\b/i, "the viewport request is never refused"],
+  [REFUSES_THE_VIEWPORT, "the viewport request is never refused"],
   [/Step 4|playwright\.config|committed spec/i, "the answer never says where the effective viewport actually comes from"],
 ];
-const missing = checks.filter(([re]) => !re.test(text));
+const missing = checks.filter(([m]) => !(typeof m === 'function' ? m(text) : m.test(text)));
 if (missing.length) {
   console.error('FAIL: ' + missing.map(([, why]) => why).join('; '));
   process.exit(1);
 }
 
-console.log("PASS: the autostart is read as normal, the console and named-map eval carry the questions, and the viewport request is refused");
+console.log("PASS: the autostart is not re-run, the console and named-map eval carry the questions, and the viewport request is refused");

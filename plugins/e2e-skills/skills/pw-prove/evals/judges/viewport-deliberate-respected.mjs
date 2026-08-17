@@ -71,8 +71,11 @@ const checks = [
   [/deliberate/i, "the answer never names the `deliberate:` branch that produced the verdict"],
   [/PW_PROVE_W=1440/, "the proof command never carries PW_PROVE_W=1440, so the recording does not match the project viewport"],
   [/PW_PROVE_H=900/, "the proof command never carries PW_PROVE_H=900"],
-  [/PW_PROVE_CLIP=1/, "the proof command never sets PW_PROVE_CLIP=1, so the spec dwell stays inert"],
-  [/playwright\.proof\.config/, "the answer never runs the proof through the proof config"],
+  // Scoped to the branch under test, and no wider. `PW_PROVE_CLIP=1` and the proof config are Step-7
+  // plumbing this branch does not change — the case's own description says so, and the dry twin
+  // `case-23`'s judge asserts neither. Asserting them here made a red verdict name one of three
+  // behaviours: in the #76 re-characterization run, two of three with-skill answers resolved
+  // `deliberate: 1440x900` exactly right and went red for the missing clip flag alone.
 ];
 const missing = checks.filter(([re]) => !re.test(text));
 if (missing.length) {

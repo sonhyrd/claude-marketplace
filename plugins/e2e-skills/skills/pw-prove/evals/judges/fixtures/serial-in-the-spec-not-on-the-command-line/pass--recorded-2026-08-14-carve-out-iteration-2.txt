@@ -1,0 +1,35 @@
+Serialise in the spec — not with a runner flag.
+
+The carve-out is settled, so the contention is the residue that survives the hermetic question, and that's exactly the case `mode: 'serial'` is for. Two things make it correct rather than just convenient: the two scenarios are ordered (rename must land before the list view asserts it), and the restore is what returns the shared record to its pre-run name for the next run.
+
+```ts
+// CARVE-OUT: the AC is that a rename PERSISTS ACROSS VIEWS, so the live round-trip IS the
+// behaviour under proof — a fixtured response is precisely what would make the cross-view
+// assertion pass, so it would prove nothing. Scoped to ONE pre-existing job on the shared
+// staging tenant; nothing is created, and the restore is exercised below.
+//
+// Serial because scenarios 2 and 3 contend over that one record: 2 renames it, 3 asserts the
+// rename from the list view. Run concurrently they race. This is a property of THIS spec, so
+// it lives here — never a global `workers` override, which would charge every other proof.
+test.describe.configure({ mode: 'serial' });
+
+test.describe('job rename persistence', () => {
+  test('renames the job from the detail view', async ({ page }) => { /* PROVES: … */ });
+  test('shows the renamed job in the list view', async ({ page }) => { /* PROVES: … */ });
+
+  test.afterAll(async ({ browser }) => {
+    // Restores the record's original name — the carve-out's obligation to the shared tenant,
+    // and itself the write path under proof, so the restore is a real round-trip too.
+  });
+});
+```
+
+Three things I'm deliberately *not* doing:
+
+- **No `-j 1` on the proof run.** The run stays concurrent (ADR 0017); the other three scenarios keep full parallelism. `-j 1` is only the diagnostic for an all-scenarios-time-out-at-first-navigation signature, and it never enters the proof command, a config, or the committed spec.
+- **No `workers` pin** in `playwright.config.ts` or the proof config. One spec's shared-state problem doesn't get to slow every other proof in the repo.
+- **No `mode: 'serial'` over the whole file.** Only the two contending scenarios go in the serial describe; the other three stay outside it and run concurrently.
+
+Two consequences to carry forward. Serial mode means a failure in the rename scenario **skips** the list-view scenario rather than failing it — so if that happens, its AC is reported `unproven`, not passed. And the `// CARVE-OUT:` header text has to match what `hermetic.mjs` will flag in Step 7: the live calls it names — the rename write, the list read, the restore write — must all be declared, or the green run still fails the hermetic audit as an undeclared live write to a shared tenant.
+
+Ready to write the spec + POM on this shape when you want Step 5 executed against the real diff — I'd need the PR/branch and the Step 3–4 output (locator table, effective viewport verdict) to generate it rather than sketch it.

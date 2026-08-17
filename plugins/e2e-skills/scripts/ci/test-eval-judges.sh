@@ -297,6 +297,35 @@ else
   ok "$filter_carriers judgment-call judges compared"
 fi
 
+# --- and the routing core is one text too ----------------------------------------------------------
+# The routing judges (#81) answer "which of two installed skills did this request reach", and they
+# carry ~180 lines of shared transcript reading to do it. Duplicated for the same reason everything
+# else here is — skill-up copies a judge to a temp directory, so a relative import of a sibling
+# resolves to nothing, which #81 discovered by spending a run on it. Between the markers is the
+# region that must be identical; the header above them is each judge's own.
+echo ""
+echo "-- the routing core is verbatim across the routing judges --"
+core_of() { awk '/^\/\/ >>> routing core/ { p = 1 } p { print } /^\/\/ <<< routing core/ { exit }' "$1"; }
+core_ref=""; core_ref_name=""; core_carriers=0
+for n in "${judge_names[@]}"; do
+  grep -q '^// >>> routing core' "$JUDGES/$n.mjs" || continue
+  core_carriers=$((core_carriers + 1))
+  sum="$(core_of "$JUDGES/$n.mjs" | md5sum | cut -d' ' -f1)"
+  if [ -z "$core_ref" ]; then
+    core_ref="$sum"; core_ref_name="$n"
+    ok "$n carries the routing core (reference copy)"
+  elif [ "$sum" = "$core_ref" ]; then
+    ok "$n carries it verbatim"
+  else
+    bad "$n's routing core has drifted from $core_ref_name's — one judge decides 'served' by an older rule"
+  fi
+done
+if [ "$core_carriers" -lt 2 ]; then
+  bad "found $core_carriers routing judge(s) — the extraction has stopped matching, so this check is proving nothing"
+else
+  ok "$core_carriers routing judges compared"
+fi
+
 # --- and the workspace judges' preamble is one text too --------------------------------------------
 # A WET case's judge reads the run's artifacts rather than its prose (judges/README.md), and the way
 # it finds them — the refusal on an absent input, `$PWPROVE_JUDGE_ROOT` or cwd, the `read()` helper —

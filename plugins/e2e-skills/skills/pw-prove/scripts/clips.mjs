@@ -220,7 +220,7 @@ function actionPayload(result) {
   // puts PROSE in the content block, carrying the link in the `_meta` open-link hint instead. Both
   // branches above therefore find nothing, and a publish that genuinely succeeded reads as a failure
   // — the run tells the operator to attach a file by hand while a perfectly good recording exists.
-  // Measured against clips.paulsjob.ai on 2026-08-06; see docs/adr/0014.
+  // Measured against clips.paulsjob.ai on 2026-08-06.
   return metaLinkPayload(result);
 }
 

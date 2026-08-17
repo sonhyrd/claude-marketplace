@@ -1,0 +1,33 @@
+No repo is present at `/tmp/skill-up-3033760428` (only `.claude/`), so this is Step 2 + the scenario half of Step 4 derived from the diff you described. Route and component names are placeholders until Step 3 recon.
+
+## Step 2 — AC → surface
+
+The PR body's three bullets are the trap here. `buildUpsert()` is pure, and the diff ships `tests/unit/customScripts.test.ts` (+51 lines, 23 assertions) covering exactly those three behaviors on that function. Re-running that input→output matrix through an authenticated page load buys no new guarantee at one page load per case — so all three fold into the wiring scenario, and keep their rows.
+
+| AC | Source | Touched surface | Changed files | Proven by |
+|---|---|---|---|---|
+| Saving custom scripts sends the payload `buildUpsert()` produced | diff-inferred | `<route rendering the scripts editor>` | `composables/customScripts.ts`, `<CustomScripts*.vue>` | E2E scenario 1 |
+| Clearing every locale for a key omits that key from the save request | diff-inferred (PR bullet 3, at the wiring layer) | same | `composables/customScripts.ts`, `<CustomScripts*.vue>` | E2E scenario 2 |
+| Values are trimmed | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+| Empty locales are dropped | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+| A key with all-empty locales is removed | PR body bullet | (pure fn) | `composables/customScripts.ts` | already covered: `tests/unit/customScripts.test.ts` |
+
+Scenario 2 is not a fold violation: it asserts the **request the browser actually sends**, which the unit test cannot see — the component could re-add the key after `buildUpsert()` returns, and nothing in the diff's unit tests would notice.
+
+**Locale floor: not triggered.** The diff keys script values *by* locale but touches no `locales/**` / `messages.*.json` / `*.i18n.*` file, so no non-default-locale scenario is required.
+
+## Step 4 — scenarios
+
+### Scenario 1: whitespace-padded values save trimmed
+- **Given:** the custom-scripts editor is open with an existing key that has values in two locales
+- **When:** the user pads one locale's value with leading and trailing whitespace and saves
+- **Then:** the save succeeds and the request body carries that locale's value trimmed, with the untouched locale unchanged
+
+### Scenario 2: clearing every locale removes the key (edge case)
+- **Given:** the same editor, with one key holding values in every locale
+- **When:** the user empties every locale field for that key and saves
+- **Then:** the save succeeds and the request body contains no entry for that key at all — not an empty object, not empty strings
+
+Two scenarios, two page loads, three PR bullets covered where they're cheapest. Both assert against the intercepted mutation (hand-mocked `route.fulfill` per Network Determinism); reads replay from `api.har`.
+
+**Unresolved until Step 3:** the route rendering the editor, the component filename, whether the save is a single mutation or a per-key call (which would change scenario 2's assertion from "key absent from body" to "no call issued for that key"), and every locator. If you point me at the repo I'll run the live pass and take it through to the proof run and PR comment.

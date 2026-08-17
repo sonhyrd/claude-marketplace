@@ -1,0 +1,34 @@
+id: case-81-untested-routes
+shape: trigger
+step: 'frontmatter description: — pw-prove''s coverage clause against e2e-reviewer''s, an untested-routes request'
+title: With both skills installed, an untested-routes request reaches pw-prove and only pw-prove
+description: >-
+    Trigger case, and the first case of any kind that runs with TWO skills installed. It belongs to
+    `evals/eval.collision.yaml`, not to the active suite: what it measures is a property of the
+    INSTALLED SET, and every arm in `eval.yaml` installs pw-prove alone.
+
+    That is the gap #81 was filed against. #73/#74 added a coverage-gap clause to pw-prove's
+    `description:` and measured it three ways, all of them with pw-prove the only skill present — so
+    "the clause fires" and "the clause fires and nothing else claims the same request" were one
+    reading. They are two questions, and the marketplace bundle ships all three skills together, so
+    the second one is the configuration users actually have.
+
+    The prompt is a realistic top-of-task request for an untested-routes audit and it names no skill.
+    The judge is `routes-to-pw-prove.mjs`: PASS only when pw-prove reached the model and e2e-reviewer
+    did not. A COLLISION verdict (exit 4) means both descriptions still claim these words; a WRONG
+    OWNER verdict (exit 3) means e2e-reviewer took a job pw-prove owns. Either is a defect in the
+    `description:` frontmatter of one of the two skills, recorded as such and never repaired by
+    editing this prompt.
+
+tag: functional_test
+input:
+    prompt: We are putting an E2E gate on this repo before the next release, and I need to know where we stand. The app declares its routes in src/routes.ts and the only spec we have is tests/auth.spec.ts. Which pages and flows have no end-to-end test at all, and how should the missing ones be structured?
+context:
+    repo_fixture: evals/files/project-pom
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/routes-to-pw-prove.mjs
+    timeout_seconds: 30
+derived_from_prompt: 1fa02d7512fc

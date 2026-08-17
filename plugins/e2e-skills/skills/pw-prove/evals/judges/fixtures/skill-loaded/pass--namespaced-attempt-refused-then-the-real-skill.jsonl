@@ -1,0 +1,6 @@
+{"type":"user","message":{"role":"user","content":"Load the pw-prove skill and follow it."},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Trying the plugin namespace first."},{"type":"tool_use","id":"toolu_01WithSkillRefusedNamespaced","name":"Skill","input":{"skill":"e2e:pw-prove"}}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01WithSkillRefusedNamespaced","is_error":true,"content":"<tool_use_error>Unknown skill: e2e:pw-prove</tool_use_error>"}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01WithSkillBareSkillCall","name":"Skill","input":{"skill":"pw-prove"}}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01WithSkillBareSkillCall","content":"Never start a second dev server when one is already answering on the recorded port."}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Beginning at the confirmation gate."}]},"sessionId":"fixture","cwd":"/ws"}

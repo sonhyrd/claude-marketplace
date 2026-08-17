@@ -21,7 +21,7 @@
 //
 // The pipeline is: probe each clip -> concatenate by STREAM COPY -> probe the result -> ONE
 // JSON-RPC call carrying the video as a base64 data URL -> print the share URL the destination
-// returns. Stream copy re-encodes nothing, so the Clip fidelity contract (docs/adr/0007) survives
+// returns. Stream copy re-encodes nothing, so the Clip fidelity contract survives
 // bit-for-bit and the cost is a byte copy rather than a transcode.
 //
 // Configuration is ONE environment variable (see clips.mjs):

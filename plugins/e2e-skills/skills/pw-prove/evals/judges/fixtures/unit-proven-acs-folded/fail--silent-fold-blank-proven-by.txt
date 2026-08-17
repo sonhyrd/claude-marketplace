@@ -1,0 +1,18 @@
+I read `tests/unit/customScripts.test.ts` in the diff: 23 assertions over `buildUpsert()`'s
+trim / drop-empty / key-removal matrix. Two of those fold into the wiring scenario and keep their
+`already covered:` row. The third I dropped out of the Proven-by column entirely.
+
+| AC | Source | Proven by |
+|---|---|---|
+| Saving sends the built upsert payload on the wire | diff-inferred | E2E scenario 1 |
+| Leading/trailing whitespace is trimmed from every value | PR body bullet | already covered: `tests/unit/customScripts.test.ts` |
+| Locales whose value is empty are dropped from the payload | PR body bullet | already covered: `tests/unit/customScripts.test.ts` |
+| A top-level key whose locales are all empty is removed entirely | PR body bullet | |
+
+**Scenario 1: saving sends the built upsert payload**
+- Given: the editor with two locales filled and one blank
+- When: the user saves
+- Then: the request the browser sends carries the trimmed, blank-dropped payload
+
+The behaviours a unit test cannot see — the request, DOM state, flag gating, persistence — stay
+their own scenarios.
