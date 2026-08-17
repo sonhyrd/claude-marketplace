@@ -81,7 +81,7 @@ BASE=<sha> (merge-base of origin/MAMAS-9316 ← stacked on open PR 3140) · HEAD
 
 Three fields, in both modes: the resolved `BASE` with the ref it came from and a stack clause where there is one, `HEAD_SHA` with its ref, and the tree verdict — `tree at PR head`, or `read-only run: <the guard that failed>`. Name the guard, not the symptom: `read-only run: alfred/mamas-9435 live in worktree /home/orca/work/hyrd-widget` tells the reader to review from that worktree instead. Branch mode fills the same slots with what it has: `BASE=<sha> (user-named fixed point 'main') · HEAD=<sha> · branch mode`. One line, printed before the fan-out, is the point: three tracks reading a base nobody printed is how a wrong one survives to the end of a run.
 
-Then `which ocr`.
+Then `ocr --version` — the version, not just the presence, because `sss:ocr-delegate` takes a different path below v1.9.3 and the report should say which one ran.
 
 **Then resolve the two sync findings** — both of them here, off the one `BASE` the tracks share, so Step 5 decides from settled facts rather than re-reading the tree after the fixes have moved it:
 
@@ -114,7 +114,7 @@ Then send **one** message with **three** `general-purpose` `Agent` calls. The lo
 - **Acquired** — *this tree is at the PR head; read files directly.* Left unsaid, a track invents the opposite and routes every read through `git show`.
 - **Read-only run** — *this tree is NOT at the PR head; read every path as `git show $HEAD_SHA:<path>`.* Here the clause is load-bearing: a track opening a tree path reviews file contents the PR does not contain, and reports them with full confidence.
 
-With no `ocr` on PATH, send the two and open the report with: *OCR track skipped, no `ocr` on PATH — this is a plain `matt:code-review` run.* An `ocr` that is present but whose `delegate` sub-commands reject the skill's invocation degrades the same way, with the failing command quoted instead of the PATH note — it is a broken tool, not a review with nothing to say, and the two must never read alike in the report.
+With no `ocr` on PATH, send the two and open the report with: *OCR track skipped, no `ocr` on PATH — this is a plain `matt:code-review` run.* An `ocr` that is present but whose `delegate` sub-commands reject the skill's invocation degrades the same way, with the failing command quoted instead of the PATH note — it is a broken tool, not a review with nothing to say, and the two must never read alike in the report. A rejected `--format json` is **not** that case: `sss:ocr-delegate` falls back to the text output on its own and the track runs in full, so degrading on it would throw away a working review.
 
 Done when every launched track has returned.
 
