@@ -104,3 +104,131 @@ The alternative shapes were considered and rejected:
 - The `git pull` assertion had to be **anchored** to line starts. Unanchored, it forbade the word,
   which the new prose explaining that Step 1 does not pull immediately tripped.
 - Nothing mechanical catches a fourth revision being made by hand. That is what this file is for.
+
+## Amendment (2026-08-17) — revision 4: a failed guard stops the run
+
+**This amendment overturns one bullet of the decision above:** *"Any guard failing is a fallback to
+revision 2's behaviour, not an abort."* It is no longer a fallback. A failed guard prints the
+provenance line, then stops the run, naming the guard and the corrective action. Nothing spawns, and
+the term **read-only run** is removed from the skill and from `CONTEXT.md` along with it. Everything
+else in the decision stands: resolve before moving, a branch and not a detached HEAD, the same three
+guards, a dirty tree refused rather than stashed, branch mode unchanged.
+
+### Why
+
+**The fallback was exercised by 0 of 12 runs** mined 2026-08-07 → 08-17. Not a single logged run hit
+a failing guard, so the behaviour existed only as prose held up by two `must_match` assertions — the
+exact fate the Consequences above predicted: *"On any machine where the checkout always works it
+reads like dead prose."* The prediction was written as a warning against deletion. It turned out to
+be a description of a path nobody travels.
+
+**Both measurements, kept together, because neither settles it alone:**
+
+| | Measurement | What it argues |
+|---|---|---|
+| For removal | fallback reached in **0 of 12** runs (2026-08-07 → 08-17) | the behaviour is unexercised prose |
+| For keeping | worktree collision hit in **3 of 8** runs under revision 1 (#19) | the failure it answers is common |
+
+**0 of 12 is not proof the path cannot fire**, and this amendment does not claim it is. The collision
+the fallback answered is real and was measured at 3 of 8. What makes the trade defensible is
+structural rather than statistical: under revision 3 the guards already moved the collision from
+*encountered* to *detected*, and they run **before** the Step 2 fan-out. So an abort now costs a
+message and nothing else — no track has spawned, no report has been paid for — where revision 1's
+collision surfaced as a `fatal:` in the middle of a recipe. A clean early stop with a named fix is a
+different object from a mid-run failure, and it is the only reason the fallback is safe to drop.
+
+**The accepted cost, stated so it can be reversed knowingly:** on a guard failure there is now **no
+report at all** until the user re-runs from a usable tree. Under revision 3 they got the complete
+report and lost only the fixes. The user chose this on the grounds that a review that cannot fix
+anything is not worth having — the report's value was never independent of the run continuing.
+
+| | Revision 1 | Revision 2 | Revision 3 | Revision 4 |
+|---|---|---|---|---|
+| Branch live elsewhere | run dies | report, no fixes | report, no fixes | **named stop, no report** |
+| Fresh worktree, clean | works | report, no fixes | report and fixes | report and fixes |
+| Dirty tree | git may refuse mid-recipe | report, no fixes | report, no fixes | **named stop, no report** |
+
+### The rationale Step 1 no longer carries
+
+Step 1 was rewritten into a literal recipe in the same change, on the rule that it keeps only what
+changes what an operator types. Roughly half of it was explaining what earlier revisions of this
+decision did, and a section that is half commentary gets executed selectively — guards skipped or
+partially run in 3 of 7 logged PR-mode runs. What moved here:
+
+- **Why three guards.** Each names one thing `git switch -C` would destroy, and `-C` is why there are
+  three: it resets an existing local branch of that name. Guard 1's full argument — falling back
+  costs this review its fixes; stashing costs state this skill would then own restoring across four
+  stages and `pw-prove`'s push; carrying the changes across would put files the PR does not contain
+  into all three tracks' reports. Guard 2 catches `fatal: '…' is already used by worktree at '…'`
+  before it fires, and only *another* worktree counts — the branch already being current here is the
+  success path. Guard 3's command failing means no such branch, which has nothing to lose.
+- **The detached-HEAD paragraph.** Step 4e commits and Step 6c hands `head_sha` to `pw-prove`, which
+  pushes; a commit on a detached HEAD is on no branch to push. Step 1 keeps this as a one-line
+  comment on the `switch -C` line, because it changes what the operator types.
+- **Why the stack is declared at all.** The merge-base formula always handled a stacked base — against
+  the parent branch it yields this PR's own commits rather than the parent's, which is what keeps a
+  stacked review off the parent's 86 unrelated files. What was missing was any *statement* of it, so
+  a run holding `baseRefName` was not trusted to use it. Revision 4 adds the probe's missing
+  condition rather than changing that arithmetic: run it only when `baseRefName` differs from the
+  repository's default branch, looked up rather than assumed to be `main`. Aimed at the default
+  branch it returned nothing and read as *not stacked* by accident, in 4 of 7 runs.
+- **The `translation-sync` divergence note.** A config present but naming no resolvable locale
+  directory is simply the second sync finding false here, where `translation-sync` stops with a named
+  error in the same case. It gets to: it was invoked on purpose. Here the two findings only decide
+  whether it is invoked at all.
+
+### Consequences of revision 4
+
+- `tests/bash/test-pr-review-step1-cases.sh` **inverts a second time.** The three fallback assertions
+  are deleted rather than left passing on stale prose, and full-SHA, post-move-verdict and
+  conditional-probe assertions replace them. Its header carries all four revisions.
+- **The two Step 1 eval cases are rewritten, not deleted.** Deleting them would leave the guards
+  themselves with no behavioural coverage, which is precisely how the fix stage got broken — see
+  `0008-pr-review-trusts-its-tracks.md`. `readonly-run-worktree-collision` becomes
+  `worktree-collision-stops-the-run`; `dirty-tree-keeps-user-work` keeps its job and changes its
+  expected outcome from degrade to stop.
+- **The provenance line proves the tree verdict rather than asserting it**, carrying a fourth field
+  `TREE` — the SHA `git rev-parse HEAD` returned after the move — and every SHA at full 40
+  characters. One run asserted `tree at PR head` from a read taken before any move; another sent a
+  track a transposed 9-character `BASE`. Both are visible on the line's face now.
+- **Nothing mechanical catches revision 4 being reverted by hand either.** Re-adding the fallback
+  would pass every assertion in the file that is not about it. This section is the record.
+
+## Amendment (2026-08-17) — revision 5: the stop names the routes back
+
+Revision 4 made a failed guard stop the run. It left one question unanswered, and an eval trial
+found it: guard 1 forbids **the skill** stashing, so what may the skill *say* about stashing?
+
+**Decision: the stop names the two routes back — stash or commit and re-run, or review from a
+separate worktree.** Guard 1 binds the skill and its stated reason is state ownership: a stash this
+skill takes is state it then owns restoring across four stages and `pw-prove`'s push. A stash the
+user takes and pops themselves carries none of that. Under revision 4 the cost of the stop is total —
+there is no report at all — so the cheapest route from a stop to a review is the most useful sentence
+the run can end on.
+
+**The rejected alternative** was reading guard 1 as binding the advice too, on the grounds that
+advising a stash reintroduces the state-owning problem one indirection out. It does not: the
+indirection is the whole point, because it moves the ownership to the party who can see their own
+work. What survives from that reading is that the skill still never runs the command.
+
+### What this changed
+
+- Step 1's guard 1 bullet states the two routes, so the advice happens on every guard-1 stop rather
+  than on the runs that happen to think of it. Revision 4 measured the inverse for the fallback:
+  behaviour that lives nowhere in the prose fires in 0 of 12 runs.
+- `dirty-tree-keeps-user-work`'s stash clause becomes a regex requiring **the skill as subject** —
+  `I'll stash`, `stashed it for you`. As a bare substring it failed a correct answer that read
+  "`git stash -u` before the review and pop after". Subject and verb are adjacent in that regex on
+  purpose: RE2 has no lookbehind, so "not preceded by a negator" is inexpressible, and adjacency is
+  what leaves no room for the `never` in *"I will never stash your work"*.
+- `commit them first` leaves the clause entirely. Under a stop it is advice, not a refusal, and the
+  refusal is asserted positively by the `stop`/`refuse` success rule instead.
+
+### Consequences
+
+- **`git reset --hard` and `git checkout -- .` stay bare substrings.** No answer recommends those to
+  anyone, so they need no subject.
+- **This is the second decision in this ADR with no mechanical guard against a hand revert.**
+  `tests/test_pr_review_eval_rules.py` holds the fixtures — a correct answer advising a stash, and a
+  wrong one taking the stash — so reverting the regex to a substring fails a test. What nothing
+  catches is guard 1's *prose* losing the two routes again. This section is the record.

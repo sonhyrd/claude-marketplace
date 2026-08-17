@@ -12,20 +12,22 @@ input:
     spawning and what does each do? I was under the impression matt:code-review
     only runs two.
 
-expect:
-  must_contain:
-    - "OCR"
-
 judge:
   type: rule_based
   success:
-    - output_contains:
-        all: ["OCR"]
-        any: ["three", "3 "]
-    - output_contains:
-        all: ["Standards", "Spec"]
-    - output_contains:
-        any: ["concurrent", "parallel", "one message", "same message", "at once"]
+    - output_matches:
+        all: ['(?i)\bOCR\b']
+    - output_matches:
+        any: ['(?i)\bthree\b', '\b3\b']
+    - output_matches:
+        all: ['(?i)Standards', '(?i)Spec']
+    - output_matches:
+        any:
+          - '(?i)concurrent'
+          - '(?i)parallel'
+          - '(?i)one message'
+          - '(?i)same message'
+          - '(?i)at once'
   failure:
     - output_contains:
         any: ["only two agents", "two tracks in total"]

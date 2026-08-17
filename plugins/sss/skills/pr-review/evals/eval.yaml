@@ -12,7 +12,7 @@ engine:
 
 cases:
   files:
-    - evals/cases/readonly-run-worktree-collision.yaml
+    - evals/cases/worktree-collision-stops-the-run.yaml
     - evals/cases/dirty-tree-keeps-user-work.yaml
     - evals/cases/ocr-missing-degrades.yaml
     - evals/cases/sync-stage-absent-silently.yaml
@@ -20,6 +20,10 @@ cases:
     - evals/cases/handoff-schema-is-pw-proves.yaml
     - evals/cases/three-tracks-not-two.yaml
     - evals/cases/report-before-write.yaml
+    - evals/cases/fix-stage-starts-unasked.yaml
+    - evals/cases/per-track-admission.yaml
+    - evals/cases/fixes-accounts-for-every-id.yaml
+    - evals/cases/bug-is-a-category-not-a-severity.yaml
   defaults:
     timeout_seconds: 300
     max_turns: 6

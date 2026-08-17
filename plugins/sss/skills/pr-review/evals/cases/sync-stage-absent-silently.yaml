@@ -15,12 +15,18 @@ input:
 judge:
   type: rule_based
   success:
-    - output_contains:
-        any: ["absent", "no translation sync", "not run", "no sync"]
-    - output_contains:
-        any: ["nothing", "no line", "silent", "won't mention", "will not mention", "not mentioned"]
-    - output_contains:
-        any: ["config", "hyrd-trans-bot"]
+    - output_matches:
+        any: ['(?i)absent', '(?i)no translation sync', '(?i)not run', '(?i)no sync']
+    - output_matches:
+        any:
+          - '(?i)nothing'
+          - '(?i)no line'
+          - '(?i)silent'
+          - '(?i)won''t mention'
+          - '(?i)will not mention'
+          - '(?i)not mentioned'
+    - output_matches:
+        any: ['(?i)config', '(?i)hyrd-trans-bot']
   failure:
     - output_contains:
         any: ["the report will note that it was skipped", "I'll sync anyway", "I will sync anyway"]

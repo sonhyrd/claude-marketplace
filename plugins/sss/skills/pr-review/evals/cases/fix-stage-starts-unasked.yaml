@@ -1,0 +1,49 @@
+id: fix-stage-starts-unasked
+title: The fix stage begins after the report with no confirmation asked
+description: |
+  Step 3 → Step 4 boundary. The report prints before any file is edited, and no
+  permission is asked once it has. Observed in 10 of 12 logged runs: the run
+  stopped dead after the report and asked "want me to proceed, or stop here with
+  the report?", and the user answered by re-typing a policy Step 4c already
+  holds. Sits beside `report-before-write.yaml` — nothing written before the
+  report, nothing asked after it.
+
+  The `failure` rule is **one quote-aware regex**, and it has to stay one. Plain
+  substrings failed correct answers twice: generic politeness ("say the word")
+  matched a run that named a real blocker — the eval sandbox is not a git
+  repository — and offered to re-run; and `want me to apply` matched a run that
+  wrote `No confirmation, no "want me to apply these?"`, quoting the anti-pattern
+  in order to refuse it. The leading `[^"'“”`*_(]` class is what separates asking
+  the question from naming it. Verified against two correct answers (no match) and
+  five ways of asking (all matched).
+
+input:
+  prompt: |
+    Mid-review on PR #412. All three tracks are back, the four sections are on
+    screen — Standards, Spec, OCR, Overlap — and there are nine findings between
+    them, two of them Critical. The tree is at the PR head and clean. What
+    happens next?
+
+judge:
+  type: rule_based
+  success:
+    - output_matches:
+        any: ['(?i)Step 4', '(?i)fix stage', '(?i)\bapply', '(?i)applying', '(?i)start fixing']
+    - output_matches:
+        any:
+          - '(?i)immediately'
+          - '(?i)no confirmation'
+          - '(?i)without asking'
+          - '(?i)don''t ask'
+          - '(?i)do not ask'
+          - '(?i)not wait'
+          - '(?i)no permission'
+          - '(?i)straight'
+          - '(?i)no approval'
+          - '(?i)stopping to ask'
+          - '(?i)asks nothing'
+          - '(?i)no gate'
+  failure:
+    - output_matches:
+        any:
+          - '(?im)(^|[^"''“”`*_(])\b(want me to (proceed|apply|start)|sh[ao]uld I (proceed|apply|start)|stop here with the report|your go-ahead|which findings would you like)'
