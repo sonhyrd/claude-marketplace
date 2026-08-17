@@ -193,3 +193,42 @@ partially run in 3 of 7 logged PR-mode runs. What moved here:
   track a transposed 9-character `BASE`. Both are visible on the line's face now.
 - **Nothing mechanical catches revision 4 being reverted by hand either.** Re-adding the fallback
   would pass every assertion in the file that is not about it. This section is the record.
+
+## Amendment (2026-08-17) — revision 5: the stop names the routes back
+
+Revision 4 made a failed guard stop the run. It left one question unanswered, and an eval trial
+found it: guard 1 forbids **the skill** stashing, so what may the skill *say* about stashing?
+
+**Decision: the stop names the two routes back — stash or commit and re-run, or review from a
+separate worktree.** Guard 1 binds the skill and its stated reason is state ownership: a stash this
+skill takes is state it then owns restoring across four stages and `pw-prove`'s push. A stash the
+user takes and pops themselves carries none of that. Under revision 4 the cost of the stop is total —
+there is no report at all — so the cheapest route from a stop to a review is the most useful sentence
+the run can end on.
+
+**The rejected alternative** was reading guard 1 as binding the advice too, on the grounds that
+advising a stash reintroduces the state-owning problem one indirection out. It does not: the
+indirection is the whole point, because it moves the ownership to the party who can see their own
+work. What survives from that reading is that the skill still never runs the command.
+
+### What this changed
+
+- Step 1's guard 1 bullet states the two routes, so the advice happens on every guard-1 stop rather
+  than on the runs that happen to think of it. Revision 4 measured the inverse for the fallback:
+  behaviour that lives nowhere in the prose fires in 0 of 12 runs.
+- `dirty-tree-keeps-user-work`'s stash clause becomes a regex requiring **the skill as subject** —
+  `I'll stash`, `stashed it for you`. As a bare substring it failed a correct answer that read
+  "`git stash -u` before the review and pop after". Subject and verb are adjacent in that regex on
+  purpose: RE2 has no lookbehind, so "not preceded by a negator" is inexpressible, and adjacency is
+  what leaves no room for the `never` in *"I will never stash your work"*.
+- `commit them first` leaves the clause entirely. Under a stop it is advice, not a refusal, and the
+  refusal is asserted positively by the `stop`/`refuse` success rule instead.
+
+### Consequences
+
+- **`git reset --hard` and `git checkout -- .` stay bare substrings.** No answer recommends those to
+  anyone, so they need no subject.
+- **This is the second decision in this ADR with no mechanical guard against a hand revert.**
+  `tests/test_pr_review_eval_rules.py` holds the fixtures — a correct answer advising a stash, and a
+  wrong one taking the stash — so reverting the regex to a substring fails a test. What nothing
+  catches is guard 1's *prose* losing the two routes again. This section is the record.

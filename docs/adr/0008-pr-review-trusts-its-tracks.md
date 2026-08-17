@@ -139,6 +139,38 @@ Medium".
   ([0007](./0007-pr-review-acquires-the-tree-in-step-1.md)) and its own test file, and deserves its
   own decision.
 
+## Amendment (2026-08-17) — what the flaky baselines actually measured
+
+The baselines above attributed three cases' flakiness to the skill. Re-measuring after Step 1's
+revision-4 rewrite found **the assertions were a large part of it**, in three distinct classes:
+
+1. **Substring collisions.** The skill's prose names every anti-pattern it forbids, so a keyword drawn
+   from that vocabulary eventually matches an answer quoting it *in order to refuse it*. `git stash`
+   failed a run advising the user to stash; `described, not applied` is a verbatim `## Fixes` heading.
+2. **Case sensitivity.** skill-up's matchers are case-sensitive in both `expect.must_contain` and
+   `output_contains` — measured with a probe case, a response of exactly `Uncommitted` fails a rule
+   reading `uncommitted`. This is what failed 1 of 3 trials of `dirty-tree-keeps-user-work` at
+   `99edd92`, on a textbook-correct answer that opened a sentence with the word. Even `OCR` was not
+   safe: 1 of 5 captured runs wrote the CLI's own lowercase name throughout.
+3. **The `expect` short-circuit.** A failed `expect.must_contain` stops the judge before any
+   `judge.*` rule is read, so one case-fragile key silently voids every rule beneath it. All six
+   `expect` blocks are deleted; every key they held was already asserted more precisely below them.
+
+**The trade this records:** every keyword in the suite is now a case-insensitive regex rather than a
+substring, which costs readability in the YAML and buys rules that fail for the reason they name.
+Finding IDs (`S1`, `O4`) and the three verbatim `## Fixes` headings stay case-sensitive literals —
+there, the exact casing *is* the assertion.
+
+**Why this matters more than a flaky case.** A false FAIL trains the next maintainer to soften the
+assertion, which is how a guard becomes decoration. `tests/test_pr_review_eval_rules.py` checks every
+changed rule in both directions — correct answers must survive it, wrong ones must trip it — because
+a rule tightened past the behaviour it guards fails silently and looks like a pass.
+
+**`fixes-accounts-for-every-id` is unaffected and stays flaky.** Its ~1-in-3 pass rate is a skill
+weakness with a known cause, recorded above; replaying its captured runs against the new rules
+reproduces the same genuine failure. The assertion classes above did not explain it and the fix
+above does not touch it.
+
 ## Alternatives considered
 
 - **Keep the severity gate and re-tune the tiers** — promote baseline smells to High, say. Rejected:
