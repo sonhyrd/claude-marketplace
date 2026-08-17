@@ -319,8 +319,21 @@ The set of cases whose verdicts may be **acted on**: each carries a recorded pas
 SKILL.md section it guards. Membership is earned at admission and recorded in the **registry**
 (`skills/pw-prove/evals/REGISTRY.md`) — the one file listing every case with its pass rate, uplift,
 guarded section and status, enforced by nothing. A case file sitting on disk is inventory, not
-coverage: after three batches of triage, #75's re-measurement and #69's two wet cases the core is
-**21** cases of 50 on disk, and a case outside the core is not a weaker guard but no guard at all.
+coverage: after three batches of triage, #69's two wet cases, the sealed re-measurements of #75 and
+#78, #76's fixture-staging repair, #71's judge repairs, #73/#74's trigger fix, #72's staged
+premise and #77's judge repair the core is **32** cases of 52 on disk, and
+a case outside the core is not a weaker guard but no guard at all.
+
+## Collision arm
+The one eval arm that installs **more than one skill** (`evals/eval.collision.yaml`, #81), and the
+only place a question spanning two skills can be asked. Every other arm installs pw-prove alone, so a
+`description:` that claims a neighbour skill's words measures green in all of them — which is how
+#73/#74's coverage clause collided with `e2e-reviewer`'s and nothing said so. Its cases are
+[trigger cases](#trigger-case) whose judge grades *which* skill the request reached: the owner, the
+neighbour, both (a collision), or neither. Installing the second skill through the suite's own
+`skills:` list is **not** a hole in the runner's isolation — the seal is against copies the runner did
+not put there — but a `Skill(<plugin-id>:*)` deny rule whose id prefixes the second skill's name will
+silently deny it, which is a thing to check before believing a verdict from this arm.
 
 ## Characterization
 The measurement that decides whether a case joins the [trusted core](#trusted-core): three runs of

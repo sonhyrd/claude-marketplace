@@ -554,7 +554,7 @@ if (MODE === 'start') {
         ({ secrets, withheld } = scrubHar(har, {}));
         // The over-scrub gate, BEFORE the write: a scrub whose substitution count is implausible
         // destroyed the recording (a two-character locale cookie substituted 125,403 times — see
-        // `docs/studies/live-proof-pr2866.md` §1), and a destroyed capture must never reach the
+        // measured), and a destroyed capture must never reach the
         // working tree, where a residue check would go on calling it clean. The refusal text is the
         // shipped one, imported like the transform itself, so this cannot drift from `--verify`.
         const wrecked = findOverScrub(har);

@@ -52,8 +52,8 @@ it is noise.
 
 ## The classification
 
-50 case files: **4 trigger, 46 behavior.** 21 are active in `eval.yaml`; the other 29 are
-quarantined. **None of them is inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every
+52 case files: **7 trigger, 45 behavior.** 31 are active in `eval.yaml`, 3 in `eval.collision.yaml`;
+the other 18 are quarantined. **None of them is inventory any more** — batch 3 (#65) closed `REGISTRY.md` over every
 file on disk, and #69's two wet cases carry rows of their own, so every file has a status and the
 evidence behind it.
 
@@ -72,10 +72,22 @@ evidence behind it.
 > contradiction; what was left was the residue that survived two passes of exactly that filter. The
 > file count moved 49 → 48 and the active count 8 → 20.
 
-**Trigger (4)** — `gate-skill-loaded` (active), `case-1`, `case-2`, `case-3` (quarantined).
+**Trigger (7)** — `gate-skill-loaded`, `case-1`, `case-2`, `case-3`, **all four active** since
+#73/#74 fixed the defect the last three recorded, plus the three **collision-arm** cases #81 added:
+`case-81-untested-routes`, `case-81-spec-quality`, `case-81-ambiguous-coverage`.
+
+**The collision-arm three are trigger cases with a second question.** They are the only cases that
+run with two skills installed (`eval.collision.yaml`), and their judges — `routes-to-pw-prove.mjs`
+and `routes-to-e2e-reviewer.mjs` — ask not *did pw-prove load* but *which of the two did*. Everything
+the trigger shape requires still holds and holds harder: the prompt names no skill at all, not even
+the one that is meant to lose, and a red is a defect in one of the two `description:` fields rather
+than something to fix by rewording the prompt. `case-81-spec-quality` is the first case in the suite
+pw-prove is required **not** to answer, which is why the post-run sweep reports it NOT LOADED on a
+passing run — the sweep asks pw-prove's question, and this case's answer to it is supposed to be no.
 
 `case-1`/`case-2`/`case-3` ask for coverage analysis or a test plan against a fixture repo, in a
-user's words. Their prompts are still untouched; what changed in #63 is their judges. Each now runs
+user's words. What changed in #63 is their judges; what changed in #76 is one clause each, and the
+distinction matters — see *the one permitted prompt edit* below. Each now runs
 `skill-loaded.mjs`, because the rule above — an *active* trigger case asserts loading — decides what
 an active trigger case may be graded on, and it is loading. So the content assertions those three
 carry are deliberately not graded: they are preserved in `mined-assertions.md` and recorded in
@@ -87,7 +99,36 @@ carry are deliberately not graded: they are preserved in `mined-assertions.md` a
 2/3, and `case-1` and `case-3` — both plain coverage-gap requests — are **0/3 NOT LOADED**. The
 frontmatter advertises proving a change and says nothing about the Coverage-gap mode the body
 implements at Step 2. Filed as **#73** and **#74**; the three cases are quarantined, and none of
-their prompts was touched, because a trigger case is never repaired by editing its prompt.
+their prompts was touched **as a repair**, because a trigger case is never repaired by editing its
+prompt.
+
+**#73/#74 closed both tickets, and the rule is what fixed them.** The repair landed in
+`description:` — one clause naming coverage analysis, coverage gaps, untested pages and flows, and a
+test plan for a page or route, with the prove-a-change sentences untouched — and never in a prompt.
+Measured at n=3 on the isolated runner with nothing else moved, the three cases went **1/3 → 3/3**,
+**2/3 → 3/3** and **1/3 → 3/3**, while `gate-skill-loaded` held **3/3** in the same run, so the
+existing trigger was not traded for the new one. All four are active.
+
+Two things that run established are worth carrying forward. First, **the filed 0/3s did not
+reproduce**: re-measured on the fixtures #76 repaired and the *unchanged* description, `case-1` and
+`case-3` were 1/3, not 0/3. The defect was intermittent, which is harder to reason about than a hard
+miss and is invisible at one iteration — establish the current rate before acting on a recorded one.
+Second, **a trigger case's uplift is `+1` by construction**: remove the body and there is nothing for
+a loading judge to find, so the `without_skill` arm cannot pass. The figure certifies the baseline
+was skill-free; what discriminates a trigger case is the before/after on the `description:` itself.
+`REGISTRY.md` carries both readings.
+
+#### The one permitted prompt edit
+
+#76 edited all three anyway, and the rule survives it. Each prompt named the fixture by the path
+`context.files` had staged it at (*"Analyze the project in `evals/files/project-pom/`"*), and those
+cases were reading a file that contained its own path. On `context.repo_fixture` the fixture lands at
+the **workspace root**, so the path in the prompt now points nowhere and the clause was removed
+(*"Analyze this project"*). That edit **removes** a detail; it adds no skill name, no placement line
+and no role injection, so it cannot make a case load that would not have loaded before — which is
+what the rule protects. A trigger prompt may be edited to match what the run actually stages, and for
+nothing else. The recorded 0/3 and 2/3 predate the edit: the phrasing under measurement changed, so
+#73/#74 re-characterize against the new prompts rather than reasoning from the old numbers.
 
 `gate-skill-loaded` is the only active trigger case, and its prompt was the reason it measured
 nothing. It read *"You are pw-prove. … Begin."* — a behavior-shaped prompt wired to a judge whose
@@ -220,3 +261,57 @@ these five is legible as a judge defect within a line of its evidence.
 
 An earlier partial run of the four cases the rule was designed against (`gate-skill-loaded`, `b01`,
 `b49`, `case-50`) reported the same four verdicts, before `b01` gained its harness clarifier.
+
+## A behavior case's premise has to be readable — the on-disk artifact audit (#72)
+
+`environment.type: none` runs the agent against the real host filesystem, so a behavior case that
+*presupposes* files gets a workspace where they are absent. `case-43` is the case that made this
+visible: it said "the committed `e2e/reports.api.har` was recorded through the probe" and staged
+nothing, so all three iterations of the 2026-08-14 characterization opened with a stop report about
+the missing repository and let the fix degrade into an illustration. It scored 0/3, and the judge
+read the illustration as the answer.
+
+**The distinguishing question is not "does the prompt name a path".** It is **"does the answer
+depend on content the prompt does not carry".** A prompt that names `e2e/onboarding.spec.ts` only to
+establish that a spec exists has told the agent everything the answer needs; a prompt that says a
+run failed and leaves the agent to find out why has not.
+
+Every behavior case was checked against that question when #72 staged `case-43`'s premise. Eleven
+others name an artifact on disk, and **all eleven carry the content the answer turns on inside the
+prompt** — a pasted handoff JSON (`b05`), a pasted exit code and message (`case-12`, `case-54`), a
+described config or spec shape (`case-16`, `case-24`, `case-28`, `case-35`), a described diff
+(`case-29`), pasted probe output (`case-42`), or a purely procedural question over named
+deliverables (`case-41`, `case-46`). None of them needs a fixture, and staging one for them would
+buy nothing but a directory to maintain.
+
+So the audit's finding is that `case-43` was the only affected case, and the rule to apply to the
+next one is: **stage a `repo_fixture` when the answer is a diagnosis, not when the prompt is a
+description.** A prompt that already contains its own evidence is self-contained by construction.
+
+Two things to carry into writing such a fixture, both learned the expensive way:
+
+- **Write it in the voice a real project would use.** The skill-free baseline arm reads the same
+  files, so a fixture whose comments explain the lesson hands the baseline the answer and voids the
+  uplift the run was taken for (#69).
+- **`context.repo_fixture` copies the directory's *contents* to the workspace root**, so the prompt
+  says "your current working directory" and never names a path no run creates.
+  `context.files` is `{workspace_path: INLINE CONTENT}` and is the wrong key for a directory (#76).
+  `scripts/ci/test-case-shapes.sh` fails on both mistakes.
+
+## A prompt repair is a judge repair
+
+Every case carries a `derived_from_prompt:` digest of the prompt its judge's assertions were written
+against, and `scripts/ci/test-case-shapes.sh` goes red when the prompt moves and the digest does
+not. Re-stamp with `python3 scripts/ci/derive-stamp.py <case-id>` — after re-reading the judge, not
+instead of it.
+
+The rule it enforces: **when a prompt changes, the judge's assertions are re-derived from the new
+prompt rather than inherited.** #80 repaired `case-61`'s premise to state the cause outright and left
+an assertion that the answer "rules out browser-context leakage" — real under the old prompt, which
+named no cause, and unreachable under the new one, which answers it for free. The case scored 0/3
+across three answers that were right in every particular. #79 did the same thing one degree milder to
+`case-53`: its repaired prompt settles the environment question, and the judge kept demanding the
+answer *say* the autostart was normal, which is the premise restated.
+
+Both are the same shape, and it is the reason a prompt repair cannot be judged local. The digest
+records the occasion; only a reader can do the derivation.

@@ -1,5 +1,6 @@
 id: b32-dwell-inline
 shape: behavior
+step: 'Step 6 › Clip-fidelity audit — the dwell is inline per test()'
 title: Step 6 dwell must be inline per test() — and a two-line dwell already passes
 description: >-
   B32. Turn 1 is the hit: a dwell hoisted into a helper is exit 2, and the fix is to
@@ -25,3 +26,4 @@ judge:
     type: script
     script_path: evals/judges/dwell-inline-per-test.mjs
     timeout_seconds: 30
+derived_from_prompt: 8c3172d50abb

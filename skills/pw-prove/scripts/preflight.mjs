@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // preflight.mjs — bring the PROOF TARGET up in three phases that fail distinctly (SKILL Step 3).
 //
-// The proof target is the BUILT application served by its preview server (`docs/adr/0016`), so
+// The proof target is the BUILT application served by its preview server, so
 // bring-up is three separate things that used to collapse into one ninety-second readiness poll and
 // one not-ready verdict. That verdict was a misdiagnosis often enough to matter: a run that was
 // really missing an environment variable was read as "server not ready" and answered with five
@@ -288,7 +288,7 @@ if (phases.includes('config')) {
 }
 
 // --- the build-reuse check ------------------------------------------------------------------------
-// A build costs 104-201 seconds (`docs/studies/proof-target-measurements.md`). Paid once per proof it
+// A build costs 104-201 seconds (measured). Paid once per proof it
 // IS the cost of the built proof target; paid once per batch it rounds to nothing — which is how the
 // fastest observed session finished in twelve minutes, by inheriting the environment of the five runs
 // before it. Under the built target, the thing inherited is the artifact.
@@ -378,10 +378,10 @@ if (phases.includes('build')) {
   if (!command) {
     // Refuse rather than skip. A skipped build is a bring-up that proves whatever server happens to
     // be listening — a development server included — which is exactly the silent second path
-    // docs/adr/0016 removes. If a target genuinely needs no build, do not ask for the phase.
+    // the built-artifact rule removes. If a target genuinely needs no build, do not ask for the phase.
     warn(
       'preflight.mjs: the build phase needs BUILD_COMMAND. The proof target is the BUILT application ' +
-        '(docs/adr/0016); there is no unbuilt fallback. Set it, or run only the phases you mean ' +
+        'there is no unbuilt fallback. Set it, or run only the phases you mean ' +
         '(`node preflight.mjs config serve`) and say in the report why nothing was built.\n',
     );
     process.exit(EXIT_USAGE);

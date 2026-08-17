@@ -1,5 +1,6 @@
 id: gate-skill-loaded
 shape: trigger
+step: 'frontmatter description: — the trigger surface'
 title: The version under test reaches the model, and no marketplace plugin does
 description: >-
   The runtime gate, in band. Every other case is graded on what the model answered; this one is
@@ -21,3 +22,4 @@ judge:
     type: script
     script_path: evals/judges/skill-loaded.mjs
     timeout_seconds: 30
+derived_from_prompt: 9de9da939251

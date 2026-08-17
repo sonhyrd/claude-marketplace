@@ -1,5 +1,6 @@
 id: w01-bringup-own-port
 shape: behavior
+step: 'Step 3 › Bring the environment up — bullet 1, the packaged serve script that hard-codes a port'
 title: pw-prove - w01 (wet) - the server it actually brought up, on a port it actually chose
 description: >-
     WET case. Its dry twin is `case-50`, which guards the same section — Step 3 › *Bring the
@@ -42,3 +43,4 @@ judge:
     type: script
     script_path: evals/judges/served-on-allocated-port.mjs
     timeout_seconds: 30
+derived_from_prompt: 6a9cbcc8b4a4

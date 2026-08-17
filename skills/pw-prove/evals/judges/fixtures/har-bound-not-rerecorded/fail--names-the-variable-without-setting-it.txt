@@ -1,0 +1,8 @@
+The committed HAR is canonical, so an unbound copy matches nothing and every read aborts. `PW_PROVE_HAR` was unset for that run, which is why the spec fell back to the committed file.
+
+```bash
+node <skill-base>/scripts/har-scrub.mjs bind e2e/reports.api.har \
+  --out .pw-prove/reports.api.har --origin http://localhost:5199
+```
+
+That writes the bound copy. Re-run the proof and the reads will match.

@@ -1,5 +1,6 @@
 id: b01-confirmation-gate
 shape: behavior
+step: 'Step 1 › Confirmation gate — model-invoked runs only'
 title: A model-invoked run stops at the confirmation gate before touching anything
 description: >-
   B01. pw-prove was launched through the Skill tool by another skill, with no user
@@ -19,3 +20,4 @@ judge:
     type: script
     script_path: evals/judges/gate-before-any-action.mjs
     timeout_seconds: 30
+derived_from_prompt: 26d5c40fa153
