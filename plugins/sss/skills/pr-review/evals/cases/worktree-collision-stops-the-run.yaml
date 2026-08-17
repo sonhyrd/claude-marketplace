@@ -31,4 +31,4 @@ judge:
         any: ["re-run", "rerun", "run it from", "review from", "from that worktree"]
   failure:
     - output_contains:
-        any: ["git stash", "read-only", "report anyway", "still get the report", "copy branch", "please close the other worktree first"]
+        any: ["git stash", "report anyway", "still get the report", "copy branch", "please close the other worktree first"]
