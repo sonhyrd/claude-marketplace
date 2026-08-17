@@ -699,6 +699,62 @@ else
   bad "{fn,arg} argument delivery — stdout: $(grep -F '[2]' "$W/out" | head -c 200)"
 fi
 
+# --- `start` detaches, reports, and RETURNS ----------------------------------------------------
+# The defect: `start` used to BECOME the daemon, so a foreground call blocked until the idle timeout
+# and an observed run lost 180s to its harness's 3-minute cap. The contract is now the script's: it
+# spawns the daemon, waits only until the socket answers, prints where it is, and exits 0.
+START_SOCK="$W/start.sock"
+probe_start() { ( cd "$APP" && env PROBE_SOCK="$START_SOCK" PROBE_IDLE=45 \
+  node "$REPO_ROOT/$S/probe.mjs" start >"$W/out" 2>"$W/err" ); }
+# PROBE_IDLE is 45s and the daemon self-closes on it, so a `start` that blocked would sit here far
+# longer than the daemon takes to boot. 30s is generous for a stub launch and far under 45.
+start_began=$(date +%s)
+probe_start
+rc=$?
+start_took=$(( $(date +%s) - start_began ))
+if [ "$rc" -eq 0 ] && [ "$start_took" -lt 30 ]; then
+  ok "start returns once the daemon is listening (exit 0 in ${start_took}s) rather than becoming it"
+else
+  bad "start — exit $rc after ${start_took}s, stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+fi
+# Backgrounding must cost no diagnostics: the socket path and the effective parameters are printed
+# BEFORE it returns, which is what an inline run would have shown.
+if grep -qF "socket $START_SOCK" "$W/err"; then
+  ok "  start names the socket it left the daemon on"
+else
+  bad "  start does not print the socket path — stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+fi
+if grep -qF 'BASE_URL=' "$W/err" && grep -qF 'RECORD_HAR=' "$W/err" \
+   && grep -qF 'STORAGE_STATE=' "$W/err"; then
+  ok "  start prints the effective BASE_URL/RECORD_HAR/STORAGE_STATE"
+else
+  bad "  start omits the effective parameters — stderr: $(tr '\n' ' ' <"$W/err" | tail -c 240)"
+fi
+# The daemon it left behind is real: a send against that socket answers without starting anything.
+( cd "$APP" && env PROBE_SOCK="$START_SOCK" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":"1"}]' >"$W/out" 2>"$W/err" )
+if [ $? -eq 0 ] && grep -qF '[1] eval -> 1' "$W/out" && ! grep -qF 'starting one first' "$W/err"; then
+  ok "  the daemon start left behind answers a later send"
+else
+  bad "  send after start — stdout: $(head -c 160 "$W/out"), stderr: $(tail -c 160 "$W/err")"
+fi
+# An uncertain agent re-issuing `start` must not cost a live recon context: it is a no-op that SAYS
+# so and exits 0. The old behaviour was exit 1, which reads as a failure worth recovering from.
+probe_start
+rc=$?
+if [ "$rc" -eq 0 ] && grep -qF 'already listening' "$W/err"; then
+  ok "a second start against a live daemon is a no-op that says so — exit 0"
+else
+  bad "second start — exit $rc, stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+fi
+# ...and it did not replace the socket: the same daemon still answers.
+( cd "$APP" && env PROBE_SOCK="$START_SOCK" node "$REPO_ROOT/$S/probe.mjs" send '[{"cmd":"eval","expression":"2"}]' >"$W/out" 2>"$W/err" )
+if [ $? -eq 0 ] && grep -qF '[1] eval -> 2' "$W/out"; then
+  ok "  the second start left the running daemon intact"
+else
+  bad "  daemon after second start — stdout: $(head -c 160 "$W/out")"
+fi
+( cd "$APP" && env PROBE_SOCK="$START_SOCK" node "$REPO_ROOT/$S/probe.mjs" close >/dev/null 2>&1 )
+
 # A second send reuses the daemon it found — the autostart is a sequencing net, not a per-batch boot.
 probe_send '[{"cmd":"eval","expression":"1"}]'
 rc=$?

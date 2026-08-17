@@ -1,0 +1,20 @@
+id: case-62-mutation-revert-marks-stale
+shape: behavior
+step: 'Step 7 › Mutation check — step 4, the revert marks the artifact stale rather than rebuilding'
+title: 'After a mutation verdict the revert is immediate and the rebuild is lazy'
+description: 'Should revert the source exactly and unconditionally — the tree is never left mutated — then mark the built artifact STALE instead of rebuilding and restarting on the spot. The rebuild is paid by whichever later step next needs the server, which checks the marker first; Step 8 hygiene stops a stale server rather than rebuilding it, so a mutation check that is the run''s last step pays nothing (docs/adr/0020). Should say why a marker is needed at all: the artifact is out of step with a tree the build-reuse check sees as unchanged, because the revert restored it. Should report the artifact state in the completion report''s `Preview server:` line. Must not rebuild unconditionally "so nothing downstream runs against broken software" — that is the retired rule, and the marker closes the same hazard without asking this step to predict whether a later step is coming. `BUILD_REUSE=never` on the mutation''s OWN rebuild is unchanged and stays.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. Step 7, PR-mode. The mutation
+        check has just come back RED — the guarding test failed on the mutated line, which is the verdict
+        you wanted. The clips are already filmed and inspected, the hermetic audit is clean, and nothing
+        else in Step 7 is outstanding. Walk through exactly what you do next with the source, the build
+        artifact and the preview server, and say what the completion report shows.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/mutation-revert-marks-stale.mjs
+    timeout_seconds: 30
+derived_from_prompt: 56aa5ae07e60

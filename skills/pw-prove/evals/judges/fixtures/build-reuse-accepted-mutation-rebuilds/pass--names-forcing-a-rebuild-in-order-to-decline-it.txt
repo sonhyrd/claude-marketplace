@@ -30,5 +30,5 @@ So, in order:
 
    Without `--output` the mutation run would overwrite `test-results/` and destroy the clips and
    trace the proof run just produced.
-5. **Revert** the mutation exactly, then rebuild and restart **once more**, so nothing downstream —
-   delivery, publishing, any later check — runs against deliberately broken software.
+5. **Revert** the mutation exactly, then mark the artifact **stale** rather than rebuilding here.
+   Whichever later step next needs the server pays that rebuild; Step 8 hygiene just stops it.
