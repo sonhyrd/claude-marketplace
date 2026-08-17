@@ -151,9 +151,7 @@ Scope: [framework scope](docs/framework-scope.md) (Playwright and Cypress only) 
 [24-smell taxonomy](docs/e2e-test-smells.md).
 
 Agent workflow config: [delegation profile](docs/agents/delegate-profile.md) ·
-[issue tracker](docs/agents/issue-tracker.md) ·
-[pw-prove profile](docs/agents/pw-prove-profile.md) (what an agent faces running the skill — read
-before editing pw-prove). Agent guide: [AGENTS.md](./AGENTS.md).
+[issue tracker](docs/agents/issue-tracker.md). Agent guide: [AGENTS.md](./AGENTS.md).
 
 Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md).
 
