@@ -120,6 +120,12 @@ Medium".
   *sustained* 0-in-3 as a regression and a 3-in-3 as the fix landing; a single failing trial is
   within measured variance. Quarantining or splitting the case is the alternative if CI needs green,
   and it was rejected here.
+- **Three of the eight pre-existing cases were measured against `5e0030a` and are flaky on their own,
+  not because of this change.** `dirty-tree-keeps-user-work` 2/3 and `handoff-schema-is-pw-proves` 2/3
+  at baseline; `sync-stage-absent-silently` 3/3 at baseline and 3/3 after, so its one observed failure
+  was variance. `dirty-tree`'s failure signature is worth fixing on its own: its `git stash` key
+  catches an answer suggesting *the user* stash before the review, which is not the thing the case
+  exists to forbid. Not folded in here.
 - **The eval sandbox is not a git repository**, so these cases probe what the skill *decides*, not
   what it does. A correct answer often ends by naming that blocker and offering to re-run, which
   reads like a confirmation prompt to a loose keyword — one reason every `failure` rule in this
