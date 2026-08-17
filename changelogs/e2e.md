@@ -12,6 +12,51 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.3.0] - Unreleased
+
+### Changed
+
+- Subtree pulled from `e2e-fork/main` (`b2665ec` → `3f2b418`, 26 commits). `pw-prove` moves
+  0.15.2 → **0.20.0** and `e2e-reviewer` 1.9.0 → **1.10.0**; `playwright-debugger` stays 1.9.0.
+  A minor bump, not a patch: the two skills' descriptions changed, which changes what the model
+  routes to them.
+- **Routing between the two skills is now explicit in both descriptions.** A request about routes,
+  pages or flows with *no* test — an untested-routes audit, a coverage-gap report, a plan for
+  missing tests — is `pw-prove`'s coverage-gap mode. Reviewing the quality of specs that already
+  exist is `e2e-reviewer`'s. Each description now names the other and says which requests belong to
+  it, so the two stop competing for the same prompt.
+- `pw-prove` Step 1 reads what an earlier run learned about the repository instead of re-deriving
+  it, and the shipped body now carries its own reasons rather than pointing at files that live only
+  in the fork's repo.
+
+### Removed
+
+- Eval case `case-17` (PROVES-header audit) and its judge `proves-header-verdict.mjs`, retired
+  upstream for zero uplift against a clean baseline. The behaviour it guarded is unchanged and still
+  stated in SKILL.md Step 6 — the case is what went. The 43 other `case-<n>.yaml` files are renamed
+  by the fork to `case-<n>-<what-it-guards>.yaml`.
+
+### Fixed
+
+- `scripts/ci/test-har-scrub.sh` assembles its synthetic Stripe fixture at runtime instead of
+  writing `sk_live_<24>` as one source literal. The value was always fake — the scrubber under test
+  reads the *key* a secret sits under, never the value's shape, so nothing depended on it being one
+  token — but a contiguous match tripped GitHub push protection and blocked every push of this
+  sync. Fixed in the fork (`05a10da`) and pulled back rather than patched here.
+
+### Notes
+
+- **This pull is `--squash`, matching every prior pull of this prefix.** An un-squashed pull was
+  attempted first and had to be abandoned twice over. It grafts the fork's 26 commits into this
+  repo's history, and four of them — predating `05a10da` — carry the whole `sk_live_…` literal, so
+  push protection blocked the branch on *history* that no fix to the tip can reach. It also merged
+  badly: rename and delete detection failed against the un-squashed base, resurrecting the 43 old
+  `case-<n>.yaml` names and the retired `case-17` judge and fixtures, 49 files that had to be
+  deleted by hand. The squashed pull reproduced the same tree with **zero conflicts** and applied
+  the fork's renames and deletions correctly. The 1.0.0 graft was deliberately un-squashed so
+  `git blame` reaches the fork's commits; pulls since have all squashed, and this records why that
+  should stay the default.
+
 ## [1.2.1] - Unreleased
 
 ### Changed
