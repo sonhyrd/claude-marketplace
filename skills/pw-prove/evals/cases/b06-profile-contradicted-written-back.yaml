@@ -1,0 +1,26 @@
+id: b06-profile-contradicted-written-back
+shape: behavior
+step: 'Step 1 › Runtime profile › The run writes the profile back — the contradiction rewrites its entry'
+title: A contradicted profile entry is rewritten in the file, not merely reported
+description: >-
+  B06. Step 1 read a runtime profile whose auth claim Step 3 has just disproven. The
+  `CONTRADICTED` Assumptions line has been required since the read half shipped, so an answer that
+  reports the disagreement and moves on looks complete — and leaves every later run to re-pay for
+  rediscovering the same lie. Should correct the entry in `.pw-prove/profile.md` before leaving
+  Step 3, restamped to this run, and continue on what was observed (the UI login form) rather than
+  on the remembered rung.
+tag: functional_test
+input:
+    prompt: Load the `pw-prove` skill with the Skill tool and follow it. Step 1 read
+        `.pw-prove/profile.md` at this repo's root; under `## Auth` it records that the `/api/dev-login`
+        rung works against the preview build, stamped `2026-06-02 · 9f1c4ae · Step 3`. Step 3 has just
+        finished against the built target - `/api/dev-login` returns 404 there, and the session you are
+        holding came from driving the UI login form. You are about to leave Step 3.
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/profile-contradiction-written-back.mjs
+    timeout_seconds: 30
+derived_from_prompt: ffa58dc2b25d
