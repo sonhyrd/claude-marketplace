@@ -1,0 +1,27 @@
+id: fix-stage-starts-unasked
+title: The fix stage begins after the report with no confirmation asked
+description: |
+  Step 3 → Step 4 boundary. The report prints before any file is edited, and no
+  permission is asked once it has. Observed in 10 of 12 logged runs: the run
+  stopped dead after the report and asked "want me to proceed, or stop here with
+  the report?", and the user answered by re-typing a policy Step 4c already
+  holds. Sits beside `report-before-write.yaml` — nothing written before the
+  report, nothing asked after it.
+
+input:
+  prompt: |
+    Mid-review on PR #412. All three tracks are back, the four sections are on
+    screen — Standards, Spec, OCR, Overlap — and there are nine findings between
+    them, two of them Critical. The tree is at the PR head and clean. What
+    happens next?
+
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        any: ["Step 4", "fix stage", "apply", "applying", "start fixing"]
+    - output_contains:
+        any: ["immediately", "no confirmation", "without asking", "don't ask", "do not ask", "not wait", "no permission", "straight"]
+  failure:
+    - output_contains:
+        any: ["want me to proceed", "shall I proceed", "should I proceed", "let me know if", "stop here with the report", "confirm before", "your go-ahead", "say the word", "which findings would you like"]

@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Carry a PR or branch from review to proof — three tracks at once (Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate) over one resolved diff, reported side by side with the agreements called out, then the Critical and High findings applied and committed, then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result via e2e:pw-prove. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
+description: Carry a PR or branch from review to proof — three tracks at once (Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, and OCR's down to Medium — then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result via e2e:pw-prove. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
   Requires the `matt` and `sss` plugins from this marketplace, the `gh` CLI for
@@ -122,12 +122,12 @@ Done when every launched track has returned.
 
 ## Step 3 — Aggregate
 
-`## Standards`, `## Spec`, `## OCR` — each verbatim, in that order. Then:
+`## Standards`, `## Spec`, `## OCR` — each verbatim, in that order. **Number every finding as you emit it** — `S1, S2…` for Standards, `P1, P2…` for Spec, `O1, O2…` for OCR. The IDs are how Step 4 accounts for the whole set and how the user points at one in conversation; an unnumbered finding is one that can go missing between the report and the fixes. Then:
 
 ```markdown
 ## Overlap
-Findings two or more tracks share (same file+line, or the same defect described differently).
-Findings unique to one track.
+Findings two or more tracks share, by ID (same file+line, or the same defect described differently).
+Findings unique to one track, by ID.
 ```
 
 Compare the full text here in the parent: this is the one judgement in the skill that wants the verbatim reports present rather than a paraphrase.
@@ -136,7 +136,9 @@ Close with one line per track — finding count, worst issue within that track. 
 
 Report in chat. Posting to GitHub is a separate ask.
 
-Done when all four sections are on screen and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of three unmerged tracks is output nobody got to soften.
+Done when all four sections are on screen, every finding carries an ID, and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of three unmerged tracks is output nobody got to soften.
+
+**This boundary orders the work and asks nothing.** Nothing is edited before the report prints, and no confirmation is asked once it has — Step 4 begins immediately, on the report's own terms. The user who invoked this skill asked for the fixes, so an offer to stop here spends their turn re-typing a policy this skill already holds. The run's one human checkpoint is `pw-prove`'s own gate in Step 6.
 
 ## Step 4 — Fix
 
@@ -146,57 +148,85 @@ The stage that writes. Findings become edits, the edits get committed, and nothi
 
 This degrades rather than refusing, because the report is the expensive half and it is valid from any tree. It degrades *declaredly*, unlike Step 5's silence, because a review that produced no fixes because it could not is not the same as one that found nothing to fix and the reader has no other way to tell them apart. Fixes applied to files the tracks never read are not fixes, and a handoff artifact built off them is worse — `pw-prove` would prove a tree nobody reviewed.
 
-### 4a. Assign a severity
+### 4a. Grade for order, not for admission
 
-Only the OCR track ships one — `critical`, `high`, `medium`, `low`, per finding. Take it as given. The two `matt:code-review` axes ship none, so assign here, in the parent:
+Severity sets the fix queue's order and the grade the handoff artifact carries. **It does not decide what gets applied** — 4c's per-track table does.
 
-| Finding | Severity |
-|---------|----------|
-| Any track calling it a bug, a security hole, or a data-loss risk | Critical |
-| Standards: a hard violation of a documented repo standard | High |
-| Spec: a requirement missing, partial, or implemented wrongly | High |
-| Standards: a baseline smell — always a judgement call | Medium |
-| Spec: scope creep, behaviour nobody asked for | Medium |
+Three tracks speak three vocabularies. This is the mapping between them, written once:
 
-This grades findings, never tracks. Each track's report stays verbatim above and scored only against itself; ranking the tracks against each other is the merge the separation exists to prevent. The fix stage still has to know what to touch first.
+| Track | Native output | Our severity |
+|-------|---------------|--------------|
+| OCR | `critical`, `high`, `medium`, `low` | taken verbatim, never re-graded |
+| OCR | `category`: `bug`, `security`, `performance`, `maintainability`, `test`, `style`, `documentation`, `other` | none — a category is not a grade |
+| Standards | a hard violation of a documented repo standard | High |
+| Standards | a baseline smell — a labelled heuristic | Medium |
+| Spec | a requirement missing, partial, or implemented wrongly | High |
+| Spec | scope creep, behaviour nobody asked for | Medium |
+
+**`bug` is OCR's category, not its severity.** A finding reading `severity: medium, category: bug` is Medium, and Medium is applied — the category says what kind of defect it is, and OCR already graded it. Reading the category as a grade is what promoted such findings to Critical and produced hybrids like `medium·bug`.
+
+**Blocker means Critical** — one tier, two words for it. The handoff artifact's `severity` enum is `pw-prove`'s, and adding a tier to it is a cross-plugin change this skill routes rather than makes.
+
+This grades findings, never tracks. Each track's report stays verbatim above and scored only against itself; ranking the tracks against each other is the merge the separation exists to prevent.
 
 ### 4b. Order the work
 
-Critical and High only, overlap-confirmed first:
+Two rules:
 
-1. Critical, two or more tracks
-2. Critical, one track
-3. High, two or more tracks
-4. High, one track
+1. **Overlap-confirmed findings first** — a defect two or more tracks landed on.
+2. **Then severity descending** — Critical, then High, then Medium.
 
-**Overlap orders the work; it does not filter it.** A Critical only the OCR track caught is applied like any other Critical. Agreement buys confidence, and confidence buys position in the queue — not admission to it.
+**Overlap orders the work; it does not filter it and it does not promote it.** A Critical only the OCR track caught is applied like any other Critical, and a finding two tracks agree on keeps the severity it arrived with. Agreement buys position in the queue — not admission to it, and not a grade.
 
-### 4c. Apply
+### 4c. Admit, then apply
 
-Every Critical and High finding is **applied or explained**. There is no third outcome and silence is not one of them.
+**Admission is per track.** A track we invoked on purpose, whose brief we wrote, is trusted at the level it reports — `docs/adr/0008-pr-review-trusts-its-tracks.md` is why:
 
-Apply it in the working tree. Where you cannot — the fix reaches outside the diff, the finding rests on a misreading, two findings contradict each other — that is a reason, and the reason goes in `## Fixes` under *Described*. "Ran out of turns" is not a reason.
+| Track | Applied | Described only |
+|-------|---------|----------------|
+| Standards | every finding — hard violations and baseline smells alike | the fix reaches outside the diff's own hunks |
+| Spec | requirements missing, partial, or implemented wrongly | scope creep — behaviour nobody asked for |
+| OCR | `critical`, `high`, `medium` | `low` |
 
-Medium and Low are **described, never applied**. They are judgement calls by construction, and a review that quietly rewrote them is a refactor with a review stapled to it.
+**Standards is gated by containment, not by the smell's name.** Four of the twelve baseline smells document fixes that restructure modules or inheritance, so the boundary is the diff's own hunks: a contained instance of any smell lands, and a fix that splits a module is described. That is what keeps a review commit a review commit rather than a module restructure.
 
-Then re-run whatever the repo documents as its own gate — its validation target, typecheck, or test command. A fix that breaks the build is a finding of its own: fix it, or revert that one fix and describe it instead.
+**Spec scope creep is described and never applied.** Deleting working code a colleague wrote, on a heuristic, is a larger act than anything else in this stage.
+
+Every admitted finding is then **applied or explained**. There is no third outcome and silence is not one of them. Apply it in the working tree; where you cannot, the reason comes from this list and nowhere else:
+
+1. The fix reaches outside the diff's own hunks.
+2. The finding rests on a misreading of the code.
+3. Two findings contradict each other.
+4. The finding targets PR metadata — the title or body — rather than the tree.
+
+**A reason off that list is not available.** "An outward-facing write you haven't authorized" and "ran out of turns" are the two observed inventions — the first describes a push this stage never makes, the second describes the run rather than the finding. Neither admits a finding to *Described*: a finding closed on either one is a finding to apply.
+
+A finding the table above never admitted carries the table's own wording instead — *scope creep* for Spec, `low` for OCR. The four reasons are for findings that were admitted and still could not land.
+
+**Reason 4 is a recorded disposition, not a refusal.** Editing a PR description is a published write, louder than the push Step 4 already defers to later stages — so a PR-body finding is listed under *Described* with that reason, and the reader makes the edit themselves.
+
+Then re-run whatever the repo documents as its own gate — its validation target, typecheck, or test command — **once, after every fix has landed**. A fix that breaks the build is a finding of its own: fix it, or revert that one fix and describe it instead.
 
 ### 4d. Report the boundary
 
-A fifth section, underneath the four:
+A fifth section, underneath the four. Every finding ID Step 3 emitted appears here exactly once:
 
 ```markdown
 ## Fixes
 
 ### Applied
-- <severity> · <tracks that found it> · <file:line> — what changed
+- <ID> · <severity> · <tracks that found it> · <file:line> — what changed
 
 ### Described, not applied
-- <severity> · <tracks> · <file:line> — the finding, and why it was not applied
+- <ID> · <severity> · <tracks> · <file:line> — the finding, and its reason: one of 4c's four, or `scope creep`
 
-### Medium and Low — described only
-- <severity> · <tracks> · <file:line> — the finding
+### OCR Low — described only
+- <ID> · <severity> · <tracks> · <file:line> — the finding
 ```
+
+**Three headings, and no fourth.** An ID that fits none of them is a disposition not yet decided, not a new category — "dropped on verification" is reason 2 under *Described*.
+
+**A later fix pass re-emits all three headings in full**, superseding this section rather than appending a delta to it. Step 6b builds `fixes_applied` from the Applied list, so a partial section ships a stale artifact.
 
 ### 4e. Commit
 
@@ -204,7 +234,7 @@ Commit the applied fixes to the current branch in the repo's own subject-line st
 
 A run that applied nothing commits nothing and says so — an empty commit claims work that did not happen.
 
-Done when every Critical and High finding appears in `## Fixes` as Applied or Described, the tree is clean, and the branch is one commit ahead of where Step 3 left it.
+Done when every finding ID Step 3 emitted appears exactly once across the three `## Fixes` headings, the tree is clean, and the branch is one commit ahead of where Step 3 left it. Count the IDs against Step 3's own numbering before claiming the stage: an ID in none of the three headings is an unfinished stage, not a shorter one.
 
 ## Step 5 — Sync
 
@@ -282,7 +312,8 @@ one line and finish the run.
 
 - **`findings` is ordered, and the order is Step 4b's**: overlap-confirmed before single-track,
   Critical before High. "Highest confidence first" is what agreement between tracks bought.
-- **Every severity ships**, Medium and Low included. Step 4 only *applies* Critical and High;
+- **Every severity ships**, including the findings Step 4 described rather than applied — OCR Low
+  and Spec scope creep among them.
   `pw-prove` decides for itself which findings name a user-observable behaviour worth a scenario,
   and a finding withheld here is one it cannot weigh.
 - **`fixes_applied` is the Applied list from 4d**, carrying the commit SHA from 4e.
@@ -332,7 +363,9 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
   the schema**: an eval trial asked for one field and got the field, plus this Gotcha rewritten to
   permit it. A rule that yields to the first request it refuses was never a rule.
 - **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
-- **Report before you write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence.
+- **Report before you write — and then write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence. Asking permission after it has printed costs the user a turn to re-state a policy 4c already holds; the two rules are separate and both hold.
+- **The fix stage never moves the working tree.** No stash, no `switch`, no `checkout` — not before the gate re-run, not to get a clean index for it. The three tracks reviewed this tree as it stands, and Step 1 already resolved everything that needed resolving; a stage that tidies the tree is a stage that fixes files nobody reviewed.
+- **`matt:code-review` calls its smell baseline "always a judgement call", and 4c applies it anyway.** That tension is real and deliberate: the caution is calibrated for a skill that only reports, and `pr-review` cross-checks the same diff against two other tracks before it acts. `docs/adr/0008-pr-review-trusts-its-tracks.md` is where a reader who notices should land. Nothing in `matt:code-review` is edited — it is a verbatim subtree, and what changed is how this skill treats its output.
 - **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.
 - **Step 5 may push, and that is not a contradiction of Step 4.** Step 4 commits and never pushes because a third pusher makes the history unreadable; `translation-sync` owns its own empty re-trigger commit and push, which is exactly the "later stages own the pushing" Step 4 defers to. It pushes only when it actually applied something, on a non-default branch, with a clean index — so a run whose sync changed nothing ends with the fix commit still local, and that is the correct outcome, not a stage that failed.
 - **Do not use OCR's fix mode for this.** `sss:ocr-delegate` has its own Step 7; the OCR track finishes at Step 6 and reports. Fixes are applied here, in the parent, from all three tracks at once — one agent fixing what only it found is how the overlap ordering gets bypassed.

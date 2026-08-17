@@ -1,0 +1,29 @@
+id: fixes-accounts-for-every-id
+title: '`## Fixes` accounts for every finding ID exactly once, under three headings'
+description: |
+  Step 4d. Step 3 numbers findings `S1…`, `P1…`, `O1…`, and the stage is
+  unfinished until every ID appears exactly once across Applied, Described, and
+  OCR Low. Observed failure: findings vanished between the report and the fix
+  section in 4 of 7 runs, one of them under an invented fourth heading.
+
+input:
+  prompt: |
+    Report is on screen for PR #355 with six findings: S1, S2, P1, O1, O2, O3.
+    O3 is awkward — it says the PR body still describes the old behaviour, which
+    is not a code change at all. Show me the shape of the `## Fixes` section you
+    will emit, and tell me where O3 ends up.
+
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        all: ["S1", "S2", "P1", "O1", "O2", "O3"]
+    - output_contains:
+        any: ["Applied", "applied"]
+    - output_contains:
+        any: ["Described", "described"]
+    - output_contains:
+        any: ["PR metadata", "metadata", "PR body", "title or body"]
+  failure:
+    - output_contains:
+        any: ["dropped on verification", "needs you", "need you", "Deferred", "deferred", "Not addressed", "out of scope for the fix section", "leave O3 out", "omit O3"]

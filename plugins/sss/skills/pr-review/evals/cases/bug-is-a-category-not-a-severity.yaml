@@ -1,0 +1,26 @@
+id: bug-is-a-category-not-a-severity
+title: A `medium` OCR finding categorised `bug` stays Medium and is applied
+description: |
+  Step 4a. `bug` is OCR's `category` enum, not a severity, and OCR's severity is
+  read verbatim and never re-graded. The deleted rule ("any track calling it a bug
+  → Critical") collided with that on every `medium·bug` finding — hit in 4 of 7
+  logged runs, producing hybrids like `medium·bug` and one agent writing "Real
+  bug, but Medium by policy."
+
+input:
+  prompt: |
+    Fix stage on PR #377. The OCR track returned O6 with `severity: medium,
+    category: bug` — an off-by-one in the pagination offset. What severity does it
+    carry in my report and in the handoff, and do you fix it now?
+
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        all: ["Medium"]
+        any: ["applied", "apply", "fix it", "fixing it"]
+    - output_contains:
+        any: ["category", "not a severity", "verbatim", "as reported", "never re-graded", "OCR's severity"]
+  failure:
+    - output_contains:
+        any: ["Critical", "medium·bug", "Medium/bug", "Medium by policy", "described, not applied", "out of policy", "promote"]
