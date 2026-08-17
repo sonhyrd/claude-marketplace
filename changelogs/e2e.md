@@ -12,6 +12,57 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.5.0] - Unreleased
+
+### Changed
+
+- Subtree pulled from `e2e-fork/main` (`d701b50` → `6963cad`, 2 commits — one feature and its
+  merge). `pw-prove` moves 0.21.0 → **0.22.0**; `e2e-reviewer` stays 1.10.0 and
+  `playwright-debugger` stays 1.9.0. A minor bump, not a patch: `pw-prove` now **refuses work it
+  used to do badly**, which is behaviour a user observes on their first heavy session. **No
+  description changed on any of the three skills**, so the routing table is untouched and nothing
+  re-routes.
+- **`pw-prove` refuses to start above 100k tokens of context.** Invoked deep into a long session
+  it stops before Step 1, names the size it measured against the threshold, and gives the exact
+  invocation to paste into a fresh session — a refusal costs one message and no work. A calling
+  skill's own confirmation question cannot spend the gate: that question is about *proceeding*,
+  never about *where*, so only the user, in their own words, continues the run. This is the
+  change most likely to surprise: a skill chained from `sss:pr-review` mid-session will now
+  decline where it used to deliver, and the fix is in the caller. Upstream `docs/adr/0019`
+  carries the reasoning and the measurement — a traced 144-minute session whose pw-prove segment
+  opened at 196k and lost two instructions it had demonstrably read.
+- **Step 7 audits before it films.** An un-clipped, un-dwelled *audit run* now produces the
+  traces the hermetic audit classifies and carries the whole heal loop; the filming run comes
+  after, so a hermetic finding can no longer invalidate footage already shot. Cheap because
+  `trace: 'on'` is in the proof config regardless of `PW_PROVE_CLIP`. The third-party block list
+  is seeded from the recon HAR, as an optimisation only — the audit still fails on any LIVE call
+  missing a `// CARVE-OUT:` line. Upstream `docs/adr/0020`.
+- **The mutation check's revert stops rebuilding.** The source is reverted unconditionally and
+  the artifact is marked *stale*; the rebuild is paid by whichever later step next needs the
+  server, and Step 8 hygiene stops a stale server rather than rebuilding it. The completion
+  report's `Preview server:` line gains the artifact state, so a reader can tell whether the
+  build on disk matches the source.
+- **`probe.mjs start` self-daemonizes**, returning once the socket answers instead of running the
+  daemon in the foreground until its idle timeout. A second `start` against a live daemon is a
+  no-op that says so and exits 0 rather than exit 1. Because the daemon is now detached, the HAR
+  scrub verdict — including the `probe: REFUSED` that decides whether a recording may be
+  committed — comes back over the `close` call rather than into a log nobody watches.
+- Two smaller rules: the preview server is stopped by a **recorded PID** rather than a `pkill -f`
+  whose pattern matches the shell issuing it, and a dwell on a **transient payoff** (a toast, an
+  auto-dismissing banner) sits immediately after its assertion so the element is still on screen
+  in the held frame.
+- Eval surface: `case-20` was **re-derived end to end** — its premise (recommend a fresh session,
+  then continue inline) is what the gate retired — and its registry row is labelled
+  *re-characterization owed*, because a 3/3 measured against a retired premise is not evidence
+  about the new one. `case-52` was **split rather than widened**, with the new lazy-rebuild guard
+  filed as `case-62`, quarantined pending characterization; splitting kept `case-52`'s recorded
+  2026-08-14 must-PASS fixture valid instead of editing a real answer to match a new rule.
+- The pull is `--squash`, as every pull of this prefix since the 1.0.0 graft has been, and it
+  **deleted `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` again**, restored in a
+  follow-up commit. Same mechanism as 1.4.0: the fork ships neither, they are the entire expected
+  divergence, and a squashed pull merges the fork's tree. `make check-e2e-subtree` is red at
+  exactly those two entries until the restore and green after — verified both ways here.
+
 ## [1.4.0] - Unreleased
 
 ### Changed
