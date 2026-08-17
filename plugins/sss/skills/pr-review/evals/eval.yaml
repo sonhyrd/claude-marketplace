@@ -12,7 +12,7 @@ engine:
 
 cases:
   files:
-    - evals/cases/readonly-run-worktree-collision.yaml
+    - evals/cases/worktree-collision-stops-the-run.yaml
     - evals/cases/dirty-tree-keeps-user-work.yaml
     - evals/cases/ocr-missing-degrades.yaml
     - evals/cases/sync-stage-absent-silently.yaml

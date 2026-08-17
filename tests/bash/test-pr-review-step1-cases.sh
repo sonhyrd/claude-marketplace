@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 #
 # Tests that sss:pr-review's Step 1 still handles refs and the working tree the
-# way it was decided to. Revision THREE of one decision; all three, and why each
+# way it was decided to. Revision FOUR of one decision; all four, and why each
 # replaced the last, are in
 # docs/adr/0007-pr-review-acquires-the-tree-in-step-1.md.
 #
-# What this file guards INVERTED at revision 3. It used to assert Step 1 held no
-# `git checkout`; it now asserts the checkout is guarded and the fallback is
-# present. The fallback is the half at risk: on a machine where the checkout
-# always works it reads like dead prose, and deleting it puts back a failure that
-# cost a recovery detour in 3 of 8 logged runs.
+# What this file guards has now INVERTED TWICE. At revision 3 it stopped
+# asserting Step 1 held no `git checkout` and started asserting the checkout was
+# guarded and the fallback present. At revision 4 the fallback itself goes: 0 of
+# 12 logged runs ever reached it, and the guards now stop the run before the
+# fan-out instead of degrading past it. So the three fallback assertions are
+# deleted rather than left passing on stale prose, and what replaces them is the
+# half that measurably failed instead — full 40-character SHAs, a tree verdict
+# read after the acquisition, and a stacked probe conditional on the default
+# branch.
 #
 # That decision lives as prose in a SKILL.md — there is no script to exercise, so
 # this test asserts the prose still says it. Deliberately: the alternative was
@@ -111,11 +115,14 @@ must_match "guard 3: local branch tip must already be on the remote" 'git rev-li
 must_match "says why a branch and not a detached HEAD" '[Dd]etach'
 must_match "refuses to stash rather than owning the state" '[Ss]tash'
 
-# --- the fallback: a failed guard costs the fixes, never the report ----------
+# --- a failed guard stops the run -------------------------------------------
+#
+# Revision 4's inversion. The fallback these three replace is deleted, so a
+# guard failure must read as a stop that names its own corrective action.
 
-must_match "a failed guard falls back rather than aborting" 'fallback, not an abort'
-must_match "names the read-only run" '[Rr]ead-only run'
-must_match "the fallback still reads between the two SHAs" 'from any working tree'
+must_match "a failed guard stops the run" 'stops the run'
+must_match "the stop names the guard and what to do next" 're-run from'
+must_match "nothing is spawned on the way out" '[Nn]o track spawns'
 
 # --- the three cases the ticket requires it to name -------------------------
 
@@ -123,16 +130,30 @@ must_match "names the other-worktree failure it is answering" 'already used by w
 must_match "names stacked PRs" '[Ss]tacked'
 must_match "detects a stacked base with gh" 'gh pr list --head'
 must_match "names the tree-at-PR-head check" 'rev-parse HEAD'
-must_match "the write stages are what the tree check gates" 'write stages'
+must_match "the write stages are what a failed guard costs" 'write stages'
+
+# The probe aimed at the default branch returns nothing and reads as "not
+# stacked" by accident — 4 of 7 logged runs. It is conditional, and the default
+# branch is looked up rather than assumed to be `main`.
+must_match "the stacked probe is conditional on the default branch" '[Dd]efault branch'
+must_match "the default branch is looked up, not assumed" 'defaultBranchRef'
 
 # --- the provenance line ----------------------------------------------------
 
 must_match "specifies a provenance line" '[Pp]rovenance line'
 must_match "the line is printed before the fan-out" 'before any track is spawned'
-must_match "the line carries BASE and the ref it came from" 'BASE=<sha> \(merge-base of origin/'
-must_match "the line carries the resolved HEAD" 'HEAD=<sha>'
+must_match "the line carries BASE and the ref it came from" 'BASE=<40-char> \(merge-base of origin/'
+must_match "the line carries the resolved HEAD" 'HEAD=<40-char>'
 must_match "the line carries the tree verdict" 'tree at PR head'
 must_match "branch mode fills the same line" "user-named fixed point"
+
+# Every SHA at full length, and the verdict traceable to a read taken after the
+# move: a transposed 9-character BASE reached a track prompt in 4 of 7 runs, and
+# one run asserted `tree at PR head` from a rev-parse taken before any move.
+must_match "the line carries the SHA the post-move read produced" 'TREE=<40-char>'
+must_match "states the full-SHA rule" 'full 40 characters'
+must_match "and forbids abbreviating them" 'never abbreviated'
+must_match "the verdict comes from a read after the acquisition" 'after the acquisition'
 
 # --- the finding count stayed in step with the findings ---------------------
 

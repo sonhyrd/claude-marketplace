@@ -2,8 +2,9 @@ id: dirty-tree-keeps-user-work
 title: Uncommitted work is never stashed or discarded to acquire the tree
 description: |
   Step 1 guard 1. `git switch -C` would destroy uncommitted work, and the skill
-  explicitly refuses both stashing and carrying the changes across. The run
-  falls back to a read-only run instead.
+  refuses both stashing it and carrying it across. The guard's outcome is a stop
+  before anything spawns; the edits themselves are the part that must survive
+  either way, so the failure clauses are the important half.
 
 input:
   prompt: |
@@ -12,16 +13,17 @@ input:
 
 expect:
   must_contain:
-    - "read-only"
+    - "uncommitted"
 
 judge:
   type: rule_based
   success:
     - output_contains:
-        all: ["read-only"]
         any: ["uncommitted", "your edits", "working tree"]
     - output_contains:
         any: ["left", "untouched", "where you left", "keep", "preserved"]
+    - output_contains:
+        any: ["stop", "stops", "refuse", "will not proceed", "won't proceed"]
   failure:
     - output_contains:
-        any: ["git stash", "git checkout -- .", "git reset --hard", "commit them first"]
+        any: ["git stash", "git checkout -- .", "git reset --hard", "commit them first", "read-only"]
