@@ -57,12 +57,6 @@ concurrent, isolated, and never merged or ranked. What runs in sequence is a sta
 _Avoid_: track (the error this term exists to prevent), round, leg — and **Step**, which is one
 numbered instruction inside a stage, not the stage itself
 
-**Read-only run**:
-A review run whose working tree could not be moved to the PR head, so only the read stage exists —
-the report is complete and valid, and the fix, sync and proof stages are absent. Named by the reason
-it happened, never by the stages that are missing.
-_Avoid_: degraded run, failed run, dry run, report-only run
-
 **Admission**:
 Whether a finding is one the fix stage will act on. Decided per **Track**, never by severity — a
 severity orders the queue once admission has already happened.

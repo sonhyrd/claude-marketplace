@@ -24,62 +24,50 @@ Four **stages** over one diff — a read stage that reports, then write stages t
 
 A track that never sees another track's findings cannot be talked out of its own. Where two land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
 
-Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage; every step after them writes — Step 4 fixes, Step 5 syncs, Step 6 proves. **Step 1 moves the tree to the PR head**, so every stage after it reads and writes the same files the tracks read. Where it cannot, the run is a **read-only run**: the report is complete and valid, and Steps 4, 5 and 6 are absent. Step 5 is conditional on top of that, and in a repo with no translation config is simply not there. One `BASE`, resolved in Step 1, holds from the first step to the last. See `CONTEXT.md`.
+Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage; every step after them writes — Step 4 fixes, Step 5 syncs, Step 6 proves. **Step 1 moves the tree to the PR head**, so every stage after it reads and writes the same files the tracks read. Where it cannot, it stops the run there rather than reporting on a tree the fixes could never reach. Step 5 is conditional on top of that, and in a repo with no translation config is simply not there. One `BASE`, resolved in Step 1, holds from the first step to the last. See `CONTEXT.md`.
 
 ## Step 1 — Prep
 
 Run this in the parent, before anything spawns. Its output is a set of **findings** the two skills verify on arrival rather than rediscover — one resolved `BASE` shared by all three tracks is what makes their reports comparable.
 
-**PR mode:**
+**PR mode. Run this block top to bottom** — everything unconditional in the stage is in it, in the order it has to happen:
 
 ```bash
 gh pr view <NUM> --json title,body,baseRefName,headRefName,commits
 git fetch origin
-HEAD_SHA=$(git rev-parse origin/<headRefName>)
-BASE=$(git merge-base origin/<baseRefName> "$HEAD_SHA")
+HEAD_SHA=$(git rev-parse origin/<headRefName>)             # resolve both ends
+BASE=$(git merge-base origin/<baseRefName> "$HEAD_SHA")    # before the tree moves
+gh repo view --json defaultBranchRef -q .defaultBranchRef.name
+gh pr list --head <baseRefName> --state open --json number # only when <baseRefName> is not that default branch
+git status --porcelain                                     # guard 1 — empty
+git worktree list --porcelain                              # guard 2 — must not hold <headRefName>
+git rev-list --count origin/<headRefName>..<headRefName>   # guard 3 — 0, or the command fails: no such branch
+git switch -C <headRefName> "$HEAD_SHA"                    # a branch, not a detached HEAD: Step 4e commits, Step 6c pushes
+TREE_SHA=$(git rev-parse HEAD)                             # read after the acquisition, never inferred from it
+git diff "$BASE...$HEAD_SHA" --stat
 ```
 
 **Both ends resolve to SHAs before the tree moves**, so a bad ref stops the run with the tree where the user left it. There is no `git pull` in this stage: `fetch` plus a SHA is the whole resolution.
 
-**Stacked PRs.** `baseRefName` may itself be an open PR, and then `BASE` sits off the default branch:
+**The stacked probe is conditional on the default branch.** `baseRefName` may itself be an open PR, and then `BASE` sits off the default branch. Look that branch up — it is not always `main` — and run `gh pr list --head <baseRefName>` only when `baseRefName` differs from it. Aimed at the default branch the probe returns nothing and reads as *not stacked* by accident. An open parent PR goes in the provenance line's stack clause; the merge-base arithmetic is unchanged either way.
 
-```bash
-gh pr list --head <baseRefName> --state open --json number
-```
+**Each guard names one thing `switch -C` would destroy**, which is why there are three: `-C` resets an existing local branch of that name.
 
-The merge-base formula already handles that — against the parent branch it yields this PR's own commits rather than the parent's, which is what keeps a stacked review off the parent's 86 unrelated files. What was missing was any statement of it, so a run holding `baseRefName` was not trusted to use it. The arithmetic is unchanged; the stack goes in the provenance line.
+- **Guard 1 — a dirty tree.** Uncommitted work stays exactly where the user left it: never stashed, never reset, never carried across into a review of files the PR does not contain.
+- **Guard 2 — `fatal: '…' is already used by worktree at '…'`, caught before it fires.** The ordinary Orca case, a review in a fresh worktree while the branch is live in the main clone. Only *another* worktree counts; the branch already being current here is the success path.
+- **Guard 3 — unpushed commits.** A non-zero count is work `-C` would strand. The command failing means no such branch, which has nothing to lose.
 
-**Then acquire the tree at the PR head.** Three guards, then one move:
+**A failed guard prints the provenance line, then stops the run** — naming the guard and the corrective action, `re-run from <that worktree>`. No track spawns, no file is written, the tree does not move. The guards sit ahead of the Step 2 fan-out, so the stop costs a message and nothing else, and the write stages are never reached. The cost is stated rather than softened: on a guard failure there is no report at all until the user re-runs from a usable tree.
 
-```bash
-git status --porcelain                                   # empty
-git worktree list --porcelain                            # must not hold <headRefName>
-git rev-list --count origin/<headRefName>..<headRefName> # 0, or the command fails: no such branch
-git switch -C <headRefName> "$HEAD_SHA"
-git diff "$BASE...$HEAD_SHA" --stat
-```
-
-Each guard names one thing the move would destroy, and `-C` is why there are three of them: it resets an existing local branch of that name.
-
-- **Guard 1 keeps uncommitted work where the user left it.** Falling back costs this review its fixes; stashing costs state this skill would then own restoring across four stages and `pw-prove`'s push, and carrying the changes across would put files the PR does not contain into all three tracks' reports.
-- **Guard 2 is `fatal: '…' is already used by worktree at '…'`, caught before it fires** — the ordinary Orca case, a review in a fresh worktree while the branch is live in the main clone. Only *another* worktree counts; the branch already being current here is the success path.
-- **Guard 3 keeps unpushed commits.** A non-zero count is work `-C` would strand. The command failing means no such branch, which has nothing to lose.
-
-**A branch, not a detached HEAD**: Step 4e commits and Step 6c hands `head_sha` to `pw-prove`, which pushes, and a commit on a detached HEAD is on no branch to push.
-
-**Any guard failing is a fallback, not an abort.** Name the guard, leave the tree, carry on: both SHAs are resolved and git reads between two SHAs from any working tree, so the read stage is complete and valid from here. That is a **read-only run** — Steps 4, 5 and 6 are absent, and Step 4 owns saying so. The report is the expensive half, and a collision costs the fixes, not the review.
-
-**Is this tree at the PR head?** `git rev-parse HEAD` against `$HEAD_SHA`, read *after* the acquisition rather than assumed from it. This is a finding like the others, and the one that decides whether the write stages exist — Step 4 owns what it does with it.
-
-**Branch mode:** take the fixed point the user named (`main`, a tag, a SHA) and set `BASE` to it. `HEAD_SHA` is `HEAD`, so the tree is trivially at it and there is nothing to acquire — no guards, no `switch`, and a read-only run is not reachable.
+**Branch mode:** take the fixed point the user named (`main`, a tag, a SHA) and set `BASE` to it. `HEAD_SHA` is `HEAD`, so the tree is trivially at it and there is nothing to acquire — no guards, no `switch`.
 
 **Echo one provenance line**, before any track is spawned:
 
 ```
-BASE=<sha> (merge-base of origin/MAMAS-9316 ← stacked on open PR 3140) · HEAD=<sha> (origin/mamas-9299-x) · tree at PR head
+BASE=<40-char> (merge-base of origin/MAMAS-9316 ← stacked on open PR 3140) · HEAD=<40-char> (origin/mamas-9299-x) · TREE=<40-char> = HEAD → tree at PR head
 ```
 
-Three fields, in both modes: the resolved `BASE` with the ref it came from and a stack clause where there is one, `HEAD_SHA` with its ref, and the tree verdict — `tree at PR head`, or `read-only run: <the guard that failed>`. Name the guard, not the symptom: `read-only run: alfred/mamas-9435 live in worktree /home/orca/work/hyrd-widget` tells the reader to review from that worktree instead. Branch mode fills the same slots with what it has: `BASE=<sha> (user-named fixed point 'main') · HEAD=<sha> · branch mode`. One line, printed before the fan-out, is the point: three tracks reading a base nobody printed is how a wrong one survives to the end of a run.
+Four fields in PR mode, and **every SHA is the full 40 characters, never abbreviated** — a 40-character string gets copied where a 9-character one gets retyped, and one transposition survived into a track prompt and cost that track its base. `TREE` is whatever `git rev-parse HEAD` returned, so the verdict `tree at PR head` is a conclusion the reader draws from two printed SHAs rather than a claim to take on trust. The stack clause appears only where the probe found an open parent PR. Branch mode fills the same slots with what it has: `BASE=<40-char> (user-named fixed point 'main') · HEAD=<40-char> · branch mode`. One line, printed before the fan-out, is the point: three tracks reading a base nobody printed is how a wrong one survives to the end of a run.
 
 Then `ocr --version` — the version, not just the presence, because `sss:ocr-delegate` takes a different path below v1.9.3 and the report should say which one ran.
 
@@ -96,9 +84,9 @@ No file, and the first finding is false and the second does not need asking. Oth
 git diff --name-only "$BASE"..."$HEAD_SHA" -- "$DIR" | grep '\.json$'
 ```
 
-Any output at all and the second finding is true. Do not run it with `$DIR` unset: git rejects an empty pathspec outright, and this line failing would be indistinguishable from the failures that are meant to stop the run. A config present but naming no resolvable directory is simply the second finding false — the sync has nowhere to read from — and that is a deliberate divergence from `translation-sync`, which stops with a named error in the same case. It gets to: it was invoked on purpose. Here the two findings only decide whether it is invoked at all.
+Any output at all and the second finding is true. Do not run it with `$DIR` unset: git rejects an empty pathspec outright, and this line failing would be indistinguishable from the failures that are meant to stop the run. A config present but naming no resolvable directory is simply the second finding false — the sync has nowhere to read from.
 
-Done when the acquisition has either happened or been declared a read-only run, seven findings are in hand, and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and whether this tree is at it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A bad ref or an empty diff stops here, naming which one failed. The tree finding never stops the run and neither sync finding does — the first decides whether the write stages exist, the other two decide whether Step 5 does.
+Done when the tree is acquired, seven findings are in hand, and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and the `TREE_SHA` read against it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A bad ref, an empty diff or a failed guard stops here, naming which one failed. Neither sync finding stops the run; the two of them decide whether Step 5 exists.
 
 ## Step 2 — Load `matt:code-review`, fan out three
 
@@ -111,10 +99,7 @@ Then send **one** message with **three** `general-purpose` `Agent` calls. The lo
 - **Standards** and **Spec** — the two prompts `matt:code-review` step 4 specifies, verbatim, including the smell baseline it says to paste in full.
 - **OCR** — invoke the Skill tool with `sss:ocr-delegate` in range mode (`--from`/`--to`), passing the PR title and body as `--background`. Review only: finish at its Step 6 and report. Return the structured comments plus the coverage summary — total, reviewable, reviewed and skipped file counts, the coverage rate over the reviewable set, and a reason for every skipped file.
 
-**Every track prompt names the tree it reads**, in one clause. A track told nothing guesses, and guesses wrong in both directions:
-
-- **Acquired** — *this tree is at the PR head; read files directly.* Left unsaid, a track invents the opposite and routes every read through `git show`.
-- **Read-only run** — *this tree is NOT at the PR head; read every path as `git show $HEAD_SHA:<path>`.* Here the clause is load-bearing: a track opening a tree path reviews file contents the PR does not contain, and reports them with full confidence.
+**Every track prompt names the tree it reads**, in one clause — *this tree is at the PR head; read files directly.* Left unsaid, a track invents the opposite and routes every read through `git show`.
 
 With no `ocr` on PATH, send the two and open the report with: *OCR track skipped, no `ocr` on PATH — this is a plain `matt:code-review` run.* An `ocr` that is present but whose `delegate` sub-commands reject the skill's invocation degrades the same way, with the failing command quoted instead of the PATH note — it is a broken tool, not a review with nothing to say, and the two must never read alike in the report. A rejected `--format json` is **not** that case: `sss:ocr-delegate` falls back to the text output on its own and the track runs in full, so degrading on it would throw away a working review.
 
@@ -144,9 +129,7 @@ Done when all four sections are on screen, every finding carries an ID, and no f
 
 The stage that writes. Findings become edits, the edits get committed, and nothing is pushed.
 
-**Step 1's tree finding gates this stage and the two after it.** Equal SHAs is the ordinary case — Step 1 acquired the tree — and everything here runs. Unequal means one of Step 1's three guards refused the acquisition, so this is a **read-only run**: Steps 4, 5 and 6 are all absent and the run ends after Step 3 with one line naming both SHAs *and the guard*: *read-only run: tree at `<sha>`, PR head is `<sha>` — `<headRefName>` live in worktree `<path>`*. Repeat the guard here — the provenance line printed it above three long reports, and the reader deciding what to do next is at the bottom.
-
-This degrades rather than refusing, because the report is the expensive half and it is valid from any tree. It degrades *declaredly*, unlike Step 5's silence, because a review that produced no fixes because it could not is not the same as one that found nothing to fix and the reader has no other way to tell them apart. Fixes applied to files the tracks never read are not fixes, and a handoff artifact built off them is worse — `pw-prove` would prove a tree nobody reviewed.
+**Step 1 already guaranteed the tree.** Its three guards stop the run rather than letting it reach here on a tree that is not the PR head, so this stage edits the same files all three tracks read. Fixes applied to files the tracks never read are not fixes, and a handoff artifact built off them is worse — `pw-prove` would prove a tree nobody reviewed.
 
 ### 4a. Grade for order, not for admission
 
@@ -360,7 +343,7 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 
 - **Coverage is the OCR track's contract.** A report without a coverage rate and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on. A high rate over a handful of reviewable files is not coverage either — OCR excludes Markdown, so a skills or docs repo can report 100% having seen almost none of the diff.
 - **Overlap is additive.** It names the agreements underneath three intact verbatim sections.
-- **Step 1 checks out the PR head, and the *fallback* is the load-bearing half.** The guards and the read-only run keep a branch that is live in another worktree — the ordinary Orca case, 3 of 8 logged runs — from costing the report along with the fixes. On a machine where the checkout has always worked that fallback reads like dead prose, and deleting it reinstates the failure. Revision three of one decision, the first two legible only from commit messages: `docs/adr/0007-pr-review-acquires-the-tree-in-step-1.md`. `tests/bash/test-pr-review-step1-cases.sh` is what notices.
+- **Step 1 checks out the PR head, and the *guards* are the load-bearing half.** Three of them stand between `switch -C` and work the user cannot get back — a dirty tree, the branch live in another worktree (the ordinary Orca case), unpushed commits. A guard that fails prints the provenance line and stops the run naming the worktree to re-run from; it does not carry on with a report. Revision four of one decision, the first two legible only from commit messages: `docs/adr/0007-pr-review-acquires-the-tree-in-step-1.md`. `tests/bash/test-pr-review-step1-cases.sh` is what notices.
 - **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
   renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`
   is told to ignore without complaint. `tests/bash/test-pr-review-handoff-parity.sh` is what
