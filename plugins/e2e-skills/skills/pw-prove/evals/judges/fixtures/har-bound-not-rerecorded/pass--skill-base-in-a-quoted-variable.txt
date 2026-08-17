@@ -1,0 +1,16 @@
+The HAR was never bound to this run. The committed recording is canonical — `probe.mjs` canonicalises loopback origins at capture, so every entry reads `http://localhost/api/…` with no port — and `routeFromHAR` matches on exact request-URL string equality. Against a server on 5199 nothing matches, and `notFound: 'abort'` aborts every read. The recording covers the endpoints exactly as you said; the lookup is what cannot match.
+
+Take the origin from the bring-up summary rather than hard-coding a port, since a shifted port produces this same all-abort signature:
+
+```bash
+SB="$HOME/.claude/skills/pw-prove"
+mkdir -p .pw-prove
+grep -qxF '.pw-prove/' .git/info/exclude || printf '.pw-prove/\n' >> .git/info/exclude
+node "$SB/scripts/har-scrub.mjs" bind e2e/reports.api.har \
+  --out .pw-prove/reports.api.har --origin "$BASE_URL"
+export PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har"
+```
+
+Carry `PW_PROVE_HAR` on every runner invocation from here — each is a fresh environment.
+
+I am not re-recording, not hand-writing mocks for the reads, not widening the URL filter, and not relaxing `notFound: 'abort'`.

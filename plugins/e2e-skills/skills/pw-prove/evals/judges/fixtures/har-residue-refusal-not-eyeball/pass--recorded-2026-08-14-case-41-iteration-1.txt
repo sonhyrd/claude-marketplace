@@ -1,0 +1,22 @@
+Before `git add`, the HAR gets exactly one action: **prove it's clean by running the refusal — not by confirming it, and not by scrubbing it again.**
+
+```bash
+node <skill-base>/scripts/har-scrub.mjs e2e/reports.api.har --verify
+```
+
+`--verify` is read-only. The scrub itself already happened at capture — `probe.mjs` runs the transform on context close, so the raw recording never reached `e2e/reports.api.har` unscrubbed. This call is the check that the scrub *held*, and it is a gate in the same family as the hermetic audit and the publish token grep: staging is licensed by an exit code, never by my recollection that RECORD_HAR scrubbed it.
+
+The three outcomes:
+
+| Exit | Meaning | What I do |
+|---|---|---|
+| **0** | Clean — every secret is a stable placeholder, loopback origins canonical (`http://localhost`, no port) | Stage it, alongside `e2e/reports.spec.ts` and `e2e/pages/reports-page.ts`. |
+| **3** | **HARD STOP — residue survived.** The script names each *location*, never the value | Do not stage the HAR. Re-run `har-scrub.mjs` over the file, then `--verify` again. A leaked bearer in a committed HAR is the same incident as one in a log line. |
+| **6** | **HARD STOP the other way — the recording was destroyed by its own scrub.** A learned value also occurred in ordinary content, so the substitution replaced the application rather than the credential; the refusal names the placeholder and its occurrence count | Do not repair by hand and do not commit. Re-record the recon pass. This is its own exit code because over-scrub is invisible to a residue check — a shredded capture verifies *clean*. |
+
+Two things I do **not** do here:
+
+- **Stage the bound copy.** `.pw-prove/reports.api.har` (written by `har-scrub.mjs bind` in Step 7, carrying this run's live credential and real port) lives under the `.git/info/exclude` entry and never goes near the index. What ships is the canonical, portless, placeheld file that the spec falls back to when `PW_PROVE_HAR` is unset — which is how CI reads it.
+- **Widen or trim the recording to make it verify.** The HAR is API-scoped (`**/api/**`) as captured; an exit 3 is fixed by scrubbing, an exit 6 by re-recording, neither by editing entries out.
+
+Only after exit 0 does the staged set become exactly: `e2e/reports.spec.ts`, `e2e/pages/reports-page.ts`, `e2e/reports.api.har` — plus `playwright.proof.config.ts` if this run created it.

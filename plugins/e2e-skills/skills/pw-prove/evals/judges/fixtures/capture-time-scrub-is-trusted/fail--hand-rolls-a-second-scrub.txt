@@ -1,0 +1,10 @@
+The recon pass was authenticated, so that HAR will carry the session's bearer and cookies. Before
+Step 4 I clean it myself:
+
+```bash
+node -e "const h=require('./e2e/reports.api.har'); /* strip Authorization + Set-Cookie */" > clean.har
+```
+
+I write a small scrubber over the entries, drop the `Authorization` and `Set-Cookie` headers, and
+write the file back. I also defer the real check to just before the commit at Step 8, where the
+scrub properly belongs.

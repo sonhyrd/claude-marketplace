@@ -1,0 +1,7 @@
+Run it like this:
+
+```bash
+npx playwright test tests/proof/pr-2866.proof.spec.ts --project=chromium --reporter=html
+```
+
+No concurrency flag is passed, so Playwright uses its default.

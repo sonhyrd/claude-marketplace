@@ -1,0 +1,34 @@
+Loaded. Your question is a Step 4/5 structuring decision, so here's the answer for each route — no bring-up needed to determine it.
+
+## `/checkout` — extend, don't scaffold
+
+Step 1's `pomInventory` records `CheckoutPage → /checkout, /checkout/confirmation`. The match key is the **route**, not the spec: the fact that only the confirmation flow has a spec today is irrelevant — the route already has a Page Object, so `code-rules.md` › Structure Detection row 2 applies ("POM for this page already exists → extend existing POM — add new locators only + new spec file").
+
+Concretely:
+
+- **Read `tests/pages/checkout-page.ts` first**, and match its existing naming and structural patterns even where they differ from the POM Rules — the rules apply only to the newly added code. That includes the file-naming convention (`checkout-page.ts`, kebab-case) if you end up adding sibling files.
+- Add **only** the coupon field and submit button locators to the existing class. Don't touch the confirmation-flow locators, don't refactor them, don't "harmonize" them.
+- If the class groups locators compositionally (a `form: { … }` object), the new ones go into the matching group; if it's flat `readonly` properties, they stay flat. Follow the file.
+- New **spec** file for the checkout-form coverage — extending the POM does not mean extending the existing confirmation spec.
+- A second `CheckoutPage`-for-`/checkout` POM ships only with an explicit justification line in the Step 4 Assumptions block. There isn't one here, so: no duplicate.
+
+Locator Mapping Table rows carry `File = tests/pages/checkout-page.ts`, `New/Existing = New` for both, with the selector tier chosen from the Step 3 live snapshot (not from source guesses — a coupon input is exactly the label-less-input case where `getByLabel` silently matches nothing and `getByPlaceholder`/`getByRole('textbox')` is correct, with the reason recorded in the table).
+
+## `/profile` — scaffold new, into the existing POM dir
+
+No Page Object anywhere for this route → Structure Detection row 1: "POM directory exists, no POM for this page → New POM class + spec file."
+
+- The directory decision is already made: `tests/pages/` exists and holds real Page Object classes, so the new file lands beside `checkout-page.ts` and **matches its naming** — `tests/pages/profile-page.ts`, not `ProfilePage.ts`. The `<testDir>/pages/<Feature>Page.ts` form in Step 4 is the greenfield default, and it loses to an established convention.
+- **Extends `BasePage` if one exists** in that directory; check before writing.
+- Full POM Rules apply here since it's all new code: `readonly` locators only, no getter methods, composition for related groups, `.nth()`/`.first()`/`.last()` only with `// JUSTIFIED:`.
+- New spec file for it.
+
+## What's common to both
+
+- POM always — no flat opt-out for either, regardless of what sibling specs look like.
+- Only locators listed in the Step 4 Locator Mapping Table get created; Step 6's YAGNI audit greps each name across specs and **deletes any with zero usages**, so the added coupon/submit locators must actually be used by the new checkout spec or they don't survive the gate.
+- Both scopes are ordinary Step 5 output: HAR-first mocking, a `// PROVES:` header per `test()`, the viewport pin/dwell per the Step-4 effective-viewport verdict.
+
+One thing to flag: the selectors for both routes are **placeholders until Step 3 runs**. The structure above is fixed by the inventory and can be decided now, but the actual locator strings must come from the live probe against the built target — never from reading the components.
+
+Want me to proceed with the run (Step 3 bring-up + probe for both routes), or was the structuring decision all you needed?

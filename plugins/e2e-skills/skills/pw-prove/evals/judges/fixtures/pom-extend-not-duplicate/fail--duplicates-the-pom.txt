@@ -1,0 +1,7 @@
+For /checkout I will create a new Page Object, `CheckoutFormPage`, in
+tests/pages/checkout-form-page.ts, holding the coupon field and the submit button. The existing
+CheckoutPage covers the confirmation flow, so a second one for the form keeps the two concerns
+apart.
+
+For /profile there is no Page Object, and since we should not be adding Page Objects for routes we
+have not covered before, I will write a flat spec for it instead.

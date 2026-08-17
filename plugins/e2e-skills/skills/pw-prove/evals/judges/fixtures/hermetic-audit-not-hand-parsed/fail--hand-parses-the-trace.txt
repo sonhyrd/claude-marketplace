@@ -1,0 +1,9 @@
+I will run the audit and read the trace directly to double-check it.
+
+```bash
+node <skill-base>/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts
+unzip -o test-results/checkout/trace.zip -d /tmp/trace
+jq -r '.params.url' /tmp/trace/*.network | sort -u
+```
+
+route.fetch shows up as MOCKED in the trace, so the run is hermetic and the existing CARVE-OUT for the auth bootstrap covers everything.

@@ -1,5 +1,17 @@
 # RECORD_HAR flushes on context close, and the runner's origin is pinned before the proof run
 
+> **PARTIALLY SUPERSEDED by `docs/adr/0016` (issue #46).** The **first half stands in full**: a
+> `recordHar` still flushes on *context* close, `probe.mjs` still closes the context before the
+> browser, and it still reports the written path and byte count or warns that nothing landed. The
+> **runner-origin half is superseded**. Its whole subject is a *development* server that binds one
+> loopback family while a scaffolded `webServer.url` names the other; under 0016 the agent owns the
+> preview server's lifecycle, `preflight.mjs` gates bring-up on its three phases, the proof config
+> carries `webServer: undefined` so Playwright never dials that string or boots a server of its own,
+> and the port is read from the server's own output rather than guessed. The Step-3 origin-pinning
+> item, the `Runner origin:` assumption line, the env-var-carrying instruction and the failure row
+> that diagnosed the mismatch are all deleted. Loopback *origin canonicalisation in the HAR* is a
+> different mechanism and is unaffected — see `har-scrub.mjs`.
+
 A rehearsal run of the revised pipeline (same repo, same change, from the same pre-test checkpoint as the run `docs/adr/0010` audited) finished in 21.6 minutes against the audited run's 57.7. The three losses 0010 targeted did not recur: no parallel-worker timeout, no clips destroyed by the mutation run, one `host-proof.mjs` call instead of five uploads behind a broken capture pipe, and a 2-second `hermetic.mjs` call in place of ~3 minutes of hand-written trace parsers. Two new defects surfaced, both of the same family the earlier audit kept finding — a documented rule that silently does nothing.
 
 **`RECORD_HAR` had never written a file.** The probe's shutdown closed the browser and not the context, and Playwright flushes a `recordHar` on **context** close. So the recon pass reported clean, produced no HAR, and the spec fell back to hand-written `route.fulfill` mocks — the exact thing HAR-first mocking exists to replace. Nothing caught it because the failure mode is absence: no error, no exit code, just a missing file that the next step never asserts on. Reproduced against `example.com` in eight seconds once suspected; the fix is `await context.close()` before `await browser.close()`.

@@ -1,0 +1,16 @@
+Clip 3 looks wrong, so I re-film and see whether it comes out better this time.
+
+```bash
+rm -rf test-results
+PW_PROVE_CLIP=1 npx playwright test --config playwright.proof.config.ts
+```
+
+If it is still cut off I add the centring to the proof config behind the clip flag, so it only costs
+time on filmed runs:
+
+```ts
+if (process.env.PW_PROVE_CLIP) await toast.evaluate((n) => n.scrollIntoView({ block: 'center', inline: 'center' }));
+```
+
+and re-film again until the frame reads cleanly. If it never does, the run fails: an illegible clip
+means the proof cannot be reviewed.

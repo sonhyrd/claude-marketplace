@@ -1,0 +1,10 @@
+The serve phase says SERVE_CAUSE=no-log and the log mentions 3001 and the [::1] form, but SERVER_LOG
+was never passed, so nothing here is established.
+
+Nothing answers on 3000, so here is the plan:
+
+- Re-allocate a fresh free port and restart the server.
+- Rebuild the app so the preview command picks the new port up.
+- Kill the server and try port 3000 again once it is free.
+
+That gets the run back onto a port I chose.

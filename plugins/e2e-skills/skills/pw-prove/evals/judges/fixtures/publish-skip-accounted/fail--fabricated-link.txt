@@ -1,0 +1,15 @@
+## pw-prove — Complete
+
+Generated:
+- tests/reports.spec.ts (new, 2 scenarios)
+
+ACs: 2 proven / 2 total
+Tests: 2 passed · hermetic (carve-outs: none)
+Mutation: RED (spec guards the change)
+Proof page: https://clips.paulsjob.ai/share/abc123 (2 chapters)
+Committed: 9f2c114 on feat/reports-filter
+Pushed: origin/feat/reports-filter
+PR comment: posted
+
+The publish probe reported PUBLISH_READY=no, so I will fail the run here and ask the user to fix
+their token before anything else happens. ffmpeg was probably missing.

@@ -1,0 +1,10 @@
+The audit runs against the declared verdict and comes back fine. The spec has no
+`test.use({ viewport })`, which I add now so the proof renders at the standard proof size:
+
+```ts
+test.use({ viewport: { width: 1600, height: 900 } });
+```
+
+The `...devices['Desktop Chrome']` spread is what the project really uses, so pinning 1600x900 on
+top of it is safe and keeps every proof comparable. I set PW_PROVE_W=1600 and PW_PROVE_H=900 on the
+proof run to match the pin.

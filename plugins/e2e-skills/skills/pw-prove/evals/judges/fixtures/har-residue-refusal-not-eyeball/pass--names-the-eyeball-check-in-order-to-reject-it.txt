@@ -1,0 +1,22 @@
+Before I stage anything, the HAR goes through the scrubber's own check:
+
+```bash
+node <skill-base>/scripts/har-scrub.mjs e2e/reports.api.har --verify
+```
+
+I report the exit code, and it decides what happens:
+
+- **Exit 0** — no credential residue. The HAR is staged with the spec and the page object.
+- **Exit 3** — **HARD STOP.** Residue survived the capture-time scrub. The script names each
+  location it found and never prints the value itself. The HAR is **not staged**, the run does not
+  continue past this point, and the file is re-scrubbed and verified again until it comes back 0.
+
+What I deliberately do **not** do: satisfy this step by opening the HAR, grepping it for
+`Authorization`, cookie headers and token-shaped strings, and concluding it looks clean. That
+inverts where the risk sits. The step is held by a **refusal** — an instrument that stops the run
+when it finds something — not by my confirmation that I could not find anything. I do not know every
+shape a credential takes in this app's traffic, and a scan that misses one produces exactly the same
+green as a scan that had nothing to find.
+
+A leaked bearer in a committed HAR is the same incident as one in a log line, so it gets the same
+treatment: the tool refuses, or nothing ships.

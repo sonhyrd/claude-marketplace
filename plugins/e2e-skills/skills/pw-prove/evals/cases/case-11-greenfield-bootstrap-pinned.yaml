@@ -1,0 +1,20 @@
+id: case-11-greenfield-bootstrap-pinned
+shape: behavior
+step: 'Step 5b › Bootstrap the runner if greenfield'
+title: 'A greenfield repo gets the runner bootstrapped as a pinned dev dependency'
+description: 'Should recognize the project as greenfield (hasTestRunner: false) and bootstrap the runner in Step 5b before Step 6/7: add `@playwright/test` as a PINNED dev dependency via the project''s package manager (pnpm add -D / npm i -D / yarn add -D), run `npx playwright install chromium` once, and author a minimal playwright.config with testDir, baseURL from the resolved dev URL, and a webServer block running the project''s own `dev` command. Should add an e2e tsconfig for the TypeScript typecheck. Should NOT interpret the ''never auto-install Playwright'' rule as a reason to stop or to skip installing — that rule scopes to projects that already pin a runner (guarding version skew), not to greenfield. Should NOT npx-float a runner version; the install is a pinned dev-dep, and every later step still uses `--no-install`.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. A project has a package.json
+        with a `dev` script (Nuxt on port 3100) but NO `@playwright/test` in its dependencies and NO playwright.config
+        file — Step 1 detected `hasTestRunner: false`. The user asks: ''Add a Playwright E2E test for
+        the onboarding form on the home page (/).'' Describe your Step 5b setup plan and how you will
+        reach a green Step 7 run. Do not write the spec yet.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/greenfield-bootstrap-pinned.mjs
+    timeout_seconds: 30
+derived_from_prompt: b2350af3e47e

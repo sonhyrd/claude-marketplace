@@ -5,8 +5,9 @@ Read by `/to-tickets` (step 5) and `/delegate-tickets` (step 2) to learn where t
 - **Tracker**: GitHub
 - **Repo**: `sonhyrd/e2e-skills` — the same repo the code lives in.
 - **Always pass `--repo sonhyrd/e2e-skills` on every `gh issue` call.** `gh` run from inside some
-  checkouts on this machine resolves to a different upstream, and this repo additionally carries an
-  `upstream` remote (`voidmatcha/e2e-skills`) that must never receive issues or pushes.
+  checkouts on this machine resolves to a different upstream. This repo carries `origin` and nothing
+  else, so an unqualified `gh issue` call is only ever right by luck — and if anyone re-adds a
+  `voidmatcha/e2e-skills` remote for a one-off fetch, it must never receive issues or pushes.
 - **Triage label**: `ready-for-agent` — "Spec is complete; an agent can pick this up."
 - **Ticket shape**: one issue per ticket. A ticket names its parent spec issue, states the
   end-to-end behaviour it delivers, lists acceptance criteria as checkboxes, and declares its

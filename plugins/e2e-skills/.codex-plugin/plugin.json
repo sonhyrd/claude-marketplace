@@ -1,7 +1,7 @@
 {
   "name": "e2e",
-  "version": "1.0.0+codex.dbb13d69368e",
-  "description": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. Both are model-invocable so they can chain: pw-prove into e2e-reviewer at its quality gate, and a review skill into pw-prove, which confirms before a model-invoked run.",
+  "version": "1.3.0+codex.4fa37997b039",
+  "description": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. playwright-debugger: root-cause diagnosis of failed Playwright runs from reports, traces and screenshots. They are model-invocable so they can chain: pw-prove into e2e-reviewer at its quality gate, and a review skill into pw-prove, which confirms before a model-invoked run.",
   "author": {
     "name": "voidmatcha"
   },
@@ -17,7 +17,7 @@
   "interface": {
     "displayName": "E2e",
     "shortDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer...",
-    "longDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. Both are model-invocable so they can chain: pw-prove into e2e-reviewer at its quality gate, and a review skill into pw-prove, which confirms before a model-invoked run.",
+    "longDescription": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. playwright-debugger: root-cause diagnosis of failed Playwright runs from reports, traces and screenshots. They are model-invocable so they can chain: pw-prove into e2e-reviewer at its quality gate, and a review skill into pw-prove, which confirms before a model-invoked run.",
     "developerName": "voidmatcha",
     "category": "Productivity",
     "capabilities": [

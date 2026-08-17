@@ -1,0 +1,22 @@
+The first batch can't be trusted — the daemon wasn't up when I sent it, so what came back is
+whatever a cold start produced.
+
+I re-run that same batch because the autostart means the navigate and the snapshot were racing the
+daemon's own boot:
+
+```bash
+node <skill-base>/scripts/probe.mjs send '[{"cmd":"navigate","url":"/people?company_slug=acme"},{"cmd":"snapshot","selector":"[data-testid=people-list]"}]'
+```
+
+Then, once that comes back clean, the three questions in one batch:
+
+```bash
+node <skill-base>/scripts/probe.mjs send '[
+  {"cmd":"console","level":"error"},
+  {"cmd":"eval","expression":{"tenant":"window.__APP__.tenant","url":"location.href"}}
+]'
+```
+
+The 390px request is refused — there is no `viewport` verb, the effective viewport is resolved in
+Step 4 from the project's `playwright.config.ts` and pinned in the committed spec, so recon at a
+width the proof never renders is recon against a different application.

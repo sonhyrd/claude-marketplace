@@ -2,7 +2,8 @@
 
 All notable changes to the e2e plugin in this marketplace will be documented in this file.
 
-> Installed as **`e2e`**, so its skills invoke as `/e2e:pw-prove` and `/e2e:e2e-reviewer`.
+> Installed as **`e2e`**, so its skills invoke as `/e2e:pw-prove`, `/e2e:e2e-reviewer` and
+> `/e2e:playwright-debugger`.
 > The plugin directory is `plugins/e2e-skills/` — that path is a `git subtree` prefix and renaming
 > it would break both `git subtree pull` and `git subtree push`.
 >
@@ -10,6 +11,89 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 > then `git subtree push --prefix=plugins/e2e-skills e2e-fork main`.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [1.3.0] - Unreleased
+
+### Changed
+
+- Subtree pulled from `e2e-fork/main` (`b2665ec` → `3f2b418`, 26 commits). `pw-prove` moves
+  0.15.2 → **0.20.0** and `e2e-reviewer` 1.9.0 → **1.10.0**; `playwright-debugger` stays 1.9.0.
+  A minor bump, not a patch: the two skills' descriptions changed, which changes what the model
+  routes to them.
+- **Routing between the two skills is now explicit in both descriptions.** A request about routes,
+  pages or flows with *no* test — an untested-routes audit, a coverage-gap report, a plan for
+  missing tests — is `pw-prove`'s coverage-gap mode. Reviewing the quality of specs that already
+  exist is `e2e-reviewer`'s. Each description now names the other and says which requests belong to
+  it, so the two stop competing for the same prompt.
+- `pw-prove` Step 1 reads what an earlier run learned about the repository instead of re-deriving
+  it, and the shipped body now carries its own reasons rather than pointing at files that live only
+  in the fork's repo.
+
+### Removed
+
+- Eval case `case-17` (PROVES-header audit) and its judge `proves-header-verdict.mjs`, retired
+  upstream for zero uplift against a clean baseline. The behaviour it guarded is unchanged and still
+  stated in SKILL.md Step 6 — the case is what went. The 43 other `case-<n>.yaml` files are renamed
+  by the fork to `case-<n>-<what-it-guards>.yaml`.
+
+### Fixed
+
+- `scripts/ci/test-har-scrub.sh` assembles its synthetic Stripe fixture at runtime instead of
+  writing `sk_live_<24>` as one source literal. The value was always fake — the scrubber under test
+  reads the *key* a secret sits under, never the value's shape, so nothing depended on it being one
+  token — but a contiguous match tripped GitHub push protection and blocked every push of this
+  sync. Fixed in the fork (`05a10da`) and pulled back rather than patched here.
+
+### Notes
+
+- **This pull is `--squash`, matching every prior pull of this prefix.** An un-squashed pull was
+  attempted first and had to be abandoned twice over. It grafts the fork's 26 commits into this
+  repo's history, and four of them — predating `05a10da` — carry the whole `sk_live_…` literal, so
+  push protection blocked the branch on *history* that no fix to the tip can reach. It also merged
+  badly: rename and delete detection failed against the un-squashed base, resurrecting the 43 old
+  `case-<n>.yaml` names and the retired `case-17` judge and fixtures, 49 files that had to be
+  deleted by hand. The squashed pull reproduced the same tree with **zero conflicts** and applied
+  the fork's renames and deletions correctly. The 1.0.0 graft was deliberately un-squashed so
+  `git blame` reaches the fork's commits; pulls since have all squashed, and this records why that
+  should stay the default.
+
+## [1.2.1] - Unreleased
+
+### Changed
+
+- `pw-prove` moves 0.15.0 → **0.15.2**: the announced port is now stated where the bring-up step
+  reads it (skill 0.15.1), and the retired `--workers=1` mandate is gone from the shipped body
+  (skill 0.15.2, following `docs/adr/0017`). A patch bump, not a minor: no skill is added or
+  removed and no interface changes — only the instruction bodies two audit tickets edited.
+- The subtree was pulled from the branch that actually carries the content rather than from the
+  fork's `main`, which is why `AGENTS.md` and `README.md` in the plugin now name the marketplace at
+  `~/work/claude-marketplace`. The 1.1.0 pull took `main` and left the old `~/SonDev` path behind.
+- Serving surface: `--workers` no longer appears anywhere under `plugins/e2e-skills/skills/`. The
+  string surviving in a version-keyed cache copy is what the audit that produced these two skill
+  versions was built around, so it is checked after propagation, not assumed.
+
+## [1.2.0] - Unreleased
+
+### Added
+
+- `playwright-debugger` — root-cause diagnosis of a failed Playwright run from `playwright-report/`,
+  traces and screenshots, classifying each failure into the stable `F1`–`F15` taxonomy. It shipped
+  in the subtree from the 1.0.0 graft onward and Claude Code always exposed it, because an explicit
+  `skills` array is *additive* to the default `./skills/` scan rather than a whitelist. Naming it in
+  the manifest ends a two-skill story that three manifests and this changelog were all telling.
+
+### Changed
+
+- Plugin, marketplace-entry and Codex-manifest descriptions now name all three skills. The Codex
+  manifest already pointed at `./skills/` wholesale, so only its description undercounted.
+
+## [1.1.0] - Unreleased
+
+### Changed
+
+- Plugin version moved off `1.0.0` for the first time since the graft. The plugin cache is a
+  version-keyed file copy, so a version that never moves means a stale cache no metadata refresh
+  can dislodge — this one had been serving `pw-prove` 0.1.0 across 14 skill versions.
 
 ## [1.0.0] - Unreleased
 

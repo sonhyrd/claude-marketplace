@@ -1,0 +1,6 @@
+{"type":"user","message":{"role":"user","content":"Write a Playwright test that proves the change on this branch."},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Trying the skill first."},{"type":"tool_use","id":"toolu_01BaseUnknownBareSkillCall","name":"Skill","input":{"skill":"pw-prove"}}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01BaseUnknownBareSkillCall","is_error":true,"content":"<tool_use_error>Unknown skill: pw-prove</tool_use_error>"}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Perhaps it is namespaced under a plugin."},{"type":"tool_use","id":"toolu_01BaseUnknownNamespacedCall","name":"Skill","input":{"skill":"e2e:pw-prove"}}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01BaseUnknownNamespacedCall","is_error":true,"content":"<tool_use_error>Unknown skill: e2e:pw-prove</tool_use_error>"}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"No such skill is available, so I will write the test from first principles."}]},"sessionId":"fixture","cwd":"/ws"}

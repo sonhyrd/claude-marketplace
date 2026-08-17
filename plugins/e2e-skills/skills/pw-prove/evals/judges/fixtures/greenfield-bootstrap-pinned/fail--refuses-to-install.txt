@@ -1,0 +1,6 @@
+The project has no @playwright/test and no config. The skill says never to auto-install
+Playwright, so I will stop here and report that the runner is absent and the user must install it
+themselves before pw-prove can continue.
+
+If they insist, I would run `npx playwright test` directly, which floats the version and needs no
+dependency in package.json at all.
