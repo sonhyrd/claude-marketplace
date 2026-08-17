@@ -11,11 +11,12 @@ compatibility: >
   Requires the `ocr` CLI installed (via `npm install -g
   @alibaba-group/open-code-review` or GitHub release binary). Does NOT
   require a configured LLM endpoint — delegation mode is LLM-free on the
-  OCR side.
+  OCR side. `--format json` needs `ocr` >= 1.9.3; older releases reject it
+  and Steps 1 and 2 fall back to parsing the text output.
 metadata:
   author: alibaba
   homepage: https://github.com/alibaba/open-code-review
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Open Code Review — Delegation Mode
@@ -25,13 +26,13 @@ A skill for performing AI code review where OCR provides deterministic engineeri
 ## Prerequisites
 
 ```bash
-which ocr || echo "NOT INSTALLED"
+ocr --version || echo "NOT INSTALLED"
 ```
 
-If `ocr` is not installed:
+If `ocr` is not installed, or is older than v1.9.3:
 
 ```bash
-npm install -g @alibaba-group/open-code-review
+npm install -g @alibaba-group/open-code-review@latest
 ```
 
 No LLM configuration is needed for delegation mode.
@@ -41,11 +42,23 @@ No LLM configuration is needed for delegation mode.
 ### Step 1: Preview — Determine What to Review
 
 ```bash
-ocr delegate preview [--from <ref> --to <ref>] [--commit <hash>] [--exclude <patterns>]
+ocr delegate preview --format json [--from <ref> --to <ref>] [--commit <hash>] [--exclude <patterns>]
 ```
 
-There is no `--format` flag on `ocr delegate` — passing one exits non-zero with
-`unknown flag: --format`. The output is Markdown, and it is parseable as-is:
+The JSON carries everything the rest of the workflow needs:
+
+| Field | Use |
+|-------|-----|
+| `mode` | `workspace` / `range` / `commit` — picks the Step 3 git command |
+| `from`, `to`, `commit`, `merge_base` | the refs Step 3 builds that command from |
+| `reviewable_files[]` | `path`, `status`, `insertions`, `deletions` — the Step 4 checklist |
+| `excluded_files[]` | same, plus `exclude_reason`. Out of scope; never in the checklist |
+| `total_files`, `reviewable_count`, `excluded_count` | the Step 6 coverage numerator/denominator |
+
+`coverage_rate` is **not** in the output — Step 6 computes it as reviewed ÷ `reviewable_count`.
+
+**If `--format` is rejected** (`unknown flag: --format`, on `ocr` < 1.9.3), do not treat
+that as a review with nothing to say — drop to the text output, which is parseable as-is:
 
 ```
 # Files (12 reviewable / 26 total)
@@ -61,28 +74,28 @@ There is no `--format` flag on `ocr delegate` — passing one exits non-zero wit
 ~~- `path/skipped.md` [modified] +9/-0 (excluded: unsupported_ext)~~
 ```
 
-Read it as:
-- **mode** (workspace / range / commit) and the **from / to / commit / merge_base**
-  ref metadata, from the bullet list — this is what Step 3 builds git commands from
-- **Reviewable files** — the plain ` - ` bullets: path, status, insertions/deletions
-- **Excluded files** — the `~~`-struck bullets, each with its exclusion reason in
-  parentheses. These are out of scope; only the reviewable ones need accounting for.
+The plain ` - ` bullets are the reviewable files; the `~~`-struck ones are excluded, each
+with its reason in parentheses. Say in the report which path was taken — an old `ocr` is a
+fact about the run, not a detail to swallow.
 
 **Common invocations:**
 
 | Scenario | Command |
 |----------|---------|
-| Workspace changes | `ocr delegate preview` |
-| Branch comparison | `ocr delegate preview --from main --to feature` |
-| Single commit | `ocr delegate preview -c abc123` |
+| Workspace changes | `ocr delegate preview --format json` |
+| Branch comparison | `ocr delegate preview --format json --from main --to feature` |
+| Single commit | `ocr delegate preview --format json -c abc123` |
 
 ### Step 2: Get Rules for Files
 
 ```bash
-ocr delegate rule <path1> <path2> ...
+ocr delegate rule --format json <path1> <path2> ...
 ```
 
-Pass the reviewable file paths from Step 1. Output is grouped by rule content — files sharing the same rule appear under one group, avoiding repetition.
+Pass the reviewable file paths from Step 1. Output is `groups[]`, each with a `group_id`,
+`source`, `pattern`, the `files` it covers, and the `rule` text itself — files sharing a
+rule appear under one group, avoiding repetition. Same fallback as Step 1: without
+`--format`, the text output carries the same groups.
 
 ### Step 3: Get Diffs
 
@@ -108,8 +121,8 @@ cat <path>
 
 ### Step 4: Review Each File
 
-Create a checklist containing every reviewable file from Step 1 — the plain bullets,
-not the `~~`-struck excluded ones. For each:
+Create a checklist containing every `reviewable_files` entry from Step 1 — never an
+`excluded_files` one. For each:
 
 Use `(path, status)` as the checklist identity. Workspace mode can report the same path twice when a staged deletion is followed by an untracked recreation.
 
@@ -135,11 +148,12 @@ Each comment must follow this structure:
 
 ### Step 6: Classify and Report
 
-Before reporting, verify that every reviewable file from Step 1 is accounted for. Open
-the report with a coverage summary naming, in these words, **total files**, **reviewable
-files**, **reviewed files**, **skipped files** and **coverage rate** — the rate is over
-the reviewable set, not the total, since the excluded files were never in scope. A
-skipped file must include its reason.
+Before reporting, verify that every `reviewable_files` entry from Step 1 is accounted for.
+Open the report with a coverage summary naming, in these words, **total files**
+(`total_files`), **reviewable files** (`reviewable_count`), **reviewed files**, **skipped
+files** and **coverage rate** — the rate is reviewed ÷ `reviewable_count`, not ÷
+`total_files`, since the excluded files were never in scope. A skipped file must include
+its reason.
 
 Group findings by severity:
 
@@ -175,6 +189,7 @@ If the user requested "review and fix":
 | `--exclude <patterns>` | Comma-separated exclude patterns |
 | `-b, --background <text>` | Business context |
 | `-B, --background-file <path>` | Business context from Markdown file |
+| `-f, --format <text\|json>` | Output format; `json` for agent integrations. `sarif` is rejected by delegate mode |
 | `--max-git-procs <n>` | Max concurrent git subprocesses (default 16) |
 
 ## Gotchas
@@ -184,5 +199,6 @@ If the user requested "review and fix":
 - **Working directory matters** — `ocr delegate` operates on the Git repo at the current directory. Use `--repo /path` to override.
 - **Untracked files in workspace mode** — `preview` includes untracked files. For these, read the file directly instead of using `git diff`.
 - **Background context** — pass `--background` to `preview` when you have requirement context; it appears in the output for your reference during review.
-- **Coverage is mandatory** — every reviewable file must end as reviewed or explicitly skipped; do not silently omit files.
+- **Coverage is mandatory** — every `reviewable_files` entry must end as reviewed or explicitly skipped; do not silently omit files.
+- **`--format` is version-gated** — it reached `ocr delegate` in v1.9.3 (via the SARIF work) and did not exist in v1.8.10, where pinning it made every run through this skill exit on its first command and review nothing. That is why Step 1 states a fallback instead of assuming the flag. Check with `ocr --version` before blaming the diff.
 - **Markdown-only repos get an empty review** — OCR excludes `.md` as `unsupported_ext`, so a docs or skills repo can preview 26 files and offer 2. That is a real limit of the tool, not a clean bill of health: say so in the report rather than letting a high coverage rate over a tiny reviewable set imply the diff was covered.
