@@ -1,0 +1,31 @@
+RED is the verdict I wanted, so the mutation check is done. What happens to the source, the artifact
+and the server:
+
+1. **Revert the source exactly**, now and unconditionally: `git checkout -- <file>`, then
+   `diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch`. Real residue
+   is a hard stop — I never continue on a polluted tree. This half is not deferred by anything.
+
+2. **Mark the artifact stale** rather than rebuilding it here. `.output/` still holds the mutation;
+   the source no longer does. Whichever step next needs the server rebuilds first — checking the
+   marker, forcing the build, proving the restart with a fresh `MARK` and `SERVE_RESTART=1` — and
+   clears the marker. Nothing else changes.
+
+3. **Nothing needs the server**, as it happens: the clips are filmed and inspected and the hermetic
+   audit is clean, so Step 8 is next. Hygiene **stops** the preview server by its recorded PID and
+   deletes the marker. The stale artifact is disposed of rather than rebuilt.
+
+The old rule here was to rebuild and restart once more so that nothing downstream ran against
+deliberately broken software. That hazard is real and the marker closes it — every step that touches
+the server checks it — but paying the rebuild unconditionally means paying it for a downstream that
+usually does not exist. I do not rebuild on the spot, and I do not restart the preview.
+
+Why a marker rather than the reuse check: reuse is measured against HEAD plus the working-tree
+difference, and the revert restored the tree, so the check sees an unchanged fingerprint and would
+happily serve an artifact built from the mutation. That gap is exactly what the marker records.
+
+The completion report says so:
+
+```
+Preview server: stopped (port 41453, artifact stale — mutation reverted, not rebuilt)
+Mutation: RED (spec guards the change)
+```

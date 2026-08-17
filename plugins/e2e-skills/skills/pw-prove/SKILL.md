@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.21.0"
+  version: "0.22.0"
 ---
 
 # pw-prove
@@ -31,11 +31,11 @@ Step 3  Bring-up + Probe            (ONE live pass: merge base, three-phase brin
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
 Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + framing + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + clip-fidelity audit + e2e-reviewer skill quality gate)
-Step 7  Verify                       (tsc → proof run [video+trace via the committed proof config, PW_PROVE_CLIP=1] → look at one frame per clip → hermetic audit → mutation check)
+Step 7  Verify                       (tsc → audit run [traces, no clip] → hermetic audit → filming run [PW_PROVE_CLIP=1] → look at one frame per clip → mutation check)
 Step 8  Deliver                      (PR-mode: publish ONE chaptered recording → Clips · commit spec+POM+api.har · push · PR comment · report)
 ```
 
-**A PR-mode run ends at Step 8's completion report, or at a sanctioned stop, and nowhere else.** The completion report is structurally invalid without its `Proof page`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines — and a stop never emits those lines, so the two endings can never be confused. PR-mode has exactly **two** sanctioned stops — a base-merge conflict (Step 3) and the **handover stop** (Step 7, the verify loop exhausted); everything else resolves from the contract with a stated assumption.
+**A PR-mode run ends at Step 8's completion report, or at a sanctioned stop, and nowhere else.** The completion report is structurally invalid without its `Proof page`, `Mutation`, `Committed`, `Pushed`, and `PR comment` lines — and a stop never emits those lines, so the two endings can never be confused. PR-mode has exactly **two** sanctioned stops — a base-merge conflict (Step 3) and the **handover stop** (Step 7, the verify loop exhausted); everything else resolves from the contract with a stated assumption. The [context gate](#context-gate--a-heavy-session-is-refused-not-survived) is a third ending and a different kind: it refuses *before* the run begins, so there is no run to stop.
 
 **Stop reports (every mode).** A run that cannot legitimately produce coverage (flow absent, the proof target won't build or serve, auth wall with no discoverable credential) or cannot make its spec pass STOPs with a report — never a fabricated pass. In order:
 
@@ -48,7 +48,8 @@ Step 8  Deliver                      (PR-mode: publish ONE chaptered recording �
 
 **A stop still carries its `Profile:` line.** The Step-3 write already happened, and a stopped run is
 the one that learned the most expensive thing in the repository — saying what was recorded is how the
-next run inherits it instead of re-paying for it.
+next run inherits it instead of re-paying for it. The [context gate](#context-gate--a-heavy-session-is-refused-not-survived)
+refusal is the one exception: it fires before Step 3, so there is nothing to report.
 
 A stop never emits the Step 8 tail — nothing shipped. The [handover stop](#the-handover-stop--pr-modes-exit-when-the-loop-is-exhausted) delivers this same report as a **PR comment**, because a report that only reaches the transcript reaches nobody waiting on the PR.
 
@@ -56,9 +57,39 @@ A stop never emits the Step 8 tail — nothing shipped. The [handover stop](#the
 
 ## Step 1: Dispatch + Environment
 
+### Context gate — a heavy session is refused, not survived
+
+**The first thing Step 1 does, before the confirmation gate and before any environment work.**
+
+Read the context this session already carries. **Above 100k tokens, pw-prove refuses and names where
+to run instead.** A refusal is one message and no work: nothing is built, served, checked out,
+generated, committed or pushed.
+
+The threshold is written down because "heavy" is not assessable from inside a heavy session. It is
+where a traced run lost two instructions it had read — a foreground probe start whose rule sat in
+bold three lines above it, and an `ENV_CONTRACT` the repository's own profile warned against — both
+in the 200–250k band, in a run that opened at 196k because a calling skill chained into it.
+
+**Refuse with the six-beat stop report** from the Pipeline Overview, filled in like this:
+
+1. `pw-prove — REFUSED at the context gate: this session carries ~<measured>k tokens, and pw-prove needs under 100k.`
+2. The change or surface that was requested.
+3. Nothing was attempted — the gate runs before the mode dispatch.
+4. The measured size and the threshold, as numbers.
+5. No spec, no POM, nothing built, served, committed or pushed.
+6. The exact invocation to paste into a fresh session — `/e2e:pw-prove <the original argument>` — plus the working directory it needs.
+
+**This refusal has no `Profile:` line.** Every other stop carries one because Step 3's write already
+happened; this one precedes Step 3, so there is nothing to report.
+
+**A caller cannot spend this gate on the user's behalf.** A calling skill that already asked its own
+confirmation question has asked about *proceeding*, never about *where* — so the gate still fires,
+and it is a statement rather than a question. The one thing that continues the run is the **user**
+saying, in their own words, to run it in this session anyway; record that as an Assumptions line.
+
 ### Confirmation gate — model-invoked runs only
 
-**This is the first thing Step 1 does.** Nothing above it starts a process, writes a file, or
+**Runs immediately after the context gate.** Nothing before Mode starts a process, writes a file, or
 touches git — not the mode dispatch, not the environment facts.
 
 | How this run started | Gate |
@@ -99,8 +130,6 @@ Pick the mode from `$ARGUMENT` before anything else. It may name a **change to p
 | could be a route **or** a branch (ambiguous) | **ask** | one line: "PR-mode for `X`, or cover route `X`?" |
 
 The mode steers **Step 2** (what to derive), **Step 4** (notify-and-continue vs approval gate), and the tail (**Step 8** is the PR-mode deliverable); Steps 3 and 5–7 are identical in every mode. `gh` unavailable → PR-mode falls back to plain `git` for the diff and asks the user to paste the PR/ticket description; never stop over a missing `gh`.
-
-**Heavy session? Recommend a clean context first.** Invoked deep into an unrelated, long-running session, open by recommending a fresh session or a background agent — this pipeline does better with room. Continue inline if they decline or don't answer; never self-background or spawn an agent on your own.
 
 ### Environment facts
 
@@ -165,20 +194,51 @@ A fact that misses any part belongs in the completion report instead. **Cap the 
 at the cap, replace the weakest entry rather than appending, because a profile that grows without
 bound charges the next run the reading time it exists to save.
 
-**Shape: subject headings, prose beneath, one stamp per entry.**
+**Shape: a `KEY=value` header first, then subject headings with prose beneath and one stamp per entry.**
 
-```markdown
+~~~markdown
+# pw-prove runtime profile — <repo>
+
+```env
+ENV_CONTRACT=none
+BUILD_COMMAND=pnpm build
+SERVE_COMMAND=node .output/server/index.mjs
+BASE_URL_FORM=http://127.0.0.1:<port>
+```
+
 ## Auth
 The `/api/dev-login` rung the repo's own e2e helper drives sits behind `import.meta.dev` and is
 compiled out of the preview build; the UI login form is the only rung that works against the
 proof target.  — 2026-08-17 · a1b2c3d · Step 3
-```
+~~~
 
-The **heading is the merge key**, and it is the only structure the file has: a run that re-learns a
-subject rewrites that entry in place instead of stacking a near-duplicate beneath it. Headings are
-conventional rather than fixed — `Auth`, `Bring-up`, `Routing`, `Env`, `Data`, `Gotchas`. The stamp is
-`<date> · <sha7> · <step>`: what was true, when, and against which commit, so a reader can weigh an
-entry's age without asking git.
+**The header is pasted, the prose is read.** Every value in it is a string a later step substitutes
+into a command — `ENV_CONTRACT=none` goes onto the preflight invocation verbatim, and that is the
+whole point: a run that pastes a value cannot paraphrase it away. The measured failure this replaces
+is a profile that said, in plain English, not to pass `ENV_CONTRACT=.env.example`, cited by the run
+one turn after the run passed exactly that. Keep the header to values a command consumes; anything
+that needs a *because* belongs in the prose below it, where a later run can weigh the reasoning
+before overriding it.
+
+Header keys, and what each one substitutes into:
+
+| Key | Substituted into |
+|---|---|
+| `ENV_CONTRACT` | the Step-3 `config` phase — a path, or `none` when the app over-declares and the contract stops a run on keys it boots without |
+| `REQUIRED_ENV` | the same invocation, when only some declared keys are genuinely load-bearing |
+| `BUILD_COMMAND` | the Step-3 `build` phase and the mutation check's forced rebuild |
+| `SERVE_COMMAND` | the preview task Step 3 starts |
+| `BASE_URL_FORM` | the origin shape to expect from the serve poll (which loopback family the server binds) |
+
+The **heading is the merge key** for the prose, and the header is a single block with one merge key
+per line: a run that re-learns a subject rewrites that entry in place instead of stacking a
+near-duplicate beneath it. Headings are conventional rather than fixed — `Auth`, `Bring-up`,
+`Routing`, `Env`, `Data`, `Gotchas`. The stamp is `<date> · <sha7> · <step>`: what was true, when,
+and against which commit, so a reader can weigh an entry's age without asking git.
+
+**The header is advisory exactly like the prose.** A value Step 3 observes to be wrong is rewritten
+to the observation, and the run continues on the observation — the same rule, and the same
+`CONTRADICTED` Assumptions line.
 
 **A contradiction rewrites its entry.** When Step 3 observes otherwise, correct that entry to the
 observation and move its stamp to this run — then report the `CONTRADICTED` Assumptions line as
@@ -187,7 +247,9 @@ live pass to disprove the claim. A contradiction reported and not written back l
 rotting monotonically, and every later run re-pays the same tax to rediscover the same lie.
 
 **Record the shape of a credential, never its value** — "the seeded admin in `seed.ts`", never the
-address and password. The profile is prose you chose to write, and it lands in the repository.
+address and password. The profile lands in the repository, and **the header holds to the same rule
+under more pressure**: a `KEY=value` block is exactly the shape a real `.env` line has, so a key that
+would carry a secret is named in the prose instead and its value stays out of the file.
 
 **Staging.** In **PR-mode**, stage it by exact path with the Step-8 commit: `.pw-prove/` is excluded
 repo-locally and an exclude hides **untracked** files, so a first-ever `profile.md` is invisible to
@@ -334,7 +396,16 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
    **The build is reused while the commit and the working tree stand still.** A build costs 104–201s; paid once per proof it *is* the cost of the built target, paid once per batch it rounds to nothing — so a second run against the same pull request in the same worktree reports `BUILD=reused` and pays nothing. *Unchanged* means unchanged since the artifact was produced (HEAD plus the whole working-tree difference from it), so any edit — staged or not, tracked or not — rebuilds, and so does a tree dirtied since the build. The decision is always in the output: `BUILD_REUSE=hit|miss` with a `BUILD_REUSE_REASON` (`no-stamp`, `commit-changed`, `tree-changed-since-build`, `command-changed`, `output-missing`, `no-git`, `fingerprint-unavailable`, `forced`), so you can always see whether a build was paid. Force one with `BUILD_REUSE=never`; name `BUILD_OUTPUT=<dist|.output>` and a deleted artifact is rebuilt rather than served. Do **not** reach for the framework's own build cache instead — it was measured and reverted, because it helped only in the case this check already covers.
 
    **exit 4 — configuration**: the output names every missing key. Set them and re-run; never "fix" this by rebuilding. **exit 5 — build**: the build's own standard error is printed and the full log path given. That is a build failure, and it is fixed in the app, not in the port. Both fail in the time they take, not on a poll budget. `APP_ROOT` is the application root — where the build runs and where the app's own `.env`/`.env.example` are read, which matters in a monorepo whose app is a subdirectory. **`BUILD_COMMAND` is not optional**: the phase refuses without one rather than skipping, because a bring-up that quietly declines to build proves whatever server happens to be listening.
-3. **Start the preview server** as a harness-tracked background task (survives the turn, **log written to a file you can read**) — the project's own preview/start command against the built output, on the resolved `PORT`. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** (the build, the Step-7 proof run). Never start it from inside a script: a script-started server can bind a sibling worktree on the wrong branch. **You own what you start:** record the port, the log path and the task, and stop it in Step 8 hygiene. A server you started and left running holds a port on the user's machine indefinitely — a server that was *already* running is not yours and is never stopped.
+3. **Start the preview server** as a harness-tracked background task (survives the turn, **log written to a file you can read**) — the project's own preview/start command against the built output, on the resolved `PORT`. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** (the build, the Step-7 proof run). Never start it from inside a script: a script-started server can bind a sibling worktree on the wrong branch. **You own what you start:** record the port, the log path, the task **and the PID**, and stop it in Step 8 hygiene. A server you started and left running holds a port on the user's machine indefinitely — a server that was *already* running is not yours and is never stopped.
+
+   **Announce the PID in the same breath as the start**, by `exec`ing the serve command so the background shell *becomes* the server and `$$` is its real process id:
+
+   ```bash
+   # inside the background task: the pid line lands in the log, then exec replaces the shell.
+   echo "PWPROVE_PREVIEW_PID=$$"; exec <the project's preview/start command>
+   ```
+
+   That one line is what makes every later stop an exact operation: `kill <pid>`, then `kill -0 <pid>` to confirm it is gone. **Stop a server by the process id you recorded** — the alternative is a `pkill -f "<the serve command>"` whose pattern matches the command line of the shell running it, so the shell kills itself, the call returns non-zero, and a stop that in fact succeeded reads as a failure worth a follow-up turn. A traced run paid that turn four times.
 4. **Confirm it serves — and take the port and the address family from the server's own output, never from your guess.** The resolved `PORT` is a *request*: a framework that finds it taken shifts by itself and says so (`Unable to find an available port (tried 3000)... Using alternative port 3001` is a real observed line), and a server binds one loopback family while your guess dials the other. Both are announcements in the log, so pass it — `SERVER_LOG` is what makes this phase read rather than guess. The poll re-reads it every round (a server announces its port when *it* is ready), tries the announced port on every loopback form, and falls back to the port you asked for.
    ```bash
    BASE_URL="http://localhost:$PORT" SERVER_LOG="<the preview task's log>" \
@@ -402,10 +473,11 @@ The generated spec must **recreate its session from code** — no committed, han
 
 Reaching Step 4 in neither state is a **HARD STOP**. Source reading *without* a recorded exit-2 refusal is the skip this gate exists to catch. Never install a floated Playwright to force a probe open.
 
-**Start the probe with the harness's background-task mechanism** (`run_in_background: true`) — **never a trailing `&`** (a `&`-backgrounded probe dies with its shell). Set `RECORD_HAR` so the SAME recon pass records the `api.har` the deliverable spec replays:
+**`start` returns as soon as the daemon is listening** — it detaches the daemon itself and prints the socket path and the parameters it started with, so an ordinary foreground call is correct and costs nothing. (`run_in_background: true` is still the tidier invocation. It is no longer load-bearing: the three minutes a traced run lost to a blocking `start` are impossible now, which is why the rule moved into the script.) Set `RECORD_HAR` so the SAME recon pass records the `api.har` the deliverable spec replays:
 
 ```bash
-# start once (background task, app root). BASE_URL is the serve phase's `BASE_URL=` line — the
+# start once, from the app root; it returns when the daemon is listening. BASE_URL is the serve
+# phase's `BASE_URL=` line — the
 # origin that ANSWERED, which is not always the one you asked for. STORAGE_STATE seeds a session;
 # RECORD_HAR captures an
 # API-scoped HAR (HAR_URL_FILTER default **/api/**), SCRUBBED AT CAPTURE — the raw recording lands
@@ -438,7 +510,7 @@ Commands for the cases a batch runs into: `{"cmd":"wait","ms":6000}` (or `"selec
 
 The named map answers several questions in one call and is the reason to prefer it over three separate `eval`s; `fn` is the reserved key that selects the function form, and `arg` is passed to it and must be JSON-serialisable (it travels inside the expression, not as a page handle — a DOM node cannot be sent this way; select it inside `fn` instead). **Every value in a named map must be synchronous** — a promise nested inside the returned object serialises as `{}`; ask an async question through the string or `fn` form, which Playwright awaits. **Prefer the semantic verbs regardless** — `snapshot`, `network-summary` and `console` are compact and stable where a raw `eval` returns whatever the page happens to hold today.
 
-**A `send` with no daemon running starts one first** rather than failing: the ordering is the probe's problem, not the application's. The autostarted daemon inherits that command's environment, so if `RECORD_HAR`/`BASE_URL`/`STORAGE_STATE` matter, set them on the `send` too — its stderr names what it started with. Exit 2 there is still the browserless refusal; exit 3 now means only that a daemon could not be reached or started. **The storageState file holds a working bearer — write it only under a gitignored path.** The HAR needs no such care and no scrub step of your own: `probe.mjs` scrubs it on context close, so it is never unscrubbed on disk. Read the `probe: HAR written …` line — it reports the byte count and how many secrets were placeheld, and a `probe: REFUSED` line beneath it means residue survived and the recording must not be committed. **`probe: WARNING — RECORD_HAR was set but no HAR landed` is the third outcome**, and it is the one that reads like success if you do not look: the pass recorded nothing, so there is no recording for Step 5 to replay. It is never evidence the surface makes no API calls — the filter, the origin or the navigation missed, and that is what to say. Carry it forward as the stated deviation Step 5 requires.
+**A `send` with no daemon running starts one first** rather than failing: the ordering is the probe's problem, not the application's. The autostarted daemon inherits that command's environment, so if `RECORD_HAR`/`BASE_URL`/`STORAGE_STATE` matter, set them on the `send` too — its stderr names what it started with. Exit 2 there is still the browserless refusal; exit 3 now means only that a daemon could not be reached or started. **The storageState file holds a working bearer — write it only under a gitignored path.** The HAR needs no such care and no scrub step of your own: `probe.mjs` scrubs it on context close, so it is never unscrubbed on disk. **`close` answers with the HAR verdict** — the scrub happens during shutdown, and its lines come back over that same call, so the recording's fate is in front of you rather than in the detached daemon's log. Read the `probe: HAR written …` line — it reports the byte count and how many secrets were placeheld, and a `probe: REFUSED` line beneath it means residue survived and the recording must not be committed. **`probe: WARNING — RECORD_HAR was set but no HAR landed` is the third outcome**, and it is the one that reads like success if you do not look: the pass recorded nothing, so there is no recording for Step 5 to replay. It is never evidence the surface makes no API calls — the filter, the origin or the navigation missed, and that is what to say. Carry it forward as the stated deviation Step 5 requires.
 
 1. **Draft selectors from source + the probed live app.** Read the changed component(s) for roles/labels/testids; `snapshot` a big or gated page once through the probe (scope with `"selector"`). Borrow codegen's *draft-then-refine rhythm* — rough sequence first, then a lean POM — but never invoke `codegen` (it needs a human at the browser and reintroduces the throwaway-spec REPL).
 2. **Record the HAR + drive the mutation mock from `network-summary`.** After navigating/interacting through the probe, its aggregation lists the endpoints the surface calls — including proxy (`/api/request?cmd=`) and SSR calls source-reading misses, with observed query suffixes. The reads are captured in `api.har`; the one **mutation under assertion** gets a hand-written `route.fulfill` (per `code-rules.md` › Network Determinism).
@@ -656,7 +728,18 @@ Most recordings need nothing more: a credential that travelled only in headers a
 
 Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
 
-**2. Proof run — video + trace as byproducts, the project's own config untouched.** There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run.
+**2. Two runs of the same command: an audit run, then the filming run.** Both go through the committed proof config; the only difference is that the filming run sets `PW_PROVE_CLIP`/`PW_PROVE_W`/`PW_PROVE_H` and the audit run sets none of them.
+
+| Run | What it is for | What it costs |
+|---|---|---|
+| **Audit run** — no `PW_PROVE_CLIP` | Getting the spec green (the whole heal loop happens here), and producing the traces the [hermetic audit](#hermetic-audit-before-the-filming-run) classifies | Cheapest form of the run: `trace: 'on'` is in the config, so traces arrive regardless, and every dwell is skipped |
+| **Filming run** — `PW_PROVE_CLIP=1` | The clips that get delivered | The dwells, plus video encoding |
+
+**The audit comes first because a hermetic finding is a spec edit, and a spec edit invalidates footage.** Filming before auditing means every LIVE call found costs a re-film of clips already shot — an observed run paid exactly that, on three calls (socket.io polling and two Intercom POSTs) that were already sitting in the recon HAR seven minutes before it filmed against them. Auditing first makes the un-clipped run strictly cheaper than the footage it protects.
+
+**Seed the third-party block list at recon, so the first audit usually has nothing to say.** After the probe pass writes its HAR (Step 3), read the recorded entries for origins outside the fixture's `**/api/**` scope — analytics, chat widgets, websocket polling — and block them in the generated spec. **Seeding is an optimisation and never a verdict**: the audit still classifies every request and still fails on any LIVE call missing a `// CARVE-OUT:` line, so a block list that missed something produces exactly the failure it produces today.
+
+There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run.
 
 - **Present** (a previous run committed it) → use it as-is. Do **not** rewrite, re-derive or "refresh" it; a per-run diff on this file is the churn it exists to remove.
 - **Absent** → write it exactly as below — no substitutions, nothing per-run in it — and stage it in Step 8.
@@ -705,10 +788,20 @@ The **only** legitimate reason to edit an existing proof config is a structural 
 # evidence. A leftover webm from an earlier (or mutated) run published as proof is a lie.
 rm -rf test-results
 
-# Run the proof spec through the proof config. video records ONE webm per test (per AC);
-# trace:'on' leaves a per-test trace.zip for healing + the playwright-debugger handoff.
-# PW_PROVE_W/H carry the run's EFFECTIVE viewport — always pass them, never a fixed literal.
+# AUDIT RUN — no PW_PROVE_CLIP, so no dwell is paid. trace:'on' is in the config, so the traces the
+# hermetic audit reads arrive anyway. This is also the run the heal loop works against.
 # Concurrency is Playwright's to choose: override nothing and the scenarios run together — see below.
+npx --no-install playwright test <spec> --project=chromium \
+  --config <configDir>/playwright.proof.config.ts --reporter=html
+
+# ...green, then the hermetic audit (it reads the traces under test-results/) and any fix it forces...
+
+# Clear again before filming: the audit run's traces have served their purpose, and only the
+# filming run's webms may be standing here at publish time.
+rm -rf test-results
+
+# FILMING RUN — the clips that get delivered. video records ONE webm per test (per AC);
+# PW_PROVE_W/H carry the run's EFFECTIVE viewport — always pass them, never a fixed literal.
 PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
   npx --no-install playwright test <spec> --project=chromium \
   --config <configDir>/playwright.proof.config.ts --reporter=html
@@ -781,9 +874,26 @@ Plus two additions this stop alone carries, because the next agent inherits them
 
 A **flaky verdict** (passed only on retry) is not clean — diagnose once. If the nondeterminism is app-inherent (the app races its own state), remove the scenario on this evidence and report its AC as `unproven — gated: nondeterministic (<cause>)`.
 
+### Hermetic audit (on the audit run, before anything is filmed)
+
+The spec is hermetic by default. `hermetic.mjs` classifies the **audit run's** traces — do **not** hand-write a trace parser; that recurring detour cost one real run ~3 minutes of parsers that were thrown away the moment they printed:
+
+```bash
+node <skill-base>/scripts/hermetic.mjs test-results --spec <generated-spec-file>
+```
+
+It prints LIVE (the browser reached the network) / MOCKED (answered in-browser) / FAILED, plus the in-spec `route.fetch()` call sites — those leave the machine but *look* mocked in a trace, because a trace records the browser and not the Playwright process. **Always pass `--spec`**: without it that class is unchecked, and unchecked reads exactly like clean. Exit 2 means the run recorded no traces — re-run the audit run through the proof config.
+
+The verdict stays yours, matched against the spec's `// CARVE-OUT:` header:
+
+- Every live call (and every in-spec round-trip) named in a `// CARVE-OUT:` line → pass; the report's `Tests` line carries `hermetic (carve-outs: <list>)`.
+- **Any undeclared live call → the run FAILS**, even though green: mock it (or declare the carve-out if the real round-trip IS the AC) and re-run the audit run. An undeclared live *write* to a shared tenant is a data-pollution incident — say so in the report.
+
+**A clean audit is what licenses the filming run.** Fix here and the fix costs one cheap re-run; fix after filming and it costs the clips as well.
+
 ### Clip inspection — look at the frame before anyone else does
 
-The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So before the hermetic audit, extract one frame per clip at the moment of the hold and **read it**:
+The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So after the filming run, extract one frame per clip at the moment of the hold and **read it**:
 
 ```bash
 # One frame per clip, at duration − 0.5s — inside the payoff hold. Duration is probed with the
@@ -806,30 +916,16 @@ A clip you did not look at is reported as **uninspected**, which is the honest v
 |---|---|---|
 | Mid-transition, a spinner, the state not yet reached | **payoff not held** | The dwell is in the wrong place. Move it after that beat's own assertion — outside the race window, still `PW_PROVE_CLIP`-gated, still `// JUSTIFIED:`. |
 | The subject at the edge, cropped, or absent | **element off-frame** | The ungated `scrollIntoView({ block: 'center', inline: 'center' })` is missing, or it runs *before* a re-render that pushes the subject away — centre **at** the moment of the hold. |
+| A settled page with the payoff simply gone — a toast that dismissed itself | **payoff expired** | A beat ran between the assertion and the dwell, and the element auto-dismissed in the gap (~4s for most toast libraries). Move the dwell to sit *immediately* after that assertion — `code-rules.md` → Transient payoffs. |
 | A skeleton, a blank page, a loader | **never settled** | The spec held on a state it never reached. Assert the loaded state — the element the AC is about — *before* the dwell, so the hold cannot land on a loader. |
 
 The fix goes into the **committed spec** — never into the proof config, and never into a filming-only branch (the filming law: `PW_PROVE_CLIP` may only add time).
 
 1. Apply the matching fix.
 2. **Re-run the Step-6 clip-fidelity audit on the edited spec** (`clip-fidelity.mjs spec … --config … --verdict …`) — exit 0 before filming, exactly as the first time. An edit that moved the dwell can have dropped its marker.
-3. **Re-film once** — the same proof-run command, `rm -rf test-results` first — and re-extract the frames.
+3. **Re-film once** — the same filming-run command, `rm -rf test-results` first — and re-extract the frames.
 
 **Exactly one re-film.** A second illegible frame **publishes anyway**, with an explicit warning: `Clip N — illegible (<diagnosis>), published with warning`, in both the completion report and the PR comment. A bad clip is not a failed test; the proof is the passing test plus the mutation verdict.
-
-### Hermetic audit (after the passing run)
-
-The spec is hermetic by default. `hermetic.mjs` classifies the passing run's traces — do **not** hand-write a trace parser; that recurring detour cost one real run ~3 minutes of parsers that were thrown away the moment they printed:
-
-```bash
-node <skill-base>/scripts/hermetic.mjs test-results --spec <generated-spec-file>
-```
-
-It prints LIVE (the browser reached the network) / MOCKED (answered in-browser) / FAILED, plus the in-spec `route.fetch()` call sites — those leave the machine but *look* mocked in a trace, because a trace records the browser and not the Playwright process. **Always pass `--spec`**: without it that class is unchecked, and unchecked reads exactly like clean. Exit 2 means the run recorded no traces — re-run the proof through the proof config.
-
-The verdict stays yours, matched against the spec's `// CARVE-OUT:` header:
-
-- Every live call (and every in-spec round-trip) named in a `// CARVE-OUT:` line → pass; the report's `Tests` line carries `hermetic (carve-outs: <list>)`.
-- **Any undeclared live call → the run FAILS**, even though green: mock it (or declare the carve-out if the real round-trip IS the AC) and re-run. An undeclared live *write* to a shared tenant is a data-pollution incident — say so in the report.
 
 ### Mutation check (PR-mode: REQUIRED — hard-bounded)
 
@@ -853,7 +949,8 @@ Getting this wrong costs a full extra proof run to regenerate clips — and only
 MARK=$(wc -c < "<the preview task's log>")   # the restart mark, taken BEFORE you stop the server
 BUILD_REUSE=never BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
   node <skill-base>/scripts/preflight.mjs build
-# ...stop the preview server, start it again on the same port...
+# ...stop the preview server by its recorded PID (`kill <pid>`, then `kill -0 <pid>` to confirm),
+# start it again on the same port, and record the NEW pid the same way...
 SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
   SERVER_LOG="<the preview task's log>" node <skill-base>/scripts/preflight.mjs serve
 ```
@@ -868,7 +965,16 @@ SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
    - **Red** → the spec guards the change. Done.
    - **Green** → strengthen the terminal assertion and repeat **once**.
    - **Green again, behavior not isolable at the browser layer** (another layer independently preserves the outcome — e.g. a read-modify-write that re-reads and merges) → **"unguardable at this layer"**. Never a third cycle. State it in the report and PR comment, naming the masking layer.
-4. **Revert exactly** (`git checkout -- <file>`), then **rebuild and restart the preview once more, polling it the same way** (a fresh `MARK`, `SERVE_RESTART=1`) — this restart is the one whose staleness would poison every later step, and it is proven or it is not. Leaving the mutated artifact behind means every later step (a re-film, a heal run, the hermetic audit) runs against deliberately broken software.
+4. **Revert exactly** (`git checkout -- <file>`), then **mark the built artifact stale** — do not rebuild here. The revert is unconditional and immediate; the rebuild is **lazy**, and the marker is what makes laziness safe:
+
+   ```bash
+   git checkout -- <file>
+   printf 'mutation reverted, artifact still holds the mutation\n' > .pw-prove/artifact-stale
+   ```
+
+   **Any step that needs the server rebuilds first if the marker is set**, forcing the build and proving the restart exactly as above (a fresh `MARK`, `SERVE_RESTART=1`), then removes the marker. That closes the hazard the old unconditional rebuild guarded — a re-film, a heal run or an audit running against deliberately broken software — without asking this step to predict whether any of them is still coming. **Step 8 hygiene stops a stale server rather than rebuilding it**, which is the common case: a mutation check that is the run's last step now pays nothing. An observed run paid an 82-second rebuild at 13:24:33 for a server it stopped at 13:26:55.
+
+   The marker exists because the *artifact* is out of step with a tree that looks unchanged — precisely the case the build-reuse check cannot see, since reuse is measured against HEAD plus the working-tree difference and the revert restored the tree. Build reuse is otherwise unaffected on this path.
 5. **Verify the tree is unchanged** — process substitution on **both** sides so a trailing-newline artifact isn't mistaken for residue:
    ```bash
    diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch
@@ -956,7 +1062,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
 2. **Hygiene sweep** before staging:
    - Delete `test-results/`/`playwright-report/` litter (and `/tmp/pw-prove-mutation`), plus any legacy throwaway `.pw-prove.proof.config.*` left by an older run. **Keep `playwright.proof.config.ts`** — it is a deliverable, not litter; stage it when this run created it. Publish before deleting `test-results/`: the clips live there.
    - **Never delete the kept proof file** (`$KEPT`, i.e. `$TMPDIR/pw-prove-proof.webm`) when the publish came back undelivered. It is the only remaining copy of the evidence and the operator has been told to attach it — sweeping it away deletes the fallback moments after it was created. It is litter only once the run has published (`$PAGE` set) or a gate withheld it, and the script already removes it in the gate case.
-   - **Stop the preview server if this run started it** (Step 3), and say so in the report: `Preview server: stopped (port <N>)` — or `left running (pre-existing)` when it was already up. Keep it running only if the user asked.
+   - **Stop the preview server if this run started it** (Step 3) — `kill <the recorded PID>`, then `kill -0 <pid>` to observe it gone — and say so in the report: `Preview server: stopped (port <N>)` — or `left running (pre-existing)` when it was already up. Keep it running only if the user asked. A **stale** artifact needs no rebuild on the way out: stopping is the last thing that touches this server. Read `.pw-prove/artifact-stale` for the report's artifact state, then delete it — a marker outliving its run makes the next run's first build unconditional.
    - Revert codegen churn (`git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'` on Nuxt-style repos).
    - **Prove the HAR is clean — do not confirm it, run the refusal:**
 
@@ -985,7 +1091,7 @@ Generated:
 - <configDir>/playwright.proof.config.ts (new — first run in this repo only; omit the line when reused)
 
 ACs: <N proven> / <M total>          # list each `unproven — gated: <what>` and each `already covered: <test file>` explicitly
-Preview server: stopped (port <N>) | left running (pre-existing)
+Preview server: stopped (port <N>, artifact <fresh | stale — mutation reverted, not rebuilt>) | left running (pre-existing)
 Profile: .pw-prove/profile.md — written (N entries) | updated (N entries, M rewritten) | unchanged
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed · hermetic (carve-outs: none | <declared list>)
@@ -1004,6 +1110,7 @@ PR comment: <url>
 - `Proof page:` is either ONE share URL followed by its per-AC timestamp links, or `skipped — <the gate, the transport failure, or the unmet prerequisite>` **with the failing probe's or the publish log's output pasted directly beneath** (never from memory). A skip line with no output is a silent drop. N bare clip URLs and no recording is not a valid report.
 - A skip caused by **undelivered** transport (exit 0 with a kept file) carries a `Kept locally: <path>` line beneath it and says the file was attached by hand; a skip caused by a **gate** never names a local file, because none is offered.
 - `Mutation:` is `RED` or `unguardable at <layer>` — never absent in PR-mode.
+- `Preview server:` names the **artifact state** as well as the port. `stale` says the mutation check's revert left the build holding the mutation and no later step needed the server, so nothing rebuilt it — the source on disk is the source under proof, and the next run rebuilds by its own reuse check. A reader who cannot tell whether the artifact matches the source has to rebuild to find out.
 - `Profile:` has **no skip form**. `unchanged` is a real outcome and says the run learned nothing durable; a run that rewrote an entry names how many, so a reader can see the profile being corrected rather than merely grown. In target and coverage-gap mode the same line names the path and adds `(untracked)`.
 - `Clips:` states what each extracted frame SHOWED, in your own words — that is the whole point of looking. A clip that was re-filmed says so; a clip still illegible after the one re-film says `illegible (<diagnosis>), published with warning`; a clip nothing could extract says `uninspected`. Never write a description of a frame you did not open.
 - `Committed / Pushed / PR comment` have **no skip form**: if the tail cannot complete (push rejected, `gh` unauthenticated), report the blocking error and the exact failing command output *instead of* a Complete report.

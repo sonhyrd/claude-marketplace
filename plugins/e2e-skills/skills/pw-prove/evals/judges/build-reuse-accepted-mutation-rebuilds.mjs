@@ -6,9 +6,13 @@
 // a skipped or failed build, and forcing a rebuild to feel safe is waste. At Step 7 the mutation MUST
 // rebuild (BUILD_REUSE=never) and restart the preview, because the proof target is a build and a
 // mutated source file changes nothing in the standing artifact: a mutation run against the un-rebuilt
-// artifact is green by construction, which is a false RED-less result. Revert, then rebuild and restart
-// once more so nothing downstream runs against deliberately broken software. Mutation artifacts stay
-// out of test-results/ via --output=/tmp/pw-prove-mutation.
+// artifact is green by construction, which is a false RED-less result. Mutation artifacts stay out of
+// test-results/ via --output=/tmp/pw-prove-mutation.
+//
+// The POST-revert rebuild is deliberately NOT asserted here: #98 made it lazy (revert, mark the
+// artifact stale, rebuild only when a later step needs the server — docs/adr/0020), and that rule is
+// guarded by case-62 rather than folded in here. This judge's scope is the reuse verdict and the
+// mutation's own forced rebuild, both unchanged.
 // This closes the Step-7 mutation artifact-isolation gap REGISTRY.md names case-52 as the candidate for.
 //
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
