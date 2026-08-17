@@ -1,0 +1,21 @@
+id: case-59-serialise-once-to-diagnose
+shape: behavior
+step: 'Step 7 › Verify — serialise once as a diagnostic (ADR 0017)'
+title: 'A whole-run timeout signature is diagnosed by one serialised re-run of the same spec'
+description: Should treat 'every test times out at its first navigation' as a whole-run signature rather than a spec defect, confirm the origin is alive with a quick curl, and re-run the SAME spec unchanged with `--workers=1` — as a DIAGNOSTIC that separates a concurrency problem from a spec problem, not as the mandated setting it used to be (docs/adr/0017 retired that). Should state that against a built preview this signature has no known cause — the preview compiles nothing and was measured not to saturate — so if the serialised run passes, that is a finding to report with its evidence, not a box ticked on the way to green. Must NOT heal locators, raise the test timeout, add waits, or count this as one of the 3 auto-fix attempts against the spec.
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. You are in Step 7 of a pw-prove
+        PR-mode run against the built proof target (the app''s own build, served by its preview server
+        on a port you allocated). The project''s playwright.config.ts has `workers: process.env.CI ? 1
+        : undefined`, so your proof run took Playwright''s default. After 6 minutes ALL FIVE scenarios
+        failed with `page.goto: Test timeout of 120000ms exceeded` at the first navigation of each test.
+        Diagnose and state your next command.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/serialise-once-to-diagnose.mjs
+    timeout_seconds: 30
+derived_from_prompt: 4ac0aaf9554f

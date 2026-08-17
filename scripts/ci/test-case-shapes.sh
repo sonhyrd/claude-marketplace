@@ -285,6 +285,25 @@ for cid, (path, case) in sorted(cases.items()):
             f'assertions against the new prompt, then stamp {digest(case)}')
 report_all(f'every case\'s judge was derived from the prompt it now carries ({len(cases)} case file(s))', stale)
 
+# 10. A case names the section it guards, in the case file.
+#     REGISTRY.md's section column was the only record of which part of SKILL.md a case is a guard
+#     for, so a body edit's blast radius was a lookup in a file nothing reads and CI never opens.
+#     `step:` puts it beside the prompt. It is deliberately a free string and not a fixed
+#     vocabulary: what a case guards is `Step 3 › Bring the environment up` for most, and
+#     `code-rules.md § Clip Fidelity`, `Pipeline Overview › Stop reports` or `frontmatter
+#     description:` for the rest, and an enum would either exclude those or be re-derived every
+#     time a step is renamed.
+#
+#     Like check 9, this checks the OCCASION and not the truth: it cannot tell a `step:` that still
+#     describes the case from one that went stale under a section rename. It only makes the field
+#     impossible to omit.
+stepless = []
+for cid, (path, case) in sorted(cases.items()):
+    step = case.get('step')
+    if not isinstance(step, str) or not step.strip():
+        stepless.append(f'{path.name}: no step: — name the SKILL.md section this case guards')
+report_all('every case names the section it guards', stepless)
+
 for status, text in verdicts:
     print(f'{status} {text}')
 PY
@@ -339,6 +358,7 @@ YAML
     cat > "$root/cases/only.yaml" <<YAML
 id: only
 title: only
+step: only
 shape: $shape
 input:
     prompt: >-
@@ -419,6 +439,17 @@ YAML
     bad "a case whose prompt moved: could not build the fixture suite"
   fi
 
+  # --- the section a case guards ---
+  # The field exists so a body edit's blast radius is readable from the case file. A case that omits
+  # it puts that back in REGISTRY.md, where nothing reads it.
+  stepless_root="$(broken_root stepless behavior 'Load the `pw-prove` skill with the Skill tool and follow it. Step 5.')"
+  if [ -n "$stepless_root" ]; then
+    sed -i '/^step:/d' "$stepless_root/cases/only.yaml"
+    expect_red "a case that does not name the section it guards" "$stepless_root" 'name the SKILL.md section'
+  else
+    bad "a case with no step: could not build the fixture suite"
+  fi
+
   # And a suite with no cases at all must never read as success.
   mkdir -p "$W/empty/cases"
   expect_red "an empty cases directory" "$W/empty" 'pass vacuously'
@@ -430,6 +461,7 @@ YAML
     "$(broken_case_root selfref <<'YAML'
 id: only
 title: only
+step: only
 shape: behavior
 input:
     prompt: >-
@@ -450,6 +482,7 @@ YAML
     "$(broken_case_root pathvalue <<'YAML'
 id: only
 title: only
+step: only
 shape: behavior
 input:
     prompt: >-
@@ -466,6 +499,7 @@ YAML
     "$(broken_case_root nofixture <<'YAML'
 id: only
 title: only
+step: only
 shape: behavior
 input:
     prompt: >-
@@ -481,6 +515,7 @@ YAML
     "$(broken_case_root unstaged <<'YAML'
 id: only
 title: only
+step: only
 shape: behavior
 input:
     prompt: >-
@@ -498,6 +533,7 @@ YAML
   green_root="$(broken_case_root inlinecontent <<'YAML'
 id: only
 title: only
+step: only
 shape: behavior
 input:
     prompt: >-
@@ -526,6 +562,7 @@ YAML
   green_root2="$(broken_case_root staged/evals <<'YAML'
 id: only
 title: only
+step: only
 shape: behavior
 input:
     prompt: >-

@@ -29,67 +29,67 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 
 | Case | Judge | Status | Assertions | Recovered title |
 | --- | --- | --- | ---: | --- |
-| [`case-1.yaml`](cases/case-1.yaml) | `script` | **quarantined #63** | 14 | Coverage gap analysis with POM project |
-| [`case-2.yaml`](cases/case-2.yaml) | `script` | **quarantined #63** | 12 | Test generation plan for /checkout with POM |
-| [`case-3.yaml`](cases/case-3.yaml) | `script` | **quarantined #63** | 13 | Flat-sibling repo — scaffold a POM anyway (POM is always the default) |
-| [`case-4.yaml`](cases/case-4.yaml) | `agent_judge` | dormant | 7 | Exploration auth/seed gate: stop and ask when credentials are missing |
-| [`case-5.yaml`](cases/case-5.yaml) | `agent_judge` | dormant | 5 | PR-mode proof link: a skip must show the failing probe (no silent drop) |
-| [`case-7.yaml`](cases/case-7.yaml) | `agent_judge` | dormant | 4 | Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate |
-| [`case-8.yaml`](cases/case-8.yaml) | `agent_judge` | dormant | 5 | Step 8 lands the proof: the report is structurally invalid without the tail lines |
+| [`case-1-coverage-request-triggers.yaml`](cases/case-1-coverage-request-triggers.yaml) | `script` | **quarantined #63** | 14 | Coverage gap analysis with POM project |
+| [`case-2-test-plan-request-triggers.yaml`](cases/case-2-test-plan-request-triggers.yaml) | `script` | **quarantined #63** | 12 | Test generation plan for /checkout with POM |
+| [`case-3-flat-spec-coverage-triggers.yaml`](cases/case-3-flat-spec-coverage-triggers.yaml) | `script` | **quarantined #63** | 13 | Flat-sibling repo — scaffold a POM anyway (POM is always the default) |
+| [`case-4-auth-ladder-exhausted-stops.yaml`](cases/case-4-auth-ladder-exhausted-stops.yaml) | `agent_judge` | dormant | 7 | Exploration auth/seed gate: stop and ask when credentials are missing |
+| [`case-5-publish-skip-accounted.yaml`](cases/case-5-publish-skip-accounted.yaml) | `agent_judge` | dormant | 5 | PR-mode proof link: a skip must show the failing probe (no silent drop) |
+| [`case-7-plan-notify-and-continue.yaml`](cases/case-7-plan-notify-and-continue.yaml) | `agent_judge` | dormant | 4 | Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate |
+| [`case-8-step8-tail-complete.yaml`](cases/case-8-step8-tail-complete.yaml) | `agent_judge` | dormant | 5 | Step 8 lands the proof: the report is structurally invalid without the tail lines |
 | `case-9.yaml` (deleted) | `agent_judge` | **retired #64** | 4 | Hermetic audit: undeclared live call fails the run; a declared carve-out passes |
-| [`case-11.yaml`](cases/case-11.yaml) | `agent_judge` | dormant | 8 | Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep |
-| [`case-12.yaml`](cases/case-12.yaml) | `agent_judge` | dormant | 8 | Legible stop report: bring-up failure names verbatim evidence and produces nothing |
+| [`case-11-greenfield-bootstrap-pinned.yaml`](cases/case-11-greenfield-bootstrap-pinned.yaml) | `agent_judge` | dormant | 8 | Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep |
+| [`case-12-bringup-stop-report.yaml`](cases/case-12-bringup-stop-report.yaml) | `agent_judge` | dormant | 8 | Legible stop report: bring-up failure names verbatim evidence and produces nothing |
 | `case-13.yaml` (deleted) | `agent_judge` | **retired #64** | 6 | Server-set login cookie: obtain it via API-login, do not hand-author the cookie value |
-| [`case-15.yaml`](cases/case-15.yaml) | `script` | **active #63** | 6 | Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden |
-| [`case-16.yaml`](cases/case-16.yaml) | `agent_judge` | dormant | 4 | POM inventory + extend-existing-POM on route match (duplicate needs stated justification) |
+| [`case-15-no-throwaway-recon-spec.yaml`](cases/case-15-no-throwaway-recon-spec.yaml) | `script` | **active #63** | 6 | Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden |
+| [`case-16-pom-extend-not-duplicate.yaml`](cases/case-16-pom-extend-not-duplicate.yaml) | `agent_judge` | dormant | 4 | POM inventory + extend-existing-POM on route match (duplicate needs stated justification) |
 | `case-17.yaml` (deleted) | `script` | **retired #78** | 3 | PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header |
 | `case-19.yaml` (deleted) | `agent_judge` | **retired #64** | 3 | Token diet in the fix loop: no inter-tool narration, spec written once — audit trail unaffected |
-| [`case-20.yaml`](cases/case-20.yaml) | `agent_judge` | dormant | 3 | A heavy context earns a fresh-session recommendation, never an auto-background |
+| [`case-20-fresh-context-recommended-once.yaml`](cases/case-20-fresh-context-recommended-once.yaml) | `agent_judge` | dormant | 3 | A heavy context earns a fresh-session recommendation, never an auto-background |
 | `case-21.yaml` (deleted) | `agent_judge` | **retired #64** | 16 | Clip fidelity: the full bundle (size, held payoff, framing) on a project that declares no viewport |
-| [`case-22.yaml`](cases/case-22.yaml) | `agent_judge` | dormant | 9 | Clip fidelity guard: respect a deliberate project viewport |
-| [`case-23.yaml`](cases/case-23.yaml) | `agent_judge` | dormant | 7 | Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport |
-| [`case-24.yaml`](cases/case-24.yaml) | `agent_judge` | dormant | 7 | Proof config is reused, not rewritten, when the repo already has one |
+| [`case-22-viewport-deliberate-respected.yaml`](cases/case-22-viewport-deliberate-respected.yaml) | `agent_judge` | dormant | 9 | Clip fidelity guard: respect a deliberate project viewport |
+| [`case-23-viewport-descriptor-pinned.yaml`](cases/case-23-viewport-descriptor-pinned.yaml) | `agent_judge` | dormant | 7 | Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport |
+| [`case-24-proof-config-reused.yaml`](cases/case-24-proof-config-reused.yaml) | `agent_judge` | dormant | 7 | Proof config is reused, not rewritten, when the repo already has one |
 | `case-25.yaml` (deleted) | `agent_judge` | **retired #64** | 9 | Step 8 delivers ONE chaptered Clips recording, not N bare clip links |
 | `case-26.yaml` (deleted) | `agent_judge` | **retired #63** | 5 | Every scenario times out on its first navigation — a saturated dev server, not a broken spec |
 | `case-27.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | The mutation check must not overwrite the proof clips |
-| [`case-28.yaml`](cases/case-28.yaml) | `script` | **quarantined #63** | 6 | Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser |
-| [`case-29.yaml`](cases/case-29.yaml) | `agent_judge` | dormant | 6 | An AC already proven by the diff's own unit tests is folded, not silently dropped |
-| [`case-30.yaml`](cases/case-30.yaml) | `script` | **quarantined #63** | 7 | Publish URL is read from the PWPROVE_URL marker, not stdout line 1 |
+| [`case-28-hermetic-audit-not-hand-parsed.yaml`](cases/case-28-hermetic-audit-not-hand-parsed.yaml) | `script` | **quarantined #63** | 6 | Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser |
+| [`case-29-unit-proven-acs-folded.yaml`](cases/case-29-unit-proven-acs-folded.yaml) | `agent_judge` | dormant | 6 | An AC already proven by the diff's own unit tests is folded, not silently dropped |
+| [`case-30-publish-url-from-marker.yaml`](cases/case-30-publish-url-from-marker.yaml) | `script` | **quarantined #63** | 7 | Publish URL is read from the PWPROVE_URL marker, not stdout line 1 |
 | `case-31.yaml` (deleted) | `agent_judge` | **retired #64** | 5 | The runner's origin is proven reachable before the proof run, not inferred from a healthy localhost |
 | `case-32.yaml` (deleted) | `agent_judge` | **retired #64** | 5 | A webServer timeout with zero tests run is diagnosed as an unreachable origin, not a slow or broken spec |
-| [`case-33.yaml`](cases/case-33.yaml) | `script` | **active #65** | 5 | A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks |
-| [`case-34.yaml`](cases/case-34.yaml) | `script` | **active #65** | 10 | The filming law: a legible clip is bought with time only, never with a different input path |
-| [`case-35.yaml`](cases/case-35.yaml) | `script` | **active #65** | 6 | Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader |
-| [`case-36.yaml`](cases/case-36.yaml) | `script` | **active #65** | 7 | A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin |
-| [`case-37.yaml`](cases/case-37.yaml) | `script` | **active #65** | 7 | Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film |
-| [`case-38.yaml`](cases/case-38.yaml) | `script` | **active #65** | 5 | Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip |
+| [`case-33-missing-har-declared.yaml`](cases/case-33-missing-har-declared.yaml) | `script` | **active #65** | 5 | A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks |
+| [`case-34-clip-adds-time-not-input.yaml`](cases/case-34-clip-adds-time-not-input.yaml) | `script` | **active #65** | 10 | The filming law: a legible clip is bought with time only, never with a different input path |
+| [`case-35-clip-audit-blocks-step7.yaml`](cases/case-35-clip-audit-blocks-step7.yaml) | `script` | **active #65** | 6 | Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader |
+| [`case-36-clip-audit-respects-deliberate.yaml`](cases/case-36-clip-audit-respects-deliberate.yaml) | `script` | **active #65** | 7 | A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin |
+| [`case-37-illegible-clip-refilmed-once.yaml`](cases/case-37-illegible-clip-refilmed-once.yaml) | `script` | **active #65** | 7 | Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film |
+| [`case-38-frames-skip-is-not-a-failure.yaml`](cases/case-38-frames-skip-is-not-a-failure.yaml) | `script` | **active #65** | 5 | Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip |
 | `case-39.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | Step 6 exit 2 on a dwell hoisted into a helper — inline it, do not conclude there is none |
 | `case-40.yaml` (deleted) | `agent_judge` | **retired #63** | 4 | A dwell wrapped across two lines already satisfies Step 6 — do not reformat it to appease the audit |
-| [`case-41.yaml`](cases/case-41.yaml) | `script` | **quarantined #65** | 4 | Step 8 runs the residue refusal — it does not confirm the HAR by eye |
-| [`case-42.yaml`](cases/case-42.yaml) | `script` | **quarantined #65** | 4 | The recon HAR is already scrubbed at capture — do not hand-roll a second scrub |
-| [`case-43.yaml`](cases/case-43.yaml) | `script` | **quarantined #63** | 4 | Every read aborting in Step 7 is an unbound HAR, not a short recording |
-| [`case-44.yaml`](cases/case-44.yaml) | `script` | **quarantined #63** | 6 | A missing configuration key is a configuration failure, named in seconds — not a slow server |
-| [`case-45.yaml`](cases/case-45.yaml) | `script` | **active #65** | 6 | The committed proof config must not inherit the project's development webServer |
-| [`case-46.yaml`](cases/case-46.yaml) | `script` | **active #65** | 7 | Two attempts with the same failure signature take the handover stop, not a third try |
-| [`case-47.yaml`](cases/case-47.yaml) | `script` | **quarantined #65** | 5 | Genuinely different failures are a converging run — spend the full budget of three |
-| [`case-48.yaml`](cases/case-48.yaml) | `script` | **quarantined #63** | 9 | A dev-guarded session bootstrap does not exist in the built target — descend the ladder |
+| [`case-41-har-residue-refusal.yaml`](cases/case-41-har-residue-refusal.yaml) | `script` | **quarantined #65** | 4 | Step 8 runs the residue refusal — it does not confirm the HAR by eye |
+| [`case-42-capture-time-scrub-trusted.yaml`](cases/case-42-capture-time-scrub-trusted.yaml) | `script` | **quarantined #65** | 4 | The recon HAR is already scrubbed at capture — do not hand-roll a second scrub |
+| [`case-43-har-bound-not-rerecorded.yaml`](cases/case-43-har-bound-not-rerecorded.yaml) | `script` | **quarantined #63** | 4 | Every read aborting in Step 7 is an unbound HAR, not a short recording |
+| [`case-44-config-exit-names-the-key.yaml`](cases/case-44-config-exit-names-the-key.yaml) | `script` | **quarantined #63** | 6 | A missing configuration key is a configuration failure, named in seconds — not a slow server |
+| [`case-45-proof-config-drops-webserver.yaml`](cases/case-45-proof-config-drops-webserver.yaml) | `script` | **active #65** | 6 | The committed proof config must not inherit the project's development webServer |
+| [`case-46-same-signature-takes-handover.yaml`](cases/case-46-same-signature-takes-handover.yaml) | `script` | **active #65** | 7 | Two attempts with the same failure signature take the handover stop, not a third try |
+| [`case-47-changed-signature-spends-budget.yaml`](cases/case-47-changed-signature-spends-budget.yaml) | `script` | **quarantined #65** | 5 | Genuinely different failures are a converging run — spend the full budget of three |
+| [`case-48-dev-guarded-rung-skipped.yaml`](cases/case-48-dev-guarded-rung-skipped.yaml) | `script` | **quarantined #63** | 9 | A dev-guarded session bootstrap does not exist in the built target — descend the ladder |
 | `case-49.yaml` (deleted) | `agent_judge` | **retired #63** | 6 | An unestablished session fails loudly in seconds, not at a sixty-second timeout |
-| [`case-50.yaml`](cases/case-50.yaml) | `script` | **active #63** | 7 | The server announced a shifted port — poll what it said, not what you asked for |
+| [`case-50-announced-port-adopted.yaml`](cases/case-50-announced-port-adopted.yaml) | `script` | **active #63** | 7 | The server announced a shifted port — poll what it said, not what you asked for |
 | `case-51.yaml` (deleted) | `script` | **retired #65** | 6 | A server whose log names no origin is not a port mismatch |
-| [`case-52.yaml`](cases/case-52.yaml) | `script` | **active #65** | 6 | A batch pays for one build, and the mutation check pays for its own |
-| [`case-53.yaml`](cases/case-53.yaml) | `script` | **quarantined #65** | 6 | The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure |
-| [`case-54.yaml`](cases/case-54.yaml) | `script` | **quarantined #65** | 7 | A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3 |
-| [`case-55.yaml`](cases/case-55.yaml) | `script` | **quarantined #65** | 7 | A mutation-check restart that cannot be proven has no verdict to read |
-| [`case-56.yaml`](cases/case-56.yaml) | `script` | **quarantined #65** | 6 | A proven restart is proven — do not re-litigate a fast one |
-| [`case-57.yaml`](cases/case-57.yaml) | `script` | **active #65** | 5 | A probe question that needs an argument uses the {fn, arg} form, and its answer is the value |
-| [`case-58.yaml`](cases/case-58.yaml) | `script` | **quarantined #65** | 5 | The eval argument carries data, not a page handle |
-| [`case-59.yaml`](cases/case-59.yaml) | `script` | **quarantined #65** | 6 | Every scenario times out on its first navigation — serialise once to diagnose, then report the finding |
-| [`case-60.yaml`](cases/case-60.yaml) | `script` | **active #63** | 5 | The proof run names no worker count |
-| [`case-61.yaml`](cases/case-61.yaml) | `script` | **quarantined #65** | 5 | Scenarios that contend over one shared record serialise in the spec, not on the command line |
+| [`case-52-build-reuse-mutation-rebuilds.yaml`](cases/case-52-build-reuse-mutation-rebuilds.yaml) | `script` | **active #65** | 6 | A batch pays for one build, and the mutation check pays for its own |
+| [`case-53-probe-vocabulary-one-batch.yaml`](cases/case-53-probe-vocabulary-one-batch.yaml) | `script` | **quarantined #65** | 6 | The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure |
+| [`case-54-overscrub-is-rerecorded.yaml`](cases/case-54-overscrub-is-rerecorded.yaml) | `script` | **quarantined #65** | 7 | A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3 |
+| [`case-55-unproven-restart-no-verdict.yaml`](cases/case-55-unproven-restart-no-verdict.yaml) | `script` | **quarantined #65** | 7 | A mutation-check restart that cannot be proven has no verdict to read |
+| [`case-56-proven-restart-is-the-red.yaml`](cases/case-56-proven-restart-is-the-red.yaml) | `script` | **quarantined #65** | 6 | A proven restart is proven — do not re-litigate a fast one |
+| [`case-57-eval-expression-evaluated.yaml`](cases/case-57-eval-expression-evaluated.yaml) | `script` | **active #65** | 5 | A probe question that needs an argument uses the {fn, arg} form, and its answer is the value |
+| [`case-58-eval-arg-carries-data.yaml`](cases/case-58-eval-arg-carries-data.yaml) | `script` | **quarantined #65** | 5 | The eval argument carries data, not a page handle |
+| [`case-59-serialise-once-to-diagnose.yaml`](cases/case-59-serialise-once-to-diagnose.yaml) | `script` | **quarantined #65** | 6 | Every scenario times out on its first navigation — serialise once to diagnose, then report the finding |
+| [`case-60-no-workers-in-command.yaml`](cases/case-60-no-workers-in-command.yaml) | `script` | **active #63** | 5 | The proof run names no worker count |
+| [`case-61-serial-in-the-spec.yaml`](cases/case-61-serial-in-the-spec.yaml) | `script` | **quarantined #65** | 5 | Scenarios that contend over one shared record serialise in the spec, not on the command line |
 
 ## Per-case detail
 
-### `case-1.yaml` — Coverage gap analysis with POM project
+### `case-1-coverage-request-triggers.yaml` — Coverage gap analysis with POM project
 
 Legacy id `1` · judge `agent_judge` · dormant · 14 assertions.
 
@@ -118,7 +118,7 @@ Dropped assertions:
 - Does not hallucinate routes not in src/routes.ts
 - Lists at least 4 uncovered routes
 
-### `case-2.yaml` — Test generation plan for /checkout with POM
+### `case-2-test-plan-request-triggers.yaml` — Test generation plan for /checkout with POM
 
 Legacy id `2` · judge `agent_judge` · dormant · 12 assertions.
 
@@ -145,7 +145,7 @@ Dropped assertions:
 - Scenario format includes Given/When/Then or equivalent structure
 - Does not hallucinate UI elements not inferable from routes
 
-### `case-3.yaml` — Flat-sibling repo — scaffold a POM anyway (POM is always the default)
+### `case-3-flat-spec-coverage-triggers.yaml` — Flat-sibling repo — scaffold a POM anyway (POM is always the default)
 
 Legacy id `3` · judge `agent_judge` · dormant · 13 assertions.
 
@@ -171,7 +171,7 @@ Dropped assertions:
 - Detects Next.js App Router structure (src/app/)
 - Does not hallucinate pages not present in project files
 
-### `case-4.yaml` — Exploration auth/seed gate: stop and ask when credentials are missing
+### `case-4-auth-ladder-exhausted-stops.yaml` — Exploration auth/seed gate: stop and ask when credentials are missing
 
 Legacy id `4` · judge `agent_judge` · dormant · 7 assertions.
 
@@ -193,7 +193,7 @@ Dropped assertions:
 - False-positive guard: does NOT stop-and-ask for the public /login route — tests/auth.spec.ts reaches it via loginPage.open() with no prior session, so no credentials are required to explore it
 - Does not hallucinate auth mechanisms (storageState files, setup projects) not present in the fixture
 
-### `case-5.yaml` — PR-mode proof link: a skip must show the failing probe (no silent drop)
+### `case-5-publish-skip-accounted.yaml` — PR-mode proof link: a skip must show the failing probe (no silent drop)
 
 Legacy id `5` · judge `agent_judge` · dormant · 5 assertions.
 
@@ -205,7 +205,7 @@ Dropped assertions:
 - False-positive guard: does not fail or abort the run over the undelivered proof link -- the passing tests and the mutation verdict are still reported and the run closes normally
 - Attributes the skip to the refused publish credential (ffmpeg is installed), not to missing video tooling
 
-### `case-7.yaml` — Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate
+### `case-7-plan-notify-and-continue.yaml` — Step 4 PR-mode is notify-and-continue; coverage-gap keeps the approval gate
 
 Legacy id `7` · judge `agent_judge` · dormant · 4 assertions.
 
@@ -216,7 +216,7 @@ Dropped assertions:
 - The plan includes an Assumptions block naming the contract-resolved decisions
 - False-positive guard: in coverage-gap mode it still STOPS at the approval gate and writes no code until explicit approval — notify-and-continue does not leak into coverage-gap mode
 
-### `case-8.yaml` — Step 8 lands the proof: the report is structurally invalid without the tail lines
+### `case-8-step8-tail-complete.yaml` — Step 8 lands the proof: the report is structurally invalid without the tail lines
 
 Legacy id `8` · judge `agent_judge` · dormant · 5 assertions.
 
@@ -239,7 +239,7 @@ Dropped assertions:
 - False-positive guard: does NOT fail Run B — a declared, read-only carve-out is sanctioned and the run proceeds
 - Carries the verdict into the report's Tests line as hermetic (carve-outs: none | <list>)
 
-### `case-11.yaml` — Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep
+### `case-11-greenfield-bootstrap-pinned.yaml` — Greenfield project (no Playwright) — Step 5b bootstraps the runner as a pinned dep
 
 Legacy id `11` · judge `agent_judge` · dormant · 8 assertions.
 
@@ -254,7 +254,7 @@ Dropped assertions:
 - False-positive guard: does NOT npx-float or reinstall a different Playwright version; after the pinned install, later steps still use --no-install
 - Sequences the bootstrap before Step 6 (e2e-reviewer) and Step 7 (test run), which cannot run without a runner
 
-### `case-12.yaml` — Legible stop report: bring-up failure names verbatim evidence and produces nothing
+### `case-12-bringup-stop-report.yaml` — Legible stop report: bring-up failure names verbatim evidence and produces nothing
 
 Legacy id `12` · judge `agent_judge` · dormant · 8 assertions.
 
@@ -282,7 +282,7 @@ Dropped assertions:
 - Recreates the session from code (no committed session file), consistent with the auth rules
 - Reserves hand-seeding a static literal for a documented static dev flag with no login path
 
-### `case-15.yaml` — Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden
+### `case-15-no-throwaway-recon-spec.yaml` — Step 3 recon is probe-first: batched questions through one persistent browser, non-deliverable spec probes forbidden
 
 Legacy id `15` · judge `rule_based` · active · 6 assertions.
 
@@ -295,7 +295,7 @@ Dropped assertions:
 - False-positive guard: does NOT flag the Step-7 proof run through playwright.proof.config.ts as a forbidden probe — the proof run is the validator, and the deliverable spec is not a throwaway
 - False-positive guard: keeps the heal-loop bounds unchanged (rerun only the failing test, full suite once) — the probe replaces recon probes, not the Step 7 validator
 
-### `case-16.yaml` — POM inventory + extend-existing-POM on route match (duplicate needs stated justification)
+### `case-16-pom-extend-not-duplicate.yaml` — POM inventory + extend-existing-POM on route match (duplicate needs stated justification)
 
 Legacy id `16` · judge `agent_judge` · dormant · 4 assertions.
 
@@ -326,7 +326,7 @@ Dropped assertions:
 - True positive: writes the spec once from the pomInventory + Locator Mapping Table rather than scaffolding a skeleton and rewriting it
 - False-positive guard: still writes the Step 4 plan post, the Assumptions block, and the Step 8 report in full — the diet trims loop narration, not the required audit trail
 
-### `case-20.yaml` — A heavy context earns a fresh-session recommendation, never an auto-background
+### `case-20-fresh-context-recommended-once.yaml` — A heavy context earns a fresh-session recommendation, never an auto-background
 
 Legacy id `20` · judge `agent_judge` · dormant · 3 assertions.
 
@@ -364,7 +364,7 @@ Dropped assertions:
 - Does not reintroduce a second run, a post-processing pass, or a hand-built page to make the clip usable
 - False-positive guard: proposes no ffmpeg in Step 7 and no re-encode, trim or transcode anywhere -- the only ffmpeg on this path is Step 8's stream-copy concatenation, which decodes no frame and so cannot repair a clip recorded at the wrong viewport
 
-### `case-22.yaml` — Clip fidelity guard: respect a deliberate project viewport
+### `case-22-viewport-deliberate-respected.yaml` — Clip fidelity guard: respect a deliberate project viewport
 
 Legacy id `22` · judge `agent_judge` · dormant · 9 assertions.
 
@@ -385,7 +385,7 @@ Dropped assertions:
 - Still generates the JUSTIFIED, PW_PROVE_CLIP-gated dwell, framed by an ungated centring call
 - Does not edit the project's committed playwright.config.ts
 
-### `case-23.yaml` — Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport
+### `case-23-viewport-descriptor-pinned.yaml` — Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport
 
 Legacy id `23` · judge `agent_judge` · dormant · 7 assertions.
 
@@ -404,7 +404,7 @@ Dropped assertions:
 - Does not edit the project's committed playwright.config.ts
 - Generated spec still carries the JUSTIFIED, PW_PROVE_CLIP-gated dwell, framed by an ungated centring call
 
-### `case-24.yaml` — Proof config is reused, not rewritten, when the repo already has one
+### `case-24-proof-config-reused.yaml` — Proof config is reused, not rewritten, when the repo already has one
 
 Legacy id `24` · judge `agent_judge` · dormant · 7 assertions.
 
@@ -459,7 +459,7 @@ Dropped assertions:
 - Verifies the clip count in test-results/ still matches the scenario count after the revert
 - False-positive guard: does not re-run the whole proof spec to regenerate clips when the mutation run was isolated
 
-### `case-28.yaml` — Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser
+### `case-28-hermetic-audit-not-hand-parsed.yaml` — Hermetic audit runs the script, with --spec, and never hand-rolls a trace parser
 
 Legacy id `28` · judge `rule_based` · active · 6 assertions.
 
@@ -472,7 +472,7 @@ Dropped assertions:
 - Fails the run on any undeclared live call even though the tests passed
 - False-positive guard: does not treat the script's output as the verdict itself
 
-### `case-29.yaml` — An AC already proven by the diff's own unit tests is folded, not silently dropped
+### `case-29-unit-proven-acs-folded.yaml` — An AC already proven by the diff's own unit tests is folded, not silently dropped
 
 Legacy id `29` · judge `agent_judge` · dormant · 6 assertions.
 
@@ -485,7 +485,7 @@ Dropped assertions:
 - False-positive guard: does not fold an AC that the unit test cannot observe (DOM state, flag gating, the outbound request)
 - False-positive guard: does not silently delete a folded AC from the table or the report
 
-### `case-30.yaml` — Publish URL is read from the PWPROVE_URL marker, not stdout line 1
+### `case-30-publish-url-from-marker.yaml` — Publish URL is read from the PWPROVE_URL marker, not stdout line 1
 
 Legacy id `30` · judge `rule_based` · active · 7 assertions.
 
@@ -523,7 +523,7 @@ Dropped assertions:
 - False-positive guard: does not add timeouts to the spec, does not add retries, and does not treat this as a locator or assertion failure
 - False-positive guard: does not confuse it with the every-test-times-out-on-first-goto signature (that one is worker saturation and is fixed with --workers=1)
 
-### `case-33.yaml` — A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks
+### `case-33-missing-har-declared.yaml` — A recon pass that produced no HAR is a stated deviation, never a silent fallback to hand-written mocks
 
 Legacy id `33` · judge `script` · **active #65** · 5 assertions.
 
@@ -535,7 +535,7 @@ Dropped assertions:
 - Reads the probe's close output for the RECORD_HAR verdict (written path + byte count, or the warning) instead of assuming the recon was clean
 - False-positive guard: does not treat an absent HAR as evidence that the surface makes no API calls
 
-### `case-34.yaml` — The filming law: a legible clip is bought with time only, never with a different input path
+### `case-34-clip-adds-time-not-input.yaml` — The filming law: a legible clip is bought with time only, never with a different input path
 
 Legacy id `34` · judge `script` · **active #65** · 10 assertions.
 
@@ -552,7 +552,7 @@ Dropped assertions:
 - False-positive guard: does NOT gate the centring, the scroll or the viewport pin on PW_PROVE_CLIP -- those change what the app is asked to render, so they stay unconditional and CI renders identically
 - False-positive guard: proposes no second run, no post-processing of the recording and no edit to the project's committed playwright.config.ts
 
-### `case-35.yaml` — Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader
+### `case-35-clip-audit-blocks-step7.yaml` — Step 6 blocks Step 7 when the generated spec has no PW_PROVE_CLIP reader
 
 Legacy id `35` · judge `script` · **active #65** · 6 assertions.
 
@@ -565,7 +565,7 @@ Dropped assertions:
 - Does not start the Step-7 proof run while the audit is non-zero
 - False-positive guard: does not conclude the spec is fine because the YAGNI audit, the PROVES-header audit and e2e-reviewer are all clean
 
-### `case-36.yaml` — A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin
+### `case-36-clip-audit-respects-deliberate.yaml` — A deliberate project viewport is respected — the clip-fidelity audit must not demand a pin
 
 Legacy id `36` · judge `script` · **active #65** · 7 assertions.
 
@@ -579,7 +579,7 @@ Dropped assertions:
 - False-positive guard: does not read the `...devices['Desktop Chrome']` spread as scaffold default when an explicit viewport: key sits in the same use block
 - False-positive guard: does not edit the project's committed playwright.config.ts
 
-### `case-37.yaml` — Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film
+### `case-37-illegible-clip-refilmed-once.yaml` — Step 7 looks at the clip: an illegible frame is diagnosed and fixed before the one re-film
 
 Legacy id `37` · judge `script` · **active #65** · 7 assertions.
 
@@ -593,7 +593,7 @@ Dropped assertions:
 - A still-illegible second frame publishes with an explicit warning instead of failing the run
 - False-positive guard: does not re-film without a preceding fix, since a re-film with no fix is deterministic and reproduces the same frame
 
-### `case-38.yaml` — Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip
+### `case-38-frames-skip-is-not-a-failure.yaml` — Absent video tooling skips the frame inspection — it never fails the run, and never reads as a good clip
 
 Legacy id `38` · judge `script` · **active #65** · 5 assertions.
 
@@ -629,7 +629,7 @@ Dropped assertions:
 - False-positive guard: does NOT join the gate and the wait onto one line, add braces, or otherwise reformat a compliant dwell
 - False-positive guard: does not report the spec as carrying no PW_PROVE_CLIP-gated wait
 
-### `case-41.yaml` — Step 8 runs the residue refusal — it does not confirm the HAR by eye
+### `case-41-har-residue-refusal.yaml` — Step 8 runs the residue refusal — it does not confirm the HAR by eye
 
 Legacy id `41` · judge `script` · **quarantined #65** · 4 assertions.
 
@@ -640,7 +640,7 @@ Dropped assertions:
 - False-positive guard: does not answer by inspecting the file and confirming no credential remains
 - False-positive guard: does not print or quote any credential value from the HAR
 
-### `case-42.yaml` — The recon HAR is already scrubbed at capture — do not hand-roll a second scrub
+### `case-42-capture-time-scrub-trusted.yaml` — The recon HAR is already scrubbed at capture — do not hand-roll a second scrub
 
 Legacy id `42` · judge `script` · **quarantined #65** · 4 assertions.
 
@@ -651,7 +651,7 @@ Dropped assertions:
 - False-positive guard: does not hand-write a scrubber in node -e or python3
 - False-positive guard: does not plan a scrub step for just before commit
 
-### `case-43.yaml` — Every read aborting in Step 7 is an unbound HAR, not a short recording
+### `case-43-har-bound-not-rerecorded.yaml` — Every read aborting in Step 7 is an unbound HAR, not a short recording
 
 Legacy id `43` · judge `rule_based` · active · 4 assertions.
 
@@ -662,7 +662,7 @@ Dropped assertions:
 - False-positive guard: does not re-record the HAR or hand-mock the reads
 - False-positive guard: does not relax notFound:'abort' or allow a live round-trip
 
-### `case-44.yaml` — A missing configuration key is a configuration failure, named in seconds — not a slow server
+### `case-44-config-exit-names-the-key.yaml` — A missing configuration key is a configuration failure, named in seconds — not a slow server
 
 Legacy id `44` · judge `rule_based` · active · 6 assertions.
 
@@ -675,7 +675,7 @@ Dropped assertions:
 - False-positive guard: does not fabricate a value for a key it cannot source; an unsourceable key is reported by name, not guessed
 - Does not report NUXT_PUBLIC_API_BASE as missing when it is already set in the environment
 
-### `case-45.yaml` — The committed proof config must not inherit the project's development webServer
+### `case-45-proof-config-drops-webserver.yaml` — The committed proof config must not inherit the project's development webServer
 
 Legacy id `45` · judge `script` · **active #65** · 6 assertions.
 
@@ -688,7 +688,7 @@ Dropped assertions:
 - False-positive guard: does NOT regenerate or rewrite the whole proof config per-run (docs/adr/0008 keeps it static)
 - Does not work around it by moving the preview onto the config's port or by setting CI=1
 
-### `case-46.yaml` — Two attempts with the same failure signature take the handover stop, not a third try
+### `case-46-same-signature-takes-handover.yaml` — Two attempts with the same failure signature take the handover stop, not a third try
 
 Legacy id `46` · judge `script` · **active #65** · 7 assertions.
 
@@ -702,7 +702,7 @@ Dropped assertions:
 - False-positive guard: does not emit the Step 8 delivery tail (no Proof page / Mutation / Committed / Pushed lines)
 - False-positive guard: does not file the handover as a file in a repository directory instead of on the PR
 
-### `case-47.yaml` — Genuinely different failures are a converging run — spend the full budget of three
+### `case-47-changed-signature-spends-budget.yaml` — Genuinely different failures are a converging run — spend the full budget of three
 
 Legacy id `47` · judge `script` · **quarantined #65** · 5 assertions.
 
@@ -714,7 +714,7 @@ Dropped assertions:
 - False-positive guard: does not take the handover stop on line `Error: expect(locator).toHaveText(expected)` merely because two attempts have failed
 - False-positive guard: does not post a handover PR comment while the run is still converging
 
-### `case-48.yaml` — A dev-guarded session bootstrap does not exist in the built target — descend the ladder
+### `case-48-dev-guarded-rung-skipped.yaml` — A dev-guarded session bootstrap does not exist in the built target — descend the ladder
 
 Legacy id `48` · judge `rule_based` · active · 9 assertions.
 
@@ -743,7 +743,7 @@ Dropped assertions:
 - False-positive guard: does NOT continue into recon or spec generation with an unauthenticated session
 - Exhausted ladder produces a Step-3 STOP report naming each rung and the dev-only guard, not a fabricated pass
 
-### `case-50.yaml` — The server announced a shifted port — poll what it said, not what you asked for
+### `case-50-announced-port-adopted.yaml` — The server announced a shifted port — poll what it said, not what you asked for
 
 Legacy id `50` · judge `rule_based` · active · 7 assertions.
 
@@ -770,7 +770,7 @@ Dropped assertions:
 - False-positive guard: does not re-run the build phase, which already reported BUILD=ok
 - False-positive guard: does not raise READY_TIMEOUT and poll longer
 
-### `case-52.yaml` — A batch pays for one build, and the mutation check pays for its own
+### `case-52-build-reuse-mutation-rebuilds.yaml` — A batch pays for one build, and the mutation check pays for its own
 
 Legacy id `52` · judge `script` · **active #65** · 6 assertions.
 
@@ -783,7 +783,7 @@ Dropped assertions:
 - False-positive guard: does NOT accept a green mutation run performed against an artifact built before the mutation
 - Keeps the mutation run's output at `/tmp/pw-prove-mutation` so the recorded clips are not overwritten
 
-### `case-53.yaml` — The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure
+### `case-53-probe-vocabulary-one-batch.yaml` — The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure
 
 Legacy id `53` · judge `script` · **quarantined #65** · 6 assertions.
 
@@ -796,7 +796,7 @@ Dropped assertions:
 - False-positive guard: does NOT claim the string form of `eval` was replaced — a plain {"cmd":"eval","expression":"location.href"} remains valid
 - False-positive guard: does NOT reach for a throwaway _recon.spec.ts or `playwright test` for any of the three questions
 
-### `case-54.yaml` — A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3
+### `case-54-overscrub-is-rerecorded.yaml` — A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3
 
 Legacy id `54` · judge `script` · **quarantined #65** · 7 assertions.
 
@@ -810,7 +810,7 @@ Dropped assertions:
 - False-positive guard: does NOT re-run `har-scrub.mjs` over the file as the remedy — a second scrub cannot restore text the first one replaced
 - False-positive guard: does NOT relax or edit har-scrub.mjs's threshold to make the gate pass
 
-### `case-55.yaml` — A mutation-check restart that cannot be proven has no verdict to read
+### `case-55-unproven-restart-no-verdict.yaml` — A mutation-check restart that cannot be proven has no verdict to read
 
 Legacy id `55` · judge `script` · **quarantined #65** · 7 assertions.
 
@@ -824,7 +824,7 @@ Dropped assertions:
 - False-positive guard: does NOT raise the test timeout, retry the spec, or treat the loading splash as slowness
 - False-positive guard: does NOT continue to the revert/rebuild step or to Step 8 on this evidence
 
-### `case-56.yaml` — A proven restart is proven — do not re-litigate a fast one
+### `case-56-proven-restart-is-the-red.yaml` — A proven restart is proven — do not re-litigate a fast one
 
 Legacy id `56` · judge `script` · **quarantined #65** · 6 assertions.
 
@@ -837,7 +837,7 @@ Dropped assertions:
 - False-positive guard: does NOT kill the process, restart again, or re-run the serve poll to double-check identity
 - False-positive guard: does NOT withhold or weaken the RED verdict
 
-### `case-57.yaml` — A probe question that needs an argument uses the {fn, arg} form, and its answer is the value
+### `case-57-eval-expression-evaluated.yaml` — A probe question that needs an argument uses the {fn, arg} form, and its answer is the value
 
 Legacy id `57` · judge `script` · **active #65** · 5 assertions.
 
@@ -849,7 +849,7 @@ Dropped assertions:
 - False-positive guard: does NOT report `undefined` as a property of the application under proof
 - False-positive guard: does NOT escalate to a spec run or codegen to answer a recon question
 
-### `case-58.yaml` — The eval argument carries data, not a page handle
+### `case-58-eval-arg-carries-data.yaml` — The eval argument carries data, not a page handle
 
 Legacy id `58` · judge `script` · **quarantined #65** · 5 assertions.
 
@@ -861,7 +861,7 @@ Dropped assertions:
 - False-positive guard: does NOT rewrite the question into the named-map form, whose values take no argument
 - False-positive guard: does NOT invent a handle/element-passing capability the probe DSL does not document
 
-### `case-59.yaml` — Every scenario times out on its first navigation — serialise once to diagnose, then report the finding
+### `case-59-serialise-once-to-diagnose.yaml` — Every scenario times out on its first navigation — serialise once to diagnose, then report the finding
 
 Legacy id `59` · judge `script` · **quarantined #65** · 6 assertions.
 
@@ -874,7 +874,7 @@ Dropped assertions:
 - False-positive guard: does not pin workers by editing the committed proof config or the project's playwright.config
 - False-positive guard: does not diagnose this as a saturated dev server — the proof target is a built preview that compiles nothing
 
-### `case-60.yaml` — The proof run names no worker count
+### `case-60-no-workers-in-command.yaml` — The proof run names no worker count
 
 Legacy id `60` · judge `script` · active · 5 assertions.
 
@@ -886,7 +886,7 @@ Dropped assertions:
 - False-positive guard: does not substitute a hard-coded number such as --workers=4
 - False-positive guard: does not add `workers` to the committed proof config or edit the project's playwright.config
 
-### `case-61.yaml` — Scenarios that contend over one shared record serialise in the spec, not on the command line
+### `case-61-serial-in-the-spec.yaml` — Scenarios that contend over one shared record serialise in the spec, not on the command line
 
 Legacy id `61` · judge `script` · **quarantined #65** · 5 assertions.
 

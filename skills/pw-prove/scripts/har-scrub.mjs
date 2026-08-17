@@ -43,7 +43,7 @@
 //
 // WHY A VALUE FLOOR EXISTS, AND WHY OVER-SCRUB IS A REFUSAL. Back-propagation above replaces a
 // learned secret by RAW STRING MATCH everywhere in the document. Against a real application
-// (`docs/studies/live-proof-pr2866.md` §1) Nuxt i18n set `i18n_redirected=en`, so the two-character
+// Measured: Nuxt i18n set `i18n_redirected=en`, so the two-character
 // string `en` was learned as a credential and every `en` in a 9.1 MB German recording was replaced —
 // 125,403 substitutions, a shredded translation payload, and three tests failing against an
 // application that is not broken. So a learned value below the floor below is placeheld WHERE IT WAS
@@ -531,7 +531,7 @@ export function scrubHar(har, { origin } = {}) {
 
 // The backstop for everything the floor above does not catch. The floor is a heuristic about a
 // value; this is a measurement of the RESULT, and it is the check that would have stopped the run
-// in `docs/studies/live-proof-pr2866.md` §1 whatever the floor had said.
+// in the measured run whatever the floor had said.
 //
 // A credential occupies a bounded number of positions per recorded exchange: the request `Cookie`
 // header and its cookies array, the response `Set-Cookie` and its cookies array, an `Authorization`

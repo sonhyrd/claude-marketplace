@@ -152,7 +152,7 @@ test.describe('Login', () => {
 
 ## Clip Fidelity
 
-The Proof clip is **reviewer-facing evidence**, not a leftover (`docs/adr/0007`, amended by `docs/adr/0015`). Everything below belongs in the **committed** spec, so the Step-7 proof run and the CI run render identically by construction rather than by luck.
+The Proof clip is **reviewer-facing evidence**, not a leftover. Everything below belongs in the **committed** spec, so the Step-7 proof run and the CI run render identically by construction rather than by luck.
 
 ### The filming law
 

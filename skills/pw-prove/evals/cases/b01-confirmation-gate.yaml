@@ -1,5 +1,6 @@
 id: b01-confirmation-gate
 shape: behavior
+step: 'Step 1 › Confirmation gate — model-invoked runs only'
 title: A model-invoked run stops at the confirmation gate before touching anything
 description: >-
   B01. pw-prove was launched through the Skill tool by another skill, with no user
