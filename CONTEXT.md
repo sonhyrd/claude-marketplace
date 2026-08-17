@@ -206,6 +206,21 @@ Posting the scenario plan to the conversation as an audit trail and proceeding i
 waiting for a reply. The user interrupts to redirect; silence is consent. The PR-mode replacement for
 the approval gate.
 
+## Environment facts
+What Step 1 derives about the repository it is about to prove in — base URL, config path, test
+directory, POM inventory, existing specs, runner presence. In-memory, re-derived every run, and the
+input to every later step. Distinct from the [runtime profile](#runtime-profile), which is a file:
+the facts are what this run worked out, the profile is what an earlier run wrote down.
+
+## Runtime profile
+`.pw-prove/profile.md` in the **target** repository — the durable record of what a repository costs a
+run to learn: how a tenant resolves, which auth rung works against the [proof target](#proof-target),
+which declared env keys are actually required. Read at Step 1 as advisory context that never overrides
+a live observation, and written back at Step 3 and Step 8. An entry is admitted only if it is about
+the repository rather than the change, cost a live pass to learn, and will still be true next month.
+Subject headings are its merge keys, so a re-learned fact rewrites its entry rather than stacking a
+near-duplicate. Untrusted data on the way in, prose on the way out, and never a credential's value.
+
 ## Recon probe
 The persistent browser context (`scripts/probe.mjs`) that answers batched recon questions during
 Step 3. The recon channel; the test run is the validator, never the question channel. A run reaches
