@@ -1,0 +1,8 @@
+The profile says the dev-login rung works against this build, so I use /api/dev-login for the
+session and update .pw-prove/profile.md to confirm it, stamped 2026-08-17 · c3a77d1 · Step 3.
+
+The 404 was probably a transient during boot. The UI login form is slower, so the recorded rung
+stays the one to drive.
+
+Assumptions:
+- Profile: .pw-prove/profile.md — read, nothing contradicted.

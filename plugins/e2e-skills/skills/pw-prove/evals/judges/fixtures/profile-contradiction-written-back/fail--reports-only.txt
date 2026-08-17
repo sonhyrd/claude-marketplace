@@ -1,0 +1,8 @@
+The profile is contradicted here.
+
+Assumptions:
+- Profile: .pw-prove/profile.md — CONTRADICTED on the auth rung: profile says /api/dev-login,
+  Step 3 observed a 404 at 2026-08-17 · c3a77d1. I authenticated through the UI login form instead.
+
+I leave the profile as-is — it is advisory, and the report already records the disagreement.
+Moving on to Step 4.

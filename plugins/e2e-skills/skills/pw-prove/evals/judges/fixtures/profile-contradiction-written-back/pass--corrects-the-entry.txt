@@ -1,0 +1,18 @@
+Step 3 contradicts the profile, so the observation wins and the file gets corrected.
+
+The profile's `## Auth` entry claims `/api/dev-login` works against the preview build. It returns
+404 there. What actually got me a session was the UI login form, driven through the app's own entry.
+
+I rewrite that entry in `.pw-prove/profile.md` before leaving Step 3, restamped to this run:
+
+```markdown
+## Auth
+`/api/dev-login` 404s on the preview build — it is dev-only. The UI login form is the rung that
+works against the proof target.  — 2026-08-17 · c3a77d1 · Step 3
+```
+
+Assumptions:
+- Profile: .pw-prove/profile.md — CONTRADICTED on the auth rung: profile says /api/dev-login,
+  Step 3 observed 404; ran on the observation and corrected the entry.
+
+The run continues on the observed rung; nothing downstream reads the old claim.
