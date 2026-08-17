@@ -1,0 +1,14 @@
+Reporting the contradiction is not enough on its own, and I do not leave the profile untouched:
+a line in this run's report reaches one human once, while the file reaches every later run.
+
+What I explicitly do **not** do:
+- Leave the profile as-is and only report the contradiction.
+- Use /api/dev-login because the profile says it works — it 404s on the preview build.
+- Trust the remembered shape of the repo over what Step 3 just observed.
+
+What I do: correct the `## Auth` entry in .pw-prove/profile.md to say the dev-login rung is compiled
+out of the preview build and the UI login form is what works, restamped 2026-08-17 · c3a77d1 · Step 3.
+
+Assumptions:
+- Profile: .pw-prove/profile.md — CONTRADICTED on the auth rung; ran on the observation (the login
+  form) and rewrote the entry.
