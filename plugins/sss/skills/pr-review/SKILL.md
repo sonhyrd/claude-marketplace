@@ -104,7 +104,9 @@ Done when the acquisition has either happened or been declared a read-only run, 
 
 Invoke the Skill tool with `matt:code-review` **inline, in this context**. It loads its own two-axis briefs and the twelve-smell baseline, and hands you the fixed point it needs — which Step 1 already resolved, so give it the `BASE` SHA and the spec source as settled facts.
 
-Then send **one** message with **three** `general-purpose` `Agent` calls. The loaded skill's step 4 says two; you send its two plus OCR, so all three tracks run concurrently at the same depth. This is the one instruction `pr-review` overrides in a skill it does not own — an upstream rewrite of that step is where it breaks.
+Then send **one** message with **three** `general-purpose` `Agent` calls. The loaded skill's step 4, *Spawn both sub-agents in parallel*, defines two briefs — **Standards** and **Spec**; you send those two plus OCR, so all three tracks run concurrently at the same depth. This is the one instruction `pr-review` overrides in a skill it does not own.
+
+**The anchor is the two named briefs, not a sentence about tool calls.** That step used to end with "send a single message with two `Agent` tool calls", and this skill used to point at it by saying the loaded skill "says two". Upstream deleted that sentence in 1.2.3, deliberately, so the step reads on Codex and other harnesses instead of naming Claude Code's tools — and the override broke, pointing at words that were no longer there. Counting briefs survives that rewrite; counting calls did not.
 
 - **Standards** and **Spec** — the two prompts `matt:code-review` step 4 specifies, verbatim, including the smell baseline it says to paste in full.
 - **OCR** — invoke the Skill tool with `sss:ocr-delegate` in range mode (`--from`/`--to`), passing the PR title and body as `--background`. Review only: finish at its Step 6 and report. Return the structured comments plus the coverage summary — total, reviewable, reviewed and skipped file counts, the coverage rate over the reviewable set, and a reason for every skipped file.

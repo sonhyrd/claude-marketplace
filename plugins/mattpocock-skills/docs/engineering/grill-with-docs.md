@@ -40,12 +40,6 @@ That third row is the one that catches people out. `CONTEXT.md` is a glossary an
 
 The glossary is the point. Domain language is the thing this skill is actually building — the project's own words, agreed once, so you, the agent and your colleagues stop paying to re-derive them. It is worth saying that not everyone agrees this buys you agent performance: the sharpest public pushback is that a term and its plain-English expansion get the same result from the [model](https://www.aihero.dev/ai-coding-dictionary/model), and that the vocabulary really compresses communication between the humans who share it. That reading still leaves the glossary valuable; it just moves the value.
 
-## It assumes one writer
-
-The stateful outputs assume a single person curating them. A two-developer team running four months in one repo reported state drift on roughly 20% of sampled merged PRs, with ADR citations and README claims the highest-drift surfaces — deliberate, human-curated docs drifted worse than agent memory did. Pruning the stale docs did not hold; the same sweep was stale again within days. What worked was deleting shadow state outright and adding a deterministic citation and link linter to CI.
-
-Related: running the skill repeatedly across unrelated changes in one repo tends to accumulate mixed-topic docs, because nothing separates one session's output from another's. Neither of these is fixed in the skill today.
-
 ## Common questions
 
 **Should I use this or `/wayfinder`?**
