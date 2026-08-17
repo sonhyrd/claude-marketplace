@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // clip-fidelity.mjs — the Step-6 authoring-time check that the generated spec actually carries the
-// Clip Fidelity contract (`code-rules.md` §Clip Fidelity, `docs/adr/0007` amended by `docs/adr/0015`).
+// Clip Fidelity contract (`code-rules.md` §Clip Fidelity).
 //
 //   node clip-fidelity.mjs spec <spec-file...> --config <playwright.config.ts> --verdict <declared>
 //     --config <path>    the project's committed Playwright config, read as TEXT (never imported —
@@ -497,7 +497,7 @@ function viewportPins(masked, original) {
 
 // ============================================================ frames — the Step-7 inspection
 // `spec` above is a GATE: it blocks Step 7. This is not one, and the difference is the whole design
-// (`docs/adr/0015`). It extracts one frame per clip at `duration − 0.5s` — inside the payoff hold —
+// It extracts one frame per clip at `duration − 0.5s` — inside the payoff hold —
 // and the AGENT looks at it. Nothing here judges legibility: the rejected alternative was a
 // frame-difference heuristic in the publish path, whose failure mode is dropping a good proof, and a
 // gate that trips aborts the whole recording. Inspection that informs the agent is strictly safer

@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.19.0"
+  version: "0.19.1"
 ---
 
 # pw-prove
@@ -224,7 +224,7 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
 - **Clean merge** → continue: you prove the merged result, and the merge commit rides to the PR branch with the Step 8 push.
 - **Conflict** → `git merge --abort`, STOP, report the conflicting paths. One of the **two sanctioned PR-mode stops** (the other is the Step-7 handover stop).
 
-**The proof target is the BUILT application, served by its preview server** (`docs/adr/0016`). There is no development-server path: what you prove is what ships, and a bundling/chunking/tree-shaking claim is only provable against the artifact. Bring-up is three phases with three distinct failures — a missing configuration key (exit 4), a broken build (exit 5), an absent preview server (exit 3) — so a run never again answers "server not ready" to a missing environment variable.
+**The proof target is the BUILT application, served by its preview server.** There is no development-server path: what you prove is what ships, and a bundling/chunking/tree-shaking claim is only provable against the artifact. Bring-up is three phases with three distinct failures — a missing configuration key (exit 4), a broken build (exit 5), an absent preview server (exit 3) — so a run never again answers "server not ready" to a missing environment variable.
 
 1. **Resolve the port — allocate a free one and pass it to the server.** The proof target is agent-served, so the port is yours to choose; a configured `baseURL`/`webServer.url` port is only a *preference*, and a packaged serve script that hard-codes one (`PORT=4100 node …` is a real observed example) is never invoked verbatim — read the command it runs and supply `PORT` yourself, or a co-resident sibling worktree's server takes the port and the run dies on `EADDRINUSE`. **Owning the port is not holding the number**: the port you pass is a request, and a server that finds it taken shifts by itself and says so. A shifted port it announced is still *your* server — phase 4 reads it out of the log and that origin is the one you carry — so re-allocating a free port and restarting is fighting your own server's announcement, not resolving a conflict.
    ```bash
@@ -274,7 +274,7 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
    ```bash
    curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
    ```
-   Reachable → record that origin in the Step-4 Assumptions block. Reachable is also the point at which the proof config's inherited `webServer` must already be neutralised — see Step 7, and `docs/adr/0008`: a proof config that still spreads the project's `webServer` boots a **development** server behind your back the moment nothing is listening at *its* URL, which silently defeats the proof target. **Refused while the serve phase's `BASE_URL=` origin answers** → the config carries the wrong port or the wrong loopback family (the serve summary's `PORT_SHIFTED`/`ADDRESS_FAMILY` says which): set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
+   Reachable → record that origin in the Step-4 Assumptions block. Reachable is also the point at which the proof config's inherited `webServer` must already be neutralised — see Step 7: a proof config that still spreads the project's `webServer` boots a **development** server behind your back the moment nothing is listening at *its* URL, which silently defeats the proof target. **Refused while the serve phase's `BASE_URL=` origin answers** → the config carries the wrong port or the wrong loopback family (the serve summary's `PORT_SHIFTED`/`ADDRESS_FAMILY` says which): set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
 6. **Probe the publish prerequisites now (PR-mode) — with the serve poll:**
    ```bash
    PROBE_HOSTING=1 BASE_URL="$BASE_URL" SERVER_LOG="<the preview task's log>" \
@@ -299,7 +299,7 @@ The generated spec must **recreate its session from code** — no committed, han
   | a login **cookie** (server-set) | API-login with the discovered credential, seed the cookie **it returns** (read its `Set-Cookie`, pass that exact name+value to `context.addCookies`). Do not hand-author the cookie value. Hand-seed a literal **only** for a documented static dev flag with no login path. |
   | `localStorage[<key>]` **only if the app actually reads it** | `addInitScript` seeding **both the credential and the user record** — every key the store hydrates from, read off the source (typically a `token`/`auth.*` key *and* a `user`/`auth.user` key). Never assume; a credential-only seed renders a blank shell on apps that populate `user` via `getCurrentUser()` |
 
-  **Read the guard, not just the mechanism — the proof target is a production build.** A rung reached only under a development-only condition (`import.meta.dev`, `import.meta.env.DEV`, `process.env.NODE_ENV !== 'production'`, `__DEV__`, a `dev`-only plugin/middleware/route file, a bundler `define` that folds to `false`) **is not in the artifact under proof**: it is compiled out, so the app never consumes the input it reads and never produces the side effect that input causes. Grep the enclosing condition of whatever the mechanism grep finds; when it is dev-only, record the rung as **absent** and descend to the next one rather than attempting a path that has been compiled away. This is a rule about the artifact you were given, not about any one application — apply it to whatever the grep finds, and **never edit the app's source to re-enable a guarded path** (out of scope; the skill adapts to the artifact, it does not route around another repo's decisions — swapping the guard for a runtime flag would put "accept an arbitrary bearer from a URL parameter" into a production bundle). State the skipped rung and its guard in the Step-4 Assumptions block. Measured case: `docs/studies/proof-target-measurements.md` › The auto-login blocker.
+  **Read the guard, not just the mechanism — the proof target is a production build.** A rung reached only under a development-only condition (`import.meta.dev`, `import.meta.env.DEV`, `process.env.NODE_ENV !== 'production'`, `__DEV__`, a `dev`-only plugin/middleware/route file, a bundler `define` that folds to `false`) **is not in the artifact under proof**: it is compiled out, so the app never consumes the input it reads and never produces the side effect that input causes. Grep the enclosing condition of whatever the mechanism grep finds; when it is dev-only, record the rung as **absent** and descend to the next one rather than attempting a path that has been compiled away. This is a rule about the artifact you were given, not about any one application — apply it to whatever the grep finds, and **never edit the app's source to re-enable a guarded path** (out of scope; the skill adapts to the artifact, it does not route around another repo's decisions — swapping the guard for a runtime flag would put "accept an arbitrary bearer from a URL parameter" into a production bundle). State the skipped rung and its guard in the Step-4 Assumptions block. Measured case: an auto-login rung that existed only behind `import.meta.dev`, so the built artifact never read the token the recon pass was feeding it.
 
   **Token source, in priority:** (1) the project's `dev-login`-style helper, (2) a repo API-login helper/script, (3) a `storageState` setup / `globalSetup`, (4) an env credential (`E2E_BEARER`, or `TEST_USER`+`TEST_PASSWORD` against the login endpoint). Use the first that exists; if none, **stop and ask**. A freshly-minted token in a gitignored `.auth/…` is sanctioned; a committed `auth/session.json` is the anti-pattern. UI-driven login belongs only in a spec that tests the login flow itself. A `dev-login` helper is itself subject to the guard rule — check whether its endpoint survives the build before ranking it first.
 
@@ -314,7 +314,7 @@ The generated spec must **recreate its session from code** — no committed, han
 - **All three bring-up phases passed** — `preflight.mjs` reported `CONFIG=ok` (or `CONFIG=undeclared`, only where the app genuinely declares no contract, and stated as an assumption), `BUILD=ok` **or `BUILD=reused`** (an artifact this worktree already built from this exact commit and tree — the reuse reason is in the same block), and `SERVE=ok`. There is no unbuilt fallback and the script refuses to pretend otherwise: a run that reached recon against a development server, or against a target it never built, is not a proof of what ships.
 - **The recon channel is one of exactly two states — no third:** (1) a probe session that has answered at least one batch, or (2) the probe refused with **exit 2** (browserless) and the source-reading fallback is named in the Step 4 Assumptions block.
 
-Reaching Step 4 in neither state is a **HARD STOP** (see `docs/adr/0004`). Source reading *without* a recorded exit-2 refusal is the skip this gate exists to catch. Never install a floated Playwright to force a probe open.
+Reaching Step 4 in neither state is a **HARD STOP**. Source reading *without* a recorded exit-2 refusal is the skip this gate exists to catch. Never install a floated Playwright to force a probe open.
 
 **Start the probe with the harness's background-task mechanism** (`run_in_background: true`) — **never a trailing `&`** (a `&`-backgrounded probe dies with its shell). Set `RECORD_HAR` so the SAME recon pass records the `api.har` the deliverable spec replays:
 
@@ -557,7 +557,7 @@ Most recordings need nothing more: a credential that travelled only in headers a
 
 Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
 
-**2. Proof run — video + trace as byproducts, the project's own config untouched.** There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run (`docs/adr/0008`).
+**2. Proof run — video + trace as byproducts, the project's own config untouched.** There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run.
 
 - **Present** (a previous run committed it) → use it as-is. Do **not** rewrite, re-derive or "refresh" it; a per-run diff on this file is the churn it exists to remove.
 - **Absent** → write it exactly as below — no substitutions, nothing per-run in it — and stage it in Step 8.
@@ -584,17 +584,16 @@ export default defineConfig({
   // answers at that config's own url (a shifted port and a loopback-family mismatch are both that
   // case), and the whole proof target is defeated silently. Dropping it is safe here and only here:
   // pw-prove owns the server's lifecycle and preflight.mjs has already gated the three bring-up
-  // phases. See docs/adr/0008 and docs/studies/proof-target-measurements.md.
   webServer: undefined,
   use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' },
 });
 ```
 
-**An existing proof config without `webServer: undefined` is migrated once, in place** — add the line, keep everything else, and stage it with this run. That is the one other sanctioned edit to a committed proof config besides a structural mismatch, and it is a one-time migration rather than the per-run rewrite `docs/adr/0008` forbids.
+**An existing proof config without `webServer: undefined` is migrated once, in place** — add the line, keep everything else, and stage it with this run. That is the one other sanctioned edit to a committed proof config besides a structural mismatch, and it is a one-time migration rather than a per-run rewrite, which stays forbidden.
 
 The **only** legitimate reason to edit an existing proof config is a structural mismatch with the project's own config (below) — a one-time, committed fix, never a per-run edit.
 
-**Clip fidelity — the Proof clip is reviewer-facing evidence** (`docs/adr/0007`, amended by `docs/adr/0015`). Three properties make it usable; none of them re-runs the spec or post-processes the recording:
+**Clip fidelity — the Proof clip is reviewer-facing evidence.** Three properties make it usable; none of them re-runs the spec or post-processes the recording:
 
 | | What | Why |
 |---|---|---|
@@ -617,7 +616,7 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 # webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
 ```
 
-**The proof run is concurrent — leave the worker count to Playwright** (`docs/adr/0017`, which supersedes the serialised proof run of `docs/adr/0010`). Scaffolded configs leave `workers` undefined off CI (`workers: process.env.CI ? 1 : undefined`), so the run takes Playwright's default of `cores/2` and the scenarios go together. Measured on a real pull request over 31 runs and 120 test instances: **1.76–1.89× less wall clock**, **zero failures and zero flaky verdicts at every concurrency from 1 to 6**, identical `hermetic.mjs` classification, every clip and trace intact, and a preview server that did not saturate even with the HAR replay removed and every API call live. So the run command carries no concurrency override, and none is pinned in the committed proof config or in the project's `playwright.config` either. Do **not** substitute a literal count: four was right on one 8-core machine and is wrong on the next, and Playwright already computes `cores/2`.
+**The proof run is concurrent — leave the worker count to Playwright.** Scaffolded configs leave `workers` undefined off CI (`workers: process.env.CI ? 1 : undefined`), so the run takes Playwright's default of `cores/2` and the scenarios go together. Measured on a real pull request over 31 runs and 120 test instances: **1.76–1.89× less wall clock**, **zero failures and zero flaky verdicts at every concurrency from 1 to 6**, identical `hermetic.mjs` classification, every clip and trace intact, and a preview server that did not saturate even with the HAR replay removed and every API call live. So the run command carries no concurrency override, and none is pinned in the committed proof config or in the project's `playwright.config` either. Do **not** substitute a literal count: four was right on one 8-core machine and is wrong on the next, and Playwright already computes `cores/2`.
 
 Two things this does not license:
 
@@ -627,7 +626,7 @@ Two things this does not license:
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
-**No *gate* measures the finished webm — the agent looks instead** (*Clip inspection* below). There is no dimension gate and no legibility heuristic by design: `docs/adr/0007` rules out a post-processing pass, and `docs/adr/0015` rejected a frame-difference gate because its failure mode is dropping a good proof, and a gate that trips aborts the whole recording. One frame is extracted and read; its verdict informs the agent rather than vetoing the artifact.
+**No *gate* measures the finished webm — the agent looks instead** (*Clip inspection* below). There is no dimension gate and no legibility heuristic by design: a post-processing pass is ruled out, and a frame-difference gate was rejected because its failure mode is dropping a good proof, and a gate that trips aborts the whole recording. One frame is extracted and read; its verdict informs the agent rather than vetoing the artifact.
 
 Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` carry the Step-4 effective viewport, and a `pinned:` verdict has already produced a `test.use({ viewport })` line in the committed spec. A letterboxed clip means that pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config.
 
@@ -641,7 +640,7 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | Assertion failure | Fix expected values, add `{ timeout }` for slow elements |
 | Structural | Fix missing `await`, wrong setup, incorrect `beforeEach` |
 | Unrecorded call aborted (`notFound:'abort'`) | First check the binding: **every** read aborting means the HAR was not bound to this run (Step 7 item 1b — `PW_PROVE_HAR` unset, or bound to a different port), not that the recording is short. A *particular* call aborting is a genuine miss — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
-| **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | The proof config still inherits the project's `webServer`: add `webServer: undefined` to it (Step 7, `docs/adr/0008`), because a run that boots its own server is not running against the proof target at all. |
+| **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | The proof config still inherits the project's `webServer`: add `webServer: undefined` to it (Step 7), because a run that boots its own server is not running against the proof target at all. |
 
 **Rerun only what failed.** During the ≤3 attempts, run just the failing test(s) — `-g "<title>"`. The full spec runs **once** after the last fix, as the gate. A **type-only fix** is gated by `tsc` — batch it into the next behavioral rerun.
 
@@ -685,7 +684,7 @@ A **flaky verdict** (passed only on retry) is not clean — diagnose once. If th
 
 ### Clip inspection — look at the frame before anyone else does
 
-The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So before the hermetic audit, extract one frame per clip at the moment of the hold and **read it** (`docs/adr/0015`):
+The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So before the hermetic audit, extract one frame per clip at the moment of the hold and **read it**:
 
 ```bash
 # One frame per clip, at duration − 0.5s — inside the payoff hold. Duration is probed with the
@@ -786,7 +785,7 @@ SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
 
 PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips is not delivered. Coverage/target mode: skip to item 5 (report only). **Step 8 is reached only after a green proof run** — a run that took the Step-7 handover stop never arrives here, and in particular never reaches the commit and push below: the spec it holds is failing, and it travelled in the handover comment instead. Run in order:
 
-1. **Publish ONE chaptered recording for the run.** Find the per-test webms under `test-results/**/*.webm` (one per scenario) and map each to the AC it proves. Write a manifest, then hand the whole run to `publish-proof.mjs`: it probes and gates every clip, joins them by **stream copy** into one video, and POSTs the whole thing to Paul Clips in one authenticated JSON-RPC call, returning one `https://clips.paulsjob.ai/share/<id>` link (`docs/adr/0012`). Each clip becomes a **chapter** on the scrubber: the scenario name is the marker label, because a label renders as a tooltip-sized space, and the AC verbatim lands as a timestamped comment beneath it, where a sentence has room to wrap. **N clips, one link** — a reviewer opens one URL and watches the whole proof as one pass.
+1. **Publish ONE chaptered recording for the run.** Find the per-test webms under `test-results/**/*.webm` (one per scenario) and map each to the AC it proves. Write a manifest, then hand the whole run to `publish-proof.mjs`: it probes and gates every clip, joins them by **stream copy** into one video, and POSTs the whole thing to Paul Clips in one authenticated JSON-RPC call, returning one `https://clips.paulsjob.ai/share/<id>` link. Each clip becomes a **chapter** on the scrubber: the scenario name is the marker label, because a label renders as a tooltip-sized space, and the AC verbatim lands as a timestamped comment beneath it, where a sentence has room to wrap. **N clips, one link** — a reviewer opens one URL and watches the whole proof as one pass.
    ```bash
    cat > /tmp/pw-prove-manifest.json <<'JSON'
    {
@@ -868,7 +867,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
 
      Exit 0 stages it. **Exit 3 is a HARD STOP:** residue survived, the script names each location (never the value), and the HAR must not be staged — re-run `har-scrub.mjs` over the file, then verify again. A leaked bearer in a committed HAR is the same incident as one in a log line, so it is held by a gate here, exactly like the clip audit, the hermetic audit and the publish token grep. The scrub itself already happened at capture; this is the check that it held.
 
-     **Exit 6 is a HARD STOP in the other direction:** the recording was destroyed by its own scrub. A learned value also occurred inside ordinary content, so the substitution replaced the application rather than the credential — the refusal names the placeholder and its occurrence count. Do not repair it by hand and do not commit it: re-record the recon pass. This is a separate exit code because over-scrub is invisible to a residue check, and a shredded 9.1 MB capture once verified *clean* (`docs/studies/live-proof-pr2866.md` §1).
+     **Exit 6 is a HARD STOP in the other direction:** the recording was destroyed by its own scrub. A learned value also occurred inside ordinary content, so the substitution replaced the application rather than the credential — the refusal names the placeholder and its occurrence count. Do not repair it by hand and do not commit it: re-record the recon pass. This is a separate exit code because over-scrub is invisible to a residue check, and a shredded 9.1 MB capture once verified *clean*.
    - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
 4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<share link + AC table + mutation verdict>"`. **The comment carries exactly ONE clips URL — the `/share/<id>` link.** Each AC row names its chapter timestamp as plain text (`M:SS`), which is navigation inside that one recording; do not put a `/embed/<id>?t=` URL in the comment at all. GitHub unfurls a clips `/embed/` URL into a video player, and in a table cell that player inflates every row into a tall black block that overflows the column and buries the AC text. The per-chapter deep links still belong in the **completion report**, where the operator reads them as text. **Copy the per-chapter deep links from the publish log's stderr — never build one by appending `?t=` to the share URL.** They are `/embed/<id>?t=<seconds>`, a different route from `/share/<id>`, because on the share route `t` is the agent-access token and a timestamp appended there is silently discarded: the reviewer lands at 0:00 and reads the wrong footage as the criterion.
