@@ -12,6 +12,30 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.4.0] - Unreleased
+
+### Changed
+
+- Subtree pulled from `e2e-fork/main` (`3f2b418` → `d701b50`, 2 commits — one feature and its
+  merge). `pw-prove` moves 0.20.0 → **0.21.0**; `e2e-reviewer` stays 1.10.0 and
+  `playwright-debugger` stays 1.9.0. A minor bump, not a patch: `pw-prove` gained behaviour a
+  user will observe. **No description changed on any of the three skills**, so unlike 1.3.0 the
+  routing table is untouched and nothing re-routes.
+- `pw-prove` **writes back what a run learned about the repository**, so a fact outlives the
+  session that paid for it — the read side of this landed in 1.3.0's Step 1, and this is the write
+  side that fills it. A new eval case (`b06-profile-contradicted-written-back`) and its judge
+  guard the case that matters: a run whose evidence contradicts an existing profile entry must
+  correct the entry, not merely report the contradiction and move on.
+- The pull is `--squash`, as every pull of this prefix since the 1.0.0 graft has been.
+- **The pull deleted `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` and they were
+  restored in a follow-up commit.** This is not a surprise and not a conflict: the fork ships
+  neither file, they are the entire expected divergence, and a squashed pull merges the fork's
+  tree — so it removes both every time. Restoring them is a step of the pull. `make
+  check-e2e-subtree` is red at exactly those two entries until it happens, and green after.
+- Verified after the pull rather than assumed: `make check-e2e-subtree` reports the expected
+  two-entry divergence, no skill in the subtree carries `disable-model-invocation`, and all three
+  on-disk skills are declared in `plugin.json`.
+
 ## [1.3.0] - Unreleased
 
 ### Changed

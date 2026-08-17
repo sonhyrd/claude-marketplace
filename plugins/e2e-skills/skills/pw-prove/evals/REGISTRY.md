@@ -1404,6 +1404,22 @@ already said this; the core is now duplicated verbatim into both judges, with
 `scripts/ci/test-eval-judges.sh` comparing the copies, exactly as it does for `offenders()` and the
 wet judges' workspace preamble.
 
+## Authored, not yet characterized
+
+A case authored alongside a body change, before any run has scored it. It is on disk with a judge and
+a fixture pair, and it is **not** in `eval.yaml`: the admission rule is evidence, and this row has
+none yet. Characterize it (3 iterations + an uplift measurement) before adding it to the active list,
+and move the row into the batch table above with its numbers when you do.
+
+| Case | Shape | Guards (SKILL.md section) | Pass rate | Uplift | Status |
+|---|---|---|:--:|:--:|---|
+| `b06-profile-contradicted-written-back` | behavior | Step 1 › *Runtime profile* › **the write-back** — a contradicted entry is rewritten in `.pw-prove/profile.md`, not merely reported | not run | not measured | quarantined — uncharacterized (authored with the write loop) |
+
+Why this rule and not another part of the write loop: the `CONTRADICTED` Assumptions line predates
+the write half, so the report-only answer is the one that looks complete. That is where the loop
+erodes back into a read-only feature, and it is judgeable from a final message — which is why no wet
+case was authored for the write (`w02`'s unstable uplift is what a second wet case would cost).
+
 ## Coverage gaps this table exposes
 
 The point of the section column is that an empty one is visible. After batch 1, #75, batch 2 and
