@@ -8,6 +8,42 @@ All notable changes to the matt plugin in this marketplace will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.3] - Unreleased
+
+### Changed
+
+- Subtree pulled from `mattpocock/main` (`9c9f36c`), moving the plugin 1.2.2 → **1.2.3**. 30 files
+  changed, 107 insertions, 65 deletions. **The declared skill set is byte-identical to 1.2.2** —
+  same 25 entries, nothing added, removed, promoted or renamed — so nothing re-routes.
+- The pull is **not** `--squash`, matching the graft: `d46eb83` is a real two-parent subtree commit
+  carrying `git-subtree-dir` / `git-subtree-mainline` / `git-subtree-split`.
+- Exactly one conflict, in `.claude-plugin/plugin.json`, and it is the known deviation — upstream's
+  `"name": "mattpocock-skills"` against our `"name": "matt"`. Resolved as always: our name,
+  upstream's version. Every other byte across the 30 files merged clean.
+- Upstream's three released changes in 1.2.3: `diagnosing-bugs` now **redacts secrets** as the
+  first move on every command, output and captured artifact; `code-review`, `codebase-design` and
+  `improve-codebase-architecture` drop Claude Code's tool and agent-type names from their
+  subagent-dispatch steps so they read on Codex too; `wizard` drops its time estimate, counting
+  progress in stages instead.
+
+### Fixed
+
+- **`sss:pr-review`'s one override of a skill it does not own broke, exactly where it said it
+  would.** Its Step 2 pointed at `matt:code-review`'s dispatch step by saying "the loaded skill's
+  step 4 says two" — and 1.2.3 **deleted** the sentence it was counting, *Send a single message
+  with two `Agent` tool calls*, as part of making that step harness-portable. The override now
+  anchors on the **two named briefs** the step still defines, Standards and Spec, which survives a
+  rewrite that removes harness-specific tool names. Counting briefs is durable; counting calls was
+  not.
+
+### Notes
+
+- The tree is upstream `main`, not the `v1.2.3` tag: four unreleased changesets sit on top of the
+  release — `domain-modeling` triggering on CONTEXT.md/ADR writes, em-dashes out of `grilling`,
+  cross-skill invocation standardised on explicit Skill-tool phrasing, and skills told to stop
+  calling other user-invoked skills. `plugin.json` reads 1.2.3 because that is what upstream's
+  manifest says; the content is slightly ahead of it.
+
 ## [1.2.0] - 2026-07-31
 
 ### Added
