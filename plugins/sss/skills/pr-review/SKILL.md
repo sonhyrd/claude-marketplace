@@ -53,7 +53,7 @@ git diff "$BASE...$HEAD_SHA" --stat
 
 **Each guard names one thing `switch -C` would destroy**, which is why there are three: `-C` resets an existing local branch of that name.
 
-- **Guard 1 — a dirty tree.** Uncommitted work stays exactly where the user left it: never stashed, never reset, never carried across into a review of files the PR does not contain.
+- **Guard 1 — a dirty tree.** Uncommitted work stays exactly where the user left it: never stashed, never reset, never carried across into a review of files the PR does not contain. **The stop names the two routes back** — stash or commit the edits and re-run, or review the PR from a separate worktree so this checkout is never touched. Whose hands the stash is in is the whole distinction: the user popping their own costs them one command, where this skill holding it would own restoring that state across four stages and `pw-prove`'s push.
 - **Guard 2 — `fatal: '…' is already used by worktree at '…'`, caught before it fires.** The ordinary Orca case, a review in a fresh worktree while the branch is live in the main clone. Only *another* worktree counts; the branch already being current here is the success path.
 - **Guard 3 — unpushed commits.** A non-zero count is work `-C` would strand. The command failing means no such branch, which has nothing to lose.
 
@@ -279,6 +279,10 @@ the POM and the HAR, so nothing downstream ever cleans it up.
 and its `SKILL.md` (`plugins/e2e-skills/skills/pw-prove/SKILL.md` in this marketplace, Step 2 step 0)
 is where the shape is defined. Write to it; do not
 extend it. A key it does not read is a key nobody reads.
+
+**What the schema carries is `pw-prove`'s call, whatever a new key would or would not disturb in
+this run.** The reader is the only party that can say what a field means, so routing the request
+there is the answer with the information in it.
 
 **Asked mid-run for a field this schema does not have, name the owner and carry on** — the answer is
 where the change belongs, not the change. It is two files in two plugins plus a parity test and a
