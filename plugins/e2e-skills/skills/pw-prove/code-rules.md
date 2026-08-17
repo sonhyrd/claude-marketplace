@@ -236,6 +236,27 @@ Every constraint here is load-bearing:
 
 This is the **only** sanctioned `page.waitForTimeout()` in generated output. Any other one is #9 and gets fixed, not justified.
 
+### Transient payoffs: assert, frame, hold — with nothing in between
+
+A payoff that **disappears on its own** — a toast, a snackbar, an auto-dismissing banner — takes its dwell **immediately** after its own assertion. No intervening beat, no next click, no second assertion between the two.
+
+The failure mode is the reason it is a rule rather than a preference: the element is gone from the held frame while every gate stays green. The assertion passed, the dwell ran its full 2500ms, `clip-fidelity.mjs` is satisfied, and the clip shows an empty page. Nothing catches it except [clip inspection](#payoff-dwell) — one full re-film late. `vue-sonner` and most toast libraries dismiss at ~4s, which is comfortably shorter than one more interaction.
+
+This is placement, not gating: the filming law is untouched, the dwell stays `PW_PROVE_CLIP`-gated and `// JUSTIFIED:`, and the framing scroll stays ungated between the assertion and the hold.
+
+```typescript
+await saveButton.click();
+const toast = page.getByRole('status');
+await expect(toast).toHaveText('Report saved');                // the assertion
+await toast.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center' }));
+// Held HERE, not a beat later: the toast auto-dismisses and would be gone from the frame.
+// JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP (the pw-prove Step-7 proof
+// run); it sits after the assertion covering the beat above, so it adds time and nothing else.
+// CI never sets it.
+if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
+await expect(page.getByRole('heading')).toHaveText('Q3 revenue');   // everything else comes after
+```
+
 ### Atomic input
 
 The evidence is the **state change**, not the keystrokes — so fill atomically and hold on the field's end state. (The exception is an acceptance criterion that is itself *about entering data*.)

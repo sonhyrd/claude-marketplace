@@ -161,7 +161,9 @@ project's own `playwright.config` is never edited. Carries `webServer: undefined
 `.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
 ## Hermetic audit
-The Step-7 check that the passing proof run reached nothing it did not declare. `hermetic.mjs`
+The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
+**audit run** — the un-clipped, un-dwelled proof run that precedes filming, so a finding costs a
+cheap re-run rather than the clips. `hermetic.mjs`
 classifies every request from the run's traces — LIVE (the browser put it on the wire: the trace
 entry carries `serverIPAddress`), MOCKED (a `route.fulfill()` answered it), FAILED — and separately
 greps the spec for `route.fetch()` call sites, which perform a real round-trip from the Playwright
@@ -218,8 +220,11 @@ run to learn: how a tenant resolves, which auth rung works against the [proof ta
 which declared env keys are actually required. Read at Step 1 as advisory context that never overrides
 a live observation, and written back at Step 3 and Step 8. An entry is admitted only if it is about
 the repository rather than the change, cost a live pass to learn, and will still be true next month.
-Subject headings are its merge keys, so a re-learned fact rewrites its entry rather than stacking a
-near-duplicate. Untrusted data on the way in, prose on the way out, and never a credential's value.
+Two halves: a `KEY=value` header a later run **substitutes into its commands**, and prose beneath it
+carrying the reasoning a run weighs before overriding a value. Subject headings are the prose's merge
+keys, so a re-learned fact rewrites its entry rather than stacking a near-duplicate; the header is one
+block with one merge key per line. Untrusted data on the way in, and never a credential's value —
+including in the header, whose shape is exactly that of a real `.env` line.
 
 ## Recon probe
 The persistent browser context (`scripts/probe.mjs`) that answers batched recon questions during

@@ -235,8 +235,8 @@ instrument certified as skill-free.
 | `b05-handoff-stale` | behavior | Step 4 › *Assumptions* › the Handoff line (and the Step-2 handoff verdict it reports) | **3/3** | **+1** (clean) | **active** |
 | `case-15-no-throwaway-recon-spec` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (re-taken under #78; baseline SKILL-FREE and failed — the inference it was admitted on is now a measurement) | **active** |
 | `case-50-announced-port-adopted` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** → **3/3** after #66 (see below) | **+1** (clean) | **active** |
-| `case-60-no-workers-in-command` | behavior | Step 7 › *Verify* — the proof-run command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
-| `case-28-hermetic-audit-not-hand-parsed` | behavior | Step 7 › *Hermetic audit (after the passing run)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
+| `case-60-no-workers-in-command` | behavior | Step 7 › *Verify* — the filming run's command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
+| `case-28-hermetic-audit-not-hand-parsed` | behavior | Step 7 › *Hermetic audit (on the audit run, before anything is filmed)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
 | `case-48-dev-guarded-rung-skipped` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
 | `w01-bringup-own-port` | behavior (**wet**) | Step 3 › *Bring the environment up* — bullet 1, the packaged serve script that hard-codes a port | **3/3** | **+1** (clean; the discriminating half is the gate, see #69 below) | **active** |
 | `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** → **3/3** (re-characterized under #71, once its judge stopped reading a tool preamble as turn 1) | **+1** (clean, and measured at **n=3 per arm** rather than n=1: 3/3 with the skill against **0/3** skill-free, all three baseline arms certified SKILL-FREE by the sweep) | **active** |
@@ -274,7 +274,7 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 | `case-7-plan-notify-and-continue` | behavior | Step 4 › *notify-and-continue (PR-mode) / approval gate (coverage-gap)* | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
 | `case-8-step8-tail-complete` | behavior | Step 8 › *Hygiene sweep* + the completion-report invariant | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
 | `case-12-bringup-stop-report` | behavior | Pipeline Overview › *Stop reports* — the six beats at a Step-3 bring-up failure | 3/3 | not measured — **both arms failed** on the #78 re-measurement, so there is no difference to read | quarantined |
-| `case-20-fresh-context-recommended-once` | behavior | Step 1 › *Mode* — the heavy-session recommendation | 3/3 | **+1** (re-measured under #78; baseline SKILL-FREE and failed) | **active** |
+| `case-20-heavy-session-refused` | behavior | Step 1 › *Context gate — a heavy session is refused, not survived* | 3/3 **as `case-20-fresh-context-recommended-once`; re-derived under #98 and NOT yet re-characterized** | **+1** under the old premise (re-measured under #78; baseline SKILL-FREE and failed) | **active — re-characterization owed** |
 | `case-17` | behavior | Step 6 › *PROVES-header audit* | 3/3 | **0** (re-measured under #78, third attempt; baseline SKILL-FREE and **passed**) | **retired — deleted** |
 | `case-23-viewport-descriptor-pinned` | behavior | Step 4 › *Effective viewport* — a desktop descriptor is scaffold boilerplate | **2/3** (re-characterized on a real fixture, #76 — the 3/3 it used to carry was on a fixture it never read) | baseline **0/3**, both arms certified skill-free | quarantined |
 | `case-4-auth-ladder-exhausted-stops` | behavior | Step 3 › *Auth* — the token-source ladder exhausted, and the public-route false positive | **2/3** | not measured | quarantined |
@@ -1394,6 +1394,31 @@ own install, and leaves every non-colliding namespace on the wide rule — so `e
 byte-identical to what every earlier measurement carried. The suite says which skills it installs;
 the runner reads that from the suite rather than being told.
 
+### #98 re-derived `case-20`, and split `case-52` rather than widening it
+
+The context gate (ADR 0019) retired `case-20`'s entire premise. The old case asserted the *opposite*
+behaviour — recommend a fresh session once, then **continue inline** when the user declines or does
+not answer — so it would have gone red against the new body for the right reason and been read as a
+regression. Its id, title, prompt, judge and fixture pair were all re-derived
+(`case-20-fresh-context-recommended-once` → `case-20-heavy-session-refused`,
+`fresh-context-recommended-once.mjs` → `heavy-session-refused.mjs`), and its digest re-stamped after
+the judge was re-read against the new prompt.
+
+**Its row keeps its old numbers and is marked `re-characterization owed`.** A 3/3 measured against a
+retired premise is not evidence about the new one, and the honest options were to quarantine it or to
+say so out loud. It stays active and labelled, because the alternative leaves the gate — the change
+with the widest blast radius in #98 — guarded by nothing at all while the label makes the debt
+visible. Re-characterize before trusting the row.
+
+Three other active cases were in the blast radius and needed less:
+
+- `case-28` and `case-60` moved only their `step:` labels and one clause of prompt each, because Step
+  7 now runs twice: the hermetic audit reads the **audit run**, and the `--workers` question is about
+  the **filming run**. Neither judge lost or gained an assertion; both digests were re-stamped.
+- `case-34` and `case-37` needed **nothing**. Both were checked assertion by assertion: the filming
+  law is unchanged, and the clip-inspection diagnosis table only gained a row. A case that does not
+  need editing is worth recording as checked, or the next reader re-derives the same conclusion.
+
 ### a judge is copied alone
 
 Six agent runs were spent before any of the above on a judge that could not start: the routing core
@@ -1414,11 +1439,19 @@ and move the row into the batch table above with its numbers when you do.
 | Case | Shape | Guards (SKILL.md section) | Pass rate | Uplift | Status |
 |---|---|---|:--:|:--:|---|
 | `b06-profile-contradicted-written-back` | behavior | Step 1 › *Runtime profile* › **the write-back** — a contradicted entry is rewritten in `.pw-prove/profile.md`, not merely reported | not run | not measured | quarantined — uncharacterized (authored with the write loop) |
+| `case-62-mutation-revert-marks-stale` | behavior | Step 7 › *Mutation check* — step 4, the revert marks the artifact **stale** and the rebuild is lazy (ADR 0020) | not run | not measured | quarantined — uncharacterized (authored with #98's lazy rebuild) |
 
 Why this rule and not another part of the write loop: the `CONTRADICTED` Assumptions line predates
 the write half, so the report-only answer is the one that looks complete. That is where the loop
 erodes back into a read-only feature, and it is judgeable from a final message — which is why no wet
 case was authored for the write (`w02`'s unstable uplift is what a second wet case would cost).
+
+`case-62` is the guard for the half of #98's change that `case-52` deliberately does **not** cover.
+`case-52` keeps its scope — a legitimate reuse is accepted, and the mutation forces its own
+`BUILD_REUSE=never` rebuild, both unchanged — and lost only the sentence asserting the *post-revert*
+rebuild that #98 made lazy. Splitting rather than widening kept `case-52`'s recorded 2026-08-14
+must-PASS fixture valid: that fixture is evidence of a real answer under the old body, and editing it
+to match a new rule would be falsifying the record it exists to be.
 
 ## Coverage gaps this table exposes
 

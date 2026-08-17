@@ -179,7 +179,9 @@ Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-
 [0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md) ·
 [0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md) ·
 [0018 the eval runtime is `none`](docs/adr/0018-eval-runtime-is-none.md) (and unsandboxed — read it
-before running the suite).
+before running the suite) ·
+[0019 pw-prove refuses a heavy session](docs/adr/0019-pw-prove-refuses-a-heavy-session.md) ·
+[0020 audit before filming, rebuild when needed](docs/adr/0020-audit-before-filming-rebuild-when-needed.md).
 
 ## License
 

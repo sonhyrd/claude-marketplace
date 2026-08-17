@@ -44,7 +44,7 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-16-pom-extend-not-duplicate.yaml`](cases/case-16-pom-extend-not-duplicate.yaml) | `agent_judge` | dormant | 4 | POM inventory + extend-existing-POM on route match (duplicate needs stated justification) |
 | `case-17.yaml` (deleted) | `script` | **retired #78** | 3 | PROVES header quotes the AC verbatim; Step 6 audit blocks Step 7 on a missing/paraphrased header |
 | `case-19.yaml` (deleted) | `agent_judge` | **retired #64** | 3 | Token diet in the fix loop: no inter-tool narration, spec written once — audit trail unaffected |
-| [`case-20-fresh-context-recommended-once.yaml`](cases/case-20-fresh-context-recommended-once.yaml) | `agent_judge` | dormant | 3 | A heavy context earns a fresh-session recommendation, never an auto-background |
+| [`case-20-heavy-session-refused.yaml`](cases/case-20-heavy-session-refused.yaml) (was `case-20-fresh-context-recommended-once.yaml`) | `agent_judge` | dormant | 3 | A heavy context earns a fresh-session recommendation, never an auto-background — **premise retired by #98** |
 | `case-21.yaml` (deleted) | `agent_judge` | **retired #64** | 16 | Clip fidelity: the full bundle (size, held payoff, framing) on a project that declares no viewport |
 | [`case-22-viewport-deliberate-respected.yaml`](cases/case-22-viewport-deliberate-respected.yaml) | `agent_judge` | dormant | 9 | Clip fidelity guard: respect a deliberate project viewport |
 | [`case-23-viewport-descriptor-pinned.yaml`](cases/case-23-viewport-descriptor-pinned.yaml) | `agent_judge` | dormant | 7 | Clip fidelity: a desktop device descriptor is scaffold default, not a deliberate viewport |
@@ -326,7 +326,7 @@ Dropped assertions:
 - True positive: writes the spec once from the pomInventory + Locator Mapping Table rather than scaffolding a skeleton and rewriting it
 - False-positive guard: still writes the Step 4 plan post, the Assumptions block, and the Step 8 report in full — the diet trims loop narration, not the required audit trail
 
-### `case-20-fresh-context-recommended-once.yaml` — A heavy context earns a fresh-session recommendation, never an auto-background
+### `case-20-heavy-session-refused.yaml` — A heavy context earns a fresh-session recommendation, never an auto-background
 
 Legacy id `20` · judge `agent_judge` · dormant · 3 assertions.
 
@@ -335,6 +335,10 @@ Dropped assertions:
 - True positive: recommends a fresh session or a background agent when invoked into a heavy, unrelated session
 - Continues the run inline in the current session when the user declines or does not answer
 - False-positive guard: never auto-backgrounds the run or spawns a background agent on its own — the choice is the user's
+
+**Do not mine the first two.** #98 replaced the recommendation with a hard refusal above 100k tokens
+(ADR 0019): there is no inline-continue branch left, and the case was re-derived under the id above.
+The third assertion survives the change and is the only one still worth recovering.
 
 ### `case-21.yaml` — Clip fidelity: the full bundle (size, held payoff, framing) on a project that declares no viewport
 

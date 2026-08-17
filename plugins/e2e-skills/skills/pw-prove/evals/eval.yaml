@@ -87,11 +87,11 @@ cases:
         # The four #78 unvoided. Each closes a coverage gap the registry named twice: Step 8's
         # hygiene sweep and its report invariant (case-8), the `Proof page: skipped` accounting on
         # the same section (case-5), Step 4's notify-and-continue / approval gate (case-7), and
-        # Step 1's heavy-session recommendation (case-20).
+        # Step 1's context gate (case-20, re-derived for the hard refusal in #98).
         - evals/cases/case-5-publish-skip-accounted.yaml
         - evals/cases/case-7-plan-notify-and-continue.yaml
         - evals/cases/case-8-step8-tail-complete.yaml
-        - evals/cases/case-20-fresh-context-recommended-once.yaml
+        - evals/cases/case-20-heavy-session-refused.yaml
         # The suite's first WET case (#69), and the first case of any kind to reference evals/files/.
         # It is graded on what the run PRODUCED — the `serve.log` a real server wrote, and the port in
         # it — rather than on what it said, which is why the runtime above is `none` and must stay

@@ -7,10 +7,20 @@
 // probe specs and invoked `playwright test` 48 times). The probe replaces both: start once, ask in
 // batches, close. Non-deliverable spec probes are forbidden by SKILL Step 3.
 //
-//   node probe.mjs start               # boot the daemon — run from the APP ROOT, background shell
+//   node probe.mjs start               # boot the daemon — run from the APP ROOT; RETURNS once it
+//                                      # is listening, so a foreground call is correct
 //   node probe.mjs send '<json>'       # run a batch of commands, print compact summaries
 //   node probe.mjs send -              # ...batch read from stdin
 //   node probe.mjs close               # explicit close (the idle timeout is the net)
+//
+// `start` DETACHES the daemon and returns. It used to run the daemon in the foreground until its
+// idle timeout, so a caller that did not background it blocked for minutes and then died on its
+// harness's timeout — an observed run lost 180s to exactly that, with the "background it" rule in
+// bold three lines above the command it ran. The rule is now the script's, not the reader's. Before
+// it returns, `start` prints the socket path and the effective BASE_URL/STORAGE_STATE/RECORD_HAR, so
+// detaching costs none of the diagnostics an inline run would have shown. A `start` against a daemon
+// that is already listening is a no-op that says so and exits 0 — re-issuing the command must never
+// cost a live recon context.
 //
 // `send` with no daemon listening STARTS ONE FIRST and then runs the batch. A batch sent before a
 // start is an ordering mistake about the probe, not a fact about the application under test, and it
@@ -105,8 +115,10 @@ import {
   shortSecretReport,
 } from './har-scrub.mjs';
 
-// Run ledger — registered before validation, so a refusal is recorded too.
-pwproveRun(import.meta.url, 'recon');
+// Run ledger — registered before validation, so a refusal is recorded too. The detached `__daemon`
+// child is skipped: it is one operator action with `start`, and counting it twice would inflate
+// every recon figure the ledger reports.
+if (process.argv[2] !== '__daemon') pwproveRun(import.meta.url, 'recon');
 
 const out = (s) => process.stdout.write(s);
 const err = (s) => process.stderr.write(s);
@@ -137,8 +149,11 @@ const VERBS = [
   'close',
 ];
 
+// `__daemon` is the detached child `start` spawns — the process that actually holds the browser. It
+// is deliberately absent from the usage text: an operator has no reason to run it, and `start` is
+// the only thing that ever should.
 const MODE = process.argv[2];
-if (!['start', 'send', 'close'].includes(MODE)) {
+if (!['start', 'send', 'close', '__daemon'].includes(MODE)) {
   err(
     "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close\n" +
       `probe.mjs: batch verbs: ${VERBS.join(' | ')}\n` +
@@ -301,18 +316,17 @@ const connectOnce = (ms) =>
     setTimeout(() => done(false), ms).unref();
   });
 
-async function ensureDaemon() {
-  if (await connectOnce(1000)) return;
-  err(`probe: no daemon at ${SOCK} — starting one first (sequencing, not a failure)\n`);
-  resolvePinnedPlaywright('send');
-  // The autostarted daemon inherits cwd and environment, so a RECORD_HAR/BASE_URL set on this send
-  // still takes effect — and is named here, because a daemon started with neither is a legal but
-  // very different recon session and the operator must not have to guess which one they got.
-  err(
-    `probe: starting with BASE_URL=${process.env.BASE_URL || '(none)'} ` +
-      `RECORD_HAR=${process.env.RECORD_HAR || '(none)'} ` +
-      `STORAGE_STATE=${process.env.STORAGE_STATE || '(none)'}\n`,
-  );
+// The effective recon session in one line. A daemon started without BASE_URL/RECORD_HAR/STORAGE_STATE
+// is a legal but very different session, and the operator must not have to guess which one they got.
+const paramLine = () =>
+  `probe: starting with BASE_URL=${process.env.BASE_URL || '(none)'} ` +
+  `RECORD_HAR=${process.env.RECORD_HAR || '(none)'} ` +
+  `STORAGE_STATE=${process.env.STORAGE_STATE || '(none)'}\n`;
+
+// Detach a daemon and wait until its socket answers. `start` and `send`'s autostart share it, so the
+// two can never disagree about what a successful boot is. The child inherits cwd and environment,
+// which is what makes the parameters above take effect.
+async function spawnDaemon() {
   const logPath = `${SOCK}.log`;
   let stdio = 'ignore';
   try {
@@ -320,7 +334,7 @@ async function ensureDaemon() {
   } catch {
     /* an unwritable log never blocks a start */
   }
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), 'start'], {
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '__daemon'], {
     detached: true,
     stdio: ['ignore', stdio, stdio],
   });
@@ -334,16 +348,13 @@ async function ensureDaemon() {
   const budget = (Number(process.env.PROBE_START_TIMEOUT) || 60) * 1000;
   const deadline = Date.now() + budget;
   while (Date.now() < deadline) {
-    if (await connectOnce(500)) {
-      err(`probe: daemon ready (pid ${child.pid}) — running the batch\n`);
-      return;
-    }
+    if (await connectOnce(500)) return { ok: true, pid: child.pid };
     // A daemon that exited may still have lost a race to another start that is now listening, so
     // the socket is asked once more before this is called a failure.
     if (died !== null) break;
     await new Promise((r) => setTimeout(r, 200));
   }
-  if (await connectOnce(1000)) return;
+  if (await connectOnce(1000)) return { ok: true, pid: child.pid };
   const tail = (() => {
     try {
       return fs.readFileSync(logPath, 'utf8').trimEnd().split('\n').slice(-6).join('\n  ');
@@ -351,12 +362,27 @@ async function ensureDaemon() {
       return '(no log)';
     }
   })();
+  return { ok: false, died, budget, tail, logPath };
+}
+
+// Shared refusal, so `start` and `send` report a failed boot identically.
+function daemonBootFailed(r) {
   err(
-    `probe: STOP — the daemon did not come up within ${budget / 1000}s` +
-      `${died === null ? '' : ` (it exited ${died})`}. Its own output:\n  ${tail}\n`,
+    `probe: STOP — the daemon did not come up within ${r.budget / 1000}s` +
+      `${r.died === null ? '' : ` (it exited ${r.died})`}. Its own output:\n  ${r.tail}\n`,
   );
   // A browserless daemon exits 2, and that is the answer worth propagating verbatim.
-  process.exit(died === 2 ? 2 : 3);
+  process.exit(r.died === 2 ? 2 : 3);
+}
+
+async function ensureDaemon() {
+  if (await connectOnce(1000)) return;
+  err(`probe: no daemon at ${SOCK} — starting one first (sequencing, not a failure)\n`);
+  resolvePinnedPlaywright('send');
+  err(paramLine());
+  const r = await spawnDaemon();
+  if (!r.ok) daemonBootFailed(r);
+  err(`probe: daemon ready (pid ${r.pid}) — running the batch\n`);
 }
 
 if (MODE === 'send') {
@@ -372,9 +398,35 @@ if (MODE === 'send') {
 }
 if (MODE === 'close') client('[{"cmd":"close"}]');
 
-// ============================================================ daemon (start)
+// ============================================================ start (detach, report, return)
+// The browserless gate runs FIRST and in THIS process, so a repository with no pinned Playwright
+// gets exit 2 before anything is spawned — the CI-proven path.
 
 if (MODE === 'start') {
+  void (async () => {
+    if (await connectOnce(1000)) {
+      err(
+        `probe: a daemon is already listening at ${SOCK} — nothing started, the recon context is\n` +
+          '       intact. Its BASE_URL/RECORD_HAR/STORAGE_STATE are whatever STARTED it; to change\n' +
+          '       them, `node probe.mjs close` and start again.\n',
+      );
+      process.exit(0);
+    }
+    resolvePinnedPlaywright('start');
+    err(paramLine());
+    const r = await spawnDaemon();
+    if (!r.ok) daemonBootFailed(r);
+    err(`probe: ready — daemon pid ${r.pid}, socket ${SOCK}, log ${SOCK}.log\n`);
+    process.exit(0);
+  })().catch((e) => {
+    err(`probe: STOP — could not start a daemon: ${String(e?.message ?? e).split('\n')[0]}\n`);
+    process.exit(3);
+  });
+}
+
+// ============================================================ daemon (the detached child)
+
+if (MODE === '__daemon') {
   const IDLE = Number(process.env.PROBE_IDLE ?? 300);
   if (!Number.isFinite(IDLE) || IDLE <= 0) {
     err(`probe.mjs: PROBE_IDLE must be a positive number of seconds (got '${process.env.PROBE_IDLE}')\n`);
@@ -384,8 +436,8 @@ if (MODE === 'start') {
   const resolved = resolvePinnedPlaywright('start');
 
   const daemon = async () => {
-    // A second `start` against a live daemon is a mistake worth catching before we launch a
-    // browser; a stale socket file left by a SIGKILLed daemon is just removed.
+    // A second daemon racing a live one is caught before we launch a browser; a stale socket file
+    // left by a SIGKILLed daemon is just removed.
     const alive = await new Promise((res) => {
       const s = net.connect(SOCK);
       const done = (v) => {
@@ -397,13 +449,8 @@ if (MODE === 'start') {
       setTimeout(() => done(false), 1000).unref();
     });
     if (alive) {
-      err(
-        `probe: a daemon is already listening at ${SOCK} — use send/close, not a second start.\n` +
-          '       A `send` starts a daemon when none is running, and it inherits THAT command\'s\n' +
-          '       environment — so if this start was meant to set BASE_URL/RECORD_HAR/STORAGE_STATE,\n' +
-          '       the running daemon does not have them: `node probe.mjs close`, then start again.\n',
-      );
-      process.exit(1);
+      err(`probe: another daemon won the race to ${SOCK} — this one exits, that one serves.\n`);
+      process.exit(0);
     }
     fs.rmSync(SOCK, { force: true });
 
@@ -515,6 +562,16 @@ if (MODE === 'start') {
     //
     // It never prints a credential. Residue is reported by location, kind and length only, the same
     // contract `har-scrub.mjs --verify` holds.
+    // Everything the shutdown has to say goes through `say`: to this process's stderr (which lands in
+    // the daemon's log) AND into a buffer the close response carries back over the socket. The daemon
+    // is detached, so its stderr is a file nobody is watching — and the HAR verdict is the one line an
+    // operator must not miss, because `probe: REFUSED` means a recording that must not be committed.
+    const shutdownLines = [];
+    const say = (s) => {
+      shutdownLines.push(s);
+      err(s);
+    };
+
     function scrubCaptureToTarget() {
       const filter = process.env.HAR_URL_FILTER || '**/api/**';
       const drop = () => fs.rmSync(harStageDir, { recursive: true, force: true });
@@ -527,7 +584,7 @@ if (MODE === 'start') {
       })();
       if (staged <= 0) {
         drop();
-        err(
+        say(
           `probe: WARNING — RECORD_HAR was set but no HAR landed at ${HAR_TARGET}. Nothing matched\n` +
             `       ${filter}, or the path is unwritable. Do NOT\n` +
             '       commit a routeFromHAR spec against a HAR that does not exist.\n',
@@ -539,7 +596,7 @@ if (MODE === 'start') {
         har = JSON.parse(fs.readFileSync(harStage, 'utf8'));
       } catch (e) {
         drop();
-        err(
+        say(
           `probe: STOP — the recorded HAR did not parse (${String(e.message ?? e).split('\n')[0]}).\n` +
             `       Nothing was written to ${HAR_TARGET}: an unscrubbed capture is never copied into\n` +
             '       the working tree. Re-run the recon pass.\n',
@@ -561,14 +618,14 @@ if (MODE === 'start') {
         if (wrecked.length) {
           // `finally` below destroys the staging directory on this path out too, so neither the
           // wreckage nor the raw authenticated capture survives.
-          err(overScrubReport(wrecked, 'probe', HAR_TARGET));
-          err(`       Nothing was written to ${HAR_TARGET}. Re-record the recon pass.\n`);
+          say(overScrubReport(wrecked, 'probe', HAR_TARGET));
+          say(`       Nothing was written to ${HAR_TARGET}. Re-record the recon pass.\n`);
           return;
         }
         fs.mkdirSync(path.dirname(path.resolve(HAR_TARGET)), { recursive: true });
         fs.writeFileSync(HAR_TARGET, `${JSON.stringify(har, null, 2)}\n`);
       } catch (e) {
-        err(
+        say(
           `probe: STOP — the capture could not be scrubbed to ${HAR_TARGET} ` +
             `(${e.code ?? String(e.message ?? e).split('\n')[0]}).\n` +
             '       The raw capture was destroyed rather than written unscrubbed.\n',
@@ -584,21 +641,21 @@ if (MODE === 'start') {
           return 0;
         }
       })();
-      err(
+      say(
         `probe: HAR written ${HAR_TARGET} (${size} bytes, filter ${filter}) — ` +
           `scrubbed at capture, ${secrets} secret(s) placeheld, loopback origins canonicalised\n`,
       );
       // Short values are placeheld where they were found and never swept across the recording. Say
       // which, by learn site and length only, so a short-but-real secret is reported and not skipped.
-      err(shortSecretReport(withheld, 'probe'));
+      say(shortSecretReport(withheld, 'probe'));
       // The same residue check the pre-commit refusal runs, so the two can never disagree. A scrub
       // that left something behind must say so HERE, while the recon context is still the thing the
       // operator is looking at — not six steps later.
       const left = findResidue(har);
       if (left.length) {
-        err(`probe: REFUSED — ${left.length} credential residue(s) SURVIVED the scrub in ${HAR_TARGET}\n`);
-        for (const h of left) err(`  ${h.where}  ${h.kind}  (len ${h.len})\n`);
-        err(
+        say(`probe: REFUSED — ${left.length} credential residue(s) SURVIVED the scrub in ${HAR_TARGET}\n`);
+        for (const h of left) say(`  ${h.where}  ${h.kind}  (len ${h.len})\n`);
+        say(
           '       Do NOT commit this HAR. A leaked bearer in a committed HAR is the same incident\n' +
             '       as one in a log line.\n',
         );
@@ -607,7 +664,10 @@ if (MODE === 'start') {
 
     // --- shutdown: explicit close, idle timeout, or signal — all one path ----------------------
     let closing = false;
-    const shutdown = async (why) => {
+    // `sock` is the still-open close connection, when there is one: the HAR verdict is written back
+    // over it before it ends, so an operator running `close` reads the scrub result inline instead of
+    // going to find a detached daemon's log.
+    const shutdown = async (why, sock) => {
       if (closing) return;
       closing = true;
       err(`probe: closing (${why}) — no zombie browser outlives the session\n`);
@@ -626,6 +686,17 @@ if (MODE === 'start') {
         /* already gone */
       }
       fs.rmSync(SOCK, { force: true });
+      if (sock && !sock.destroyed && shutdownLines.length) {
+        // Exit only once the bytes are on the wire — a process.exit() here drops them and the
+        // operator's `close` prints nothing about a recording it may not be allowed to commit.
+        await new Promise((res) => {
+          const done = () => res();
+          setTimeout(done, 2000).unref();
+          sock.end(shutdownLines.join(''), done);
+        });
+      } else if (sock && !sock.destroyed) {
+        sock.end();
+      }
       process.exit(0);
     };
     process.on('SIGINT', () => void shutdown('SIGINT'));
@@ -815,8 +886,10 @@ if (MODE === 'start') {
           break;
         }
       }
-      sock.end();
-      if (wantClose) await shutdown('explicit close');
+      // A closing batch keeps its connection open so the shutdown can write the HAR verdict into the
+      // same response; every other batch ends here.
+      if (wantClose) await shutdown('explicit close', sock);
+      else sock.end();
     }
 
     // Batches run strictly one at a time across ALL connections: concurrent sends would interleave
