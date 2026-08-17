@@ -1,0 +1,26 @@
+id: sync-stage-absent-silently
+title: With no translation config the sync stage is absent, not reported as skipped
+description: |
+  Step 5. Both sync findings must be true for the stage to run. When the repo has
+  no .github/hyrd-trans-bot.json the stage is absent — the report says nothing at
+  all about translations, because nearly every repo would otherwise carry a line
+  announcing an irrelevant stage.
+
+input:
+  prompt: |
+    This repo has no .github/hyrd-trans-bot.json — we don't use the translation
+    server here. When you review PR #90, is there a translation sync step, and
+    will the report mention it either way?
+
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        any: ["absent", "no translation sync", "not run", "no sync"]
+    - output_contains:
+        any: ["nothing", "no line", "silent", "won't mention", "will not mention", "not mentioned"]
+    - output_contains:
+        any: ["config", "hyrd-trans-bot"]
+  failure:
+    - output_contains:
+        any: ["the report will note that it was skipped", "I'll sync anyway", "I will sync anyway"]
