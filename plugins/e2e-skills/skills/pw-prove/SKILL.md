@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.22.0"
+  version: "0.23.0"
 ---
 
 # pw-prove
@@ -31,7 +31,7 @@ Step 3  Bring-up + Probe            (ONE live pass: merge base, three-phase brin
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
 Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + framing + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + clip-fidelity audit + e2e-reviewer skill quality gate)
-Step 7  Verify                       (tsc → audit run [traces, no clip] → hermetic audit → filming run [PW_PROVE_CLIP=1] → look at one frame per clip → mutation check)
+Step 7  Verify                       (tsc → audit run [traces, no clip] → hermetic audit → filming run [PW_PROVE_CLIP=1, PR spec set] → look at one frame per clip → mutation check)
 Step 8  Deliver                      (PR-mode: publish ONE chaptered recording → Clips · commit spec+POM+api.har · push · PR comment · report)
 ```
 
@@ -346,7 +346,21 @@ accident, but an ungitignored handoff will show up in someone's `git status` for
 | Empty filter clears the result list  | handoff           | /en/people      | PeopleList.vue               | E2E scenario 3       |
 | Status strings are trimmed + deduped | PR body bullet    | (pure fn)       | useFilter.ts                 | already covered:     |
 |                                      |                   |                 |                              | useFilter.test.ts    |
+| Filtered people survive a reload     | PR body checklist | /en/people      | PeopleList.vue               | carried:             |
+|                                      |                   |                 |                              | people-filter.spec.ts|
 ```
+
+**The diff is the PR's whole diff, never this session's commits.** A long-lived branch is proven
+across several pw-prove runs, and every one of them derives against the same PR — so an AC an
+earlier run already proved is still an AC here. It keeps its row with **`carried: <spec file>`** in
+the Proven-by column, its scenario is filmed again by this run (Step 7), and it is counted in this
+run's report (Step 8). That row count is the run's `M total`, and it is the only place that number
+comes from.
+
+**Carried is not folded.** A folded AC left the browser layer for a unit test in the diff; a carried
+one is proven in the browser by a spec already on the branch, and this run re-proves it. Reading a
+carried AC as folded is what produces a proof page holding one session's delta and presenting it as
+the proof of the PR.
 
 ### Coverage-gap mode (no argument)
 
@@ -578,7 +592,7 @@ Cover at minimum one happy path + one error/edge case. **PR-mode:** at minimum o
 
 ### Assumptions (required block in the PR-mode plan)
 
-One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth, **effective viewport**, **handoff**, **profile**). This block is the audit trail that replaces the questions.
+One line per contract-resolved decision that applies (structure, selectors, stash, HAR + the hand-mocked mutation + any carve-out, locale, auth, **effective viewport**, **spec set**, **handoff**, **profile**). This block is the audit trail that replaces the questions.
 
 **Profile** is the Step-1 verdict, and it is **one line, never zero** when a `.pw-prove/profile.md` was read:
 
@@ -594,6 +608,12 @@ No file found → no line. **A contradiction must produce its line**: it is the 
 - `Handoff: .pw-prove/handoff.json — stale (recorded head <sha7>, HEAD is <sha7>); dropped, ACs derived from the diff alone`
 
 No file found → no line. A stale handoff **must** produce its line: dropping it silently is how a reader ends up believing the review's findings were carried when they were not.
+
+**Spec set** is what Step 7 will run, and PR-mode states it here so a surprising film is caught in
+the plan rather than at minute fifty: the spec this run writes, plus every spec already on the branch
+that the PR's diff touches under `testDir` (resolved by the command in Step 7). Name the carried
+files and their scenario count — `Spec set: people-filter.spec.ts (3 carried) + this run's
+people-export.spec.ts (2 new)`.
 
 **Effective viewport** is resolved here, from the Step-1 `configPath`, by the rule in `code-rules.md` → Clip Fidelity — state the value *and* which branch produced it (`deliberate: <w>x<h>` when the config carries an explicit `viewport:` key or a mobile descriptor, `pinned: 1600x900` when it carries only a desktop descriptor or nothing). Step 5 writes the pin; Step 7 sizes the recording to match.
 
@@ -728,7 +748,21 @@ Most recordings need nothing more: a credential that travelled only in headers a
 
 Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
 
-**2. Two runs of the same command: an audit run, then the filming run.** Both go through the committed proof config; the only difference is that the filming run sets `PW_PROVE_CLIP`/`PW_PROVE_W`/`PW_PROVE_H` and the audit run sets none of them.
+**2a. In PR-mode, both runs execute the PR spec set** — every spec that proves this PR, not only the one this run wrote. A run that films its own delta delivers a proof page holding two chapters of a thirteen-scenario PR, and nothing in the artifact says so. Resolve the set **mechanically**, because a judgement call here is where the drift comes back:
+
+```bash
+# Every spec the PR's diff touches under the project's testDir. pw-prove commits its own specs to
+# the PR branch, so an earlier run's spec is in this list by construction — that is the whole trick.
+git diff --name-only "$(git merge-base <base> HEAD)"...HEAD -- '<testDir>/**/*.spec.*'
+```
+
+That list plus the spec this run wrote is `<spec set>` below, and Step 4's Assumptions block already named it. Target and coverage-gap mode film one run's work by definition: there `<spec set>` is the spec this run wrote.
+
+**A carried spec that goes red in the audit run is a finding, not a spec to heal.** It passed on the run that wrote it, so a failure now says the PR moved the behaviour underneath it. Diagnose it like any other failure, and when the fix belongs in the *application* rather than the spec, report it with its evidence and leave the spec asserting what it always asserted. Loosening a carried assertion to get green deletes the only guard that caught the regression.
+
+The set widens what is **filmed**. It does not widen what is **mutation-verified** — that scope is stated at the mutation check and is deliberately narrower.
+
+**2b. Two runs of the same command: an audit run, then the filming run.** Both go through the committed proof config; the only difference is that the filming run sets `PW_PROVE_CLIP`/`PW_PROVE_W`/`PW_PROVE_H` and the audit run sets none of them.
 
 | Run | What it is for | What it costs |
 |---|---|---|
@@ -791,7 +825,7 @@ rm -rf test-results
 # AUDIT RUN — no PW_PROVE_CLIP, so no dwell is paid. trace:'on' is in the config, so the traces the
 # hermetic audit reads arrive anyway. This is also the run the heal loop works against.
 # Concurrency is Playwright's to choose: override nothing and the scenarios run together — see below.
-npx --no-install playwright test <spec> --project=chromium \
+npx --no-install playwright test <spec set> --project=chromium \
   --config <configDir>/playwright.proof.config.ts --reporter=html
 
 # ...green, then the hermetic audit (it reads the traces under test-results/) and any fix it forces...
@@ -803,7 +837,7 @@ rm -rf test-results
 # FILMING RUN — the clips that get delivered. video records ONE webm per test (per AC);
 # PW_PROVE_W/H carry the run's EFFECTIVE viewport — always pass them, never a fixed literal.
 PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
-  npx --no-install playwright test <spec> --project=chromium \
+  npx --no-install playwright test <spec set> --project=chromium \
   --config <configDir>/playwright.proof.config.ts --reporter=html
 # webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
 ```
@@ -931,6 +965,8 @@ The fix goes into the **committed spec** — never into the proof config, and ne
 
 Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded source mutation:
 
+**Scope: the scenarios this run wrote.** A carried scenario's mutation verdict was recorded by the run that wrote it, and re-deriving it costs one forced-no-reuse rebuild each (~635s, below). So the run carries two scopes and they are different on purpose: **filmed** is the PR spec set (Step 7), **mutation-verified** is this run's new scenarios. Widening one leaves the other where it is. A run that wrote no new scenario — a re-film of an unchanged branch — reports `Mutation: carried (no new scenario this run)` and mutates nothing.
+
 **The mutation run must not touch the clips.** `test-results/` holds the recorded evidence of the *passing* run; a mutation run writing there overwrites clips with footage of deliberately broken software, and publishing those is the worst artifact this pipeline could emit. Send it elsewhere and record nothing:
 
 ```bash
@@ -980,7 +1016,7 @@ SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
    diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch
    ```
    Real residue = **HARD STOP**: report immediately; never continue on a polluted tree.
-6. **Confirm the clips survived:** `ls test-results/*/video.webm | wc -l` equals the scenario count. If the mutation run clobbered them (it wrote to `test-results/`), the clips no longer show passing software — delete them and re-run the proof before publishing. Never publish a clip you cannot place after the last source revert.
+6. **Confirm the clips survived:** `ls test-results/*/video.webm | wc -l` equals the **PR spec set's** scenario count, carried scenarios included. If the mutation run clobbered them (it wrote to `test-results/`), the clips no longer show passing software — delete them and re-run the proof before publishing. Never publish a clip you cannot place after the last source revert.
 
 **On full pass:** PR-mode → Step 8. Target/coverage-gap → the completion report directly (Step 8's proof page only when a clip was requested or the publish prerequisites are ready).
 
@@ -990,13 +1026,13 @@ SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
 
 PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips is not delivered. Coverage/target mode: skip to item 5 (report only). **Step 8 is reached only after a green proof run** — a run that took the Step-7 handover stop never arrives here, and in particular never reaches the commit and push below: the spec it holds is failing, and it travelled in the handover comment instead. Run in order:
 
-1. **Publish ONE chaptered recording for the run.** Find the per-test webms under `test-results/**/*.webm` (one per scenario) and map each to the AC it proves. Write a manifest, then hand the whole run to `publish-proof.mjs`: it probes and gates every clip, joins them by **stream copy** into one video, and POSTs the whole thing to Paul Clips in one authenticated JSON-RPC call, returning one `https://clips.paulsjob.ai/share/<id>` link. Each clip becomes a **chapter** on the scrubber: the scenario name is the marker label, because a label renders as a tooltip-sized space, and the AC verbatim lands as a timestamped comment beneath it, where a sentence has room to wrap. **N clips, one link** — a reviewer opens one URL and watches the whole proof as one pass.
+1. **Publish ONE chaptered recording for the PR.** Find the per-test webms under `test-results/**/*.webm` — the filming run wrote one per scenario of the **PR spec set**, so carried scenarios stand there beside this run's — and map each to the AC it proves. A chapter for a scenario an earlier run wrote is indistinguishable from one this run wrote, which is the point: a reviewer reads the proof without knowing the branch's session history. Write a manifest, then hand the whole run to `publish-proof.mjs`: it probes and gates every clip, joins them by **stream copy** into one video, and POSTs the whole thing to Paul Clips in one authenticated JSON-RPC call, returning one `https://clips.paulsjob.ai/share/<id>` link. Each clip becomes a **chapter** on the scrubber: the scenario name is the marker label, because a label renders as a tooltip-sized space, and the AC verbatim lands as a timestamped comment beneath it, where a sentence has room to wrap. **N clips, one link** — a reviewer opens one URL and watches the whole proof as one pass.
    ```bash
    cat > /tmp/pw-prove-manifest.json <<'JSON'
    {
      "title":    "PR #<N> — <change in a phrase>",
      "prUrl":    "<PR url, or omit to let gh resolve it>",
-     "spec":     "<generated-spec-file>",
+     "spec":     "<the PR spec set> — hermetic, HAR replay (carve-outs: <none | the declared list>)",
      "mutation": "RED — <the mutation that turned it red> | unguardable at <layer>",
      "clips": [
        { "ac": "<AC verbatim>", "scenario": "<the test's title>", "file": "test-results/<...>/video.webm" }
@@ -1059,6 +1095,10 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    Gate exits: empty recording (3), token leak (6, widened to the title, description and chapter titles), homogeneity (8, mismatched codec/dimensions — stream copy would corrupt the video *without failing*), duration reconciliation (9). Exit 1 is usage/manifest/configuration, exit 4 is the video tooling. A gate that trips on any clip **aborts the whole recording** — a proof with a hole in it is worse than none. A publish-not-ready environment (Step 3 `PROBE_HOSTING` reported `HOSTING_READY=no`) skips before the call altogether: `Proof page: skipped — publish prerequisites not ready` with the probe output pasted beneath. That is a third skip cause, not a gate — never fail the run over a missing link.
 
    Clip order in `clips[]` is the order a reviewer watches, so it is the **AC order**, not the order `test-results/` happened to list — it is chapter order, and the script prints each chapter's deep link on stderr.
+
+   **Over the inline ceiling, truncate and declare it.** `publish-proof.mjs` refuses a recording above its 64 MiB inline ceiling and publishes no page at all — a hazard two chapters never approached and a PR-wide set can. When the joined size would exceed it, drop scenarios from the **end** of AC order until it fits, and name the omission in two places: the report's `Proof page:` line (`N chapters, M omitted for size: <scenario names>`) and the manifest's `spec` field, which is what the description shows a reviewer. A truncated film that declares its truncation is evidence; a gated one is nothing. The script's gate is unchanged — this is the skill choosing what to hand it.
+
+   **The `spec` field is the description a reviewer reads**, so it carries the two facts the footage cannot show: that every scenario replays a recorded HAR fixture — so the film proves the frontend's read and write shapes, and a reviewer who concludes the backend is proven has been misled — plus each declared carve-out, plus any truncation above.
 2. **Hygiene sweep** before staging:
    - Delete `test-results/`/`playwright-report/` litter (and `/tmp/pw-prove-mutation`), plus any legacy throwaway `.pw-prove.proof.config.*` left by an older run. **Keep `playwright.proof.config.ts`** — it is a deliverable, not litter; stage it when this run created it. Publish before deleting `test-results/`: the clips live there.
    - **Never delete the kept proof file** (`$KEPT`, i.e. `$TMPDIR/pw-prove-proof.webm`) when the publish came back undelivered. It is the only remaining copy of the evidence and the operator has been told to attach it — sweeping it away deletes the fallback moments after it was created. It is litter only once the run has published (`$PAGE` set) or a gate withheld it, and the script already removes it in the gate case.
@@ -1077,6 +1117,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it, plus `.pw-prove/profile.md`.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
 4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<share link + AC table + mutation verdict>"`. **The comment carries exactly ONE clips URL — the `/share/<id>` link.** Each AC row names its chapter timestamp as plain text (`M:SS`), which is navigation inside that one recording; do not put a `/embed/<id>?t=` URL in the comment at all. GitHub unfurls a clips `/embed/` URL into a video player, and in a table cell that player inflates every row into a tall black block that overflows the column and buries the AC text. The per-chapter deep links still belong in the **completion report**, where the operator reads them as text. **Copy the per-chapter deep links from the publish log's stderr — never build one by appending `?t=` to the share URL.** They are `/embed/<id>?t=<seconds>`, a different route from `/share/<id>`, because on the share route `t` is the agent-access token and a timestamp appended there is silently discarded: the reviewer lands at 0:00 and reads the wrong footage as the criterion.
+   - **Supersede the earlier proof page.** An incrementally proven PR accumulates one share link per run, each a partial film of the same PR, and a reviewer scrolling the thread meets the oldest one first. So this comment opens with `Supersedes <the previous pw-prove comment's URL>`, and the previous comment is edited in place to carry `**Superseded by <the new share link>**` at its top: `gh api --method PATCH /repos/{owner}/{repo}/issues/comments/<id> -f body=<the amended body>`. Edit only comments this skill authored; a link nobody marked stale is reviewed as though it were current.
    - **No PR exists** (prose/branch run): push, `gh pr create` with the AC table as body, comment there.
    - **Merged-PR retarget** (Step 2): fresh test-only branch off the default, push, `gh pr create`, comment there.
 5. **Completion report** — the run's exit artifact:
@@ -1090,14 +1131,14 @@ Generated:
 - <path to api.har> (scoped **/api/**, scrubbed at capture, --verify clean)
 - <configDir>/playwright.proof.config.ts (new — first run in this repo only; omit the line when reused)
 
-ACs: <N proven> / <M total>          # list each `unproven — gated: <what>` and each `already covered: <test file>` explicitly
+ACs: <N> new, <N> carried, <N> proven of <M> total   # M = the Step-2 AC table's row count; list each `unproven — gated: <what>`, each `carried: <spec file>` and each `already covered: <test file>` explicitly
 Preview server: stopped (port <N>, artifact <fresh | stale — mutation reverted, not rebuilt>) | left running (pre-existing)
 Profile: .pw-prove/profile.md — written (N entries) | updated (N entries, M rewritten) | unchanged
 e2e-reviewer: N P0 (fixed), N P1 (listed below)
 Tests: N passed · hermetic (carve-outs: none | <declared list>)
 Mutation: RED (spec guards the change) | unguardable at <layer>
 Clips: N inspected — <clip 1: what its frame shows> · <clip 2: …>   # or `illegible (<diagnosis>), published with warning` / `uninspected — no video tooling`
-Proof page: https://clips.paulsjob.ai/share/<id> (N chapters)
+Proof page: https://clips.paulsjob.ai/share/<id> (N chapters[, M omitted for size: <scenario names>])
 - <AC1> -> https://clips.paulsjob.ai/embed/<id>?t=<seconds>
 - <AC2> -> https://clips.paulsjob.ai/embed/<id>?t=<seconds>
 Committed: <short-sha> on <branch>
@@ -1109,7 +1150,8 @@ PR comment: <url>
 
 - `Proof page:` is either ONE share URL followed by its per-AC timestamp links, or `skipped — <the gate, the transport failure, or the unmet prerequisite>` **with the failing probe's or the publish log's output pasted directly beneath** (never from memory). A skip line with no output is a silent drop. N bare clip URLs and no recording is not a valid report.
 - A skip caused by **undelivered** transport (exit 0 with a kept file) carries a `Kept locally: <path>` line beneath it and says the file was attached by hand; a skip caused by a **gate** never names a local file, because none is offered.
-- `Mutation:` is `RED` or `unguardable at <layer>` — never absent in PR-mode.
+- `ACs:` states **three numbers**, always: this run's new scenarios, the carried ones it re-filmed, and the total from the Step-2 AC table. Every one is a count of that table's rows, so a reader can check the report against something. A single `N of M` is not a valid form of this line — that shape is how a run's delta gets read as the PR's total, which is the whole reason the line has three numbers.
+- `Mutation:` is `RED`, `unguardable at <layer>`, or `carried (no new scenario this run)` — never absent in PR-mode.
 - `Preview server:` names the **artifact state** as well as the port. `stale` says the mutation check's revert left the build holding the mutation and no later step needed the server, so nothing rebuilt it — the source on disk is the source under proof, and the next run rebuilds by its own reuse check. A reader who cannot tell whether the artifact matches the source has to rebuild to find out.
 - `Profile:` has **no skip form**. `unchanged` is a real outcome and says the run learned nothing durable; a run that rewrote an entry names how many, so a reader can see the profile being corrected rather than merely grown. In target and coverage-gap mode the same line names the path and adds `(untracked)`.
 - `Clips:` states what each extracted frame SHOWED, in your own words — that is the whole point of looking. A clip that was re-filmed says so; a clip still illegible after the one re-film says `illegible (<diagnosis>), published with warning`; a clip nothing could extract says `uninspected`. Never write a description of a frame you did not open.

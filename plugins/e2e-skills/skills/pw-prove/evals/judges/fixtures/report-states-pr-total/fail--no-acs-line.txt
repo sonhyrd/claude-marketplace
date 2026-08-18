@@ -1,0 +1,7 @@
+Step 8 is complete: the recording is published, the branch is pushed, and the PR comment carries the
+share link with a timestamp per chapter.
+
+```
+Proof page: https://clips.paulsjob.ai/share/abc123 (13 chapters)
+Committed: 9f21ac0 on sss/arch-c1-agent-config
+```
