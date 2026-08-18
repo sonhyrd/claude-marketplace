@@ -1,51 +1,28 @@
-dump/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# Virtual environments
-.venv/
-venv/
-ENV/
-env/
-
-# uv
-**/uv.lock
-!/uv.lock
-.uv/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
 .DS_Store
-Thumbs.db
+__pycache__/
+*.pyc
+.serena
+.agents/
+.claude/
+.sisyphus/
+docs/superpowers/
+testbed/
+results/
+# Scratch dirs that other local campaigns (e.g. ui-clone) drop relative to CWD
+/tmp/
+/$PWD/
 
-# Docker
-.dockerignore
+# Eval fixtures are committed: assertions cite exact file:line and must be reproducible
+# from a fresh clone. The scanner excludes **/evals/files/** in all three tiers, so the
+# intentional anti-patterns inside them cannot fail the repo's own smell-scan CI gate.
 
-# Test artifacts
-tests/**/__pycache__/
-tests/**/.pytest_cache/
+# Eval run results (benchmarks, grading, timing)
+*-workspace/
+.serena/
 
-# skill-up eval run artifacts
-plugins/*/skills/*-workspace/
+# test-parity.sh transient backups (stray after an interrupted run)
+*.parity-backup
+
+# Marketing collateral (local-only, not part of the public repo)
+marketing/
+.playwright-mcp/
