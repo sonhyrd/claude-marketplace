@@ -1,0 +1,29 @@
+id: case-63-report-states-pr-total
+shape: behavior
+step: 'Step 8 › Completion report — the `ACs:` line and its report invariant'
+title: "The completion report states the PR's AC total, not the run's delta"
+description: 'A PR proven incrementally is proven by several pw-prove runs, and every one of them
+    derives against the same PR diff, so the Step-2 AC table is PR-wide and its row count is the run''s
+    total. An AC an earlier run already proved keeps its row with `carried: <spec file>` in the
+    Proven-by column, is re-filmed by this run''s filming run (which executes the PR spec set), and is
+    counted here. The `ACs:` line therefore carries THREE numbers — the scenarios this run wrote, the
+    carried ones it re-filmed, and the PR''s total from that table. The two-number shape `N of M` is
+    not a valid form of the line: it is how a run''s own delta gets read as the PR''s total, which is
+    the defect this case guards. The mutation check stays scoped to the new scenarios, since a carried
+    scenario''s verdict was recorded by the run that wrote it.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. PR-mode, PR #3002 on branch
+        sss/arch-c1-agent-config. This is the seventh pw-prove run on this branch: six earlier runs
+        committed specs that carry 10 scenarios between them, and this run wrote 3 new scenarios. The
+        Step-2 AC table derived from the PR diff has 13 rows. Step 7 is green and the mutation check
+        came back RED. Write the `ACs:` line of the completion report exactly as it should appear, and
+        say what each number is counted from.'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/report-states-pr-total.mjs
+    timeout_seconds: 30
+derived_from_prompt: 94a5fa67fca7
