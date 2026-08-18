@@ -12,6 +12,53 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.0] - Unreleased
+
+### Changed
+
+- Subtree pulled from `e2e-fork/main` (`6963cad` → `256f761`, 2 commits — one feature and its
+  merge). `pw-prove` moves 0.22.0 → **0.23.0**; `e2e-reviewer` stays 1.10.0 and
+  `playwright-debugger` stays 1.9.0. A minor, not a patch: what a run **films, publishes and
+  reports** changes shape. **No description changed on any of the three skills**, so the routing
+  table is untouched and nothing re-routes.
+- **The proof describes the PR, not the run that produced it.** A branch proven across several
+  pw-prove runs used to deliver a page holding only the latest run's chapters, with every run's
+  report correct about itself and wrong about the PR. Three rules fix the denominator: an AC an
+  earlier run proved is **`carried`**, it keeps its row in the Step-2 AC table, and that row count
+  is the only source of the run's `M total`. Step 2 derives against the **PR's whole diff**, never
+  this session's commits.
+- **Step 7 films the PR spec set.** The set is resolved mechanically — `git diff --name-only
+  <merge-base>...HEAD -- '<testDir>/**/*.spec.*'` plus the spec this run wrote — so no judgement
+  call reintroduces the drift, and Step 4's Assumptions block states it in the plan rather than
+  surprising the operator at minute fifty. A **carried spec that goes red is a finding**, not a
+  spec to heal: loosening its assertion to get green deletes the guard that just caught a
+  regression.
+- **The mutation check deliberately stays narrow** — this run's new scenarios only, because
+  re-deriving a carried verdict costs a forced-no-reuse rebuild each (~635s). The run now carries
+  two scopes on purpose: *filmed* is the PR spec set, *mutation-verified* is the delta. A re-film
+  that wrote no new scenario reports `Mutation: carried (no new scenario this run)`.
+- **The `ACs:` report line states three numbers** — new, carried, total — and a bare `N of M` is
+  no longer a valid form of it. That single number is exactly how a run's delta got read as the
+  PR's total.
+- **Two publishing rules.** A joined film over `publish-proof.mjs`'s **64 MiB inline ceiling** now
+  truncates from the end of AC order and declares the omission in both the report's `Proof page:`
+  line and the manifest's `spec` field, rather than gating into publishing nothing — a hazard two
+  chapters never reached and a PR-wide set does. And the `spec` field, which is the description a
+  reviewer reads, must say the suite is **HAR replay**, so nobody reads the film as proof of a
+  backend.
+- **A new proof page supersedes the previous one.** The new PR comment opens with `Supersedes
+  <url>` and the earlier comment is edited in place to carry `**Superseded by <link>**`, so a
+  reviewer scrolling the thread does not meet the oldest partial film first. Only comments this
+  skill authored are edited.
+- Eval surface: `case-63-report-states-pr-total` and its judge assert the report's three numbers,
+  with a must-PASS twin that names the delta in order to reject it. Upstream marks the case
+  *authored and validated, not yet characterized*.
+- The pull is `--squash`, as every pull of this prefix since the 1.0.0 graft has been, and it
+  deleted `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` again — the fork ships
+  neither and they are the entire expected divergence, so restoring them is a step of the
+  procedure. `make check-e2e-subtree` is red at exactly those two entries until the restore and
+  green after. The Codex manifest was regenerated with `scripts/sync_codex_plugins.py`.
+
 ## [1.5.0] - Unreleased
 
 ### Changed
