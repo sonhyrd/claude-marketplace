@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **e2e plugin author corrected to `sonhyrd`.** The three published manifests — `.claude-plugin/marketplace.json`'s `e2e` entry, `plugins/e2e-skills/.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` (both its `author.name` and `interface.developerName`) — still credited `voidmatcha`, the pre-fork upstream, which is who wrote the skills but not who publishes this bundle. All three are marketplace-only files the fork does not ship, so the change is invisible to `check-e2e-subtree.sh`'s divergence set (still green at exactly 2 entries). **Upstream attribution is untouched on purpose**: `README.md`'s Apache-2.0 notice, `AGENTS.md`, and `playwright-debugger`'s `metadata.author` stay as they are — the licence requires the first and the last is byte-identical subtree content whose edit would register as an unexpected divergence.
+
 - Subtree pulled from `e2e-fork/main` (`6963cad` → `256f761`, 2 commits — one feature and its
   merge). `pw-prove` moves 0.22.0 → **0.23.0**; `e2e-reviewer` stays 1.10.0 and
   `playwright-debugger` stays 1.9.0. A minor, not a patch: what a run **films, publishes and
