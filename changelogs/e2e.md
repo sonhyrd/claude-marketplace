@@ -12,6 +12,27 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.1] - Unreleased
+
+### Fixed
+
+- **Subtree pulled from `e2e-fork/main`** (`256f761` → `e8ddfd3`, 2 commits — one fix and its merge).
+  `pw-prove` moves 0.23.0 → **0.23.1**; `e2e-reviewer` stays 1.10.0 and `playwright-debugger` stays
+  1.9.0. A patch: it repairs the command 1.6.0 introduced, and **no description changed on any of
+  the three skills**, so nothing re-routes. Step 7's PR spec-set resolution used
+  `-- '<testDir>/**/*.spec.*'`, which **looks like a glob and is not one** — git's default pathspec
+  mode is not glob mode, so `**/` demands a subdirectory most projects do not have, and a flat test
+  dir matched nothing. Measured against the 7-spec PR the 1.6.0 feature was written for, the
+  pathspec form returned **0** and the replacement returns **7**. It now pathspecs the directory and
+  filters by extension afterwards (`-- '<testDir>' | grep -E '\.(spec|test)\.[cm]?[jt]sx?$'`).
+  The failure mode is exactly the one 1.6.0 existed to remove — an empty set films an empty set and
+  says nothing about it — so **an empty result is now a stop**, naming its two causes (a wrong
+  `<base>`, or a `<testDir>` that is not where the specs landed), rather than a filming instruction.
+
+### Changed
+
+- **e2e plugin author corrected to `sonhyrd`.** The three published manifests — `.claude-plugin/marketplace.json`'s `e2e` entry, `plugins/e2e-skills/.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` (both its `author.name` and `interface.developerName`) — still credited `voidmatcha`, the pre-fork upstream, which is who wrote the skills but not who publishes this bundle. All three are marketplace-only files the fork does not ship, so the change is invisible to `check-e2e-subtree.sh`'s divergence set (still green at exactly 2 entries). **Upstream attribution is untouched on purpose**: `README.md`'s Apache-2.0 notice, `AGENTS.md`, and `playwright-debugger`'s `metadata.author` stay as they are — the licence requires the first and the last is byte-identical subtree content whose edit would register as an unexpected divergence.
+
 ## [1.6.0] - Unreleased
 
 ### Changed

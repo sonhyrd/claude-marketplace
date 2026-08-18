@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.23.0"
+  version: "0.23.1"
 ---
 
 # pw-prove
@@ -753,8 +753,15 @@ Never run the proof past an exit 4 and let it surface as an aborted call — tha
 ```bash
 # Every spec the PR's diff touches under the project's testDir. pw-prove commits its own specs to
 # the PR branch, so an earlier run's spec is in this list by construction — that is the whole trick.
-git diff --name-only "$(git merge-base <base> HEAD)"...HEAD -- '<testDir>/**/*.spec.*'
+# Pathspec the DIRECTORY and filter by extension afterwards. A `<testDir>/**/*.spec.*` pathspec
+# returns NOTHING on a flat test dir — git's default pathspec is not glob mode, so `**/` demands a
+# subdirectory that most projects do not have — and a set that came back empty films an empty set
+# without saying so. Measured against a real 7-spec PR: the pathspec form returned 0, this one 7.
+git diff --name-only "$(git merge-base <base> HEAD)"...HEAD -- '<testDir>' \
+  | grep -E '\.(spec|test)\.[cm]?[jt]sx?$'
 ```
+
+**An empty set is a stop, not a filming instruction.** PR-mode reaches Step 7 with at least the spec this run wrote, so nothing back from that command means the resolution is wrong — the wrong `<base>`, or a `<testDir>` that is not where the specs landed. Fix the resolution; never film what the command returned.
 
 That list plus the spec this run wrote is `<spec set>` below, and Step 4's Assumptions block already named it. Target and coverage-gap mode film one run's work by definition: there `<spec set>` is the spec this run wrote.
 
