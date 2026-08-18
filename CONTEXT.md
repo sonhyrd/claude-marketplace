@@ -1,82 +1,371 @@
-# Claude Marketplace
+# Glossary
 
-A marketplace of Claude Code plugins — skills, MCP servers, and the vendored subtrees they build on.
-A glossary and nothing else: rules live in `CLAUDE.md`, decisions in [`docs/adr/`](./docs/adr/).
+One E2E proof skill: **pw-prove**, the lean default for proving a change, whose evidence is a
+byproduct of its one proof run. The heavyweight `playwright-test-generator` variant is retired, and
+its **film vocabulary** — Watch link, Proof film, Chapter-as-filmed-segment, Contact sheet, Static
+chapter, Film QA gate, Refilm budget, Flake screen, State-isolation rule, Demotion — retires with
+it. Nothing in this glossary describes a second pipeline. See `docs/adr/0005`, `docs/adr/0006`.
 
-## Delegation
+## pw-prove
+The E2E proof skill. North star: the fastest correct proof of a change, under one rule — a
+best-practice earns its place only if it also cuts steps or model output. PR-mode's guarantees
+(mutation check, hermetic-by-default, POM-always, PROVES headers, stop-report) hold, and evidence is
+a byproduct of the single proof run rather than a separate production step. 8 steps; probe-required
+recon; HAR-first mocks.
 
-**Coordinator**:
-The invoking Claude Code session in a delegated run. Owns the DAG, dispatch, merge-back, and every
-write to the delegation profile.
-_Avoid_: orchestrator, parent agent
+## Proof clip
+pw-prove's evidence artifact: the per-test webm Playwright records when the proof run enables video
+via the [proof config](#proof-config). One clip per scenario (per AC). Published as part of the
+run's [proof page](#proof-page); the `trace.zip` from the same run is a local heal/debug aid, not a
+delivered clip. Reviewer-facing, and therefore held to a [fidelity contract](#clip-fidelity-contract).
 
-**Worker**:
-One agent in one child worktree, implementing exactly one ticket.
-_Avoid_: subagent, child agent
+## Proof page
+The single `https://clips.paulsjob.ai/share/<id>` URL a pw-prove run delivers: every per-AC [Proof
+clip](#proof-clip) joined by stream copy into ONE Paul Clips recording, with one **chapter** per AC —
+a scrubber marker at the cumulative measured offset, labelled with the scenario name (capped at 60
+characters, cut on a word boundary) because a marker label renders in tooltip-sized space, while the
+AC itself travels verbatim as a timestamped comment beside it, where a sentence of 54–167 characters
+can wrap. Nothing is paraphrased; `ac` is the source of truth for both. Built by `publish-proof.mjs`
+from a manifest: one JSON-RPC `tools/call` POST to the Clips `/mcp` endpoint carrying the whole
+recording, then one best-effort `add-comment` call per chapter, all under a single opaque bearer
+[leased](#lease) from the workspace vault — long-lived (365-day, `jti`-revocable) and not per-action
+scoped, since its [callable catalog](#callable-catalog) is twelve actions. Four gates
+(empty-recording, token-leak, homogeneity, duration-reconciliation) run before anything leaves the
+machine, and a gate trip publishes nothing and withholds the local file. A transport or credential
+failure leaves the run passing and prints the kept file's path instead. The PR comment leads with
+this link; the per-AC rows deep-link their offsets against `/embed/<id>?t=<seconds>`, because on
+`/share/<id>` the `t` parameter is an access token and an offset there is dropped silently. No second
+run, no production step, no chapters sidecar: the offsets are measured from the clips the one proof
+run already produced, and stream copy decodes no frame. See `docs/adr/0012` and `docs/adr/0014`, and
+`docs/adr/0009` for the goal it preserves.
 
-**Frontier**:
-The tickets whose blockers have all merged back, and which can therefore dispatch now.
-_Avoid_: ready queue, next batch
+## Callable catalog
+The set of actions a given credential may actually invoke, as returned by `tools/list` for that
+token. **Distinct from the searchable index** surfaced by `tool-search`, which is far larger — 188
+entries against a callable catalog of 12, measured. An action can therefore be findable, fully
+documented, and uncallable; the refusal arrives at **HTTP 200** as `Unknown tool: <name>`, not as an
+error status. Catalog breadth is a property of the token's tier, so narrowing it is a re-mint, never
+a skill change. See `docs/adr/0014`.
 
-**Integration branch**:
-The branch a run merges every worker's slice back into, and the base its worktrees are cut from.
-Distinct from the repo's default base, which is what a worktree gets when nobody names one.
-_Avoid_: target branch, parent branch, base branch (which names a flag, not this)
+## Delegable action
+An action present in the caller's [callable catalog](#callable-catalog). Non-delegable is a statement
+about the token's tier, **not** about the credential's validity: a perfectly current bearer gets
+`Unknown tool` for an action outside its catalog, which is a different problem, with a different fix,
+from the honest 401 that means the credential itself was refused. `clips.mjs` keeps the two verdicts
+separate — and keeps the remedy sentence for a non-delegable action in one place, so the minute-zero
+probe and the minute-fifty publish cannot send an operator down two roads for one problem.
 
-**Delegation profile**:
-A repo's `docs/agents/delegate-profile.md` — the facts a delegated run needs about that repo. A
-**snapshot** of what is true now, not a ledger of what was.
-_Avoid_: repo profile, worker config
+## Lease
+A vault-issued, audited loan of a secret into one child process's environment (`agent-native vault
+exec --app … --key … -- node …`). It keeps the credential out of the shell history, the dotfiles and
+the transcript, and prints a lease id so *"this credential was used here"* is checkable afterwards.
+**A receipt, not a boundary** — its own help text says "This is hygiene, not containment": anything
+running as the operator can read the same secret. The shipped scripts are lease-*ignorant*: they read
+`process.env.CLIPS_MCP_TOKEN` and never spawn `agent-native`, so a private CLI never becomes a
+runtime dependency. See `docs/adr/0014`.
 
-**Baseline**:
-A recorded measurement of a check on a known-good tree: the counts, the commit, the date. Names the
-measurement, never the tree it was measured on.
-_Avoid_: clean run, reference run
+## Clip fidelity contract
+The three properties a Proof clip must have to be usable as evidence: recorded at the **effective
+viewport** (never Playwright's 800×800-box downscale), ending on the success signal **held** on
+screen, and holding it in [frame](#framing). Held at authoring time — a committed viewport pin,
+ungated centering, and a
+`PW_PROVE_CLIP`-gated, `// JUSTIFIED:` post-assertion dwell **inline in each `test()` body** (a
+dwell hoisted into a helper does not count: one shared dwell would satisfy tests that hold on
+nothing) — never by a second run, a measurement
+gate, or editing the recording. Authoring-time compliance is *checked*, not assumed: `clip-fidelity
+spec` blocks Step 7 on a spec that carries neither. A clip that fails the contract is a defect, not
+a trade-off. What the contract cannot check from the source is caught by the
+[clip inspection](#clip-inspection) instead. See `docs/adr/0007` and `docs/adr/0015`.
 
-**Known noise**:
-A check failure that reproduces on the integration branch independent of any worker's changes. A
-failure becomes known noise by being named in the baseline; until then it is a regression.
-_Avoid_: flaky, pre-existing failure, expected failure
+## Clip inspection
+The Step-7 beat where the AGENT looks at the [proof clip](#proof-clip) before anyone publishes it:
+`clip-fidelity frames` extracts one frame per clip at `duration − 0.5s` (inside the payoff hold) and
+the agent states in the report what each one shows. **Not a gate, and the distinction is the
+design** — it informs the agent, it never vetoes the artifact, so absent video tooling skips and an
+illegible frame that survives one diagnosed fix and one re-film publishes with a warning. The
+counterpart it is defined against is a legibility gate in the publish path, which was rejected
+because its failure mode is dropping a good proof and a gate that trips aborts the whole recording.
+An illegible frame is *diagnosed* — payoff not held, [element off-frame](#framing), still booting —
+before anything is re-filmed: a re-film with no preceding fix is deterministic. See `docs/adr/0015`.
 
-**Prohibition**:
-A repo rule injected verbatim into every worker brief, true only because the work is delegated.
-Its counterpart is a **Convention**, which the repo's own agent guide owns.
-_Avoid_: worker constraint, guardrail
+## Framing
+The fourth property of the [clip fidelity contract](#clip-fidelity-contract): the element under
+proof is on screen, and near the centre of it, at the moment of the payoff hold. Distinct from the
+hold itself — a clip can hold the success signal for the full dwell and still be worthless because
+the signal sits against the screen edge, or was pushed off-frame by a re-render after the scroll.
+`scrollIntoViewIfNeeded()` moves the minimum distance and is therefore the usual cause; centring is
+the fix, and it is **ungated** so CI renders identically. Named because it went unnamed: "held
+payoff" was already in this glossary and was read as a duration. See `docs/adr/0015`.
 
-## Review
+## Filming law
+The one rule governing `PW_PROVE_CLIP`: it may only ever **add time**, never change what the app is
+asked to do. Waits are gated; everything else — centring, scroll, choice of input method — is
+unconditional and runs in CI too. A gated dwell may sit at any beat except between an action and the
+assertion that covers it, because there the filmed run is more patient than CI and a proof passes
+where CI flakes. Generalises the argument in `docs/adr/0007` (which permitted the dwell only because,
+sitting after the terminal assertion, it could not move the verdict) from one position to one class
+of operation. See `docs/adr/0015`.
 
-**Track**:
-One independently-contexted reviewer in a review run, whose report is printed verbatim and scored
-only against itself. Tracks are never merged or ranked against each other.
-_Avoid_: lane, pass, reviewer
+## Effective viewport
+The viewport a generated spec actually renders at, and the size its clip is recorded at. Resolved
+from the project's Playwright config by one rule: only an **explicit `viewport:` key** is a
+deliberate project decision and is respected; a viewport arriving solely from a *desktop*
+device-descriptor spread is scaffold default and is pinned over (1600×900). A **mobile/non-desktop**
+descriptor is always respected. Resolved in the Step-4 Assumptions block as either a `deliberate:` or
+a `pinned:` verdict. The pin lives in the committed spec, never only in the [proof
+config](#proof-config) — otherwise the proof renders at a size CI never produces. Step 7 passes it to
+the recording as `PW_PROVE_W`/`PW_PROVE_H`.
 
-**Stage**:
-One serial phase of a review run, sharing the run's context and working tree — `pr-review` reports in
-one and fixes in the next. Stages are ordered and may each depend on the last; a **Track** is
-concurrent, isolated, and never merged or ranked. What runs in sequence is a stage, never a track.
-_Avoid_: track (the error this term exists to prevent), round, leg — and **Step**, which is one
-numbered instruction inside a stage, not the stage itself
+## Proof target
+The **served form of the application a proof runs against**: the *built* application, served by its
+preview server. Never the development server — that path is removed, not conditional, so there is no
+second bring-up path to maintain or to take by accident. The agent owns its lifecycle (allocate the
+port, build, start the server, stop it in Step 8 hygiene), and bring-up is three phases with three
+distinct failures — configuration (exit 4, names the missing keys), build (exit 5, carries the build's
+standard error), serve (exit 3, a short poll) — because one not-ready verdict for all three was a
+misdiagnosis often enough to cost twelve minutes of wall clock and five needless rebuilds. Named here
+so the choice is a modelled decision rather than a hard-coded assumption re-litigated every time
+someone reads the bring-up timings in isolation: the built target is *slower* to bring up and much
+slower to mutate, and wins on the session total, on clip quality, and on proving the artifact that
+ships. See `docs/adr/0016` and `docs/studies/proof-target-measurements.md`.
 
-**Admission**:
-Whether a finding is one the fix stage will act on. Decided per **Track**, never by severity — a
-severity orders the queue once admission has already happened.
-_Avoid_: filtering, triage, gating, in scope
+The build behind it is **reused while the commit and the working tree stand still**, and paid again
+otherwise. That is what turns a 104-to-201-second build from a per-proof cost into a per-batch one:
+an unattended batch against one pull request builds once, the way the fastest observed session
+inherited the environment of the five runs before it. *Unchanged* is measured against the source the
+artifact was produced from — HEAD plus the whole working-tree difference from it — so any edit,
+staged or not, tracked or not, is a rebuild, and so is a tree dirtied since the build. The
+mutation check always rebuilds: it mutates source by definition, and an inherited
+artifact would make it prove nothing. Not the framework's own build cache, which was measured and
+reverted — it helped only in the case this check already covers.
 
-**Apply set**:
-The admitted findings of one review run — what the fix stage edits. Its complement is described
-rather than applied, always with a stated reason; a finding in neither set is a stage that has not
-finished.
-_Avoid_: fix list, queue (which is the apply set in order), backlog
+## Session ladder
+The ordered set of **rungs** — `?token=` query bootstrap, `storageState`, a server-set login cookie,
+client-storage seeding — by which a proof establishes its session, walked top-down until one holds.
+A rung is chosen by grepping the application's own source for what it actually reads, on every run,
+never by assumption. A rung whose mechanism sits behind a development-only guard (`import.meta.dev`
+and its equivalents) is **absent**: the [proof target](#proof-target) is a production build, so that
+code is compiled out and the input it reads is never consumed — the ladder records the rung as absent
+and descends rather than driving a path that no longer exists. Absence is a property of the artifact
+under proof, not of any one application, and it is never repaired by editing the application's
+source. Each rung's success is asserted on the authenticated state itself against a short budget, so
+an unestablished session is named in seconds instead of expiring a default timeout on a side effect
+that can never occur. See `docs/studies/proof-target-measurements.md` › The auto-login blocker.
 
-**Axis**:
-One question a single review skill asks of a diff — `matt:code-review` asks two, Standards and Spec.
-An axis belongs to the skill that asks it; a **Track** is who ran it. Two of `pr-review`'s three
-tracks are that skill's two axes.
-_Avoid_: dimension, angle
+## Proof config
+`<configDir>/playwright.proof.config.ts` — the second Playwright config pw-prove runs the proof
+through, spreading the project's own config and overriding only `use` (`video`, `trace`). **Static,
+project-agnostic and committed once**, then reused verbatim by every later run: the single per-run
+value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a file edit. The
+project's own `playwright.config` is never edited. Carries `webServer: undefined`, so the spread cannot inherit the project's development-server command and boot one behind a run aimed at the [proof target](#proof-target) — a one-time committed migration, not a per-run edit. Superseded the throwaway
+`.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
-## Plugins
+## Hermetic audit
+The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
+**audit run** — the un-clipped, un-dwelled proof run that precedes filming, so a finding costs a
+cheap re-run rather than the clips. `hermetic.mjs`
+classifies every request from the run's traces — LIVE (the browser put it on the wire: the trace
+entry carries `serverIPAddress`), MOCKED (a `route.fulfill()` answered it), FAILED — and separately
+greps the spec for `route.fetch()` call sites, which perform a real round-trip from the Playwright
+process and therefore look mocked in a browser trace. The verdict stays with the agent: every LIVE
+call must appear in a `// CARVE-OUT:` line or the run fails despite being green. See `docs/adr/0010`.
 
-**Subtree**:
-A vendored upstream repo under `plugins/`, synced with `git subtree`. Each is either **verbatim** or
-**editable** — the distinction is per-subtree and load-bearing.
-_Avoid_: vendored dir, fork
+## HAR fixture
+pw-prove's replacement for hand-written read mocks: an API-scoped (`**/api/**`) HAR recorded during
+the probe pass, **scrubbed at capture** and committed alongside the spec. `routeFromHAR(..., { notFound:
+'abort' })` replays it deterministically, keeping the spec self-hermetic and CI-durable. Because
+Playwright matches a recorded entry by exact request-URL equality, a live run replays a **bound
+working copy** (`har-scrub.mjs bind`) — the canonical origin re-pointed at the run's port and each
+placeholder in the match key given the run's own value, written to a gitignored path and never
+staged. Hand-written
+`route.fulfill` remains only for the mutation under assertion. Playwright flushes the recording on
+**context** close, so `probe.mjs` closes the context before the browser and reports the written path
+and byte count — a recorder that cannot be observed recording is indistinguishable from a broken one.
+The same close scrubs it: the raw flush goes to a private staging file that is destroyed in the same
+breath, so the working tree never holds an unscrubbed authenticated capture, and the scrub has no
+placement left to decide. Before commit the hygiene sweep runs `har-scrub.mjs --verify`, whose
+non-zero exit refuses residue rather than asking anyone to confirm its absence — and refuses, with a
+distinct code, a recording its own scrub **destroyed**: a value short enough to occur inside ordinary
+content (`i18n_redirected=en`) is placeheld only where it was found and never swept across the
+document, and an implausible substitution count is a wrecked recording that a residue check reads as
+clean.
+See `docs/adr/0011`.
+
+## PR-mode
+The pipeline variant that proves a specific change (PR, branch, ticket, or prose "prove this change"
+argument) end-to-end. Scope is closed: acceptance criteria are derived from the diff.
+
+## Coverage-gap mode
+The pipeline variant invoked with no target, where pw-prove proposes what to cover. Scope is open:
+the user's intent cannot be derived from a diff.
+
+## Approval gate
+A hard stop where the pipeline waits for an explicit user go-ahead before proceeding. As of
+2026-07-10: exists only in coverage-gap mode. PR-mode uses notify-and-continue.
+
+## Notify-and-continue
+Posting the scenario plan to the conversation as an audit trail and proceeding immediately without
+waiting for a reply. The user interrupts to redirect; silence is consent. The PR-mode replacement for
+the approval gate.
+
+## Environment facts
+What Step 1 derives about the repository it is about to prove in — base URL, config path, test
+directory, POM inventory, existing specs, runner presence. In-memory, re-derived every run, and the
+input to every later step. Distinct from the [runtime profile](#runtime-profile), which is a file:
+the facts are what this run worked out, the profile is what an earlier run wrote down.
+
+## Runtime profile
+`.pw-prove/profile.md` in the **target** repository — the durable record of what a repository costs a
+run to learn: how a tenant resolves, which auth rung works against the [proof target](#proof-target),
+which declared env keys are actually required. Read at Step 1 as advisory context that never overrides
+a live observation, and written back at Step 3 and Step 8. An entry is admitted only if it is about
+the repository rather than the change, cost a live pass to learn, and will still be true next month.
+Two halves: a `KEY=value` header a later run **substitutes into its commands**, and prose beneath it
+carrying the reasoning a run weighs before overriding a value. Subject headings are the prose's merge
+keys, so a re-learned fact rewrites its entry rather than stacking a near-duplicate; the header is one
+block with one merge key per line. Untrusted data on the way in, and never a credential's value —
+including in the header, whose shape is exactly that of a real `.env` line.
+
+## Recon probe
+The persistent browser context (`scripts/probe.mjs`) that answers batched recon questions during
+Step 3. The recon channel; the test run is the validator, never the question channel. A run reaches
+Step 4 in exactly one of two states — a probe session that answered at least one batch, or a recorded
+exit-2 (browserless) refusal with the source-reading fallback named in the Assumptions block. Neither
+state is a HARD STOP. Decided 2026-07-24: of 15 audited runs, the 10 that skipped the probe ran the
+test runner 9–42 times each; the 5 that used it ran it 5–8 times.
+
+## Unguardable at this layer
+The mutation check's third verdict: the mutation did not turn the spec red, and no browser-layer
+assertion can distinguish the mutated behavior because another layer independently preserves the
+observable outcome (e.g. a read-modify-write that re-reads and merges the full record). A stated
+verdict in the report and the PR comment, never a silent skip, and never a third
+strengthen-and-retry cycle.
+
+## Handover stop
+A sanctioned, reported non-delivery that ships its partial work to the pull request. PR-mode's second
+legal stop, beside the base-merge conflict: the Step-7 verify loop ended without a green run — three
+fix attempts spent, or the [no-progress checkpoint](#no-progress-checkpoint) tripped at two — so the
+run stops and posts the spec, the verbatim failure and the `playwright-debugger` diagnosis as a **pull-request
+comment**. Named because the concept kept being re-invented without a name: two observed
+non-deliveries each wrote a handover document unprompted and filed it in a repository directory,
+where nobody waiting on the pull request would ever see it. The instinct was right; only the
+destination was wrong. **Nothing is committed** — a knowingly-failing spec on the branch is the
+defect this pipeline exists to prevent — and the stop never emits the [delivery tail](#land-the-proof),
+so a reported non-delivery can never be mistaken for a proof.
+
+## No-progress checkpoint
+The Step-7 test that tells a fix apart from a retry. Each failed attempt is reduced to a **failure
+signature** — error class plus failing locator — and two consecutive attempts carrying the same
+signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
+application can see. Attempts whose signatures differ are converging and still consume the full
+budget of three. The bound was always three; a raw count could not distinguish three fixes from three
+retries, and one run spent an hour rewriting the same binding against one unchanging 30-second
+timeout. Exhausting the loop, by either route, is what triggers the [handover stop](#handover-stop).
+
+## Hermetic spec
+A generated spec whose every network call is mocked. The default for all pw-prove output; Step 7
+fails a run on any live call that is not part of a declared carve-out.
+
+## Declared carve-out
+The sanctioned exception to hermetic specs: a real-backend interaction that is itself the acceptance
+criterion under proof. Must be named in the scenario plan and in the spec header. Reads freely;
+writes only with a proven restore; never creates data on a shared tenant.
+
+## Gated AC
+An acceptance criterion recorded as `unproven — gated: <reason>` on the report's ACs line instead of
+being proven — a surface unreachable with the available auth, or a scenario whose nondeterminism is
+app-inherent. Always stated, never a silent drop: dropping a gated surface without the marker is a
+coverage lie. The committed spec keeps every scenario that passes its own run.
+
+## Proof
+The complete PR-mode deliverable: green spec + POM committed to the PR branch, plus the published
+evidence — the [proof page](#proof-page) built from the run's Proof clips. A run that ends with
+uncommitted tests, or with no published evidence and no stated skip reason, has not delivered a
+proof.
+
+## Land the proof
+The deterministic PR-mode tail — pw-prove's Step 8: publish the evidence → hygiene sweep → commit
+spec+POM to the PR branch → push → PR comment (creating a PR when none exists) → completion report.
+The report format is the run's exit gate, structurally invalid in PR-mode without its Proof page,
+Mutation, Committed, Pushed and PR comment lines.
+
+# Eval vocabulary
+
+The second half of this glossary. Everything above names part of a proof; everything below names part
+of the **instrument that measures the skill** — the skill-up suite under `skills/pw-prove/evals/`.
+Nothing here describes pw-prove's behaviour, and nothing above is an eval concept. `docs/adr/0018`
+records the runtime the instrument runs on, and why it is not a container.
+
+## Trigger case
+An eval case whose prompt is a **realistic top-of-task request** — the job asked for the way a user
+asks for it, naming no skill. Whether pw-prove loads at all is the measurement, so a case that fails
+to load is a defect in the skill's `description:` frontmatter, *recorded* as one. Its prompt is never
+edited until it loads: that deletes the only signal the case produces. The complement of a
+[behavior case](#behavior-case); every case file declares which it is in `shape:`, and
+`skills/pw-prove/evals/prompt-shapes.md` carries the classification.
+
+## Behavior case
+An eval case whose prompt presupposes **mid-run context** — a step number, a preflight exit code, a
+pasted server log. Nothing about such a prompt would ever trip the skill's trigger, so it opens with
+the [placement line](#placement-line) and a failure is about the body rather than the frontmatter.
+The bulk of the suite: 46 of 50 case files.
+
+## Placement line
+The one sentence that puts a [behavior case](#behavior-case)'s agent inside the skill — *"Load the
+`pw-prove` skill with the Skill tool and follow it."* — leading the first thing the agent is handed.
+One wording, so the mechanism is greppable and no case invents a weaker one. **Role injection is not
+placement**: asserting a persona ("You are pw-prove.") puts no line of the body in context, which is
+what `evals/judges/skill-loaded.mjs` reads, and `b01` carried exactly that through two runs while
+reading NOT LOADED in both.
+
+## Wet case
+An eval case that runs pw-prove against a repository fixture and judges what the run **did** — the
+files it wrote, the server it brought up — rather than what it said. The expensive tier, scoped
+deliberately narrow (one behaviour per case, never a whole proof) so a red verdict names one
+behaviour instead of one of eight steps. Wet cases are why the runtime is `docs/adr/0018`'s `none`:
+their verdicts come from file assertions, and file assertions are what `docker` cannot answer
+truthfully. Each is paired with a [dry case](#dry-case) twin, so a divergence between doing and
+saying is measurable rather than inferred.
+
+## Dry case
+An eval case that puts a prompt to the agent and judges the response text. The bulk of the suite, and
+cheap enough to be the default. It can only ever establish that the skill *describes* the right
+behaviour — a green dry case is not evidence that a run performs it, which is the gap its
+[wet](#wet-case) twin exists to close.
+
+## Trusted core
+The set of cases whose verdicts may be **acted on**: each carries a recorded pass rate from
+[characterization](#characterization), a recorded uplift over running with no skill, and a named
+SKILL.md section it guards. Membership is earned at admission and recorded in the **registry**
+(`skills/pw-prove/evals/REGISTRY.md`) — the one file listing every case with its pass rate, uplift,
+guarded section and status, enforced by nothing. A case file sitting on disk is inventory, not
+coverage: after three batches of triage, #69's two wet cases, the sealed re-measurements of #75 and
+#78, #76's fixture-staging repair, #71's judge repairs, #73/#74's trigger fix, #72's staged
+premise and #77's judge repair the core is **32** cases of 52 on disk, and
+a case outside the core is not a weaker guard but no guard at all.
+
+## Collision arm
+The one eval arm that installs **more than one skill** (`evals/eval.collision.yaml`, #81), and the
+only place a question spanning two skills can be asked. Every other arm installs pw-prove alone, so a
+`description:` that claims a neighbour skill's words measures green in all of them — which is how
+#73/#74's coverage clause collided with `e2e-reviewer`'s and nothing said so. Its cases are
+[trigger cases](#trigger-case) whose judge grades *which* skill the request reached: the owner, the
+neighbour, both (a collision), or neither. Installing the second skill through the suite's own
+`skills:` list is **not** a hole in the runner's isolation — the seal is against copies the runner did
+not put there — but a `Skill(<plugin-id>:*)` deny rule whose id prefixes the second skill's name will
+silently deny it, which is a thing to check before believing a verdict from this arm.
+
+## Characterization
+The measurement that decides whether a case joins the [trusted core](#trusted-core): three runs of
+the same case, admitted only on **3/3** (a guard) or **0/3** (a confirmed defect, which becomes a
+ticket). Anything between is quarantined rather than left active, because a case that flips is a
+random verdict and a green built on one is worse than no reading. A case is *characterized*, never
+merely "passing" — the word carries the n and the strictness with it.
+
+## Blast radius
+The cases a SKILL.md edit obliges you to re-[characterize](#characterization): the ones the registry
+maps to the edited section. **Computed from the registry at the moment of the edit, never declared as
+a list** — there is deliberately no fixed fast tier, because a named tier is a second artifact that
+falls out of sync with the map it was derived from. What this buys is that a re-baseline costs one to
+three cases instead of the whole suite; what it costs is that the registry's section map has to be
+right, which is why it is the registry's load-bearing column.
