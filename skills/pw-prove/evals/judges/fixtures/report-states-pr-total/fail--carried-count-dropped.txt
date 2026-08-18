@@ -1,0 +1,7 @@
+The PR has 13 acceptance criteria in total and this run proved 3 of them in the browser.
+
+```
+ACs: 3 proven of 13 total
+```
+
+The remaining 10 were proven by earlier runs on this branch.
