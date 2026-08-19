@@ -12,6 +12,41 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.7.1] - Unreleased
+
+### Fixed
+
+- **Subtree pulled from `e2e-fork/main`** (`fd2fceb` → `bc38f0f`, 2 commits — one fix and its
+  merge). A patch: it repairs a bring-up input that never worked rather than changing what a run
+  proves. **No description changed on any of the three skills**, so the routing table is untouched
+  and nothing re-routes.
+- **`ENV_CONTRACT` is gone; `REQUIRED_ENV` is the one declaration form.** `ENV_CONTRACT=none` was
+  documented as a sentinel in two places and implemented nowhere — `'none'` is truthy, so
+  `preflight.mjs` resolved it as a path, found no file called `none`, and exited 1 before the build.
+  Following the skill's own runtime-profile template cost a live run its bring-up. The sentinel was
+  not implemented; the contract read was deleted instead, because it was the source of a second
+  defect too: the valueless-key heuristic over-declared from a **generated** `.env.example` (which
+  declares optional keys exactly like required ones) and stopped a real app in 91 ms over 11 keys,
+  9 of which it boots without. Recon now names the keys.
+- **Three SKILL.md sites that disagreed with each other now say one thing.** The runtime-profile
+  template ships `REQUIRED_ENV`, the header-key table's two rows collapse to one, and the Step-3
+  invocation names the generated-`.env.example` trap inline. `ENV_FILES` / `.env` — the *supply*
+  side, which keeps a key the app provides itself from reading as missing — is untouched, as is
+  `APP_ROOT` (it no longer resolves a relative `ENV_CONTRACT`, only `ENV_FILES` / `.env`).
+- **The undeclared-config warning now carries the form to paste** (`REQUIRED_ENV="KEY_A KEY_B"`),
+  and a missing key reports `declared by REQUIRED_ENV` instead of naming a file. `CONFIG=undeclared`
+  still does not read as a pass.
+- **`pw-prove` stays at 0.24.0** with `e2e-reviewer` at 1.10.0 and `playwright-debugger` at 1.9.0.
+  Not an oversight to correct here: the fork branched this fix off 0.23.1 and bumped to 0.24.0 in
+  parallel with the AC-table work that 1.7.0 shipped, so one skill version now covers both changes
+  upstream. The marketplace patch bump is what distinguishes them downstream.
+- Marketplace mechanics: the pull merged the fork's history (not `--squash`), so the plugin
+  manifests survived; the four conflicts — `pw-prove/SKILL.md`, `preflight.mjs`,
+  `evals/cases/case-44-config-exit-names-the-key.yaml` and `scripts/ci/test-pw-prove-scripts.sh` —
+  were resolved by taking the fork's side, skill bodies being byte-identical on both sides by
+  contract. `make check-e2e-subtree` is green at exactly the expected 2 entries. The Codex manifest
+  was regenerated with `scripts/sync_codex_plugins.py`.
+
 ## [1.7.0] - Unreleased
 
 ### Changed
