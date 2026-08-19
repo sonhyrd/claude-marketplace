@@ -159,7 +159,10 @@ Studies: [proof target measurements](docs/studies/proof-target-measurements.md) 
 against a built preview, measured, plus the two claims that were verified by running them ·
 [the first live proof](docs/studies/live-proof-pr2866.md) — pw-prove run end to end against a real
 pull request on a real application, with the timings against the numbers this work was justified by
-and the twelve behaviours no fixture shows.
+and the twelve behaviours no fixture shows ·
+[Playwright config composition](docs/studies/playwright-config-composition.md) — what Playwright
+itself documents and implements about `webServer`, `reuseExistingServer`, deriving one config from
+another, and the four places the current `webServer: undefined` rule outruns its sources.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·

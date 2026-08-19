@@ -1,0 +1,17 @@
+The committed proof config is wrong for this repository, and the fix is to take a line out rather than put one in.
+
+Step 3 phase 5 already settled it. I curled the url the second `webServer` entry declares, `http://127.0.0.1:4173`, and it returned 200 — that is the SSR origin I built and started myself, and it is the origin this proof runs against. So that entry is not a development server standing beside my run; it is the build-and-boot of the proof target itself, `node script/run-ssr-engine.mjs build --mode staging` followed by the built server. Deleting it would leave a later run with no origin at all.
+
+So I remove the `webServer: undefined` line from `<configDir>/playwright.proof.config.ts`, leave every other line of that file alone, and stage it with this run as a one-time in-place migration.
+
+I keep the array whole. The first entry is a hermetic MSW backend declared beside the origin, and a proof run wants it.
+
+Keeping the entry costs nothing at run time: both entries carry `reuseExistingServer: true`, my server is already answering on 4173, so Playwright's availability probe adopts it and the command never runs. What I get back is the readiness wait, not a second build.
+
+I decided this on what answers at that url, not on the shape of the command string. Reading a command for the word "build" is a guess about intent — a wrapper named `serve.mjs` can build inside itself.
+
+What I explicitly do **not** do:
+
+- Add `webServer: undefined` back, or leave it in place. It is right for a development server and wrong here.
+- Touch the project's own playwright.config.ts. That file is never mine to edit.
+- Start a second server on another port to satisfy the config.
