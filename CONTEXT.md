@@ -120,9 +120,10 @@ the recording as `PW_PROVE_W`/`PW_PROVE_H`.
 The **served form of the application a proof runs against**: the *built* application, served by its
 preview server. Never the development server — that path is removed, not conditional, so there is no
 second bring-up path to maintain or to take by accident. The agent owns its lifecycle (allocate the
-port, build, start the server, stop it in Step 8 hygiene), and bring-up is three phases with three
-distinct failures — configuration (exit 4, names the missing keys), build (exit 5, carries the build's
-standard error), serve (exit 3, a short poll) — because one not-ready verdict for all three was a
+port, build, start the server, stop it in Step 8 hygiene), and bring-up is four phases with four
+distinct failures — configuration (exit 4, names the missing keys), browser (exit 6, the launcher
+binaries a package-manager install does not place), build (exit 5, carries the build's standard
+error), serve (exit 3, a short poll) — because one not-ready verdict for all of them was a
 misdiagnosis often enough to cost twelve minutes of wall clock and five needless rebuilds. Named here
 so the choice is a modelled decision rather than a hard-coded assumption re-litigated every time
 someone reads the bring-up timings in isolation: the built target is *slower* to bring up and much

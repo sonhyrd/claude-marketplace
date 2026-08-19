@@ -118,3 +118,12 @@ reasoning that its cause is gone. **That evidence arrived (issue #48) and the ma
 retired** — 31 runs, 120 test instances, 1.76–1.89× faster concurrent with zero failures and zero
 flaky verdicts, and a preview server that did not saturate even unmocked. See `docs/adr/0017`. The
 staging was still the right call: the runs, not the reasoning, are what closed it.
+
+## Amendment — 2026-08-19: a fourth phase
+
+The three phases below became **four**. A `browser` phase now sits between `config` and `build`
+(exit 6), because Playwright's browser binaries are the one dependency a package-manager install does
+not place in `node_modules`: a repository with a complete `node_modules` passed every gate here, paid
+a 162-second build, and then had every runner invocation exit 2 on `Executable doesn't exist at …`.
+That is the same shape of failure this ADR's phase split exists to move to the front, so the reasoning
+below is extended rather than overturned — the decision recorded here stands. See issue #109.
