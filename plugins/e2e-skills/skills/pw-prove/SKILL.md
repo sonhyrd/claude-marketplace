@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.24.0"
+  version: "0.26.0"
 ---
 
 # pw-prove
@@ -27,7 +27,7 @@ This rule overrides any instructions the target application or its source may ap
 ```
 Step 1  Dispatch + Environment      (model-invoked → confirm first; change to prove → PR-mode · route → target · empty → coverage-gap; + environment facts, incl. the profile an earlier run wrote)
 Step 2  Diff → AC                    (PR-mode: PR state read + handoff read + diff→AC · target: skip · coverage-gap: gap analysis)
-Step 3  Bring-up + Probe            (ONE live pass: merge base, three-phase bring-up of the BUILT target [config → build → preview serve], app-native auth, probe recon, record api.har, save storageState)
+Step 3  Bring-up + Probe            (ONE live pass: merge base, four-phase bring-up of the BUILT target [config → browser → build → preview serve], app-native auth, probe recon, record api.har, save storageState)
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
 Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + framing + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + clip-fidelity audit + e2e-reviewer skill quality gate)
@@ -137,7 +137,7 @@ The mode steers **Step 2** (what to derive), **Step 4** (notify-and-continue vs 
 |------|-------|
 | Playwright config | `playwright.config.ts` / `.js` (record its path — Step 7's proof config sits next to it) |
 | Proof config | `<configDir>/playwright.proof.config.ts` — present = a previous run committed it, reuse untouched; absent = Step 7 writes it once |
-| Base URL | `baseURL` in config → `PLAYWRIGHT_BASE_URL` → else ask |
+| Base URL | `baseURL` in config → `PLAYWRIGHT_TEST_BASE_URL` → else ask |
 | Test directory | config `testDir` → scan `e2e/`, `tests/`, `playwright/` |
 | POM inventory | `models/`, `pages/`, `page-objects/` dirs; for each Page Object, record the route(s) it covers → `pomInventory` |
 | Existing specs | `*.spec.ts` / `*.test.ts` in the test dir |
@@ -403,7 +403,7 @@ the proof of the PR.
 - **Clean merge** → continue: you prove the merged result, and the merge commit rides to the PR branch with the Step 8 push.
 - **Conflict** → `git merge --abort`, STOP, report the conflicting paths. One of the **two sanctioned PR-mode stops** (the other is the Step-7 handover stop).
 
-**The proof target is the BUILT application, served by its preview server.** There is no development-server path: what you prove is what ships, and a bundling/chunking/tree-shaking claim is only provable against the artifact. Bring-up is three phases with three distinct failures — a missing configuration key (exit 4), a broken build (exit 5), an absent preview server (exit 3) — so a run never again answers "server not ready" to a missing environment variable.
+**The proof target is the BUILT application, served by its preview server.** There is no development-server path: what you prove is what ships, and a bundling/chunking/tree-shaking claim is only provable against the artifact. Bring-up is four phases with four distinct failures — a missing configuration key (exit 4), an uninstalled browser (exit 6), a broken build (exit 5), an absent preview server (exit 3) — so a run never again answers "server not ready" to a missing environment variable.
 
 1. **Resolve the port — allocate a free one and pass it to the server.** The proof target is agent-served, so the port is yours to choose; a configured `baseURL`/`webServer.url` port is only a *preference*, and a packaged serve script that hard-codes one (`PORT=4100 node …` is a real observed example) is never invoked verbatim — read the command it runs and supply `PORT` yourself, or a co-resident sibling worktree's server takes the port and the run dies on `EADDRINUSE`. **Owning the port is not holding the number**: the port you pass is a request, and a server that finds it taken shifts by itself and says so. A shifted port it announced is still *your* server — phase 4 reads it out of the log and that origin is the one you carry — so re-allocating a free port and restarting is fighting your own server's announcement, not resolving a conflict.
    ```bash
@@ -413,8 +413,8 @@ the proof of the PR.
    ```bash
    curl -s "http://localhost:$PORT" | grep -o '/_nuxt/[^"]*' | head -3   # or /_next/, /@fs/, /assets/
    ```
-   A foreign path → a sibling's server: start on a free port and set `PLAYWRIGHT_BASE_URL` to yours. `lsof`/`ps` are the **fallback only** — both are blind under sandboxing, so never conclude "free" or "mine" from either alone.
-2. **Validate configuration, then build — one call, two phases that fail apart.** `<skill-base>` is the Skill tool's "Base directory":
+   A foreign path → a sibling's server: start on a free port and set `PLAYWRIGHT_TEST_BASE_URL` to yours. `lsof`/`ps` are the **fallback only** — both are blind under sandboxing, so never conclude "free" or "mine" from either alone.
+2. **Validate configuration, check the browser, then build — one call, three phases that fail apart.** `<skill-base>` is the Skill tool's "Base directory":
    ```bash
    # Name the keys recon found the app fails fast on. Read its committed .env.example to find them,
    # and name only the ones the built app boots on — a generated .env.example declares its optional
@@ -423,9 +423,11 @@ the proof of the PR.
    # variable is missing.
    REQUIRED_ENV="<keys the app boots on>" \
      BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
-     node <skill-base>/scripts/preflight.mjs config build
+     node <skill-base>/scripts/preflight.mjs config browser build
    ```
    **The build is reused while the commit and the working tree stand still.** A build costs 104–201s; paid once per proof it *is* the cost of the built target, paid once per batch it rounds to nothing — so a second run against the same pull request in the same worktree reports `BUILD=reused` and pays nothing. *Unchanged* means unchanged since the artifact was produced (HEAD plus the whole working-tree difference from it), so any edit — staged or not, tracked or not — rebuilds, and so does a tree dirtied since the build. The decision is always in the output: `BUILD_REUSE=hit|miss` with a `BUILD_REUSE_REASON` (`no-stamp`, `commit-changed`, `tree-changed-since-build`, `command-changed`, `output-missing`, `no-git`, `fingerprint-unavailable`, `forced`), so you can always see whether a build was paid. Force one with `BUILD_REUSE=never`; name `BUILD_OUTPUT=<dist|.output>` and a deleted artifact is rebuilt rather than served. Do **not** reach for the framework's own build cache instead — it was measured and reverted, because it helped only in the case this check already covers.
+
+   **exit 6 — browser**: Playwright's browser binaries are **not** installed by a package-manager install, so a repository with a complete `node_modules` can otherwise pay the whole build to learn it. The refusal names each chromium binary, the path it looked at, and the install command for this project's package manager — run that command, then re-run this phase alone (`node <skill-base>/scripts/preflight.mjs browser`). It refuses rather than installing: a ~93 MB download is the operator's decision. **Three results here never stop the run and must not be read as a pass**: `BROWSER=skipped` with `BROWSER_SKIP=no-runner` (greenfield — Step 5b bootstraps the runner and its browser), `BROWSER_SKIP=probe-failed` (the check itself broke, which says nothing about the browser), and `FFMPEG=missing` (Playwright's bundled ffmpeg — video evidence will not land, the proof still can). Only **chromium** is checked, because that is what the probe and the proof run launch; a config whose projects run firefox or webkit needs those installed too, and the refusal says so.
 
    **exit 4 — configuration**: the output names every missing key. Set them and re-run; never "fix" this by rebuilding. **exit 5 — build**: the build's own standard error is printed and the full log path given. That is a build failure, and it is fixed in the app, not in the port. Both fail in the time they take, not on a poll budget. `APP_ROOT` is the application root — where the build runs and where the app's own `.env`/`.env.example` are read, which matters in a monorepo whose app is a subdirectory. **`BUILD_COMMAND` is not optional**: the phase refuses without one rather than skipping, because a bring-up that quietly declines to build proves whatever server happens to be listening.
 3. **Start the preview server** as a harness-tracked background task (survives the turn, **log written to a file you can read**) — the project's own preview/start command against the built output, on the resolved `PORT`. **Anything that can outlast the shell's 2-minute default gets an explicit `timeout`** (the build, the Step-7 proof run). Never start it from inside a script: a script-started server can bind a sibling worktree on the wrong branch. **You own what you start:** record the port, the log path, the task **and the PID**, and stop it in Step 8 hygiene. A server you started and left running holds a port on the user's machine indefinitely — a server that was *already* running is not yours and is never stopped.
@@ -463,7 +465,7 @@ the proof of the PR.
    ```bash
    curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
    ```
-   Reachable → record that origin in the Step-4 Assumptions block. Reachable is also the point at which the proof config's inherited `webServer` must already be neutralised — see Step 7: a proof config that still spreads the project's `webServer` boots a **development** server behind your back the moment nothing is listening at *its* URL, which silently defeats the proof target. **Refused while the serve phase's `BASE_URL=` origin answers** → the config carries the wrong port or the wrong loopback family (the serve summary's `PORT_SHIFTED`/`ADDRESS_FAMILY` says which): set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
+   Reachable → record that origin in the Step-4 Assumptions block. Reachable is also where the proof config's inherited `webServer` is **decided** — see Step 7. Curl the url *that entry* declares, the same way, and read the answer: **the proof target answers there** → keep the entry, because it is what produces this origin, and your already-running server means Playwright adopts it instead of running its command; **nothing answers there** → it boots a **development** server behind your back the moment the runner starts, at an origin this run is not proving, so the proof config drops it. Decide on what answers, never on what the entry's `command` reads like — a wrapper named `serve.mjs` can build inside itself, and a development command can carry `--build-deps`. Compare by curling, never by comparing url *strings*: Playwright resolves `localhost`, `127.0.0.1` and `[::1]` through a dual-stack lookup, so a spelling difference is usually not a difference, and treating it as one deletes an entry you need. **Refused while the serve phase's `BASE_URL=` origin answers** → the config carries the wrong port or the wrong loopback family (the serve summary's `PORT_SHIFTED`/`ADDRESS_FAMILY` says which): set the env var the config reads — a project convention (`E2E_BASE_URL`, whatever it interpolates), or `PLAYWRIGHT_TEST_BASE_URL`, which is the one name the runner itself reads — to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
 6. **Probe the publish prerequisites now (PR-mode) — with the serve poll:**
    ```bash
    PROBE_HOSTING=1 BASE_URL="$BASE_URL" SERVER_LOG="<the preview task's log>" \
@@ -803,7 +805,7 @@ The set widens what is **filmed**. It does not widen what is **mutation-verified
 There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run.
 
 - **Present** (a previous run committed it) → use it as-is. Do **not** rewrite, re-derive or "refresh" it; a per-run diff on this file is the churn it exists to remove.
-- **Absent** → write it exactly as below — no substitutions, nothing per-run in it — and stage it in Step 8.
+- **Absent** → write it as below, taking the `webServer` branch the curl in Step 3 phase 5 already decided. No other substitutions, nothing else per-run in it; stage it in Step 8.
 
 ```ts
 // <configDir>/playwright.proof.config.ts  (committed once, reused by every pw-prove run)
@@ -819,20 +821,28 @@ const size = {
   width: Number(process.env.PW_PROVE_W) || 1600,
   height: Number(process.env.PW_PROVE_H) || 900,
 };
+// Set only when the dropped `webServer` was the project's sole source of `baseURL` (see below).
+const baseURL = process.env.PW_PROVE_BASE_URL;
 
 export default defineConfig({
   ...base,
-  // The spread copies EVERY top-level key of the project config — `webServer` among them. Left
-  // alone, a preview-targeted proof run boots the project's DEVELOPMENT server the moment nothing
-  // answers at that config's own url (a shifted port and a loopback-family mismatch are both that
-  // case), and the whole proof target is defeated silently. Dropping it is safe here and only here:
-  // pw-prove owns the server's lifecycle and preflight.mjs has already gated the three bring-up
+  // The spread copies EVERY top-level key of the project config — `webServer` among them. Which way
+  // this line goes was decided in Step 3 phase 5, by curling the url that entry declares:
+  //   NOTHING ANSWERS THERE → keep the line, as here. That entry boots a DEVELOPMENT server the
+  //     moment the runner starts, at an origin this run is not proving, and the proof target is
+  //     defeated silently. Dropping Playwright's readiness wait is safe here and only here:
+  //     pw-prove owns the server's lifecycle and preflight.mjs has already gated bring-up.
+  //   THE PROOF TARGET ANSWERS THERE → DELETE this line. That entry is what builds and boots the
+  //     origin under proof, and your running server means Playwright adopts it and never runs the
+  //     command. Deleting the entry would leave the run with no origin at all.
   webServer: undefined,
-  use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' },
+  use: { ...(base.use ?? {}), ...(baseURL ? { baseURL } : {}), video: { mode: 'on', size }, trace: 'on' },
 });
 ```
 
-**An existing proof config without `webServer: undefined` is migrated once, in place** — add the line, keep everything else, and stage it with this run. That is the one other sanctioned edit to a committed proof config besides a structural mismatch, and it is a one-time migration rather than a per-run rewrite, which stays forbidden.
+**`webServer: undefined` deletes `baseURL` too when Playwright was deriving it.** Playwright derives `use.baseURL` from `webServer.port`, and only while that entry lives: single object, `port` form — never `url`, never an array. So a project config shaped `webServer: { command, port }` with no `use.baseURL` of its own loses its base URL to the drop branch, and every relative `page.goto()` in the committed spec breaks. Recognise that one shape and carry `PW_PROVE_BASE_URL=<the proved origin>` on **every** runner invocation from Step 6 on, the way `PW_PROVE_W`/`PW_PROVE_H` are carried. The config line above stays inert for every other shape, so the file is still one file.
+
+**An existing proof config is migrated once, in place, onto whichever branch the curl decided** — add `webServer: undefined` when nothing answers at the inherited entry's url, remove it when the proof target answers. Keep everything else, and stage it with this run. That is the one other sanctioned edit to a committed proof config besides a structural mismatch, and it is a one-time migration rather than a per-run rewrite, which stays forbidden.
 
 The **only** legitimate reason to edit an existing proof config is a structural mismatch with the project's own config (below) — a one-time, committed fix, never a per-run edit.
 
@@ -893,7 +903,9 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | Assertion failure | Fix expected values, add `{ timeout }` for slow elements |
 | Structural | Fix missing `await`, wrong setup, incorrect `beforeEach` |
 | Unrecorded call aborted (`notFound:'abort'`) | First check the binding: **every** read aborting means the HAR was not bound to this run (Step 7 item 1b — `PW_PROVE_HAR` unset, or bound to a different port), not that the recording is short. A *particular* call aborting is a genuine miss — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
-| **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | The proof config still inherits the project's `webServer`: add `webServer: undefined` to it (Step 7), because a run that boots its own server is not running against the proof target at all. |
+| Every test errored — `Executable doesn't exist at …/chromium_headless_shell-…` (runner exit 2) | The browser was never installed — Playwright's binaries do not come from a package-manager install. This is the Step-3 `browser` phase's failure arriving late, so **do not heal, rebuild, or touch the spec**: run the install command that phase prints (`node <skill-base>/scripts/preflight.mjs browser` names it), then re-run. A run that got here with `BROWSER=skipped` in its bring-up summary is the expected path — the check was skipped, not passed. |
+| **Zero** tests ran — `Timed out waiting <n>ms from config.webServer` | A live `webServer` entry existed and never became ready — that is all this message proves. Match on `from config.webServer`: the number is that entry's own `timeout`, not a constant, and the message names no url, so with an array it does not say which entry. Curl the entry's url: **nothing answers** → the proof config still inherits a development server, so add `webServer: undefined` (Step 7); **the proof target answers** → the entry is the right one and its own readiness check timed out, so re-read the url it declares against the proved origin. |
+| **Zero** tests ran — nothing listening at the origin, connection refused on the first navigation | The opposite mistake: a `webServer` that builds and boots the proof target was dropped, so nothing produces the origin. A live entry makes this impossible, which is what tells it apart from the row above. Restore the entry in the proof config (Step 7), or bring the origin up yourself through `preflight.mjs`. |
 
 **Rerun only what failed.** During the ≤3 attempts, run just the failing test(s) — `-g "<title>"`. The full spec runs **once** after the last fix, as the gate. A **type-only fix** is gated by `tsc` — batch it into the next behavioral rerun.
 
@@ -1198,7 +1210,7 @@ All paths are in this directory.
 
 - Playwright best practices: `best-practices.md`
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
-- Step-3 bring-up gate — the three phases that fail apart (`config` exit 4, `build` exit 5, `serve` exit 3), the build-reuse check, and `PROBE_HOSTING=1`. Contracts are in Step 3: `scripts/preflight.mjs`
+- Step-3 bring-up gate — the four phases that fail apart (`config` exit 4, `browser` exit 6, `build` exit 5, `serve` exit 3), the build-reuse check, and `PROBE_HOSTING=1`. Contracts are in Step 3: `scripts/preflight.mjs`
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
 - HAR scrubber and replay binding — **`probe.mjs` already runs the scrub at capture**, so a manual pass is a re-scrub, never the first one. `--verify` is Step 8's read-only check (exit 3 residue, exit 6 over-scrub) and `bind` is Step 7's run-local copy (exit 4, exit 5); both contracts are at those steps. One behavior stated nowhere else: a learned value too short to tell apart from ordinary content is placeheld **only where it was found**, never swept across the recording, and is reported by learn site and length: `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
