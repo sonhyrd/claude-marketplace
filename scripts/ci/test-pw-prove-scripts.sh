@@ -42,13 +42,12 @@ echo "-- preflight: three bring-up phases that fail distinctly --"
 # not-ready verdict: a missing configuration key (exit 4), a broken build (exit 5) and an absent
 # preview server (exit 3). Each case asserts the code AND the diagnostic that goes with it.
 
-# config — a contract declaring a key nobody set. Must fail in seconds and NAME the key, and must
-# not reach the build: BUILD_COMMAND here would take a minute and write a marker if it ever ran.
+# config — a declared key nobody set. Must fail in seconds and NAME the key, and must not reach
+# the build: BUILD_COMMAND here would take a minute and write a marker if it ever ran.
 mkdir -p "$W/cfg"
-printf '# the app own declared contract\nAPI_BASE_URL=\nTENANT_SLUG=acme\n' >"$W/cfg/.env.example"
 start=$(date +%s)
 expect_exit 4 "missing required key is a CONFIG failure, not a not-ready verdict" -- \
-  env -u API_BASE_URL ENV_CONTRACT="$W/cfg/.env.example" \
+  env -u API_BASE_URL REQUIRED_ENV="API_BASE_URL" \
       BUILD_COMMAND="touch $W/cfg/BUILD-RAN.marker; sleep 60" \
       BASE_URL=http://127.0.0.1:1 READY_TIMEOUT=2 node "$REPO_ROOT/$S/preflight.mjs"
 elapsed=$(( $(date +%s) - start ))
@@ -63,11 +62,10 @@ if [ "$elapsed" -le 10 ] && [ ! -e "$W/cfg/BUILD-RAN.marker" ]; then
 else
   bad "config phase took ${elapsed}s / build marker present=$([ -e "$W/cfg/BUILD-RAN.marker" ] && echo yes || echo no)"
 fi
-# A key declared WITH a value declares its own default — it is not required, and must not be flagged.
-expect_exit 0 "a declared default (TENANT_SLUG=acme) is not reported missing" -- \
-  env API_BASE_URL=http://api.example.test ENV_CONTRACT="$W/cfg/.env.example" \
+# A key set in the environment satisfies its declaration and must not be flagged.
+expect_exit 0 "a key present in the environment is not reported missing" -- \
+  env API_BASE_URL=http://api.example.test REQUIRED_ENV="API_BASE_URL" \
       node "$REPO_ROOT/$S/preflight.mjs" config
-# REQUIRED_ENV is the other declaration form (what recon hands over when the app ships no contract).
 expect_exit 4 "REQUIRED_ENV names its own missing keys" -- \
   env -u PWPROVE_FIXTURE_KEY REQUIRED_ENV="PWPROVE_FIXTURE_KEY" node "$REPO_ROOT/$S/preflight.mjs" config
 stderr_has "  REQUIRED_ENV failure names the key" "PWPROVE_FIXTURE_KEY"
@@ -95,13 +93,12 @@ if grep -q '^BUILD_EXIT=timeout$' "$W/out"; then ok "a timed-out build says so �
 # The app's dotenv files are ITS files. Resolving them against the caller's cwd made a key the app
 # itself supplies read as missing — a false stop, in the phase that exists to prevent misdiagnosis.
 mkdir -p "$W/monorepo/apps/web"
-printf 'API_BASE_URL=\n' >"$W/monorepo/apps/web/.env.example"
 printf 'API_BASE_URL=http://api.internal\n' >"$W/monorepo/apps/web/.env"
-expect_exit 0 "a key supplied by the app's own .env satisfies the contract (APP_ROOT, not cwd)" -- \
-  env -u API_BASE_URL APP_ROOT="$W/monorepo/apps/web" ENV_CONTRACT=.env.example \
+expect_exit 0 "a key supplied by the app's own .env satisfies the declaration (APP_ROOT, not cwd)" -- \
+  env -u API_BASE_URL APP_ROOT="$W/monorepo/apps/web" REQUIRED_ENV="API_BASE_URL" \
       node "$REPO_ROOT/$S/preflight.mjs" config
 # Nothing declared must not read as a pass: the check did not happen, and the output says which.
-( cd "$W" && env -u API_BASE_URL -u REQUIRED_ENV -u ENV_CONTRACT node "$REPO_ROOT/$S/preflight.mjs" config >"$W/out" 2>"$W/err" )
+( cd "$W" && env -u API_BASE_URL -u REQUIRED_ENV node "$REPO_ROOT/$S/preflight.mjs" config >"$W/out" 2>"$W/err" )
 if grep -q '^CONFIG=undeclared$' "$W/out" && grep -qF 'no configuration contract declared' "$W/err"; then
   ok "an undeclared contract reports CONFIG=undeclared, not CONFIG=ok"
 else
