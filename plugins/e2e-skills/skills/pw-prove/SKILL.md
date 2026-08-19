@@ -67,7 +67,7 @@ generated, committed or pushed.
 
 The threshold is written down because "heavy" is not assessable from inside a heavy session. It is
 where a traced run lost two instructions it had read — a foreground probe start whose rule sat in
-bold three lines above it, and an `ENV_CONTRACT` the repository's own profile warned against — both
+bold three lines above it, and a config declaration the repository's own profile warned against — both
 in the 200–250k band, in a run that opened at 196k because a calling skill chained into it.
 
 **Refuse with the six-beat stop report** from the Pipeline Overview, filled in like this:
@@ -200,7 +200,7 @@ bound charges the next run the reading time it exists to save.
 # pw-prove runtime profile — <repo>
 
 ```env
-ENV_CONTRACT=none
+REQUIRED_ENV=API_BASE_URL,TENANT_SLUG
 BUILD_COMMAND=pnpm build
 SERVE_COMMAND=node .output/server/index.mjs
 BASE_URL_FORM=http://127.0.0.1:<port>
@@ -213,9 +213,9 @@ proof target.  — 2026-08-17 · a1b2c3d · Step 3
 ~~~
 
 **The header is pasted, the prose is read.** Every value in it is a string a later step substitutes
-into a command — `ENV_CONTRACT=none` goes onto the preflight invocation verbatim, and that is the
+into a command — `REQUIRED_ENV` goes onto the preflight invocation verbatim, and that is the
 whole point: a run that pastes a value cannot paraphrase it away. The measured failure this replaces
-is a profile that said, in plain English, not to pass `ENV_CONTRACT=.env.example`, cited by the run
+is a profile that said, in plain English, which config declaration not to pass, cited by the run
 one turn after the run passed exactly that. Keep the header to values a command consumes; anything
 that needs a *because* belongs in the prose below it, where a later run can weigh the reasoning
 before overriding it.
@@ -224,8 +224,7 @@ Header keys, and what each one substitutes into:
 
 | Key | Substituted into |
 |---|---|
-| `ENV_CONTRACT` | the Step-3 `config` phase — a path, or `none` when the app over-declares and the contract stops a run on keys it boots without |
-| `REQUIRED_ENV` | the same invocation, when only some declared keys are genuinely load-bearing |
+| `REQUIRED_ENV` | the Step-3 `config` phase — the keys this repository's built app actually boots on, which a run pays a live pass to learn |
 | `BUILD_COMMAND` | the Step-3 `build` phase and the mutation check's forced rebuild |
 | `SERVE_COMMAND` | the preview task Step 3 starts |
 | `BASE_URL_FORM` | the origin shape to expect from the serve poll (which loopback family the server binds) |
@@ -417,11 +416,12 @@ the proof of the PR.
    A foreign path → a sibling's server: start on a free port and set `PLAYWRIGHT_BASE_URL` to yours. `lsof`/`ps` are the **fallback only** — both are blind under sandboxing, so never conclude "free" or "mine" from either alone.
 2. **Validate configuration, then build — one call, two phases that fail apart.** `<skill-base>` is the Skill tool's "Base directory":
    ```bash
-   # Declare the app's OWN contract: its committed .env.example (a key with no value is required),
-   # or the keys recon found the app fails fast on. A production build does not supply the defaults
-   # a development server did, so this is the phase that stops you paying for a build to learn a
+   # Name the keys recon found the app fails fast on. Read its committed .env.example to find them,
+   # and name only the ones the built app boots on — a generated .env.example declares its optional
+   # keys exactly like its required ones. A production build does not supply the defaults a
+   # development server did, so this is the phase that stops you paying for a build to learn a
    # variable is missing.
-   ENV_CONTRACT=.env.example REQUIRED_ENV="<keys the app boots on>" \
+   REQUIRED_ENV="<keys the app boots on>" \
      BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
      node <skill-base>/scripts/preflight.mjs config build
    ```
