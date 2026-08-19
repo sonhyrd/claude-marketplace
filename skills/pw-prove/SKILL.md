@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.24.0"
+  version: "0.25.0"
 ---
 
 # pw-prove
@@ -137,7 +137,7 @@ The mode steers **Step 2** (what to derive), **Step 4** (notify-and-continue vs 
 |------|-------|
 | Playwright config | `playwright.config.ts` / `.js` (record its path — Step 7's proof config sits next to it) |
 | Proof config | `<configDir>/playwright.proof.config.ts` — present = a previous run committed it, reuse untouched; absent = Step 7 writes it once |
-| Base URL | `baseURL` in config → `PLAYWRIGHT_BASE_URL` → else ask |
+| Base URL | `baseURL` in config → `PLAYWRIGHT_TEST_BASE_URL` → else ask |
 | Test directory | config `testDir` → scan `e2e/`, `tests/`, `playwright/` |
 | POM inventory | `models/`, `pages/`, `page-objects/` dirs; for each Page Object, record the route(s) it covers → `pomInventory` |
 | Existing specs | `*.spec.ts` / `*.test.ts` in the test dir |
@@ -395,7 +395,7 @@ the proof of the PR.
    ```bash
    curl -s "http://localhost:$PORT" | grep -o '/_nuxt/[^"]*' | head -3   # or /_next/, /@fs/, /assets/
    ```
-   A foreign path → a sibling's server: start on a free port and set `PLAYWRIGHT_BASE_URL` to yours. `lsof`/`ps` are the **fallback only** — both are blind under sandboxing, so never conclude "free" or "mine" from either alone.
+   A foreign path → a sibling's server: start on a free port and set `PLAYWRIGHT_TEST_BASE_URL` to yours. `lsof`/`ps` are the **fallback only** — both are blind under sandboxing, so never conclude "free" or "mine" from either alone.
 2. **Validate configuration, then build — one call, two phases that fail apart.** `<skill-base>` is the Skill tool's "Base directory":
    ```bash
    # Name the keys recon found the app fails fast on. Read its committed .env.example to find them,
@@ -445,7 +445,7 @@ the proof of the PR.
    ```bash
    curl -sS -o /dev/null --max-time 10 -w '%{http_code}\n' "<the exact webServer.url / baseURL string>"
    ```
-   Reachable → record that origin in the Step-4 Assumptions block. Reachable is also the point at which the proof config's inherited `webServer` must already be neutralised — see Step 7: a proof config that still spreads the project's `webServer` boots a **development** server behind your back the moment nothing is listening at *its* URL, which silently defeats the proof target. **Refused while the serve phase's `BASE_URL=` origin answers** → the config carries the wrong port or the wrong loopback family (the serve summary's `PORT_SHIFTED`/`ADDRESS_FAMILY` says which): set the env var the config reads (`E2E_BASE_URL`, `PLAYWRIGHT_BASE_URL`, whatever it interpolates) to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
+   Reachable → record that origin in the Step-4 Assumptions block. Reachable is also where the proof config's inherited `webServer` is **decided** — see Step 7. Curl the url *that entry* declares, the same way, and read the answer: **the proof target answers there** → keep the entry, because it is what produces this origin, and your already-running server means Playwright adopts it instead of running its command; **nothing answers there** → it boots a **development** server behind your back the moment the runner starts, at an origin this run is not proving, so the proof config drops it. Decide on what answers, never on what the entry's `command` reads like — a wrapper named `serve.mjs` can build inside itself, and a development command can carry `--build-deps`. Compare by curling, never by comparing url *strings*: Playwright resolves `localhost`, `127.0.0.1` and `[::1]` through a dual-stack lookup, so a spelling difference is usually not a difference, and treating it as one deletes an entry you need. **Refused while the serve phase's `BASE_URL=` origin answers** → the config carries the wrong port or the wrong loopback family (the serve summary's `PORT_SHIFTED`/`ADDRESS_FAMILY` says which): set the env var the config reads — a project convention (`E2E_BASE_URL`, whatever it interpolates), or `PLAYWRIGHT_TEST_BASE_URL`, which is the one name the runner itself reads — to the reachable form, and carry that variable on **every** runner invocation from Step 6 on — the typecheck, the proof run, the heal runs, and the mutation run. Fixing it once in your shell is not enough; each invocation is a fresh environment.
 6. **Probe the publish prerequisites now (PR-mode) — with the serve poll:**
    ```bash
    PROBE_HOSTING=1 BASE_URL="$BASE_URL" SERVER_LOG="<the preview task's log>" \
@@ -783,7 +783,7 @@ The set widens what is **filmed**. It does not widen what is **mutation-verified
 There is no `--video` CLI flag, so enable video via a **second config passed with `--config`** that spreads the project config and overrides `use`. That file is **static, project-agnostic and committed**: written once next to the detected `configPath` (so its relative import resolves), then reused verbatim by every later run.
 
 - **Present** (a previous run committed it) → use it as-is. Do **not** rewrite, re-derive or "refresh" it; a per-run diff on this file is the churn it exists to remove.
-- **Absent** → write it exactly as below — no substitutions, nothing per-run in it — and stage it in Step 8.
+- **Absent** → write it as below, taking the `webServer` branch the curl in Step 3 phase 5 already decided. No other substitutions, nothing else per-run in it; stage it in Step 8.
 
 ```ts
 // <configDir>/playwright.proof.config.ts  (committed once, reused by every pw-prove run)
@@ -799,20 +799,28 @@ const size = {
   width: Number(process.env.PW_PROVE_W) || 1600,
   height: Number(process.env.PW_PROVE_H) || 900,
 };
+// Set only when the dropped `webServer` was the project's sole source of `baseURL` (see below).
+const baseURL = process.env.PW_PROVE_BASE_URL;
 
 export default defineConfig({
   ...base,
-  // The spread copies EVERY top-level key of the project config — `webServer` among them. Left
-  // alone, a preview-targeted proof run boots the project's DEVELOPMENT server the moment nothing
-  // answers at that config's own url (a shifted port and a loopback-family mismatch are both that
-  // case), and the whole proof target is defeated silently. Dropping it is safe here and only here:
-  // pw-prove owns the server's lifecycle and preflight.mjs has already gated the three bring-up
+  // The spread copies EVERY top-level key of the project config — `webServer` among them. Which way
+  // this line goes was decided in Step 3 phase 5, by curling the url that entry declares:
+  //   NOTHING ANSWERS THERE → keep the line, as here. That entry boots a DEVELOPMENT server the
+  //     moment the runner starts, at an origin this run is not proving, and the proof target is
+  //     defeated silently. Dropping Playwright's readiness wait is safe here and only here:
+  //     pw-prove owns the server's lifecycle and preflight.mjs has already gated bring-up.
+  //   THE PROOF TARGET ANSWERS THERE → DELETE this line. That entry is what builds and boots the
+  //     origin under proof, and your running server means Playwright adopts it and never runs the
+  //     command. Deleting the entry would leave the run with no origin at all.
   webServer: undefined,
-  use: { ...(base.use ?? {}), video: { mode: 'on', size }, trace: 'on' },
+  use: { ...(base.use ?? {}), ...(baseURL ? { baseURL } : {}), video: { mode: 'on', size }, trace: 'on' },
 });
 ```
 
-**An existing proof config without `webServer: undefined` is migrated once, in place** — add the line, keep everything else, and stage it with this run. That is the one other sanctioned edit to a committed proof config besides a structural mismatch, and it is a one-time migration rather than a per-run rewrite, which stays forbidden.
+**`webServer: undefined` deletes `baseURL` too when Playwright was deriving it.** Playwright derives `use.baseURL` from `webServer.port`, and only while that entry lives: single object, `port` form — never `url`, never an array. So a project config shaped `webServer: { command, port }` with no `use.baseURL` of its own loses its base URL to the drop branch, and every relative `page.goto()` in the committed spec breaks. Recognise that one shape and carry `PW_PROVE_BASE_URL=<the proved origin>` on **every** runner invocation from Step 6 on, the way `PW_PROVE_W`/`PW_PROVE_H` are carried. The config line above stays inert for every other shape, so the file is still one file.
+
+**An existing proof config is migrated once, in place, onto whichever branch the curl decided** — add `webServer: undefined` when nothing answers at the inherited entry's url, remove it when the proof target answers. Keep everything else, and stage it with this run. That is the one other sanctioned edit to a committed proof config besides a structural mismatch, and it is a one-time migration rather than a per-run rewrite, which stays forbidden.
 
 The **only** legitimate reason to edit an existing proof config is a structural mismatch with the project's own config (below) — a one-time, committed fix, never a per-run edit.
 
@@ -873,7 +881,8 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | Assertion failure | Fix expected values, add `{ timeout }` for slow elements |
 | Structural | Fix missing `await`, wrong setup, incorrect `beforeEach` |
 | Unrecorded call aborted (`notFound:'abort'`) | First check the binding: **every** read aborting means the HAR was not bound to this run (Step 7 item 1b — `PW_PROVE_HAR` unset, or bound to a different port), not that the recording is short. A *particular* call aborting is a genuine miss — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
-| **Zero** tests ran — `Timed out waiting 120000ms from config.webServer` | The proof config still inherits the project's `webServer`: add `webServer: undefined` to it (Step 7), because a run that boots its own server is not running against the proof target at all. |
+| **Zero** tests ran — `Timed out waiting <n>ms from config.webServer` | A live `webServer` entry existed and never became ready — that is all this message proves. Match on `from config.webServer`: the number is that entry's own `timeout`, not a constant, and the message names no url, so with an array it does not say which entry. Curl the entry's url: **nothing answers** → the proof config still inherits a development server, so add `webServer: undefined` (Step 7); **the proof target answers** → the entry is the right one and its own readiness check timed out, so re-read the url it declares against the proved origin. |
+| **Zero** tests ran — nothing listening at the origin, connection refused on the first navigation | The opposite mistake: a `webServer` that builds and boots the proof target was dropped, so nothing produces the origin. A live entry makes this impossible, which is what tells it apart from the row above. Restore the entry in the proof config (Step 7), or bring the origin up yourself through `preflight.mjs`. |
 
 **Rerun only what failed.** During the ≤3 attempts, run just the failing test(s) — `-g "<title>"`. The full spec runs **once** after the last fix, as the gate. A **type-only fix** is gated by `tsc` — batch it into the next behavioral rerun.
 

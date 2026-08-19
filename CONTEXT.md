@@ -157,7 +157,7 @@ that can never occur. See `docs/studies/proof-target-measurements.md` › The au
 through, spreading the project's own config and overriding only `use` (`video`, `trace`). **Static,
 project-agnostic and committed once**, then reused verbatim by every later run: the single per-run
 value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a file edit. The
-project's own `playwright.config` is never edited. Carries `webServer: undefined`, so the spread cannot inherit the project's development-server command and boot one behind a run aimed at the [proof target](#proof-target) — a one-time committed migration, not a per-run edit. Superseded the throwaway
+project's own `playwright.config` is never edited. Drops the inherited `webServer` **when nothing answers at that entry's url**, so the spread cannot boot a development server behind a run aimed at the [proof target](#proof-target); keeps it when the proof target answers there, because then that entry is what produces the origin. Either way a one-time committed migration, not a per-run edit. Superseded the throwaway
 `.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
 ## Hermetic audit

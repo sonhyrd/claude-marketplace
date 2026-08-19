@@ -325,6 +325,7 @@ must-FAIL fixture pair before it could run at all.
 | `case-37-illegible-clip-refilmed-once` | behavior | Step 7 › the clip inspection — diagnose, fix ungated, re-audit, re-film once | **3/3** | **+1** (clean) | **active** |
 | `case-38-frames-skip-is-not-a-failure` | behavior | Step 7 › the frame extract — exit 6 is a SKIP, not a failed test | **3/3** (after judge repair) | **+1** (first baseline CONTAMINATED; re-measured SKILL-FREE and still failed) | **active** |
 | `case-45-proof-config-drops-webserver` | behavior | Step 7 › *Proof run* — the committed proof config must not inherit `webServer` (ADR 0008) | **3/3** | **+1** (clean) | **active** |
+| `case-64-proof-config-keeps-target-building-webserver` | behavior | Step 7 › *Proof run* — the inherited `webServer` is **kept** when the proof target answers at its url (ADR 0016, scoped by #116) | not measured | not measured | quarantined — **never run**, see below |
 | `case-46-same-signature-takes-handover` | behavior | Step 7 › *Failure handling* — the no-progress checkpoint takes the handover stop | **3/3** (after judge repair) | **+1** (clean) | **active** |
 | `case-51` | behavior | Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` is a server fault | **3/3** | **0** (re-measured on a certified SKILL-FREE baseline, which **passed**) | **retired — deleted** |
 | `case-52-build-reuse-mutation-rebuilds` | behavior | Step 3 › build reuse **and** Step 7 › *Mutation check* — artifact isolation | **3/3** (after judge repair) | **+1** (clean) | **active** |
@@ -1577,3 +1578,27 @@ Two adjacencies worth stating, because both look like double coverage:
   asks, the test run validates — never a throwaway spec); `case-57` guards the probe's `eval`
   grammar. `case-53` and `case-58` would have been the third and fourth here and are both
   quarantined, so the section is guarded twice rather than four times.
+
+## `case-64` — the keep side of the `webServer` boundary, filed unmeasured
+
+`case-64-proof-config-keeps-target-building-webserver` is the sibling of `case-45`, added by #116
+when the "drop the inherited `webServer`" rule gained its boundary. `case-45` measures the drop side
+and stays exactly as it was, at **3/3** with a clean `+1`; nothing about it was re-derived, and its
+`derived_from_prompt` digest is unchanged. `case-64` measures the other side: an inherited entry that
+builds and boots the [proof target](../../../CONTEXT.md#proof-target), answering at the origin the
+proof runs against, is kept rather than suppressed.
+
+**It is on disk and deliberately absent from `eval.yaml`.** Admission needs a characterization run —
+three iterations plus an uplift measured with the skill installed and removed — and that is a paid
+run this change did not buy. Adding it to the active list on the strength of `case-45`'s numbers is
+exactly the move this registry exists to refuse: `case-45` measures a different branch of the rule
+against a different fixture, so its pass rate says nothing about this one.
+
+Its judge, `judges/proof-config-keeps-target-building-webserver.mjs`, is covered by
+`scripts/ci/test-eval-judges.sh` today, with both fixture halves — a must-FAIL that adds
+`webServer: undefined` anyway, and a must-PASS that names the suppression **in order to remove it**.
+The judge scores the token on the verb that governs it rather than on sentence-level negation,
+because the forbidden thing here is a token an answer writes inline and a sentence like *"a proof run
+must not boot its own server, so I add `webServer: undefined`"* carries a negation that has nothing
+to do with it. That is the bare-substring defect in its keep-side form, and both fixtures are what
+catch it.

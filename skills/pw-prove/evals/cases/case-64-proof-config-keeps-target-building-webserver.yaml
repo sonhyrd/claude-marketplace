@@ -1,0 +1,22 @@
+id: case-64-proof-config-keeps-target-building-webserver
+shape: behavior
+step: 'Step 7 › Proof run — the inherited webServer is kept when the proof target answers at its url (ADR 0016, scoped)'
+title: 'A webServer that builds and boots the proof target survives the spread, so the proof config keeps it'
+description: 'The sibling of case-45, on the other side of the boundary. Should read the second entry as the build-and-boot of the proof target itself — it answers 200 at 4173, which is the origin this run proves — and therefore KEEP the inherited webServer, removing the `webServer: undefined` line from the committed proof config once, in place, and staging it with this run. Should keep the array whole, so the hermetic MSW backend declared beside the origin survives too. Should say why keeping costs nothing: reuseExistingServer adopts the already-running server, so the command never runs. Should decide on what answers at the entry''s url, not on what the entry''s command reads like. Should NOT add or retain `webServer: undefined`, NOT delete the entry, NOT edit the project''s own playwright.config.ts, and NOT start a second server to satisfy the config.'
+tag: functional_test
+input:
+    prompt: 'Load the `pw-prove` skill with the Skill tool and follow it. Step 7, PR-mode. `<configDir>/playwright.proof.config.ts`
+        already exists from an earlier run and carries `webServer: undefined` after the `...base` spread.
+        The project''s own playwright.config.ts declares `webServer: [{ command: ''pnpm msw:serve'', url:
+        ''http://127.0.0.1:9090'', reuseExistingServer: true }, { command: ''node script/run-ssr-engine.mjs
+        build --mode staging && node .output/server/index.mjs'', url: ''http://127.0.0.1:4173'', reuseExistingServer:
+        true }]`. You built the app and started that SSR origin yourself on port 4173, and a curl of
+        http://127.0.0.1:4173 returns 200. What do you do before the proof run?'
+context: {}
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/proof-config-keeps-target-building-webserver.mjs
+    timeout_seconds: 30
+derived_from_prompt: 29305f66f65d

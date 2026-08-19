@@ -1,0 +1,1 @@
+The committed proof config already carries `webServer: undefined` after the spread, so it is correct as it stands and nothing needs migrating. I leave the file untouched and go straight to the proof run against 4173, where my server is already answering.

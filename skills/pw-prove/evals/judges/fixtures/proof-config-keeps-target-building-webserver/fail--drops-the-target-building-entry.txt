@@ -1,0 +1,3 @@
+The proof config spreads the project config, and the spread copies `webServer` in. A proof run must not boot its own server, so I add `webServer: undefined` after the `...base` spread in `<configDir>/playwright.proof.config.ts` and stage it with this run.
+
+That keeps the run pinned to the preview I started on 4173. I leave the project's own playwright.config.ts alone.
