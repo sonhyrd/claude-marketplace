@@ -12,6 +12,48 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.7.0] - Unreleased
+
+### Changed
+
+- **Subtree pulled from `e2e-fork/main`** (`e8ddfd3` → `fd2fceb`, 2 commits — one feature and its
+  merge). `pw-prove` moves 0.23.1 → **0.24.0**; `e2e-reviewer` stays 1.10.0 and
+  `playwright-debugger` stays 1.9.0. A minor, not a patch: what a run **writes into the AC table
+  and how it packages the proof** both change shape. **No description changed on any of the three
+  skills**, so the routing table is untouched and nothing re-routes.
+- **The AC table is written for the reviewer, not for the diff's author.** The AC column is now a
+  manual test plan — one user-observable behavior, active voice, what a tester does and sees — and
+  it carries **no function, component, file, constant, prop or feature-flag name**; identifiers
+  live in the `Changed files` and `Proven by` columns. On-screen text stays, quoted exactly, because
+  that is what keeps a scoped condition checkable. Rows merge **by behavior, not by surface**: one
+  rule proved on three surfaces is one row naming the surfaces as its condition, and it still films
+  three chapters.
+- **A row with no observable form is folded, not asserted.** A routing flag's value, a helper's
+  return, a constant's default — unit-test material that reached the wrong table. It keeps its row
+  with `not user-observable — <where it is proven>` on the same never-silent terms, and it is
+  **excluded from `M total`**: it is not a criterion, so nothing can prove it. The report's `ACs:`
+  line lists those rows explicitly alongside the gated, carried and already-covered ones.
+- **A scope qualifier rides on every row it weakens.** A bound like "a HAR fixture answers the
+  write, so persistence past the response is unproven" belongs in that row's Proven-by cell, where
+  a reviewer reads it while reading the criterion. A caveat parked below the table qualifies
+  nothing.
+- **Six ACs fill a recording; the seventh opens the next one.** Step 8 publishes chaptered
+  recordings in AC-order batches of six rather than one film per PR, each batch its own manifest and
+  its own `publish-proof.mjs` call — nothing in the script changes, and a table of six rows or fewer
+  publishes exactly one recording as before. The 64 MiB inline ceiling is now a **second reason to
+  split** instead of a reason to truncate: a batch that would exceed it splits at the last AC that
+  fits. Truncation survives only for the un-splittable case — a single chapter over the ceiling on
+  its own — and still declares itself in both the report and the manifest's `spec` field.
+- **One PR comment carries every recording's `/share/<id>` link**, listed above the table in AC
+  order, with each row naming its recording and timestamp as plain text (`clip 2 · 1:47`).
+  `/embed/<id>?t=` URLs stay out of the comment, unchanged: GitHub unfurls them into a video player
+  that buries the AC text. Supersession is now per **comment**, so it retires all of that comment's
+  links at once.
+- **The PROVES header inherits Step 2's phrasing contract.** A **Then** that names an identifier is
+  rewritten to what a tester sees *before* it is quoted into the header, and the table or plan is
+  corrected to match, so header and source stay word-for-word identical — which is what the Step 6
+  audit reads.
+
 ## [1.6.1] - Unreleased
 
 ### Fixed
