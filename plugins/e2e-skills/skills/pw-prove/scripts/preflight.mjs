@@ -50,17 +50,17 @@
 //                  (`wc -c < "$SERVER_LOG"`). Only announcements past that mark belong to the new
 //                  process. Default 0, which is right when the restart writes a fresh or truncated
 //                  log and wrong when it appends to the old one — so pass it when you append.
-//   REQUIRED_ENV   optional — comma/space-separated keys the built app must have to boot.
-//   ENV_CONTRACT   optional — path to the app's own declared contract (`.env.example` shape). A key
-//                  declared with no value is REQUIRED; a key declared with a value carries its own
-//                  default and is not.
+//   REQUIRED_ENV   optional — comma/space-separated keys the built app must have to boot. The only
+//                  declaration form: recon names the keys it found the app fails fast on. A committed
+//                  `.env.example` is a hint to read, never a contract this script reads for you — the
+//                  generated ones declare optional keys exactly like required ones.
 //   ENV_FILES      optional — comma-separated dotenv files the build/preview will load, counted as
 //                  suppliers of a key (default `.env` when it exists).
 //   BUILD_COMMAND  required for the build phase — the app's build command. There is no skip: the
 //                  proof target is the BUILT app, and a bring-up that quietly declines to build is
 //                  the second, silent path this design removes.
 //   APP_ROOT       optional — the application root: where the build runs and where a relative
-//                  ENV_CONTRACT / ENV_FILES / .env is resolved (default: cwd). `BUILD_CWD` is
+//                  relative ENV_FILES / .env is resolved (default: cwd). `BUILD_CWD` is
 //                  accepted as its older name.
 //   BUILD_REUSE    optional — `never` (also `0`/`no`/`off`) forces a build even when the commit and
 //                  the working tree have not moved since the last one. The MUTATION check sets this:
@@ -229,28 +229,15 @@ function splitKeys(raw) {
 }
 
 if (phases.includes('config')) {
-  const required = new Map(); // key -> where it was declared
-  for (const key of splitKeys(process.env.REQUIRED_ENV)) required.set(key, 'REQUIRED_ENV');
-
-  const contractPath = process.env.ENV_CONTRACT ? inApp(process.env.ENV_CONTRACT) : undefined;
-  if (contractPath) {
-    if (!fs.existsSync(contractPath)) {
-      warn(`preflight.mjs: ENV_CONTRACT names a file that does not exist: ${contractPath}\n`);
-      process.exit(EXIT_USAGE);
-    }
-    for (const { key, value } of parseDeclarations(fs.readFileSync(contractPath, 'utf8'))) {
-      // A declaration that carries a value is declaring its own default, so it is not required.
-      if (value === '' && !required.has(key)) required.set(key, contractPath);
-    }
-  }
+  const required = new Set(splitKeys(process.env.REQUIRED_ENV));
 
   if (required.size === 0) {
     // Nothing declared is not the same as nothing needed, and it must not read as a pass: the skill
     // cannot invent another repository's contract, so it says the check did not happen.
     summary.push('CONFIG=undeclared');
     warn(
-      'preflight: WARN - no configuration contract declared; set REQUIRED_ENV=<keys> or ' +
-        'ENV_CONTRACT=<path to the app .env.example> so a missing key fails here instead of after the build.\n',
+      'preflight: WARN - no configuration contract declared; set REQUIRED_ENV="KEY_A KEY_B" with the ' +
+        'keys recon found the app boots on, so a missing key fails here instead of after the build.\n',
     );
   } else {
     // Keys the build and the preview will pick up from a dotenv file count as supplied — the check
@@ -268,12 +255,12 @@ if (phases.includes('config')) {
       }
     }
 
-    const missing = [...required.keys()].filter(
+    const missing = [...required].filter(
       (key) => !(process.env[key] ?? '').trim() && !fromFiles.has(key),
     );
     if (missing.length) {
       warn(`preflight: STOP - configuration incomplete: ${missing.length} required key(s) not set\n`);
-      for (const key of missing) warn(`preflight:   ${key} — declared required by ${required.get(key)}\n`);
+      for (const key of missing) warn(`preflight:   ${key} — declared by REQUIRED_ENV\n`);
       warn(
         'preflight:   set them in the environment the build and the preview server will run under, ' +
           `or in one of ${envFiles.length ? envFiles.join(', ') : 'the app dotenv files'}, and re-run.\n`,
