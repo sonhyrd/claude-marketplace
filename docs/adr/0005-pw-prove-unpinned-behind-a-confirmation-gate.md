@@ -5,6 +5,11 @@
 - **Issue:** [#9](https://github.com/sonhyrd/claude-marketplace/issues/9) (parent
   [#8](https://github.com/sonhyrd/claude-marketplace/issues/8))
 - **Amends:** [ADR-0001](./0001-e2e-skills-as-an-editable-subtree.md), decision 5
+- **Superseded in part by:**
+  [ADR-0009](./0009-pr-review-spawns-the-proof-in-a-fresh-session.md) — the *One human checkpoint in
+  a long chain* consequence below no longer holds on the `sss:pr-review` path, which now spawns a
+  fresh session and so lands on the user-invoked path where the gate does not fire. The decision
+  itself, and the gate on every other chained path, stand.
 
 ## Context
 

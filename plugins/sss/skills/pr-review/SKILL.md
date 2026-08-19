@@ -1,12 +1,13 @@
 ---
 name: pr-review
-description: Carry a PR or branch from review to proof — three tracks at once (Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, and OCR's down to Medium — then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result via e2e:pw-prove. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
+description: Carry a PR or branch from review to proof — three tracks at once (Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, and OCR's down to Medium — then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result, which e2e:pw-prove runs in a fresh session spawned into an Orca terminal rather than inline in this one. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
   Requires the `matt` and `sss` plugins from this marketplace, the `gh` CLI for
   PR mode, and the `ocr` CLI for the OCR track. A missing `ocr` degrades to two
-  tracks. The proof stage needs the `e2e` plugin for `e2e:pw-prove`; without it
-  the run writes the handoff artifact and stops there.
+  tracks. The proof stage needs the `e2e` plugin for `e2e:pw-prove` and the
+  `orca` CLI to spawn the fresh session that runs it; without either, the run
+  writes the handoff artifact and prints the line to paste into a fresh session.
 metadata:
   author: sonhyrd
   version: "1.0.0"
@@ -71,6 +72,14 @@ Four fields in PR mode, and **every SHA is the full 40 characters, never abbrevi
 
 Then `ocr --version` — the version, not just the presence, because `sss:ocr-delegate` takes a different path below v1.9.3 and the report should say which one ran.
 
+**Then whether Orca can spawn a terminal in this checkout**, which is what Step 6 needs to run the proof at all:
+
+```bash
+orca worktree current --json
+```
+
+One call answers both halves: a non-zero exit is `orca` missing from PATH, and a clean exit naming no worktree is a checkout Orca does not manage. Either way the finding is false and Step 6 prints a paste line where it would have spawned. **Report it, never repair it** — `orca repo add` writes to the user's tool configuration, and a review does not reconfigure the machine as a side effect of proving a PR. Like the two sync findings it stops nothing; it decides the shape of a later stage. It sits here rather than in Step 6 for the reason the `ocr` finding does: a run should know what it can finish with before it spends three tracks getting there.
+
 **Then resolve the two sync findings** — both of them here, off the one `BASE` the tracks share, so Step 5 decides from settled facts rather than re-reading the tree after the fixes have moved it:
 
 ```bash
@@ -86,7 +95,7 @@ git diff --name-only "$BASE"..."$HEAD_SHA" -- "$DIR" | grep '\.json$'
 
 Any output at all and the second finding is true. Do not run it with `$DIR` unset: git rejects an empty pathspec outright, and this line failing would be indistinguishable from the failures that are meant to stop the run. A config present but naming no resolvable directory is simply the second finding false — the sync has nowhere to read from.
 
-Done when the tree is acquired, seven findings are in hand, and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and the `TREE_SHA` read against it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A bad ref, an empty diff or a failed guard stops here, naming which one failed. Neither sync finding stops the run; the two of them decide whether Step 5 exists.
+Done when the tree is acquired, eight findings are in hand, and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and the `TREE_SHA` read against it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to, and whether Orca can spawn a terminal in this checkout. A bad ref, an empty diff or a failed guard stops here, naming which one failed. Neither sync finding stops the run; the two of them decide whether Step 5 exists.
 
 ## Step 2 — Load `matt:code-review`, fan out three
 
@@ -123,7 +132,7 @@ Report in chat. Posting to GitHub is a separate ask.
 
 Done when all four sections are on screen, every finding carries an ID, and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of three unmerged tracks is output nobody got to soften.
 
-**This boundary orders the work and asks nothing.** Nothing is edited before the report prints, and no confirmation is asked once it has — Step 4 begins immediately, on the report's own terms. The user who invoked this skill asked for the fixes, so an offer to stop here spends their turn re-typing a policy this skill already holds. The run's one human checkpoint is `pw-prove`'s own gate in Step 6.
+**This boundary orders the work and asks nothing.** Nothing is edited before the report prints, and no confirmation is asked once it has — Step 4 begins immediately, on the report's own terms. The user who invoked this skill asked for the fixes, so an offer to stop here spends their turn re-typing a policy this skill already holds. Nothing later asks either: Step 6 spawns the proof unprompted, so this run has no human checkpoint anywhere — deliberately, and `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md` is where the trade is recorded.
 
 ## Step 4 — Fix
 
@@ -251,7 +260,7 @@ Done when either `sss:translation-sync` has reported its own closing status line
 ## Step 6 — Prove
 
 The last stage. What the review concluded gets written down where `e2e:pw-prove` reads it, and then
-`pw-prove` runs. Nothing here re-reviews and nothing here re-fixes.
+a fresh session runs `pw-prove` against it. Nothing here re-reviews and nothing here re-fixes.
 
 ### 6a. Ignore the artifact path first
 
@@ -320,22 +329,53 @@ commit too early is not a stale artifact you get warned about — it is the revi
 away. Nothing between here and the handoff may commit; once `pw-prove` has it, its commits are its
 own business.
 
-### 6c. Hand into `pw-prove`
+### 6c. Spawn a fresh session to run `pw-prove`
 
-Invoke the Skill tool with `e2e:pw-prove`, passing the PR number (or the branch and `BASE` in branch
-mode). It reads the artifact itself in its own Step 2 — the handoff is the file, not the prompt.
+`pw-prove` opens with a context gate and refuses above 100k tokens. By here this run is reliably
+past it — three tracks, an aggregate report and a fix stage — so the proof runs in a **fresh
+session**, in this same checkout:
 
-- **Its confirmation gate fires here, and that is the point.** A model invoked it, so it asks before
-  a browser bring-up, a HAR record, a commit and a push. Do not try to pre-answer or suppress it;
-  it is the one human checkpoint in the run.
-- **`pw-prove` owns everything from this point**, including the push. Do not run its steps ahead of
-  it, and do not push to make its job smaller.
-- **If it is not installed**, say so in one line and stop. The artifact is on disk and a later
-  `/e2e:pw-prove <PR#>` picks up the same findings — that standalone path is why the file is written
-  at all, and it is not a failure of this run.
+```bash
+orca terminal create --worktree active --command "claude '/e2e:pw-prove <NUM>'" --json
+```
+
+- **`<NUM>` is the PR number, or the branch name in branch mode, and that is the whole prompt.**
+  `BASE` and the findings are in the artifact, which `pw-prove` reads itself in its own Step 2 — the
+  handoff is the file, not the prompt. So the spawned line is byte-identical to the one a user
+  pastes by hand, and there is one place a run's base comes from.
+- **`--worktree active` keeps the proof in the tree Step 1 acquired** and Step 4 committed to, which
+  is what makes it a proof of the reviewed code. Not a child worktree: `pw-prove` commits, pushes
+  and comments on the PR, and from a child that becomes a merge-back this skill would then own.
+- **The prompt rides on `--command`**, so the session boots with it already sent. Creating a bare
+  `claude` and sending the slash command afterwards is three calls with a boot race in the middle.
+- **The spawn asks nothing.** The user who invoked this skill asked for the proof, and
+  `/e2e:pw-prove` arriving as first user input is the *user-invoked* path, so `pw-prove`'s own
+  confirmation gate does not fire there either. This run therefore stops for a person nowhere at
+  all: `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md` is where that trade is
+  recorded rather than left to be discovered.
+- **`pw-prove` owns everything from the spawn onward**, including the push. Do not run its steps
+  ahead of it, and do not push to make its job smaller.
+- **Then end the run.** Nothing here waits on that terminal. Holding a session this heavy open
+  through a full bring-up and verify loop buys nothing — being too heavy to be useful is the reason
+  the fresh session exists — so the proof's outcome is not this run's to report, and saying so is
+  part of the close.
+
+**Close on four things**: the artifact path, the terminal handle `terminal create` returned, the
+`orca terminal read --terminal <handle>` line that shows the proof's output, and one sentence saying
+plainly that the proof is running there and is not verified here. A "Done" a reader takes for a
+passed proof is the silent always-pass that `pw-prove` exists to prevent.
+
+**Step 1's eighth finding false — Orca cannot spawn a terminal here — and the stage prints three
+things and stops**: `.pw-prove/handoff.json`'s path, the exact `/e2e:pw-prove <NUM>` line, and the
+working directory to run it from. The same three where the `e2e` plugin is not installed. The
+artifact is on disk and a fresh `/e2e:pw-prove <NUM>` picks up the same findings — that standalone
+path is why the file is written at all, and taking it is not a failure of this run. **Invoking
+`pw-prove` inline is never the answer here**, on any branch: this context is exactly the one its
+gate turns away, so an inline attempt spends a turn to arrive at the same paste line.
 
 Done when `.pw-prove/handoff.json` is on disk with a `head_sha` equal to `HEAD`, the path is
-gitignored, and `pw-prove` has either reached its own pipeline or been reported absent.
+gitignored, and either a fresh session is running the proof with its handle on screen, or the paste
+line and its working directory are.
 
 ## Why inline
 

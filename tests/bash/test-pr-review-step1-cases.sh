@@ -155,9 +155,27 @@ must_match "states the full-SHA rule" 'full 40 characters'
 must_match "and forbids abbreviating them" 'never abbreviated'
 must_match "the verdict comes from a read after the acquisition" 'after the acquisition'
 
+# --- the eighth finding: can Orca spawn the proof's session? ----------------
+#
+# Step 6 spawns a fresh session because pw-prove's context gate refuses this one
+# (docs/adr/0009). Whether that spawn is possible is resolved HERE, before three
+# tracks are spent getting to a stage that cannot finish — the same reason the
+# `ocr` finding sits in Step 1. One call covers both halves, and the finding is
+# reported rather than repaired.
+
+must_match "resolves whether Orca can spawn a terminal here" 'orca worktree current'
+must_match "and asks it as one call covering both halves" '(not manage|does not manage|unmanaged)'
+must_match "a missing binary is the same finding" 'PATH'
+# Anchored at the start of a line, for the reason the `git pull` test above is:
+# the prose that rules the command out has to say its name.
+must_not_match "runs no repo registration" '^[[:space:]]*orca repo add'
+# shellcheck disable=SC2016  # a grep pattern: expansion is exactly what must not happen
+must_match "and says the finding is reported, never repaired" '`orca repo add`'
+must_match "names repair as the thing it is not doing" '[Rr]epair'
+
 # --- the finding count stayed in step with the findings ---------------------
 
-must_match "the closing tally counts seven findings" 'seven findings'
+must_match "the closing tally counts eight findings" 'eight findings'
 
 echo
 if [ "$FAIL" -eq 0 ]; then

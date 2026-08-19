@@ -1,0 +1,48 @@
+id: orca-missing-prints-the-paste-line
+title: No Orca terminal available and Step 6 prints the paste line, then stops
+description: |
+  Step 1's eighth finding, spent in Step 6c. `orca worktree current --json`
+  answers whether Orca can spawn a terminal in this checkout — a non-zero exit
+  for a missing binary, a worktree-less success for an unmanaged checkout. False
+  either way, and Step 6 prints three things and stops: the artifact path, the
+  exact `/e2e:pw-prove <NUM>` line, and the working directory to run it from.
+
+  **There is no inline fallback, and that is what this case guards.** Invoking
+  pw-prove in a ~150k-token session is the refusal the spawn exists to route
+  around, so a "fallback" walks the run straight back into it and burns a turn to
+  reach the same paste line. `ocr-missing-degrades.yaml` is the closest analogue —
+  a tool absent from PATH changing a stage's shape rather than failing the run —
+  and the `failure` clause is quote-aware for the reason
+  `fix-stage-starts-unasked.yaml`'s is: a correct answer names inline invocation
+  in order to rule it out. Measured — a correct fixture writing *It does not fall
+  back to invoking pw-prove inline* tripped the unanchored rule, so each failure
+  regex carries its subject adjacent to the verb and a `not` between them breaks
+  the match. `tests/test_pr_review_eval_rules.py` holds both directions.
+
+input:
+  prompt: |
+    Setting up your PR review on a plain CI checkout — no Orca on that box at all,
+    so nothing there is an Orca-managed worktree. Don't check this machine, I'm
+    asking about that one. Does the review still finish, and what happens at the
+    proof stage?
+
+judge:
+  type: rule_based
+  success:
+    - output_matches:
+        all: ['(?i)pw-prove']
+        any: ['(?i)handoff', '(?i)\.pw-prove/handoff\.json', '(?i)artifact']
+    - output_matches:
+        any: ['(?i)/e2e:pw-prove', '(?i)paste', '(?i)fresh session', '(?i)yourself', '(?i)by hand']
+    - output_matches:
+        any: ['(?i)working directory', '(?i)\bdirectory\b', '(?i)where to run', '(?i)\bcd\b', '(?i)repo root']
+    - output_matches:
+        any: ['(?i)stops', '(?i)stop there', '(?i)ends there', '(?i)no spawn', '(?i)cannot spawn', '(?i)can''t spawn']
+  failure:
+    - output_matches:
+        any:
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I|so I) invoke the Skill tool with `?e2e:pw-prove'
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|I''d|we''ll|then I|so I) fall back to (invoking|running) (it|pw-prove) inline'
+          - '(?im)(^|[^"''“”`*_(])\borca repo add\b'
+    - output_contains:
+        any: ["cannot run the review", "the review can't run", "register the repo with Orca"]
