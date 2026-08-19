@@ -65,6 +65,29 @@ committed migration** of the template and of any proof config already in a repos
 edit — `docs/adr/0008` still holds. It also removes Playwright's own readiness wait, which is correct
 only because the agent owns the server lifecycle and `preflight.mjs` gates bring-up.
 
+**Scoped, 2026-08-19: the entry is dropped for what answers at its url, not for having been
+inherited.** The paragraph above states the rule without a boundary, and it inverts wherever the
+inherited entry is not a development server but the build-and-boot of the proof target itself —
+measured in a consuming repository whose config declares a hermetic backend and then builds and execs
+the SSR origin. Dropping it there does not protect the target; it removes it, and the run has no
+origin at all. So the decision is taken in Step 3 phase 5, from the curl that step already performs:
+the proof target answers at the entry's url → keep it, and the agent's running server means
+Playwright adopts it rather than running the command; nothing answers → drop it, which is the case
+this record measured. Reading the entry's `command` for a build step was rejected as a guess about
+intent on an arbitrary shell string, and comparing url *strings* was rejected as wrong in the
+dangerous direction: Playwright's `url` form performs a dual-stack lookup, so only a literal address
+is loopback-family sensitive and a spelling difference would delete an entry that should have stayed.
+Two consequences this record did not weigh. **`baseURL` can go with the entry** — Playwright derives
+`use.baseURL` from `webServer.port`, and only while the entry lives (single object, `port` form,
+never `url`, never an array), so a project config of that one shape with no `use.baseURL` of its own
+loses its base URL to the drop branch; the proof config therefore takes an optional `baseURL` from
+`PW_PROVE_BASE_URL`, by the same per-run-value-arrives-by-env law as the recording size. And **a kept
+entry is not reliably dormant**: the availability probe counts a status from 200 to 403 as
+"already running", so a proof target answering `5xx` reads as no-server and the command runs anyway.
+That edge is recorded rather than guarded — the curl sees the same `5xx` and drops the entry, so the
+two agree and the run fails loudly instead of proving the wrong artifact. Primary-source basis:
+`docs/studies/playwright-config-composition.md`.
+
 **There is no unbuilt fallback, and the gate refuses rather than skips.** Asking for the build phase
 without a build command is a usage error, not a quiet `BUILD=skipped` that lets a run pass while
 proving whatever server happened to be listening — a skipped build is the second, silent path this
@@ -95,3 +118,12 @@ reasoning that its cause is gone. **That evidence arrived (issue #48) and the ma
 retired** — 31 runs, 120 test instances, 1.76–1.89× faster concurrent with zero failures and zero
 flaky verdicts, and a preview server that did not saturate even unmocked. See `docs/adr/0017`. The
 staging was still the right call: the runs, not the reasoning, are what closed it.
+
+## Amendment — 2026-08-19: a fourth phase
+
+The three phases below became **four**. A `browser` phase now sits between `config` and `build`
+(exit 6), because Playwright's browser binaries are the one dependency a package-manager install does
+not place in `node_modules`: a repository with a complete `node_modules` passed every gate here, paid
+a 162-second build, and then had every runner invocation exit 2 on `Executable doesn't exist at …`.
+That is the same shape of failure this ADR's phase split exists to move to the front, so the reasoning
+below is extended rather than overturned — the decision recorded here stands. See issue #109.

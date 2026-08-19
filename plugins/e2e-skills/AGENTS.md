@@ -151,7 +151,7 @@ bash scripts/ci/ci-local.sh
 bash scripts/ci/review.sh           # parity, language, links, framework scope, orphans
 bash scripts/ci/test-parity.sh      # drift smoke test (mutate-and-detect)
 bash scripts/ci/test-corpus.sh      # scanner golden: 25/25 checks fire, suppression holds
-bash scripts/ci/test-pw-prove-scripts.sh # preflight three-phase bring-up gate + probe argument/socket contract
+bash scripts/ci/test-pw-prove-scripts.sh # preflight four-phase bring-up gate + probe argument/socket contract
 bash scripts/ci/test-hermetic.sh    # hermetic.mjs: LIVE/MOCKED classification + route.fetch blind spot
 bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clips share link out (four gates, kept-file fallback)
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so

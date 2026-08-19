@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Process-boundary tests for the shipped pw-prove entry points that no other suite reaches:
-# preflight.mjs (the Step-3 three-phase bring-up gate) and probe.mjs's argument/socket contract. The seam is
+# preflight.mjs (the Step-3 four-phase bring-up gate) and probe.mjs's argument/socket contract. The seam is
 # the highest one available — spawn the script, assert on the exit code and the bytes it wrote.
 #
 # Carried over from the retired generator-scripts suite: these cases test behaviour that survives
@@ -173,6 +173,159 @@ mkdir -p "$W/nogit"
 ( cd "$W/nogit" && env APP_ROOT="$W/nogit" BUILD_STAMP="$W/nogit-stamp.json" \
     BUILD_COMMAND="echo built >>$BUILDS" node "$REPO_ROOT/$S/preflight.mjs" build >"$W/out" 2>"$W/err" )
 assert_reuse "outside a git worktree there is nothing to compare, so the build is paid" ok no-git 7
+
+echo ""
+echo "-- preflight: the browser phase (the one dependency a package-manager install does not place) --"
+# Playwright's browser binaries do not live in node_modules, so a repository can pin @playwright/test,
+# pass every other gate, pay a 162s build, and have the runner exit 2 on `Executable doesn't exist at
+# ...`. This phase moves that failure to the front, before the build.
+#
+# The seam is the project's OWN pinned Playwright CLI, resolved from APP_ROOT through the package's
+# own `bin` declaration. Never `npx playwright`: measured 2026-08-19, `npx playwright install
+# --dry-run` in a directory without the runner tries to DOWNLOAD playwright@latest, which is exactly
+# the auto-install the skill forbids and would fire on the repo that lacks it. A stub package at that
+# seam gives every verdict with no browser, no network and no real Playwright anywhere.
+PWAPP="$W/pwapp"
+mkdir -p "$PWAPP/node_modules/playwright"
+printf '{"name":"pwapp","private":true,"packageManager":"pnpm@9.0.0"}\n' >"$PWAPP/package.json"
+printf '{"name":"playwright","version":"0.0.0-stub","bin":{"playwright":"cli.js"}}\n' \
+  >"$PWAPP/node_modules/playwright/package.json"
+cat >"$PWAPP/node_modules/playwright/cli.js" <<'PWSTUB'
+// Stand-in for the target project's pinned Playwright CLI. `install <browser> --dry-run` is the only
+// verb the browser phase uses, and the bytes below are a VERBATIM transcription of a real
+// `playwright install chromium --dry-run` (playwright 1.61.1, linux, captured 2026-08-19) with only
+// the cache root made substitutable. Note what that real output contains and a hand-written stub
+// would not: chromium resolves to THREE entries, and the headless shell — the binary the probe
+// actually launches, and the one named in the original report — is the LAST of them.
+//
+// The known limitation, stated rather than hidden: if Playwright changes this format, this suite
+// stays green while the real check rots. Re-capture these bytes rather than trusting this copy.
+const argv = process.argv.slice(2).join(' ');
+if (argv !== 'install chromium --dry-run') {
+  process.stderr.write(`stub: unexpected argv '${argv}'\n`);
+  process.exit(1);
+}
+if (process.env.PWSTUB_FAIL === '1') {
+  process.stderr.write('stub: simulated CLI failure\n');
+  process.exit(1);
+}
+if (process.env.PWSTUB_GARBAGE === '1') {
+  process.stdout.write('nothing that looks like an install location\n');
+  process.exit(0);
+}
+const root = process.env.PLAYWRIGHT_BROWSERS_PATH || '/nonexistent-ms-playwright';
+process.stdout.write(
+  `Chrome for Testing 149.0.7827.55 (playwright chromium v1228)\n` +
+  `  Install location:    ${root}/chromium-1228\n` +
+  `  Download url:        https://cdn.playwright.dev/builds/cft/149.0.7827.55/linux64/chrome-linux64.zip\n` +
+  `\n` +
+  `FFmpeg (playwright ffmpeg v1011)\n` +
+  `  Install location:    ${root}/ffmpeg-1011\n` +
+  `  Download url:        https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-linux.zip\n` +
+  `\n` +
+  `Chrome Headless Shell 149.0.7827.55 (playwright chromium-headless-shell v1228)\n` +
+  `  Install location:    ${root}/chromium_headless_shell-1228\n` +
+  `  Download url:        https://cdn.playwright.dev/builds/cft/149.0.7827.55/linux64/chrome-headless-shell-linux64.zip\n` +
+  `\n`,
+);
+PWSTUB
+
+# usage: browser_run <cache-root> [EXTRA=env ...] — runs the browser phase in the stub app.
+browser_run() {
+  local cache="$1"; shift
+  ( cd "$PWAPP" && env APP_ROOT="$PWAPP" PLAYWRIGHT_BROWSERS_PATH="$cache" "$@" \
+      node "$REPO_ROOT/$S/preflight.mjs" browser >"$W/out" 2>"$W/err" )
+}
+summary_has() {
+  if grep -q "^$2\$" "$W/out"; then ok "$1"; else bad "$1 — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"; fi
+}
+
+# missing — an empty cache. The refusal must name the install command for THIS project's package
+# manager, and the path it looked at, so a cache pointed somewhere unexpected is diagnosable.
+CACHE="$W/pw-cache"
+browser_run "$CACHE"; rc=$?
+if [ "$rc" = 6 ]; then ok "an absent browser is its own refusal — exit 6"; else bad "absent browser — exit $rc, wanted 6"; fi
+summary_has "the refusal is machine-readable — BROWSER=missing" "BROWSER=missing"
+summary_has "and it says which phase stopped — PHASE_FAILED=browser" "PHASE_FAILED=browser"
+if grep -qF 'pnpm exec playwright install chromium' "$W/err"; then
+  ok "the refusal names the install command for the project's own package manager"
+else
+  bad "install command — stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+fi
+if grep -qF "$CACHE/chromium_headless_shell-1228" "$W/err"; then
+  ok "the refusal names the headless shell by path — the binary the probe actually launches"
+else
+  bad "refusal does not name the headless-shell path — stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+fi
+
+# partial — the directories exist, the completion marker does not. This is an interrupted download,
+# and it is the state a directory-exists check cannot see.
+mkdir -p "$CACHE/chromium-1228" "$CACHE/chromium_headless_shell-1228" "$CACHE/ffmpeg-1011"
+browser_run "$CACHE"; rc=$?
+if [ "$rc" = 6 ]; then ok "a half-downloaded cache still refuses — exit 6"; else bad "partial install — exit $rc, wanted 6"; fi
+summary_has "a partial install is not reported as merely missing — BROWSER=partial" "BROWSER=partial"
+
+# ok — Playwright's own completion marker present in each location.
+touch "$CACHE/chromium-1228/INSTALLATION_COMPLETE" \
+      "$CACHE/chromium_headless_shell-1228/INSTALLATION_COMPLETE" \
+      "$CACHE/ffmpeg-1011/INSTALLATION_COMPLETE"
+browser_run "$CACHE"; rc=$?
+if [ "$rc" = 0 ]; then ok "a complete install passes — exit 0"; else bad "complete install — exit $rc, wanted 0: $(tr '\n' ' ' <"$W/err" | tail -c 200)"; fi
+summary_has "a pass says so — BROWSER=ok" "BROWSER=ok"
+summary_has "the bundled ffmpeg is reported alongside it — FFMPEG=ok" "FFMPEG=ok"
+
+# The bundled ffmpeg is EVIDENCE (video), not the proof. Its absence is a WARN and never the exit
+# code: a run must still be able to prove a change with a degraded recording pipeline.
+rm -rf "$CACHE/ffmpeg-1011"
+browser_run "$CACHE"; rc=$?
+if [ "$rc" = 0 ]; then ok "a missing bundled ffmpeg warns and does not block — exit 0"; else bad "missing ffmpeg — exit $rc, wanted 0"; fi
+summary_has "and it is still reported — FFMPEG=missing" "FFMPEG=missing"
+mkdir -p "$CACHE/ffmpeg-1011" && touch "$CACHE/ffmpeg-1011/INSTALLATION_COMPLETE"
+
+# no-runner — greenfield reaches Step 3 before Step 5b bootstraps the runner, so refusing here would
+# block a run that is about to be fixed. It must SKIP, and a skip must never read as a pass.
+mkdir -p "$W/norunner"
+( cd "$W/norunner" && env APP_ROOT="$W/norunner" node "$REPO_ROOT/$S/preflight.mjs" browser \
+    >"$W/out" 2>"$W/err" ); rc=$?
+if [ "$rc" = 0 ]; then ok "greenfield skips rather than refusing — exit 0"; else bad "no-runner — exit $rc, wanted 0"; fi
+summary_has "a skip is distinct from a pass — BROWSER=skipped" "BROWSER=skipped"
+summary_has "and it names why — BROWSER_SKIP=no-runner" "BROWSER_SKIP=no-runner"
+
+# probe-failed — a checker that stops bring-up because the CHECKER broke is a false stop in the one
+# phase whose whole purpose is preventing misdiagnosis. Both failure shapes skip with a named reason.
+browser_run "$CACHE" PWSTUB_FAIL=1; rc=$?
+if [ "$rc" = 0 ]; then ok "a broken CLI skips rather than stopping the run — exit 0"; else bad "probe-failed — exit $rc, wanted 0"; fi
+summary_has "and says the checker failed, not the browser — BROWSER_SKIP=probe-failed" "BROWSER_SKIP=probe-failed"
+browser_run "$CACHE" PWSTUB_GARBAGE=1; rc=$?
+if [ "$rc" = 0 ]; then ok "unparseable output skips too — exit 0"; else bad "unparseable output — exit $rc, wanted 0"; fi
+summary_has "unparseable output is a checker failure — BROWSER_SKIP=probe-failed" "BROWSER_SKIP=probe-failed"
+
+# The package manager is read from the project, not passed in. A lockfile answers when the
+# declarative `packageManager` field does not.
+NPMAPP="$W/npmapp"
+mkdir -p "$NPMAPP/node_modules"
+cp -r "$PWAPP/node_modules/playwright" "$NPMAPP/node_modules/playwright"
+printf '{"name":"npmapp","private":true}\n' >"$NPMAPP/package.json"
+printf '{"lockfileVersion":3}\n' >"$NPMAPP/package-lock.json"
+( cd "$NPMAPP" && env APP_ROOT="$NPMAPP" PLAYWRIGHT_BROWSERS_PATH="$W/pw-empty" \
+    node "$REPO_ROOT/$S/preflight.mjs" browser >"$W/out" 2>"$W/err" )
+if grep -qF 'npm exec -- playwright install chromium' "$W/err"; then
+  ok "a lockfile answers when no packageManager field is declared"
+else
+  bad "lockfile-derived install command — stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+fi
+
+# The whole point of the phase is its POSITION: the check must happen before anything expensive.
+# BUILD_COMMAND here would write a marker if the build were ever reached.
+rm -f "$PWAPP/BUILD-RAN.marker"
+( cd "$PWAPP" && env APP_ROOT="$PWAPP" PLAYWRIGHT_BROWSERS_PATH="$W/pw-empty" \
+    BUILD_COMMAND="touch $PWAPP/BUILD-RAN.marker" \
+    node "$REPO_ROOT/$S/preflight.mjs" browser build >"$W/out" 2>"$W/err" ); rc=$?
+if [ "$rc" = 6 ] && [ ! -e "$PWAPP/BUILD-RAN.marker" ]; then
+  ok "the browser check runs BEFORE the build — a 162s build is never paid to learn this"
+else
+  bad "browser/build ordering — exit $rc, build marker present=$([ -e "$PWAPP/BUILD-RAN.marker" ] && echo yes || echo no)"
+fi
 
 echo ""
 echo "-- preflight: dead origin, refused timeout, ready origin --"
