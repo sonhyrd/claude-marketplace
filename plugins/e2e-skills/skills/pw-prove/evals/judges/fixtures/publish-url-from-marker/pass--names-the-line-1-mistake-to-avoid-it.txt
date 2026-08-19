@@ -1,0 +1,17 @@
+The first line of stdout is not the URL here. This project's `.npmrc` makes npm print two `npm warn Unknown project config` lines on every npx invocation, and ffmpeg writes its banner to stderr, so a bare `head -n1` on the publish output captures chatter — that exact mistake cost a real run five URLs and a repeat upload.
+
+So: stderr goes to a log file, and the URL comes off the `PWPROVE_URL ` marker line.
+
+```bash
+node <skill-base>/scripts/publish-proof.mjs .pw-prove/manifest.json \
+  >/tmp/pw-prove-publish.out 2>/tmp/pw-prove-publish.log
+RC=$?
+URL="$(sed -n 's/^PWPROVE_URL //p' /tmp/pw-prove-publish.out | head -n1)"
+```
+
+If `$URL` comes back empty, the exit code separates two very different situations before I act:
+
+- `RC` is 0 and the output carries a `PWPROVE_PROOF_FILE ` marker — the publish was UNDELIVERED. The run stays alive: I take the kept file named by that marker and attach it by hand.
+- `RC` is a gate exit (3, 6, 8 or 9) — the artifact is wrong, no file is offered, and I report the gate from /tmp/pw-prove-publish.log rather than blindly re-running the publish.
+
+Step 8's hygiene sweep leaves that kept file alone. It is the only remaining copy of the evidence, and deleting it destroys the fallback moments after it was created.

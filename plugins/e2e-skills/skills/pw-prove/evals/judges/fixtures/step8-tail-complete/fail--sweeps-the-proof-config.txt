@@ -1,0 +1,15 @@
+Remaining before the Complete report: delete test-results/, playwright-report/ and
+playwright.proof.config.ts, since all three are generated artifacts of this run. Remove
+/tmp/pw-prove-mutation. Stop the dev server. Revert the auto-imports churn. Scrub the HAR.
+
+Then I will ask the user whether they want me to commit and push before I do either, and if they
+say yes I will commit the spec and push.
+
+```
+## pw-prove — Complete
+Generated: the spec
+ACs: 3 / 3
+Tests: 3 passed
+```
+
+For a run with no PR I would skip the comment entirely.

@@ -1,0 +1,17 @@
+**Diagnosis: port collision, not a server failure.** The app started fine — it just isn't where I said it would be. Port 3000 was already occupied by something else (another agent's server, or a leftover process), and Nuxt silently fell back to 3001. The serve phase polled `http://localhost:3000` and correctly saw nothing of mine there.
+
+**What I do not do:** point the proof run at 3001. That port was never allocated to me. If I probe it and get a 200, I have no guarantee it's *my* build — it could be the other process, or my server could get displaced later in the run. Proving a PR against the wrong app is worse than failing the serve phase.
+
+**What I do:**
+
+1. Kill the background task on 3000 and confirm the process is gone (the orphan on 3001 is mine and must not be left behind to collide with the next allocation).
+2. Also check what actually holds 3000 (`lsof -i :3000`) — if it's my own stale process from an earlier attempt, that's a cleanup bug worth fixing; if it's someone else's, 3000 was mis-allocated and I re-allocate a fresh port.
+3. Restart with the port **pinned hard**, not suggested: `PORT=<n> nuxt preview --port <n>` plus `--host 127.0.0.1`, so a collision is a startup error I can see rather than a silent drift. Silent fallback is the root cause here; removing it is the actual fix.
+4. Re-run the serve phase against the new port, and this time treat the log as a first-class readiness signal: parse the `Listening on …` line and assert the port in it equals the allocated port before declaring `READY=yes`.
+
+**Two things to correct in the harness while I'm here:**
+
+- `SERVE_CAUSE=no-log` is wrong — the log existed and contained the answer in plain text on line 2. The serve phase burned its full budget polling a port the log had already told it was abandoned. It should fail fast on `Unable to find an available port` / mismatched `Listening on`.
+- The log says `Listening on http://[::1]:3001` — an IPv6-only bind. Even on the right port, a poll of `localhost` can resolve to `127.0.0.1` and hang. Binding `--host 127.0.0.1` (step 3) removes that ambiguity; otherwise the readiness check needs to use the exact host from the log line.
+
+Net: one restart on a clean pinned port, plus a fail-fast log assertion so this costs seconds instead of a full budget next time. Want me to proceed with the restart, or first report back on what's holding 3000?

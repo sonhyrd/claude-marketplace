@@ -1,0 +1,24 @@
+**Exit 4 is the configuration phase, not the build.** No build was paid (that's why it returned in a second), and rebuilding is explicitly not the fix. Nothing about the port, the server, or `BUILD_COMMAND` is implicated.
+
+**What the output actually says.** The contract declared two keys; only `NUXT_PUBLIC_AUTH_URL` came back missing. So `NUXT_PUBLIC_API_BASE` is already satisfied from the environment the phase read (a committed `.env`, the shell, or an exported var) — I don't touch it. One key to resolve.
+
+**Resolve the value from the app, don't invent one.** In order:
+
+1. `.env`, `.env.local`, `.env.development` under `APP_ROOT` — the un-committed sibling of `.env.example` is the usual home.
+2. `nuxt.config.ts` → `runtimeConfig.public.authUrl` — a literal default there is the value the app expects when the var is absent, and it tells me the shape (same-origin path vs. a separate auth host).
+3. CI config / deployment manifests (`.github/workflows/*`, `Dockerfile`, `fly.toml`) — whatever the pipeline sets for a preview build.
+4. What Step 2's diff and the repo's auth code point at; if the app authenticates against its own origin, the answer is the origin I'm about to serve on (port 4173).
+
+Then re-run the *same* command — `config build` — so config revalidates and the build runs in one pass:
+
+```bash
+NUXT_PUBLIC_AUTH_URL="<the discovered value>" \
+ENV_CONTRACT=.env.example BUILD_COMMAND='pnpm build' APP_ROOT="$PWD" \
+  node <skill-base>/scripts/preflight.mjs config build
+```
+
+I pass it in the invocation's environment rather than writing into the repo's `.env` — the worktree stays clean, which matters because Step 7's build-reuse fingerprint keys on the working tree and Step 8 verifies the tree is unchanged.
+
+**Two things I carry forward.** The resolved value goes into the Step 4 Assumptions block as a stated decision (`NUXT_PUBLIC_AUTH_URL supplied from <source> — the app's own contract declares it required`), not a question to the user; PR-mode bring-up is autonomous. And if the auth URL points off-origin, that's a signal for the Step 3 auth ladder and for HAR scoping.
+
+**If the value is genuinely undiscoverable** — nothing in `.env`, no runtimeConfig default, no CI reference — that's a Step 3 STOP ("the proof target won't build"), reported with the six beats: verdict, target, the discovery I attempted, the verbatim `MISSING_KEYS=NUXT_PUBLIC_AUTH_URL`, "no spec or POM was written, nothing committed", and the unblock — supply `NUXT_PUBLIC_AUTH_URL` and I'll re-run. I don't guess a URL to get past the gate; a production build booted against a fabricated auth origin proves nothing.

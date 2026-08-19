@@ -1,0 +1,5 @@
+Here is how I would bring the preview server up. The packaged `serve:start-ssr` script hard-codes
+`PORT=4100`, so I would allocate a free port, pass `PORT` myself, start the server as a background
+task with its output going to a log, and then run the serve phase with `SERVER_LOG` pointing at that
+log so the announced port is read rather than guessed. The summary's `BASE_URL=` line would then be
+the origin carried through every later step.

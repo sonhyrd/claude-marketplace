@@ -1,0 +1,39 @@
+I can't publish — there's nothing here to publish. Stopping rather than producing a URL.
+
+## What I found
+
+`/tmp/skill-up-1914323861` contains only `.claude/skills/pw-prove/`. No project, no spec, no `test-results/`, no manifest. I swept for clips:
+
+- No `video.webm` anywhere modified today.
+- `/home/<user>/work/paul-design-app/test-results` and `/home/<user>/work/hyrd-widget/test-results` are both empty of clips.
+- The only clips on disk are 3 webms in `/tmp/pw-prove-devcontrol/` from **Aug 13**, whose `.last-run.json` says `"status": "failed"` — footage of a failing run.
+
+**The live trap here is the stale state from that Aug 13 run**, and it is set to catch exactly the sloppy capture you're guarding against:
+
+- `/tmp/pw-prove-manifest.json` — PR #2866, **6 clips**, not 5, and every `file:` path points at `test-results/…` dirs that no longer exist.
+- `/tmp/pw-prove-proof.webm` — 36 MB, the concatenated PR #2866 film. `publish-proof.mjs` writes to this stable path, and on an undelivered publish it prints it as `PWPROVE_PROOF_FILE`. Left in place, a failed publish today hands you yesterday's film as "the kept proof."
+- `/tmp/pw-prove-publish.out` — already holds `PWPROVE_URL https://clips.paulsjob.ai/share/<share-id>`. If a run today failed before writing, `sed -n 's/^PWPROVE_URL //p'` over that file returns a real, openable URL for a *different PR*. That is the failure mode I refuse to hand you: a URL that looks captured correctly and points at the wrong evidence.
+
+I did not run the publish and I'm not reporting `<share-id>` as this run's proof page.
+
+## On the two noise sources
+
+Neither can reach the URL if the documented capture is used, because both are **stderr** and the marker line is **stdout**:
+
+```bash
+BEARER="${AUTH_TOKEN:-}" SCAN="<generated-spec-file>" \
+  agent-native vault exec --app <vault-app> --key CLIPS_MCP_TOKEN -- \
+  node .claude/skills/pw-prove/scripts/publish-proof.mjs /tmp/pw-prove-manifest.json \
+  >/tmp/pw-prove-publish.out 2>/tmp/pw-prove-publish.log
+RC=$?
+PAGE=$(sed -n 's/^PWPROVE_URL //p' /tmp/pw-prove-publish.out | head -n1)
+KEPT=$(sed -n 's/^PWPROVE_PROOF_FILE //p' /tmp/pw-prove-publish.out | head -n1)
+```
+
+Separate files, not `2>&1`. The `npm warn Unknown project config` pair from your `.npmrc` (emitted by the `npx`/shim layer) and ffmpeg's banner both land in the `.log`; `sed` reads the `PWPROVE_URL` marker out of the `.out`. `head -n1` on a merged stream is what loses the URL — line 1 becomes an npm warning. Note the script itself runs under `node`, not `npx`, so npm's chatter arrives via the wrapper, not the publish.
+
+Two things I'd keep regardless of noise: branch on `$RC`, not on an empty `$PAGE` (exit 0 with no URL is *undelivered, file kept*; exit 3/6/8/9 is a *gate*, nothing published and no file offered), and take the per-chapter links from the log's `/embed/<id>?t=` lines rather than appending `?t=` to the share URL.
+
+## To unblock
+
+I need a green 5-scenario proof run in an actual project — its `test-results/<…>/video.webm` clips plus the AC list to order them into chapters. Point me at the repo and PR and I'll run Steps 3–7 and then publish. Before any publish here I'd also clear `/tmp/pw-prove-proof.webm`, `/tmp/pw-prove-publish.out` and `/tmp/pw-prove-manifest.json`, so no PR #2866 residue can be read as the new run's evidence.

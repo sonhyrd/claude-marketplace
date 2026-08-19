@@ -1,0 +1,2 @@
+Session established. The auth composable accepts a `?token=` query parameter, so I navigated to
+`/reports?token=<jwt>` and waited for the app to ingest it.

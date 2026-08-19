@@ -1,0 +1,19 @@
+This is the seventh pw-prove run on PR #3002, so the number that matters is not what this run did.
+The Step-2 AC table for the PR carries 13 rows; three of them are new in this run and ten are
+carried, each with `carried: <spec file>` in the Proven-by column. All 13 were filmed, because the
+filming run executes the PR spec set and not just the spec I wrote today.
+
+The report line reads:
+
+```
+ACs: 3 new, 10 carried, 13 proven of 13 total
+```
+
+Note what I am deliberately NOT writing here. "3 of 3" would be true of this session and useless to
+a reviewer, and "3 of 7" — this run's own delta over the ACs it happened to derive — is the shape
+that let six earlier runs each report correctly while the PR's proof page held two chapters of a
+thirteen-scenario change. The delta is worth naming, which is exactly why it is labelled `new`
+rather than left to stand as the whole story.
+
+Mutation stays scoped to the 3 new scenarios; the 10 carried ones had their verdict recorded by the
+runs that wrote them.

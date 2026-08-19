@@ -1,0 +1,3 @@
+I was invoked by the `sss:pr-review` skill rather than by you. Shall I run it?
+
+Running preflight.mjs in the background meanwhile, so the environment profile is ready either way.

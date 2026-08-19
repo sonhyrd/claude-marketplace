@@ -7,32 +7,41 @@
 // probe specs and invoked `playwright test` 48 times). The probe replaces both: start once, ask in
 // batches, close. Non-deliverable spec probes are forbidden by SKILL Step 3.
 //
-//   node probe.mjs start               # boot the daemon — run from the APP ROOT, background shell
+//   node probe.mjs start               # boot the daemon — run from the APP ROOT; RETURNS once it
+//                                      # is listening, so a foreground call is correct
 //   node probe.mjs send '<json>'       # run a batch of commands, print compact summaries
 //   node probe.mjs send -              # ...batch read from stdin
 //   node probe.mjs close               # explicit close (the idle timeout is the net)
-//   node probe.mjs warm <url>          # one-shot UNFILMED browser load — the Step-7 warm lead
+//
+// `start` DETACHES the daemon and returns. It used to run the daemon in the foreground until its
+// idle timeout, so a caller that did not background it blocked for minutes and then died on its
+// harness's timeout — an observed run lost 180s to exactly that, with the "background it" rule in
+// bold three lines above the command it ran. The rule is now the script's, not the reader's. Before
+// it returns, `start` prints the socket path and the effective BASE_URL/STORAGE_STATE/RECORD_HAR, so
+// detaching costs none of the diagnostics an inline run would have shown. A `start` against a daemon
+// that is already listening is a no-op that says so and exits 0 — re-issuing the command must never
+// cost a live recon context.
+//
+// `send` with no daemon listening STARTS ONE FIRST and then runs the batch. A batch sent before a
+// start is an ordering mistake about the probe, not a fact about the application under test, and it
+// was every probe failure in the audited sample; sequencing it correctly is the fix. The autostarted
+// daemon inherits this process's environment and cwd, so BASE_URL/STORAGE_STATE/RECORD_HAR still
+// apply if they are set on the `send` — the notice on stderr says what it was started with.
 //
 //   BASE_URL       optional, `start` — context baseURL; `navigate` then accepts relative paths.
 //   STORAGE_STATE  optional, `start` — storageState file for the context (Step 3 auth table).
 //   RECORD_HAR     optional, `start` — path to record an API-scoped HAR of the recon pass, flushed
-//                  on context close; the deliverable spec replays it via routeFromHAR.
+//                  on context close and SCRUBBED IN THE SAME BREATH (har-scrub.mjs): the raw
+//                  recording lands in a private staging file, never at this path, so the working
+//                  tree never holds an unscrubbed authenticated capture. The deliverable spec
+//                  replays the scrubbed file via routeFromHAR.
 //   HAR_URL_FILTER optional, `start` — HAR glob (default `**/api/**`); pairs with RECORD_HAR.
 //   PROBE_IDLE     optional, `start` — idle seconds before self-close (default 300), so no zombie
 //                  browser outlives a session even when the agent forgets to `close`.
 //   PROBE_SOCK     optional — Unix-socket path (default: $TMPDIR/ptg-probe-<cwd-hash>.sock, so each
 //                  project root gets its own daemon).
-//   PROBE_WARM_TIMEOUT optional, `warm` — navigation timeout ms (default 120000).
-//
-// `warm` exists because the Step-7 warm lead used to be a `curl`, and a curl warms the wrong half.
-// It fetches the HTML document; it never executes JS, so it never requests the client module graph
-// and never makes Vite discover-and-pre-bundle its deps (Vite's own docs: a dep found after server
-// start makes it "re-run the dep bundling process and reload the page if needed" — driven by real
-// module requests, which curl does not make). On a Vite-family dev server the browser then pays the
-// whole 20s+ inside the recorded context, because Playwright video is context-scoped: recording
-// starts at context creation and there is no delayed-start or trim option. You cannot warm inside
-// the context you are filming. So `warm` warms from a SEPARATE short-lived process: same server-side
-// caches (route transform, optimizeDeps), no video, nothing to edit afterwards.
+//   PROBE_START_TIMEOUT optional, `send` — seconds to wait for a daemon this send started itself to
+//                  begin listening (default 60; a cold browser launch is seconds, not milliseconds).
 //
 // A batch is a JSON array of {cmd, ...} objects, executed in order, one compact result each.
 // Failures are reported per command and the batch continues — recon wants maximum signal per round
@@ -49,7 +58,26 @@
 //                                                      NEVER a raw DOM dump.
 //   {"cmd":"eval","expression":"location.href"}        JSON-stringified result, truncated at 2000
 //                                                      chars — "max" raises the cap, "out":"<path>"
-//                                                      writes the FULL result to a file instead
+//                                                      writes the FULL result to a file instead.
+//                                                      "expression" also takes two OBJECT forms:
+//                                                        {"fn":"a => a.id","arg":{...}}  — the
+//                                                          page.evaluate(fn, arg) shape, for a
+//                                                          question that needs an argument. "arg"
+//                                                          is JSON-serialised INTO the call, so it
+//                                                          carries data, never a page handle —
+//                                                          select a DOM node inside "fn" instead.
+//                                                        {"url":"location.href","t":"document.title"}
+//                                                          — a map of named expressions, answered
+//                                                          in ONE round trip as one object. Each
+//                                                          value must be SYNCHRONOUS: a promise
+//                                                          nested inside the returned object
+//                                                          serialises as {}. Ask an async question
+//                                                          through the string or "fn" form, both of
+//                                                          which Playwright awaits.
+//   {"cmd":"console"}                                  console output + uncaught page errors since
+//                                                      the last navigate — "level" filters by type
+//                                                      ("error", "warning", …), "max" caps lines
+//                                                      (default 50)
 //   {"cmd":"network-summary"}                          method+path aggregation since last navigate;
 //                                                      document/xhr/fetch only (the mock targets) —
 //                                                      "all": true includes scripts/styles/assets
@@ -64,21 +92,33 @@
 // probe by design, and recon there falls back to source reading + the heal loop.
 //
 //   exit 2 = browserless refusal (no pinned Playwright from cwd, or the browser failed to launch)
-//   exit 3 = no daemon listening at the socket (start one: `node probe.mjs start`)
+//   exit 3 = the daemon could not be reached or could not be started (`send` starts one itself, so
+//            this is no longer the "you forgot to start it" code — read the log tail it prints)
 //
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention.
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pwproveRun } from './pwprove-run.mjs';
+// The ONE shipped transform. The probe never hand-rolls a scrub: eight audited sessions each wrote
+// their own, six in `node -e`, and seven needed two passes because a header-only scrub under-scrubs.
+import {
+  scrubHar,
+  findResidue,
+  findOverScrub,
+  overScrubReport,
+  shortSecretReport,
+} from './har-scrub.mjs';
 
-// Run ledger — registered before validation. The phase splits on the subcommand so the ledger can
-// answer "what did the warm lead cost this run?", which is the whole reason `warm` exists.
-pwproveRun(import.meta.url, process.argv[2] === 'warm' ? 'warm' : 'recon');
+// Run ledger — registered before validation, so a refusal is recorded too. The detached `__daemon`
+// child is skipped: it is one operator action with `start`, and counting it twice would inflate
+// every recon figure the ledger reports.
+if (process.argv[2] !== '__daemon') pwproveRun(import.meta.url, 'recon');
 
 const out = (s) => process.stdout.write(s);
 const err = (s) => process.stderr.write(s);
@@ -90,13 +130,79 @@ const SOCK =
     `ptg-probe-${createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12)}.sock`,
   );
 
+// The ONE vocabulary. The usage text, the unknown-verb rejection and the header all read from here,
+// so an agent can never learn a verb that does not exist or miss one that does — the audited sample
+// shows the model reaching for verbs the DSL never had (`console` most often, now real) and learning
+// the real ones only by rejection. `viewport` is deliberately absent: the effective viewport is
+// resolved once during planning and pinned in the committed spec, and a probe verb that changed
+// rendering outside that resolution would invite recon against a viewport the proof never uses.
+const VERBS = [
+  'navigate',
+  'click',
+  'fill',
+  'wait',
+  'snapshot',
+  'eval',
+  'console',
+  'network-summary',
+  'storage-state',
+  'close',
+];
+
+// `__daemon` is the detached child `start` spawns — the process that actually holds the browser. It
+// is deliberately absent from the usage text: an operator has no reason to run it, and `start` is
+// the only thing that ever should.
 const MODE = process.argv[2];
-if (!['start', 'send', 'close', 'warm'].includes(MODE)) {
+if (!['start', 'send', 'close', '__daemon'].includes(MODE)) {
   err(
-    "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close | warm <url>" +
-      '   (see the header)\n',
+    "probe.mjs: usage: node probe.mjs start | send '<json-batch>'|- | close\n" +
+      `probe.mjs: batch verbs: ${VERBS.join(' | ')}\n` +
+      "probe.mjs: each verb's arguments are documented in this script's header\n",
   );
   process.exit(1);
+}
+
+// --- eval's argument forms --------------------------------------------------------------------
+// Forty-two percent of probe traffic is raw `eval`, and fifteen of twenty audited sessions paid one
+// rejected call on first contact because they wrote the object shape the DSL did not take. Both
+// object shapes below are now accepted alongside the string form, which is untouched: 250 recorded
+// calls already use it. Resolved in ONE place, so the client's early rejection and the daemon's
+// execution can never disagree about what a legal eval is.
+// Playwright evaluates a STRING as an EXPRESSION and discards the arguments after it — its client
+// derives `isFunction` from `typeof pageFunction`, which is never 'function' for source text. So
+// handing it arrow-function source produced a function object (serialised over the wire as
+// `undefined`) and silently dropped `arg`. Everything the page must see has to be INSIDE the one
+// expression, so the argument travels as a JSON literal embedded in the call.
+// Every batch arrives through JSON.parse, so `arg` is representable by construction; JSON is a
+// subset of JS expression syntax except for two line terminators it permits raw inside a string.
+const jsLiteral = (v) =>
+  String(JSON.stringify(v)).replace(/[\u2028\u2029]/g, (m) =>
+    m === '\u2028' ? '\\u2028' : '\\u2029',
+  );
+
+function evalPlan(c) {
+  const e = c.expression;
+  if (typeof e === 'string') return { source: e };
+  if (e && typeof e === 'object' && !Array.isArray(e)) {
+    // `fn` is the reserved discriminator — the shape a model mirroring page.evaluate(fn, arg)
+    // reaches for, answered by an inlined CALL. Everything else is a map of named expressions.
+    // The trailing newline keeps a source that ends in a `//` comment from swallowing the call.
+    if (typeof e.fn === 'string') {
+      return { source: `(${e.fn}\n)(${'arg' in e ? jsLiteral(e.arg) : ''})` };
+    }
+    const names = Object.keys(e);
+    if (names.length && names.every((k) => typeof e[k] === 'string')) {
+      // One round trip, several answers. Each value is parenthesised so an expression containing a
+      // comma or an operator cannot leak into its neighbour.
+      const body = names.map((k) => `${JSON.stringify(k)}: (${e[k]})`).join(', ');
+      return { source: `(() => ({${body}}))()` };
+    }
+  }
+  throw new Error(
+    'eval needs "expression" as a string ("location.href"), a function object ' +
+      '({"fn":"a => a.id","arg":{...}}), or a map of named string expressions ' +
+      '({"url":"location.href","title":"document.title"})',
+  );
 }
 
 // --- the browserless gate: resolve the TARGET project's pinned Playwright, or refuse -------------
@@ -148,6 +254,18 @@ function readBatch() {
     err('probe.mjs: the batch must be a JSON ARRAY of 1-50 {"cmd": ...} objects\n');
     process.exit(1);
   }
+  // An eval the daemon could only reject is rejected HERE, before a browser is started for it —
+  // same rule, one implementation. An unknown VERB is deliberately not caught here: the daemon
+  // reports it per command and runs the rest of the batch, so one typo never costs nine answers.
+  for (const [i, c] of batch.entries()) {
+    if (c.cmd !== 'eval') continue;
+    try {
+      evalPlan(c);
+    } catch (e) {
+      err(`probe.mjs: command ${i + 1}: ${e.message}\n`);
+      process.exit(1);
+    }
+  }
   return JSON.stringify(batch);
 }
 
@@ -169,80 +287,146 @@ function client(payload) {
   });
   sock.on('error', (e) => {
     err(
-      `probe: no probe daemon at ${SOCK} (${e.code ?? e.message}) — start one from the app root: ` +
-        'node probe.mjs start\n',
+      `probe: no probe daemon at ${SOCK} (${e.code ?? e.message}).\n` +
+        '       A `send` starts one itself, so reaching this means the daemon went away mid-batch —\n' +
+        '       re-send. A bare `close` needs one already running, and closing nothing is not a\n' +
+        '       failure to fix.\n',
     );
     process.exit(3);
   });
 }
 
-if (MODE === 'send') client(readBatch());
+// --- sequencing: a batch sent before a start starts the daemon, then runs -----------------------
+// All six probe failures in the audited sample were this one ordering mistake, surfacing as a run
+// failure that said nothing about the application under test. Starting the daemon is something the
+// probe can do for itself, so it does.
+//
+// The browserless gate still runs, and runs FIRST: in an environment with no pinned Playwright the
+// operator sees the refusal that explains the environment (exit 2), not "no daemon" (exit 3). Exit 3
+// now means what it says — a daemon that could not be reached or could not be started.
+const connectOnce = (ms) =>
+  new Promise((res) => {
+    const s = net.connect(SOCK);
+    const done = (v) => {
+      s.destroy();
+      res(v);
+    };
+    s.once('connect', () => done(true));
+    s.once('error', () => done(false));
+    setTimeout(() => done(false), ms).unref();
+  });
+
+// The effective recon session in one line. A daemon started without BASE_URL/RECORD_HAR/STORAGE_STATE
+// is a legal but very different session, and the operator must not have to guess which one they got.
+const paramLine = () =>
+  `probe: starting with BASE_URL=${process.env.BASE_URL || '(none)'} ` +
+  `RECORD_HAR=${process.env.RECORD_HAR || '(none)'} ` +
+  `STORAGE_STATE=${process.env.STORAGE_STATE || '(none)'}\n`;
+
+// Detach a daemon and wait until its socket answers. `start` and `send`'s autostart share it, so the
+// two can never disagree about what a successful boot is. The child inherits cwd and environment,
+// which is what makes the parameters above take effect.
+async function spawnDaemon() {
+  const logPath = `${SOCK}.log`;
+  let stdio = 'ignore';
+  try {
+    stdio = fs.openSync(logPath, 'a');
+  } catch {
+    /* an unwritable log never blocks a start */
+  }
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '__daemon'], {
+    detached: true,
+    stdio: ['ignore', stdio, stdio],
+  });
+  child.unref();
+  if (typeof stdio === 'number') fs.closeSync(stdio);
+  let died = null;
+  child.on('exit', (code) => {
+    died = code ?? 1;
+  });
+  // A cold browser launch is seconds, not milliseconds; PROBE_START_TIMEOUT is the ceiling.
+  const budget = (Number(process.env.PROBE_START_TIMEOUT) || 60) * 1000;
+  const deadline = Date.now() + budget;
+  while (Date.now() < deadline) {
+    if (await connectOnce(500)) return { ok: true, pid: child.pid };
+    // A daemon that exited may still have lost a race to another start that is now listening, so
+    // the socket is asked once more before this is called a failure.
+    if (died !== null) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  if (await connectOnce(1000)) return { ok: true, pid: child.pid };
+  const tail = (() => {
+    try {
+      return fs.readFileSync(logPath, 'utf8').trimEnd().split('\n').slice(-6).join('\n  ');
+    } catch {
+      return '(no log)';
+    }
+  })();
+  return { ok: false, died, budget, tail, logPath };
+}
+
+// Shared refusal, so `start` and `send` report a failed boot identically.
+function daemonBootFailed(r) {
+  err(
+    `probe: STOP — the daemon did not come up within ${r.budget / 1000}s` +
+      `${r.died === null ? '' : ` (it exited ${r.died})`}. Its own output:\n  ${r.tail}\n`,
+  );
+  // A browserless daemon exits 2, and that is the answer worth propagating verbatim.
+  process.exit(r.died === 2 ? 2 : 3);
+}
+
+async function ensureDaemon() {
+  if (await connectOnce(1000)) return;
+  err(`probe: no daemon at ${SOCK} — starting one first (sequencing, not a failure)\n`);
+  resolvePinnedPlaywright('send');
+  err(paramLine());
+  const r = await spawnDaemon();
+  if (!r.ok) daemonBootFailed(r);
+  err(`probe: daemon ready (pid ${r.pid}) — running the batch\n`);
+}
+
+if (MODE === 'send') {
+  const payload = readBatch();
+  // An unexpected throw in here must still leave through the script's own exit codes: an unhandled
+  // rejection would print a Node stack trace where the probe's refusals are what a caller reads.
+  void ensureDaemon()
+    .then(() => client(payload))
+    .catch((e) => {
+      err(`probe: STOP — could not start a daemon: ${String(e?.message ?? e).split('\n')[0]}\n`);
+      process.exit(3);
+    });
+}
 if (MODE === 'close') client('[{"cmd":"close"}]');
 
-// ============================================================ warm (one-shot, unfilmed)
-// Deliberately NOT a daemon command: by Step 7 the recon daemon is closed, and the warm must be a
-// process the proof run can neither see nor record. No video, no HAR, no storageState — the only
-// artifact is the server-side cache state left behind.
-//
-// Failure policy mirrors the curl it replaces: a warm that did not land is REPORTED, never fatal.
-// The one exception is the browserless refusal (exit 2), which is a signal, not a failure — it tells
-// the caller to fall back to the curl warm.
-if (MODE === 'warm') {
-  const arg = process.argv[3];
-  if (!arg) {
-    err('probe.mjs: warm needs a url: warm <url>   (relative is allowed when BASE_URL is set)\n');
-    process.exit(1);
-  }
-  const base = (process.env.BASE_URL ?? '').replace(/\/+$/, '');
-  const url = /^https?:\/\//.test(arg) ? arg : `${base}${arg.startsWith('/') ? '' : '/'}${arg}`;
-  if (!/^https?:\/\//.test(url)) {
-    err(`probe.mjs: '${arg}' is relative and BASE_URL is not set — pass an absolute url\n`);
-    process.exit(1);
-  }
-  const timeout = Number(process.env.PROBE_WARM_TIMEOUT ?? 120000);
-  const resolved = resolvePinnedPlaywright('warm');
-  const started = Date.now();
+// ============================================================ start (detach, report, return)
+// The browserless gate runs FIRST and in THIS process, so a repository with no pinned Playwright
+// gets exit 2 before anything is spawned — the CI-proven path.
 
-  const warm = async () => {
-    let browser;
-    try {
-      const mod = await import(pathToFileURL(resolved).href);
-      const chromium = mod.chromium ?? mod.default?.chromium;
-      if (!chromium) throw new Error(`${resolved} exports no chromium`);
-      browser = await chromium.launch();
-    } catch (e) {
+if (MODE === 'start') {
+  void (async () => {
+    if (await connectOnce(1000)) {
       err(
-        'probe: STOP — the pinned Playwright could not open a browser here: ' +
-          `${String(e.message ?? e).split('\n')[0]}\n` +
-          '       Fall back to the curl warm; the clip will be boot-heavy. (exit 2)\n',
+        `probe: a daemon is already listening at ${SOCK} — nothing started, the recon context is\n` +
+          '       intact. Its BASE_URL/RECORD_HAR/STORAGE_STATE are whatever STARTED it; to change\n' +
+          '       them, `node probe.mjs close` and start again.\n',
       );
-      process.exit(2);
+      process.exit(0);
     }
-    try {
-      const page = await browser.newPage();
-      const resp = await page.goto(url, { waitUntil: 'load', timeout });
-      // The `load` event fires before a Vite-family app has finished discovering deps — and it is
-      // exactly that discovery pass (and the reload it can trigger) we are here to pay for. A short
-      // networkidle grace absorbs it; expiring is fine, the transform work already happened.
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      out(`warm: ${resp?.status() ?? 'no-response'} ${url} in ${Date.now() - started}ms\n`);
-    } catch (e) {
-      out(`warm-failed: ${url} — ${String(e.message ?? e).split('\n')[0].slice(0, 200)}\n`);
-    } finally {
-      await browser.close().catch(() => {});
-    }
-  };
-
-  warm().catch((e) => {
-    // Unreachable in practice — warm() swallows navigation failure by contract. If it ever throws,
-    // still do not fail the run: the caller treats a warm miss as a report line.
-    out(`warm-failed: ${url} — ${String(e?.message ?? e).split('\n')[0].slice(0, 200)}\n`);
+    resolvePinnedPlaywright('start');
+    err(paramLine());
+    const r = await spawnDaemon();
+    if (!r.ok) daemonBootFailed(r);
+    err(`probe: ready — daemon pid ${r.pid}, socket ${SOCK}, log ${SOCK}.log\n`);
+    process.exit(0);
+  })().catch((e) => {
+    err(`probe: STOP — could not start a daemon: ${String(e?.message ?? e).split('\n')[0]}\n`);
+    process.exit(3);
   });
 }
 
-// ============================================================ daemon (start)
+// ============================================================ daemon (the detached child)
 
-if (MODE === 'start') {
+if (MODE === '__daemon') {
   const IDLE = Number(process.env.PROBE_IDLE ?? 300);
   if (!Number.isFinite(IDLE) || IDLE <= 0) {
     err(`probe.mjs: PROBE_IDLE must be a positive number of seconds (got '${process.env.PROBE_IDLE}')\n`);
@@ -252,8 +436,8 @@ if (MODE === 'start') {
   const resolved = resolvePinnedPlaywright('start');
 
   const daemon = async () => {
-    // A second `start` against a live daemon is a mistake worth catching before we launch a
-    // browser; a stale socket file left by a SIGKILLed daemon is just removed.
+    // A second daemon racing a live one is caught before we launch a browser; a stale socket file
+    // left by a SIGKILLed daemon is just removed.
     const alive = await new Promise((res) => {
       const s = net.connect(SOCK);
       const done = (v) => {
@@ -265,8 +449,8 @@ if (MODE === 'start') {
       setTimeout(() => done(false), 1000).unref();
     });
     if (alive) {
-      err(`probe: a daemon is already listening at ${SOCK} — use send/close, not a second start\n`);
-      process.exit(1);
+      err(`probe: another daemon won the race to ${SOCK} — this one exits, that one serves.\n`);
+      process.exit(0);
     }
     fs.rmSync(SOCK, { force: true });
 
@@ -289,18 +473,58 @@ if (MODE === 'start') {
 
     // RECORD_HAR set -> the recon pass ALSO records an API-scoped HAR (HAR_URL_FILTER, default
     // `**/api/**`) that the deliverable spec replays via routeFromHAR — recon and HAR capture happen
-    // in the SAME live pass. Playwright flushes the HAR when the context closes. Auth headers must be
-    // scrubbed before commit.
+    // in the SAME live pass. Playwright flushes the HAR when the context closes.
+    //
+    // The capture is authenticated, so it is SCRUBBED AT CAPTURE, not before commit (issue #41).
+    // Playwright can only flush to a path, so the raw flush goes to a private staging file that this
+    // shutdown scrubs and then destroys; the path the operator named only ever receives the scrubbed
+    // result. That is what makes "the HAR is never unscrubbed on disk" true rather than aspirational,
+    // and it removes the placement decision seven audited sessions each made alone and did not agree
+    // on — one of them scrubbing a recording the final spec never used.
+    //
+    // Staging is a 0700 directory in $TMPDIR, outside the working tree, and it is destroyed on every
+    // exit this process can observe (explicit close, idle self-close, SIGINT, SIGTERM). A SIGKILLed
+    // daemon is the one case that leaves it behind — private, outside the repo, and impossible to
+    // stage by accident, which is the property that matters.
+    const HAR_TARGET = process.env.RECORD_HAR || null;
+    let harStageDir = null;
+    try {
+      if (HAR_TARGET) harStageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pwprove-har-'));
+    } catch (e) {
+      err(
+        `probe: STOP — RECORD_HAR is set but no private staging directory could be created in ` +
+          `${os.tmpdir()} (${e.code ?? e.message}).\n` +
+          '       The recording is not made rather than made unscrubbed. Fix TMPDIR, or unset\n' +
+          '       RECORD_HAR and re-record once it is writable. (exit 2)\n',
+      );
+      process.exit(2);
+    }
+    const harStage = harStageDir ? path.join(harStageDir, 'capture.har') : null;
     const context = await browser.newContext({
       baseURL: process.env.BASE_URL || undefined,
       storageState: process.env.STORAGE_STATE || undefined,
-      ...(process.env.RECORD_HAR
-        ? { recordHar: { path: process.env.RECORD_HAR, urlFilter: process.env.HAR_URL_FILTER || '**/api/**' } }
+      ...(harStage
+        ? { recordHar: { path: harStage, urlFilter: process.env.HAR_URL_FILTER || '**/api/**' } }
         : {}),
     });
     const page = await context.newPage();
     // A surprise alert()/confirm() would wedge every later command behind a modal nobody can see.
     page.on('dialog', (d) => d.dismiss().catch(() => {}));
+
+    // --- console log: the recon question that had no answer ------------------------------------
+    // A page that renders an empty shell usually said why in the console, and until now the probe
+    // had no way to ask. Uncaught page errors land in the same buffer, because "the surface is
+    // blank" and "the surface threw" are the same question asked twice. Reset on navigate, like the
+    // network log — a summary is per page, not per session — and bounded, so a chatty app cannot
+    // grow the daemon's memory across a long recon.
+    const CONSOLE_CAP = 500;
+    const consoleLog = [];
+    const pushConsole = (type, text) => {
+      consoleLog.push({ type, text: String(text ?? '').split('\n')[0].slice(0, 300) });
+      if (consoleLog.length > CONSOLE_CAP) consoleLog.shift();
+    };
+    page.on('console', (m) => pushConsole(m.type(), m.text()));
+    page.on('pageerror', (e) => pushConsole('pageerror', e?.message ?? e));
 
     // --- network log: aggregated per method+path, reset on navigate ----------------------------
     // The summary answers "what does this surface actually call" (mock targets, observed query
@@ -330,9 +554,120 @@ if (MODE === 'start') {
       if (e) e.status = `FAILED ${r.failure()?.errorText ?? ''}`.trim();
     });
 
+    // --- the capture-time scrub ----------------------------------------------------------------
+    // Runs inside shutdown, immediately after the context flushed its recording to the private
+    // staging file: read it, scrub it with the shipped transform, write the operator's path, and
+    // destroy the staging directory on every path out — including the failures, because a capture
+    // this cannot scrub is a capture it must not copy into a working tree.
+    //
+    // It never prints a credential. Residue is reported by location, kind and length only, the same
+    // contract `har-scrub.mjs --verify` holds.
+    // Everything the shutdown has to say goes through `say`: to this process's stderr (which lands in
+    // the daemon's log) AND into a buffer the close response carries back over the socket. The daemon
+    // is detached, so its stderr is a file nobody is watching — and the HAR verdict is the one line an
+    // operator must not miss, because `probe: REFUSED` means a recording that must not be committed.
+    const shutdownLines = [];
+    const say = (s) => {
+      shutdownLines.push(s);
+      err(s);
+    };
+
+    function scrubCaptureToTarget() {
+      const filter = process.env.HAR_URL_FILTER || '**/api/**';
+      const drop = () => fs.rmSync(harStageDir, { recursive: true, force: true });
+      const staged = (() => {
+        try {
+          return fs.statSync(harStage).size;
+        } catch {
+          return -1;
+        }
+      })();
+      if (staged <= 0) {
+        drop();
+        say(
+          `probe: WARNING — RECORD_HAR was set but no HAR landed at ${HAR_TARGET}. Nothing matched\n` +
+            `       ${filter}, or the path is unwritable. Do NOT\n` +
+            '       commit a routeFromHAR spec against a HAR that does not exist.\n',
+        );
+        return;
+      }
+      let har;
+      try {
+        har = JSON.parse(fs.readFileSync(harStage, 'utf8'));
+      } catch (e) {
+        drop();
+        say(
+          `probe: STOP — the recorded HAR did not parse (${String(e.message ?? e).split('\n')[0]}).\n` +
+            `       Nothing was written to ${HAR_TARGET}: an unscrubbed capture is never copied into\n` +
+            '       the working tree. Re-run the recon pass.\n',
+        );
+        return;
+      }
+      // Loopback origins are canonicalised in the same pass, so the committed recording is not bound
+      // to the port this run happened to get (`har-scrub.mjs --origin` re-points it before replay).
+      let secrets = 0;
+      let withheld = [];
+      try {
+        ({ secrets, withheld } = scrubHar(har, {}));
+        // The over-scrub gate, BEFORE the write: a scrub whose substitution count is implausible
+        // destroyed the recording (a two-character locale cookie substituted 125,403 times — see
+        // measured), and a destroyed capture must never reach the
+        // working tree, where a residue check would go on calling it clean. The refusal text is the
+        // shipped one, imported like the transform itself, so this cannot drift from `--verify`.
+        const wrecked = findOverScrub(har);
+        if (wrecked.length) {
+          // `finally` below destroys the staging directory on this path out too, so neither the
+          // wreckage nor the raw authenticated capture survives.
+          say(overScrubReport(wrecked, 'probe', HAR_TARGET));
+          say(`       Nothing was written to ${HAR_TARGET}. Re-record the recon pass.\n`);
+          return;
+        }
+        fs.mkdirSync(path.dirname(path.resolve(HAR_TARGET)), { recursive: true });
+        fs.writeFileSync(HAR_TARGET, `${JSON.stringify(har, null, 2)}\n`);
+      } catch (e) {
+        say(
+          `probe: STOP — the capture could not be scrubbed to ${HAR_TARGET} ` +
+            `(${e.code ?? String(e.message ?? e).split('\n')[0]}).\n` +
+            '       The raw capture was destroyed rather than written unscrubbed.\n',
+        );
+        return;
+      } finally {
+        drop();
+      }
+      const size = (() => {
+        try {
+          return fs.statSync(HAR_TARGET).size;
+        } catch {
+          return 0;
+        }
+      })();
+      say(
+        `probe: HAR written ${HAR_TARGET} (${size} bytes, filter ${filter}) — ` +
+          `scrubbed at capture, ${secrets} secret(s) placeheld, loopback origins canonicalised\n`,
+      );
+      // Short values are placeheld where they were found and never swept across the recording. Say
+      // which, by learn site and length only, so a short-but-real secret is reported and not skipped.
+      say(shortSecretReport(withheld, 'probe'));
+      // The same residue check the pre-commit refusal runs, so the two can never disagree. A scrub
+      // that left something behind must say so HERE, while the recon context is still the thing the
+      // operator is looking at — not six steps later.
+      const left = findResidue(har);
+      if (left.length) {
+        say(`probe: REFUSED — ${left.length} credential residue(s) SURVIVED the scrub in ${HAR_TARGET}\n`);
+        for (const h of left) say(`  ${h.where}  ${h.kind}  (len ${h.len})\n`);
+        say(
+          '       Do NOT commit this HAR. A leaked bearer in a committed HAR is the same incident\n' +
+            '       as one in a log line.\n',
+        );
+      }
+    }
+
     // --- shutdown: explicit close, idle timeout, or signal — all one path ----------------------
     let closing = false;
-    const shutdown = async (why) => {
+    // `sock` is the still-open close connection, when there is one: the HAR verdict is written back
+    // over it before it ends, so an operator running `close` reads the scrub result inline instead of
+    // going to find a detached daemon's log.
+    const shutdown = async (why, sock) => {
       if (closing) return;
       closing = true;
       err(`probe: closing (${why}) — no zombie browser outlives the session\n`);
@@ -344,29 +679,24 @@ if (MODE === 'start') {
       } catch {
         /* already gone */
       }
-      if (process.env.RECORD_HAR) {
-        const p = process.env.RECORD_HAR;
-        const size = (() => {
-          try {
-            return fs.statSync(p).size;
-          } catch {
-            return -1;
-          }
-        })();
-        err(
-          size > 0
-            ? `probe: HAR written ${p} (${size} bytes, filter ${process.env.HAR_URL_FILTER || '**/api/**'})\n`
-            : `probe: WARNING — RECORD_HAR was set but no HAR landed at ${p}. Nothing matched\n` +
-              `       ${process.env.HAR_URL_FILTER || '**/api/**'}, or the path is unwritable. Do NOT\n` +
-              `       commit a routeFromHAR spec against a HAR that does not exist.\n`,
-        );
-      }
+      if (HAR_TARGET) scrubCaptureToTarget();
       try {
         await browser.close();
       } catch {
         /* already gone */
       }
       fs.rmSync(SOCK, { force: true });
+      if (sock && !sock.destroyed && shutdownLines.length) {
+        // Exit only once the bytes are on the wire — a process.exit() here drops them and the
+        // operator's `close` prints nothing about a recording it may not be allowed to commit.
+        await new Promise((res) => {
+          const done = () => res();
+          setTimeout(done, 2000).unref();
+          sock.end(shutdownLines.join(''), done);
+        });
+      } else if (sock && !sock.destroyed) {
+        sock.end();
+      }
       process.exit(0);
     };
     process.on('SIGINT', () => void shutdown('SIGINT'));
@@ -394,6 +724,7 @@ if (MODE === 'start') {
         case 'navigate': {
           if (typeof c.url !== 'string') throw new Error('navigate needs a string "url"');
           netLog.clear();
+          consoleLog.length = 0;
           const resp = await page.goto(c.url, { waitUntil: 'load', timeout: Number(c.timeout) || 15000 });
           // Grace for the XHRs a load event does not wait for — they are the network-summary's food.
           await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
@@ -437,8 +768,12 @@ if (MODE === 'start') {
           return `snapshot ${scope} (${lines.length} lines)\n${lines.slice(0, max).join('\n')}${cut}`;
         }
         case 'eval': {
-          if (typeof c.expression !== 'string') throw new Error('eval needs a string "expression"');
-          const v = await page.evaluate(c.expression);
+          // String, {fn, arg} or a named map — one resolver, shared with the client's early check.
+          const plan = evalPlan(c);
+          // One argument, always: every form resolves to a single self-contained expression, because
+          // that is the only thing Playwright evaluates when handed source text rather than a
+          // function. A second argument here would be accepted and thrown away.
+          const v = await page.evaluate(plan.source);
           let s;
           try {
             s = JSON.stringify(v) ?? String(v);
@@ -456,6 +791,24 @@ if (MODE === 'start') {
             s = `${s.slice(0, max)}… truncated (${s.length} chars — raise "max" or use "out")`;
           }
           return `eval -> ${s}`;
+        }
+        case 'console': {
+          if (c.level !== undefined && typeof c.level !== 'string') {
+            throw new Error('console "level" must be a string ("error", "warning", "pageerror", …)');
+          }
+          const wanted = c.level ? consoleLog.filter((m) => m.type === c.level) : consoleLog;
+          const max = Number(c.max) || 50;
+          const shown = wanted.slice(-max);
+          const cut =
+            wanted.length > shown.length
+              ? `\n… truncated (${wanted.length - shown.length} older messages — raise "max")`
+              : '';
+          const scope = c.level ? ` at level ${c.level}` : '';
+          return (
+            `console (${wanted.length} message(s)${scope} since last navigate)` +
+            (shown.length ? `\n${shown.map((m) => `${m.type}: ${m.text}`).join('\n')}` : '') +
+            cut
+          );
         }
         case 'network-summary': {
           const origin = pageOrigin();
@@ -495,10 +848,9 @@ if (MODE === 'start') {
         case 'close':
           return 'closing — browser down, socket removed';
         default:
-          throw new Error(
-            `unknown cmd '${c.cmd}' ` +
-              '(navigate|click|fill|wait|snapshot|eval|network-summary|storage-state|close)',
-          );
+          // Names the WHOLE vocabulary, from the one list the usage text also prints: a rejection
+          // that shows only the verb you got wrong is how a model learns the DSL one error at a time.
+          throw new Error(`unknown cmd '${c.cmd}' (${VERBS.join('|')})`);
       }
     }
 
@@ -534,8 +886,10 @@ if (MODE === 'start') {
           break;
         }
       }
-      sock.end();
-      if (wantClose) await shutdown('explicit close');
+      // A closing batch keeps its connection open so the shutdown can write the HAR verdict into the
+      // same response; every other batch ends here.
+      if (wantClose) await shutdown('explicit close', sock);
+      else sock.end();
     }
 
     // Batches run strictly one at a time across ALL connections: concurrent sends would interleave

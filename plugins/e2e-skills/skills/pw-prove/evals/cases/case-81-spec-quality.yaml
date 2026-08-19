@@ -1,0 +1,35 @@
+id: case-81-spec-quality
+shape: trigger
+step: 'frontmatter description: — e2e-reviewer''s, and the pw-prove clause that must NOT swallow it'
+title: With both skills installed, a spec-quality request reaches e2e-reviewer and pw-prove stays out
+description: >-
+    Trigger case, the other half of #81's collision arm, and the only case in this suite that pw-prove
+    is required to LOSE. It belongs to `evals/eval.collision.yaml` for the same reason its twin does:
+    the measurement is a property of the installed set, and `eval.yaml` installs pw-prove alone.
+
+    The prompt is a realistic top-of-task request about the specs the project already has — green,
+    and not believed — and it names no skill. That is e2e-reviewer's job: whether a spec would still
+    pass with the behaviour under it removed. pw-prove's job is the routes with no spec at all.
+
+    The judge is `routes-to-e2e-reviewer.mjs`. WRONG OWNER (exit 3) here means pw-prove's coverage
+    clause has grown wide enough to swallow a review request, which is precisely the regression a
+    single-skill arm cannot see; COLLISION (exit 4) means both still claim it. Both are defects in
+    the `description:` frontmatter, recorded rather than repaired by editing the prompt.
+
+    Its fixture is `evals/files/project-weak-specs`, whose specs carry deliberate anti-patterns — a
+    conditional assertion, a fixed sleep, a swallowed expect. Scanner self-scans skip
+    `evals/files/**` for exactly this reason, so the smells stay unmarked and the request stays
+    realistic.
+
+tag: functional_test
+input:
+    prompt: Our Playwright suite is green on every run and I still do not trust it — I think some of these specs would pass even if the feature under them was completely broken. Go through the specs in tests/ and tell me which ones are not really asserting anything, which are flaky by construction, and what to fix first.
+context:
+    repo_fixture: evals/files/project-weak-specs
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/routes-to-e2e-reviewer.mjs
+    timeout_seconds: 30
+derived_from_prompt: 78dc54b816f1

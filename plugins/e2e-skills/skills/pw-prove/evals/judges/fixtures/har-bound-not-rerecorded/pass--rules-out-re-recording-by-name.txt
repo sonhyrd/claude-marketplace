@@ -1,0 +1,17 @@
+The recording is not the problem, and re-recording it would produce the same file. The committed `e2e/reports.api.har` is canonical on purpose: origin `http://localhost` with no port, every secret placeheld. Playwright's HAR lookup matches on exact request-URL string equality, so against a server on port 5199 an unbound HAR matches nothing at all, and `notFound: 'abort'` did exactly what it promised.
+
+Bind it to the running origin, write the bound copy somewhere gitignored, and carry it:
+
+```bash
+node <skill-base>/scripts/har-scrub.mjs bind e2e/reports.api.har \
+  --out .pw-prove/reports.api.har \
+  --origin http://localhost:5199 \
+  --bindings .pw-prove/bindings.json
+export PW_PROVE_HAR=.pw-prove/reports.api.har
+```
+
+PW_PROVE_HAR goes on every later runner invocation — each is a fresh environment — and then the proof run repeats.
+
+Reading the exit codes: exit 4 means a placeholder sits in the match key with no run-time value, so bind it or capture that endpoint again deliberately; never run the proof and let it surface as an aborted call. Exit 5 means `--out` points at a committable path.
+
+I do not hand-write mocks for the reads, I do not widen the URL filter, and I do not relax `notFound` or let anything fall through to a live call.

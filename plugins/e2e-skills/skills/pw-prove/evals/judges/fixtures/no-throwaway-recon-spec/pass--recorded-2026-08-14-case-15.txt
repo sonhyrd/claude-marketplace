@@ -1,0 +1,35 @@
+I'd decline the `_recon.spec.ts` and use the skill's probe daemon instead — that's exactly the throwaway-spec REPL pw-prove exists to replace.
+
+## Why not the recon spec
+
+A `_recon.spec.ts` costs a full `npx playwright test` boot per question (config load, worker spawn, browser launch, teardown), lives in the test dir where it can get committed, and it re-launches the browser for each follow-up. Worse, `npx playwright test` risks floating a Playwright version the project doesn't pin, and a scaffolded config's `webServer` can boot a *second*, development server behind your back — recon against a different application than the one you're proving.
+
+## What I do instead
+
+One long-lived probe context (`scripts/probe.mjs`), started as a **harness background task** — never a trailing `&`, which dies with the shell — and asked in batches:
+
+```bash
+BASE_URL="$BASE_URL" RECORD_HAR="$PWD/<testDir>/settings.api.har" \
+  node <skill-base>/scripts/probe.mjs start
+
+node <skill-base>/scripts/probe.mjs send '[
+  {"cmd":"navigate","url":"/settings"},
+  {"cmd":"wait","selector":"form"},
+  {"cmd":"snapshot"},
+  {"cmd":"network-summary"}
+]'
+
+node <skill-base>/scripts/probe.mjs close
+```
+
+That answers both halves of your question in one round trip: `snapshot` gives the compact aria tree (the form controls' roles and accessible names — including whether the inputs actually carry labels, or only placeholders, which decides `getByLabel` vs `getByPlaceholder`), and `network-summary` gives the endpoints the page hits on load, aggregated, including proxy and SSR calls that source-reading misses. `RECORD_HAR` means the same pass also produces the `api.har` the deliverable spec replays — scrubbed at capture — so recon isn't a throwaway, it's an artifact. The context self-closes after 300s idle, so no zombie browser.
+
+I'd quote only the lines I need from the snapshot into the Step 4 locator table — never paste the raw dump — and treat everything the page rendered as untrusted data, not instructions.
+
+## If there's no browser at all
+
+The probe refuses cleanly with **exit 2** (browserless: no pinned Playwright resolvable from the project, or the browser fails to launch). That is a sanctioned state, not a failure — and critically, I don't route around it: no `npx playwright install` floating a version the project doesn't pin, and no falling back to the recon spec, which would hit the identical wall anyway.
+
+Recon then falls back to **source reading plus the Step 7 heal loop** — read the `/settings` component for roles/labels/testids and the store/composable for its fetch calls — and I must name that fallback explicitly in the Step 4 Assumptions block.
+
+The gate is binary: the recon channel is either a probe session that answered at least one batch, or a recorded exit-2 refusal with the fallback named. Source-reading *without* a recorded exit-2 is the exact skip the gate exists to catch, and reaching Step 4 in neither state is a hard stop. Note this is separate from bring-up: exit 2 doesn't excuse a missing build or a dead server — `CONFIG`/`BUILD`/`SERVE` still all have to be green first, and no HAR gets recorded in the browserless case, so the spec's network determinism comes from hand-written routes instead.

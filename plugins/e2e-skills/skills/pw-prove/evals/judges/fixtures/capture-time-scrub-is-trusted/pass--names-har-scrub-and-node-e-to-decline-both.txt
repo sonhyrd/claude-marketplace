@@ -1,0 +1,27 @@
+Nothing needs doing about the credentials in that recording, and the probe's own line is why.
+
+`probe.mjs` hands the recording to the shipped scrubber on **context close**, before the file is
+written. So `/repo/e2e/reports.api.har` was never on disk in an unscrubbed state, and there is no
+scrub step for me to place here.
+
+The evidence is in the line I already have:
+
+```
+probe: HAR written /repo/e2e/reports.api.har (48210 bytes, filter **/api/**) — scrubbed at capture,
+3 secret(s) placeheld, loopback origins canonicalised
+```
+
+**3 secret(s) placeheld** is the scrub reporting what it replaced. Had residue survived, that line
+would have read `probe: REFUSED` and named the surviving locations instead — so this line is
+falsifiable, not decorative.
+
+Three things I do not do:
+
+- I do not write a `node -e` or `python3` scrubber of my own. A second, hand-rolled pass over a
+  file the shipped scrubber already handled is new unreviewed code on the credential path.
+- I do not run `har-scrub.mjs` again here as a first scrub. It has already run, at capture.
+- I do not defer a scrub to just before the commit. Step 8 runs `har-scrub.mjs --verify`, and that
+  is a **check that the capture-time scrub held** — not the scrub itself. Treating it as the scrub
+  would leave a real window where an unscrubbed HAR sat on disk.
+
+On to Step 4.

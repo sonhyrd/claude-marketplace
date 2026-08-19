@@ -1,0 +1,33 @@
+## The short answer
+
+The `?token=` rung is **not in the artifact you're proving**. `import.meta.dev` folds to `false` in a production build, so the whole `if` block — `setToken`, `getCurrentUser` — is tree-shaken out of the bundle serving 4173. Navigating to `/…?token=<jwt>` there does nothing: the app ignores the param, renders the anonymous shell, and you'd burn a default 30s timeout learning it. Skip the rung; don't attempt it.
+
+Do **not** edit the app to re-enable it. Swapping the guard for a runtime flag would put "accept an arbitrary bearer from a URL query parameter" into a production bundle — out of scope, and a real vulnerability you'd be authoring in someone else's repo.
+
+## Establish the session on the next rung down
+
+`localStorage`, seeded via `addInitScript` — and seed **both** keys the store hydrates from, not just the credential:
+
+```ts
+await context.addInitScript(([token, user]) => {
+  localStorage.setItem('auth.token', token);
+  localStorage.setItem('auth.user', user);
+}, [jwt, JSON.stringify(userRecord)]);
+```
+
+`auth.token` alone gives you an authenticated-but-blank shell on exactly this app shape: `getCurrentUser()` lived inside the dev-guarded branch, so nothing populates `auth.user` at runtime — the store hydrates it from storage or not at all. Get the record by calling the API's current-user endpoint with your JWT (read-only discovery is sanctioned) and seed that verbatim shape.
+
+Then, before recon proceeds:
+- Assert the **authenticated state itself** — a signed-in-only element or the store's user — on a **≤10s explicit budget**. Never assert a side effect like "the app stripped the query param": that side effect is the compiled-out code, so it never happens and the assertion is meaningless.
+- Confirm the page renders **populated** — the user-dependent region has content. That's what catches an incomplete seed before you misdiagnose it as a broken locator.
+- Save `storage-state` to a **gitignored** `.auth/` path for the deliverable spec to reuse. It holds a working bearer.
+
+If the localStorage seed also fails, the ladder is exhausted → Step-3 STOP report listing each rung and why.
+
+## What you record
+
+One line in the **Step 4 Assumptions block**, naming the rung *and* its guard — this is the audit trail that replaces asking:
+
+> **Auth:** query-token bootstrap rung skipped — `import.meta.dev`-guarded in `composables/useAuth.ts`, compiled out of the production build under proof. Session seeded via `addInitScript` on `localStorage['auth.token']` + `['auth.user']`; JWT from `<source>`, user record from `<endpoint>`. storageState saved to gitignored `.auth/<slug>.auth.json`.
+
+Plus the `Token source` rung you actually used, per the priority ladder. Nothing here becomes a question to the user — PR-mode is notify-and-continue.

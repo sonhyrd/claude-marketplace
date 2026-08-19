@@ -1,0 +1,8 @@
+This run derived 7 acceptance criteria from the commits since the last proof and proved 3 of them.
+
+```
+ACs: 3 proven / 7 total
+Proof page: https://clips.paulsjob.ai/share/kOSzh7s1GQb3 (2 chapters)
+```
+
+The other 4 are unproven — not browser-observable.

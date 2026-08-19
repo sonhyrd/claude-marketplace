@@ -25,56 +25,21 @@ ok() { [ "$QUIET" = "1" ] || echo "  [OK] $*"; PASSED=$((PASSED + 1)); }
 section() { [ "$QUIET" = "1" ] || { echo ""; echo "-- $* --"; }; }
 repo_files() { git ls-files -co --exclude-standard -- "$@" 2>/dev/null; }
 
-section "Eval metadata"
-eval_log=$(mktemp "${TMPDIR:-/tmp}/e2e-skills-evals.XXXXXX")
-if ./scripts/validate-evals.sh >"$eval_log" 2>&1; then
-  total=$(grep -oE 'total: [0-9]+ eval\(s\)' "$eval_log" | tail -1 || true)
-  ok "validate-evals.sh ${total:-passed}"
-else
-  err "validate-evals.sh failed"
-  [ "$QUIET" = "0" ] && tail -20 "$eval_log" >&2
-fi
-rm -f "$eval_log"
-
-if command -v python3 >/dev/null 2>&1; then
-  if python3 - <<'PY'
-import json
-import pathlib
-import sys
-
-errors = []
-seen = set()
-for path in sorted(pathlib.Path('skills').glob('*/evals/evals.json')):
-    data = json.loads(path.read_text(encoding='utf-8'))
-    skill = path.parts[1]
-    if data.get('skill_name') != skill:
-        errors.append(f"{path}: skill_name must be {skill!r}")
-    ids = []
-    for entry in data.get('evals', []):
-        eval_id = entry.get('id')
-        key = (skill, eval_id)
-        if key in seen:
-            errors.append(f"{path}: duplicate eval id {eval_id!r}")
-        seen.add(key)
-        ids.append(eval_id)
-        if 'files' in entry and not isinstance(entry['files'], list):
-            errors.append(f"{path}: eval {eval_id!r} files must be a list when present")
-    if ids != sorted(ids):
-        errors.append(f"{path}: eval ids should be sorted")
-
-if errors:
-    for error in errors:
-        print(error, file=sys.stderr)
-    sys.exit(1)
-PY
-  then
-    ok "eval names and ids match skill conventions"
-  else
-    err "eval convention check failed"
-  fi
-else
-  warn "python3 not available; skipped eval convention check"
-fi
+# There is deliberately no eval SCHEMA or CONVENTION check here any more. pw-prove's evals moved to
+# skill-up (`evals/eval.yaml` plus `evals/cases/*.yaml`) and the legacy `evals/evals.json` is gone;
+# the two checks that read that format — `scripts/validate-evals.sh` and an id/name convention
+# block — were deleted rather than ported, because CI is the contract for the SHIPPED surface and
+# the eval suite is an instrument operated by hand. See issue #54.
+#
+# Two consequences worth stating, because neither is obvious from the deletion:
+#   - `e2e-reviewer` and `playwright-debugger` still carry the array-form `evals/evals.json`. They
+#     lose the fixture-existence guarantee the deleted validator gave them. That is accepted: the
+#     decision is no eval CI, not no eval CI for pw-prove only.
+#   - One check below still READS an `evals/` file: Check 4, in the pattern-parity section, holds
+#     playwright-debugger's evals to the F-code taxonomy in its SKILL.md. That is a taxonomy parity
+#     check — the same class as every other check in that block — and it is not an eval check.
+#
+# `scripts/ci/test-eval-judges.sh` is the eval suite's own harness and is run by name, not here.
 
 section "Security"
 if [ "${E2E_SKILLS_SKIP_SECURITY:-}" = "1" ]; then
@@ -316,6 +281,211 @@ else
   warn "python3 not available; skipped pattern parity check"
 fi
 
+section "Canonical dwell snippet"
+if command -v python3 >/dev/null 2>&1; then
+  if python3 - <<'PY'
+import pathlib
+import re
+import sys
+
+# ONE canonical payoff dwell, defined in clip-fidelity.mjs and carried verbatim by the two prose
+# surfaces that must show it to an agent: SKILL.md Step 5, where the spec is written, and
+# code-rules.md, where the contract is stated. Three near-identical variants used to exist and the
+# field never reached any of them; this check is what stops them growing back.
+errors = []
+audit = pathlib.Path('skills/pw-prove/scripts/clip-fidelity.mjs').read_text(encoding='utf-8')
+m = re.search(r'export const CANONICAL_DWELL = `(.*?)`;', audit, re.S)
+if not m:
+    print('skills/pw-prove/scripts/clip-fidelity.mjs: no CANONICAL_DWELL export to derive from',
+          file=sys.stderr)
+    sys.exit(1)
+canonical = m.group(1).split('\n')
+
+for rel in ('skills/pw-prove/SKILL.md', 'skills/pw-prove/code-rules.md'):
+    lines = pathlib.Path(rel).read_text(encoding='utf-8').split('\n')
+    found = 0
+    for i, line in enumerate(lines):
+        # Every gated wait in these files is a dwell, so every one of them must be the canonical
+        # dwell — wording, duration and all — under whatever indent its snippet sits at.
+        if 'PW_PROVE_CLIP' not in line or 'waitForTimeout' not in line:
+            continue
+        indent = line[: len(line) - len(line.lstrip())]
+        start = i - len(canonical) + 1
+        # A negative start would wrap the slice around the end of the file and compare the wrong
+        # lines, so a wait too near the top of the file is simply not canonical.
+        window = lines[start : i + 1] if start >= 0 else []
+        if window == [indent + c for c in canonical]:
+            found += 1
+        else:
+            errors.append(
+                f"{rel}:{i + 1}: the gated wait here is not the canonical dwell — it must be the "
+                "CANONICAL_DWELL block from clip-fidelity.mjs, verbatim, comment lines included"
+            )
+    if not found:
+        errors.append(
+            f"{rel}: carries no canonical dwell. The snippet must sit INLINE here — a pointer to "
+            "another file is what ten of eleven field sessions never followed"
+        )
+
+if errors:
+    for error in errors:
+        print(error, file=sys.stderr)
+    sys.exit(1)
+PY
+  then
+    ok "one canonical dwell, carried verbatim by the audit, Step 5 and code-rules.md"
+  else
+    err "canonical dwell snippet check failed"
+  fi
+else
+  warn "python3 not available; skipped canonical dwell check"
+fi
+
+section "Skill version bump"
+if command -v python3 >/dev/null 2>&1; then
+  if python3 - <<'PY'
+import pathlib
+import re
+import subprocess
+import sys
+
+# The ledger's stale-install detection compares the frontmatter version of the installed skill
+# against the one that produced a record. pw-prove sat at 0.1.0 across 638 recorded runs and 14
+# distinct installs, so it detected nothing: the convention was stated and never enforced. This
+# check enforces it — a change to a skill's body or its shipped scripts must move that skill's
+# metadata.version.
+#
+# Scope is deliberately the two things the convention names. SKILL.md counts only below its
+# frontmatter (the frontmatter is where the version itself lives, and an author or description edit
+# is not a change to what the skill instructs); sibling and reference .md files count in full,
+# because the body is split across them and read on demand; scripts/ counts in full. evals/ and the
+# eval engine's own config (.skill-up.yaml at the skill root, and only there) are test material
+# rather than the shipped instruction surface and do not demand a bump.
+
+
+def git(*args):
+    return subprocess.run(
+        ['git', *args], capture_output=True, text=True, check=False
+    )
+
+
+def base_ref():
+    # Compare against the point this line of work left the main line, so the question asked is
+    # "does this commit move the version", not "does this checkout differ from some remote".
+    for ref in ('origin/main', 'main'):
+        if git('rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}').returncode != 0:
+            continue
+        merge_base = git('merge-base', 'HEAD', ref)
+        if merge_base.returncode == 0 and merge_base.stdout.strip():
+            return merge_base.stdout.strip()
+    return None
+
+
+base = base_ref()
+if base is None:
+    print('no main line to compare against (no origin/main and no main) — cannot tell whether a '
+          'skill changed', file=sys.stderr)
+    sys.exit(2)
+
+frontmatter_re = re.compile(r'\A---\n.*?\n---\n', re.S)
+version_re = re.compile(r'^\s*version:\s*["\']?([^"\'\n]+?)["\']?\s*$', re.M)
+
+
+def blob_at_base(rel):
+    out = git('show', f'{base}:{rel}')
+    return out.stdout if out.returncode == 0 else None
+
+
+def version_of(text):
+    # Read the version out of the frontmatter only. A `version:` line in the body — a config
+    # example, a snippet — must not be mistaken for the skill's own, or a body edit could appear
+    # to move a version it never touched.
+    if text is None:
+        return None
+    frontmatter = frontmatter_re.match(text)
+    if not frontmatter:
+        return None
+    match = version_re.search(frontmatter.group(0))
+    return match.group(1) if match else None
+
+
+def body_of(text):
+    return frontmatter_re.sub('', text, count=1)
+
+
+def changed_paths():
+    # Working tree against the base, so an uncommitted edit is judged the same way a committed one
+    # is — which is also what lets the drift harness mutate a file and watch this fire.
+    tracked = git('diff', '--name-only', base, '--', 'skills')
+    untracked = git('ls-files', '-o', '--exclude-standard', '--', 'skills')
+    if tracked.returncode != 0:
+        return None
+    paths = set(tracked.stdout.split())
+    paths.update(untracked.stdout.split())
+    return paths
+
+
+paths = changed_paths()
+if paths is None:
+    print(f'git diff against {base} failed — cannot tell whether a skill changed', file=sys.stderr)
+    sys.exit(2)
+
+errors = []
+for skill_dir in sorted(p for p in pathlib.Path('skills').iterdir() if p.is_dir()):
+    skill = skill_dir.name
+    skill_md = skill_dir / 'SKILL.md'
+    prefix = f'skills/{skill}/'
+
+    triggers = []
+    for rel in sorted(p for p in paths if p.startswith(prefix)):
+        parts = pathlib.PurePosixPath(rel).parts
+        if len(parts) > 2 and parts[2] == 'evals':
+            continue
+        if len(parts) == 3 and parts[2] == '.skill-up.yaml':
+            continue
+        if rel == skill_md.as_posix():
+            before = blob_at_base(rel)
+            after = skill_md.read_text(encoding='utf-8') if skill_md.exists() else ''
+            # A frontmatter-only edit (the version bump itself included) is not a body change.
+            if before is not None and body_of(before) == body_of(after):
+                continue
+        triggers.append(rel)
+
+    if not triggers:
+        continue
+
+    before_md = blob_at_base(skill_md.as_posix())
+    if before_md is None:
+        # A skill that did not exist on the main line has no version to move.
+        continue
+    was = version_of(before_md)
+    now = version_of(skill_md.read_text(encoding='utf-8')) if skill_md.exists() else None
+    if was is not None and was == now:
+        shown = ', '.join(triggers[:4]) + (' …' if len(triggers) > 4 else '')
+        errors.append(
+            f"skills/{skill}: body and/or shipped scripts changed but metadata.version is still "
+            f"{now} — bump the version in {skill_md.as_posix()} (changed: {shown})"
+        )
+
+if errors:
+    for error in errors:
+        print(error, file=sys.stderr)
+    sys.exit(1)
+PY
+  then
+    ok "every skill whose body or shipped scripts changed moved its metadata.version"
+  else
+    rc=$?
+    if [ "$rc" = "2" ]; then
+      warn "skill version bump check could not run"
+    else
+      err "skill version bump check failed"
+    fi
+  fi
+else
+  warn "python3 not available; skipped skill version bump check"
+fi
+
 section "Framework scope"
 unsupported=$(
   while IFS= read -r path; do
@@ -531,6 +701,22 @@ PY
   fi
 else
   warn "python3 not available; skipped language check"
+fi
+
+# --- Unresolved merge-conflict markers ---------------------------------------------------------
+# A committed conflict marker is invisible to every other check here: the parity, link, orphan and
+# language checks all read the file happily with `<<<<<<< HEAD` in it, and one shipped through two
+# merges into AGENTS.md and CONTEXT.md before a worker noticed. Tracked files only, and anchored to
+# column 0 so prose about conflict markers (this comment included) does not trip it.
+echo ""
+echo "-- Unresolved merge-conflict markers --"
+conflict_hits=$(git grep -n -E '^(<<<<<<< |>>>>>>> |={7}$)' -- \
+  '*.md' '*.sh' '*.mjs' '*.js' '*.json' '*.yaml' '*.yml' '*.ts' 2>/dev/null || true)
+if [ -z "$conflict_hits" ]; then
+  ok "no unresolved merge-conflict markers in tracked files"
+else
+  err "unresolved merge-conflict markers found:"
+  echo "$conflict_hits" >&2
 fi
 
 echo ""

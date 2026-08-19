@@ -1,0 +1,32 @@
+id: case-3-flat-spec-coverage-triggers
+shape: trigger
+step: 'frontmatter description: — the coverage-gap clause, over a flat-spec repo'
+title: 'A coverage request against a flat-spec repo trips the trigger'
+description: >-
+    Trigger case. The prompt is a realistic top-of-task request for coverage analysis over a Next.js
+    project whose existing specs are flat, and it names no skill. What is graded is whether the
+    `description:` frontmatter fired; NOT LOADED is a defect in that frontmatter, recorded as such and
+    never repaired by editing this prompt.
+
+    The judge is `skill-loaded.mjs`. Per `evals/prompt-shapes.md` an ACTIVE trigger case asserts
+    loading and nothing else, so the thirteen content assertions this case carried before #63 — the
+    POM-always rule, the no-retro-refactor guard, and the trap that a Next.js `app/` route folder is
+    not a Playwright POM directory — are not graded here. They survive in
+    `evals/mined-assertions.md` and the registry records them as an unmeasured coverage gap against
+    SKILL.md Step 4 -> Locator Mapping Table (POM always).
+
+    It widens trigger coverage against a repo shape the other trigger cases do not use: flat specs,
+    no POM directory anywhere.
+
+tag: functional_test
+input:
+    prompt: Analyze this project for test coverage and structure. The project has a Next.js App Router structure with src/app/page.tsx as the home page. Its existing E2E tests are flat (direct page interactions, no Page Object Model) and there is no POM directory anywhere. Identify the project pattern, coverage gaps, and how new tests should be structured.
+context:
+    repo_fixture: evals/files/project-flat
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/skill-loaded.mjs
+    timeout_seconds: 30
+derived_from_prompt: 8ad0dfc4b8c5

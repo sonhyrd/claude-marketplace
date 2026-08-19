@@ -1,0 +1,25 @@
+Attempt 2's failure signature is identical to attempt 1's — same error class (`TimeoutError` on `locator.click`) and same failing locator (`getByRole('button', { name: 'Apply filter' })`). That's the Step 7 no-progress checkpoint: my rewrite changed nothing the app can see, so it was a retry, not a fix. The budget is three attempts but the checkpoint overrides the count.
+
+Here's what I do next, in order:
+
+1. **Stop the fix loop now.** No attempt 3 — a third pass at an unchanging timeout is the same retry paid a third time.
+
+2. **Invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML report + per-test traces) for the diagnosis. No 4th fix attempt regardless of what it says — its job here is to name the cause for the handover, not to unblock another cycle.
+
+3. **Take the PR-mode handover stop** and write the six-beat stop report:
+   - **Verdict + where** — `pw-prove — HANDOVER STOP at Step 7: stopped at attempt 2 — unchanged failure signature`
+   - **Target** — PR #212 / `feat/reports-filter`, and the AC the failing scenario proves
+   - **What was attempted** — both fixes, and why neither moved the signature
+   - **Blocker evidence, verbatim** — the runner's own output for attempt 2, unparaphrased
+   - **What was NOT produced** — no passing spec; nothing committed, nothing pushed, no proof page
+   - **How to unblock** — the one change (likely in the app, not the spec) that would let a re-run pass
+   
+   Plus the two additions this stop alone carries: **`e2e/reports.spec.ts` and `e2e/pages/reports-page.ts` verbatim in fenced blocks** (the comment is the only place they land), and **playwright-debugger's F-code verdict and named cause**.
+
+4. **Post it with `gh pr comment 212`.** The stop isn't taken until the comment exists — a handover that only reaches this transcript reaches nobody waiting on the PR.
+
+5. **Run only the resource-releasing hygiene beats** — stop the preview server if this run started it, sweep `test-results/` / `playwright-report/` and `/tmp/pw-prove-mutation`, restore the stashed worktree state. Nothing else from Step 8.
+
+6. **Commit nothing, push nothing, emit no delivery tail.** A knowingly-failing spec on the branch is exactly the defect this pipeline exists to prevent, and no `Proof page` / `Mutation` / `Committed` / `Pushed` / `PR comment: <proof link>` lines — those are what distinguish a shipped proof from a reported non-delivery.
+
+One thing worth flagging for the diagnosis in step 2: a timeout *waiting for* the locator (not on an intercepted click) means the button never appeared, so the likely cause is upstream of the binding I rewrote twice — the page never reached the state that renders it. Candidates the trace will settle: a `notFound: 'abort'` HAR miss killing the reads that populate the filter panel (check whether **every** read aborted, which means `PW_PROVE_HAR` was unset or bound to the wrong port), or the control being gated/renamed in the built artifact. That goes in beat 6, not into a third rewrite.

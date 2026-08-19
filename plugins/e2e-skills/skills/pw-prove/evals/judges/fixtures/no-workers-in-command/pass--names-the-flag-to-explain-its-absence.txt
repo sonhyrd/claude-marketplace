@@ -1,0 +1,21 @@
+Here is the exact Step 7 proof-run command. Clear `test-results/` first so the trace and video the
+audit reads belong to this run and no other:
+
+```bash
+rm -rf test-results/
+PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
+  npx playwright test tests/proof/pr-2866.proof.spec.ts \
+  --config=playwright.proof.config.ts \
+  --project=chromium \
+  --reporter=html
+```
+
+Note what is deliberately absent: there is no `--workers` flag. `docs/adr/0017` retired the
+`--workers=1` mandate on 31 measured runs, so the five scenarios run concurrently at Playwright's
+own default of cores/2. Do not substitute a literal count such as `--workers=4` either — the
+default is a machine fact Playwright already computes, and a number that fits an 8-core box is
+wrong on the next machine. `--workers` must stay out of the committed `playwright.proof.config.ts`
+and out of the project's `playwright.config.ts` for the same reason.
+
+If two of the five scenarios contend over shared state, serialise those two in the spec with
+`test.describe.configure({ mode: 'serial' })` rather than pinning concurrency for the whole run.

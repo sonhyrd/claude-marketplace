@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"Write a Playwright test that proves the change on this branch."},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Trying the plugin-namespaced skill."},{"type":"tool_use","id":"toolu_01BaseDeniedNamespacedCall","name":"Skill","input":{"skill":"e2e:pw-prove"}}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01BaseDeniedNamespacedCall","is_error":true,"content":"Skill execution blocked by permission rules"}]},"sessionId":"fixture","cwd":"/ws"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"That is blocked, so I will write the test myself."}]},"sessionId":"fixture","cwd":"/ws"}

@@ -1,0 +1,16 @@
+Two of the three are one batch; the third isn't a probe question at all.
+
+```bash
+node <skill-base>/scripts/probe.mjs send '[
+  {"cmd":"console","level":"error"},
+  {"cmd":"eval","expression":{"tenant":"window.__APP__?.tenant","href":"location.href"}}
+]'
+```
+
+Why exactly that:
+
+- **No env prefix.** The daemon is already up, and its stderr named `BASE_URL`, `STORAGE_STATE` and `RECORD_HAR` as what it started with — so the recording and session are already bound to this context. Env on a `send` only matters when that `send` has to autostart a daemon; re-passing it here changes nothing and just invites the false impression that it re-bound the HAR.
+- **One `send`, not three.** The named-map `eval` form answers `tenant` and `href` in a single round trip, and both values are synchronous, so neither serialises as `{}`. `?.` because a shell that renders an empty list may well have no `window.__APP__` yet — an unguarded read throws and I lose `href` along with it.
+- **`console` first, before the eval.** It reports what the page logged since the last navigate, which is the navigate from the previous batch — an empty list container with an error in the console is a different diagnosis from an empty one without.
+
+**The 390px viewport question I'm not sending, because there is no verb for it.** The probe vocabulary is ten commands and `viewport` is deliberately not among them: the effective viewport is resolved once in Step 4 (from `configPath`) and pinned in the committed spec, so a snapshot taken at 390px would be recon against a rendering the proof never produces. If mobile is genuinely in scope for this change, it belongs in the Step-4 Assumptions block as the effective viewport — `deliberate: 390x844` if the config carries a mobile descriptor — and then the spec, the clip and the recon all agree by construction. Tell me if the diff touches a mobile-specific path and I'll resolve it that way at Step 4.

@@ -1,0 +1,40 @@
+Here is the relevant part of the spec, with each clip-fidelity decision justified.
+
+```ts
+test('a renamed report saves', async ({ page }) => {
+  const title = page.getByLabel('Title');
+  await title.scrollIntoView({ block: 'center' });
+  await title.fill('Q3 pipeline review');
+  await expect(title).toHaveValue('Q3 pipeline review');
+
+  // JUSTIFIED: payoff dwell — holds on the field's end state after the assertion that covers it.
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1200);
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  const toast = page.getByRole('status');
+  await expect(toast).toHaveText('Report saved');
+  await toast.evaluate((n) => n.scrollIntoView({ block: 'center' }));
+
+  // JUSTIFIED: payoff dwell — after the toast assertion, so the filmed run is no more patient than CI.
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(1200);
+});
+```
+
+The decisions, and what I refuse:
+
+- **The fill stays atomic.** I do not reach for a PW_PROVE_CLIP-gated pressSequentially() to make the
+  typing visible. That would swap one input event for N keystroke events before the assertion, so a
+  debounced or per-key-validated Title field would be driven differently in the film than in CI —
+  and the filming law is that PW_PROVE_CLIP may only ever add time, never change what the app is
+  asked to do. An ungated pressSequentially(value, { delay }) is worse still: every CI run pays that
+  per-keystroke sleep forever.
+- **The legibility comes from holding on the end state**, after the assertion, which is time only.
+- **Framing is ungated.** The scrollIntoView({ block: 'center' }) runs on every run, filmed or not,
+  because it is not an input change and the frame has to be centred at the moment of the hold. I do
+  not use scrollIntoViewIfNeeded() — it moves the minimum distance and parks the element against the
+  screen edge, which is exactly the illegible frame this is meant to avoid.
+- **The centring on the toast is taken after its assertion**, not before, because the page re-renders
+  when the toast mounts.
+- **No dwell sits between the Save click and the toast assertion.** There the filmed run would be
+  more patient than CI, and the proof would pass where CI flakes. The mid-test dwell after the
+  fill's own assertion is allowed under the relaxed placement rule.

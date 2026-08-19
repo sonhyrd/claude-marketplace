@@ -1,0 +1,2 @@
+Session established. The app sets an `app_session` cookie, so I seeded that cookie directly on the
+context before the first navigation.

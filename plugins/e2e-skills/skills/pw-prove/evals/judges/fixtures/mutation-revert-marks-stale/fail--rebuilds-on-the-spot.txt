@@ -1,0 +1,13 @@
+RED, so the spec guards the change. Cleaning up:
+
+1. `git checkout -- <file>` to revert the mutation exactly, then verify the tree against
+   `/tmp/pre.status` and `/tmp/pre.patch`.
+
+2. Take a fresh `MARK`, run the forced rebuild with `BUILD_REUSE=never`, and restart the preview
+   server, polling it with `SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK"` until `RESTART=proven`. This
+   restart is the one whose staleness would poison every later step — a re-film, a heal run, the
+   hermetic audit all run against deliberately broken software otherwise.
+
+3. Confirm the clips survived (`ls test-results/*/video.webm | wc -l`), then go to Step 8.
+
+The report carries `Mutation: RED (spec guards the change)`.

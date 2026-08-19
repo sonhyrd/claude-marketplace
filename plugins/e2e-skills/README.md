@@ -18,7 +18,7 @@ exceptions — see [Distribution](#distribution).
 
 ## Distribution
 
-The repo is grafted into `~/SonDev/claude-marketplace` as an editable git subtree at
+The repo is grafted into `~/work/claude-marketplace` as an editable git subtree at
 `plugins/e2e-skills`. The marketplace's own `.claude-plugin/plugin.json` names the shipped skills
 (`pw-prove`, `e2e-reviewer`) and carries the version. Nothing here is installed by any other route.
 
@@ -43,7 +43,7 @@ bash scripts/ci/pre-push-security.sh # secrets and credential-leak guard (manual
 `ci-local.sh` runs shell/Node syntax sweeps, the review checks (eval schema, skill surface, framework
 scope, link integrity, docs orphan, language, pattern parity), the parity drift smoke test, the
 scanner pattern corpus against its frozen golden, the process-boundary suites over the shipped
-`pw-prove` scripts (preflight, probe, hermetic, probe-HAR, probe-warm, publish-proof, run-ledger),
+`pw-prove` scripts (preflight, probe, hermetic, probe-HAR, publish-proof, run-ledger),
 and the repo's own smell scan.
 
 **The pattern-corpus golden is a hard invariant.** Never run `test-corpus.sh --update` to make a red
@@ -63,14 +63,14 @@ Step 3  Bring-up + Probe         one live pass: base merge, dev server, auth, re
 Step 4  Plan                     PR-mode notify-and-continue · coverage-gap approval gate
 Step 5  Generate                 POM always, HAR-first mocks, PROVES headers, clip fidelity
 Step 6  e2e-reviewer             YAGNI audit + PROVES audit + the reviewer skill as a gate
-Step 7  Verify                   tsc, warm, proof run, a frame per clip the agent reads, hermetic audit, mutation check
+Step 7  Verify                   tsc, proof run, a frame per clip the agent reads, hermetic audit, mutation check
 Step 8  Deliver                  publish, commit, push, PR comment, completion report
 ```
 
 Invoke it with a PR number/URL, a ticket key, a branch, a route, or nothing at all. Shipped scripts
 (`skills/pw-prove/scripts/`, Node stdlib only, nothing installed into the target project):
-`preflight.mjs`, `probe.mjs`, `hermetic.mjs`, `clip-fidelity.mjs`, `publish-proof.mjs`, `clips.mjs`,
-`video.mjs`, `pwprove-run.mjs`.
+`preflight.mjs`, `probe.mjs`, `har-scrub.mjs`, `hermetic.mjs`, `clip-fidelity.mjs`,
+`publish-proof.mjs`, `clips.mjs`, `video.mjs`, `pwprove-run.mjs`.
 
 ## `e2e-reviewer` — static review
 
@@ -155,6 +155,12 @@ Agent workflow config: [delegation profile](docs/agents/delegate-profile.md) ·
 
 Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md).
 
+Studies: [proof target measurements](docs/studies/proof-target-measurements.md) — development server
+against a built preview, measured, plus the two claims that were verified by running them ·
+[the first live proof](docs/studies/live-proof-pr2866.md) — pw-prove run end to end against a real
+pull request on a real application, with the timings against the numbers this work was justified by
+and the twelve behaviours no fixture shows.
+
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
 [0003 mock-first with declared carve-out](docs/adr/0003-mock-first-declared-carve-out.md) ·
@@ -164,12 +170,18 @@ Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-
 [0007 proof clip fidelity](docs/adr/0007-proof-clip-fidelity.md) ·
 [0008 committed proof config](docs/adr/0008-committed-proof-config.md) ·
 [0009 one proof page](docs/adr/0009-one-proof-page.md) ·
-[0010 serialize, isolate, audit](docs/adr/0010-serialize-isolate-audit.md) ·
-[0011 HAR flush + runner origin](docs/adr/0011-har-flush-and-runner-origin.md) ·
+[0010 serialize, isolate, audit](docs/adr/0010-serialize-isolate-audit.md) (serialisation superseded by 0017) ·
+[0011 HAR flush + runner origin](docs/adr/0011-har-flush-and-runner-origin.md) (partially superseded by 0016) ·
 [0012 publish to Clips](docs/adr/0012-publish-to-clips-stream-copy-concat.md) ·
-[0013 the warm lead is a browser](docs/adr/0013-warm-lead-is-a-browser-not-a-curl.md) ·
+[0013 the warm lead is a browser](docs/adr/0013-warm-lead-is-a-browser-not-a-curl.md) (superseded by 0016) ·
 [0014 one vaulted bearer over JSON-RPC](docs/adr/0014-one-vaulted-bearer-over-json-rpc.md) ·
-[0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md).
+[0015 legibility is checked, not prescribed](docs/adr/0015-legibility-is-checked-not-prescribed.md) ·
+[0016 the built preview is the proof target](docs/adr/0016-built-preview-is-the-proof-target.md) ·
+[0017 the proof run is concurrent](docs/adr/0017-proof-run-is-concurrent.md) ·
+[0018 the eval runtime is `none`](docs/adr/0018-eval-runtime-is-none.md) (and unsandboxed — read it
+before running the suite) ·
+[0019 pw-prove refuses a heavy session](docs/adr/0019-pw-prove-refuses-a-heavy-session.md) ·
+[0020 audit before filming, rebuild when needed](docs/adr/0020-audit-before-filming-rebuild-when-needed.md).
 
 ## License
 

@@ -1,0 +1,7 @@
+Quickest path: write `_recon.spec.ts` with an ariaSnapshot dump and a request listener, run it, read the output, delete the file.
+
+```bash
+npx playwright test e2e/_recon.spec.ts --reporter=line
+```
+
+If there is no browser, probe.mjs would exit 2 anyway, so the runner is the more reliable route; I fall back to source reading only when the install is broken.

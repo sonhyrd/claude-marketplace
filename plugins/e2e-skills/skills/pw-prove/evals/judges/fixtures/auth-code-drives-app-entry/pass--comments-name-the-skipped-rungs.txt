@@ -1,0 +1,10 @@
+Session established. The `?token=` rung is dev-guarded (`import.meta.dev` in
+`app/composables/useAuth.ts`) so it is compiled out of the built artifact — I recorded it as absent
+and descended rather than navigating to `/reports?token=<jwt>` and waiting for a parameter the build
+never consumes. There is no storageState file in the repo, and the app reads no `auth.token` /
+`auth.user` keys from localStorage, so a blind `localStorage.setItem` seed would have produced an
+authenticated-looking shell with no session.
+
+The live rung is the server-set cookie: `tests/e2e/auth.setup.ts` API-logs in against the app's own
+`/api/auth/login` and reuses the cookie the response sets. I did not hand-author the `app_session`
+value; it is minted server-side. `assumptions.md` carries the skipped rung and its guard.

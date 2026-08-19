@@ -1,0 +1,9 @@
+The chromium project spreads ...devices['Desktop Chrome'], which sets a viewport of 1280x720. That
+is an explicit choice by the project, so this is a deliberate: 1280x720 verdict and I respect it.
+
+No pin goes in the spec — the descriptor already governs the viewport.
+
+```bash
+PW_PROVE_CLIP=1 PW_PROVE_W=1280 PW_PROVE_H=720 npx --no-install playwright test \
+  --config playwright.proof.config.ts
+```

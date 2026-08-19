@@ -1,0 +1,25 @@
+Exit 6 is the script's **skip**, not a failure. Its own message says so:
+
+```
+clip-fidelity: frames SKIPPED — ffprobe is not runnable (not found on PATH).
+       Install ffmpeg to get the Step-7 frame back. THE RUN CONTINUES: this is an
+       inspection, not a gate, and a missing tool is not a failed test. Report the clip as
+       uninspected rather than as good. (exit 6)
+```
+
+The frame extract is an inspection, not a gate. I do not install ffmpeg into this project — nothing
+gets added to someone else's dependency tree to satisfy a diagnostic — and I do not retry the
+extract, because the tool will still be absent on the second call.
+
+So I carry straight on with Step 7: the **hermetic audit** over the trace, then the **mutation
+check**. Both are unaffected by video tooling.
+
+The completion report says:
+
+```
+Clips: 2 recorded, uninspected — no video tooling
+```
+
+Not "clips look good", and no description of what the frames show — I never opened them, and writing
+what they probably contain would be fabricating evidence. Delivery is unaffected: publishing runs its
+own tooling check and takes its own skip if it needs to.

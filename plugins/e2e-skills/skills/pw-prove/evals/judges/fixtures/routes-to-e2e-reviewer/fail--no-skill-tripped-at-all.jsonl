@@ -1,0 +1,2 @@
+{"type": "user", "message": {"role": "user", "content": "Our Playwright suite is green but I do not believe it. Go through the specs in tests/ and tell me which ones would still pass if the feature under them broke."}, "sessionId": "fixture", "cwd": "/repo"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "I read the specs myself and here is what I think of them."}]}, "sessionId": "fixture", "cwd": "/repo"}

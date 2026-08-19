@@ -1,0 +1,43 @@
+id: w02-auth-cookie-from-app
+shape: behavior
+step: 'Step 3 › Auth — drive the app''s OWN entry (never a blind localStorage seed) — the ladder as written code'
+title: pw-prove - w02 (wet) - the auth code it wrote, not the ladder it described
+description: >-
+    WET case. Its dry twin is `case-48`, which guards the same section — Step 3 › *Auth — drive the
+    app's OWN entry (never a blind localStorage seed)* — by grading an answer about a dev-guarded
+    `?token=` rung. This one grades the file the run left on disk. The fixture
+    `evals/files/app-nuxt-ssr` is staged as the working directory and carries both halves of the
+    ladder in real source: `app/composables/useAuth.ts` reads `route.query.token` under an
+    `import.meta.dev` guard the production build folds away, and `server/api/auth/login.post.ts`
+    mints the `app_session` cookie server-side, so its value cannot be hand-authored.
+
+    Should record the `?token=` rung as ABSENT with its guard named in the Assumptions block, and
+    write auth code that API-logs in against the app's own `/api/auth/login` and reuses the session
+    the response sets. Should NOT navigate to `?token=`, NOT seed `localStorage` blindly (this app
+    reads no auth key from it), NOT hand-author the cookie value, and NOT edit the app's source to
+    re-enable the guarded path.
+
+    The divergence this can see and `case-48` cannot: an answer can name the ladder correctly and
+    still emit a blind seed in the file the proof run would execute. Playwright is deliberately not
+    installed and the prompt forbids running it — the case is scoped to which rung the code takes, so
+    a red verdict names that and not an install.
+tag: functional_test
+input:
+    prompt: |-
+        Load the `pw-prove` skill with the Skill tool and follow it. Step 3, PR-mode, against the Nuxt app in your current working directory. The bring-up gate has already passed and the built app is being previewed at `http://localhost:41287`; `TEST_USER` and `TEST_PASSWORD` are exported for a real account.
+
+        Establish the session the proof spec will run under. Work the mechanism out from this repository's own source, then leave two files behind:
+
+        - `tests/e2e/auth.setup.ts` — the authentication code the proof run will execute.
+        - `assumptions.md` — your Step-4 Assumptions block, at minimum the auth entries.
+
+        Nothing is installed here, so do not run Playwright and do not start a server. Do not modify anything under `app/`, `server/` or `nuxt.config.ts`. Confine everything you do to this directory.
+context:
+    repo_fixture: evals/files/app-nuxt-ssr
+constraints: {}
+expect: {}
+judge:
+    type: script
+    script_path: evals/judges/auth-code-drives-app-entry.mjs
+    timeout_seconds: 30
+derived_from_prompt: 2be933e88a12

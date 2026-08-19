@@ -1,0 +1,31 @@
+**I stop the fix loop here.** Attempt 1 and attempt 2 failed with the same error class
+(`TimeoutError`) on the same failing locator (`getByRole('button', { name: 'Apply filter' })`).
+The signature is **unchanged**, so the edit changed nothing the app can see — that is a retry, not a
+fix. A third attempt would be a third retry, so I do not spend it.
+
+In order:
+
+1. **Diagnose.** Invoke `playwright-debugger` against `playwright-report/` and take its F-code
+   verdict.
+
+2. **Take the handover stop.** Post it on the PR:
+
+   ```bash
+   gh pr comment 212 --body-file handover.md
+   ```
+
+   The comment carries, in full:
+   - the verdict and exactly where the run stopped;
+   - `e2e/reports.spec.ts` and `e2e/pages/reports-page.ts` **verbatim**;
+   - the runner's failure output **verbatim**;
+   - the playwright-debugger F-code diagnosis;
+   - both fixes already attempted and why neither moved the failure;
+   - what was **not** produced — no proof run, no clips, no mutation check;
+   - the one change that would unblock a re-run.
+
+3. **Clean up.** Stop the dev server this run started, and sweep `test-results/`.
+
+**Nothing is committed and nothing is pushed.** A knowingly-failing spec on `feat/reports-filter`
+is precisely the defect this pipeline exists to prevent — it would go green-until-someone-looks in
+CI and be read as coverage. The completion report emits no Proof page line, no Mutation line, no
+Committed line and no Pushed line, because none of those happened.
