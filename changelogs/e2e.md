@@ -12,6 +12,47 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.8.0] - Unreleased
+
+### Fixed
+
+- **Subtree pulled from `e2e-fork/main`** (`bc38f0f` → `618a6ef`, 4 commits — two fixes and their
+  merges), moving `pw-prove` 0.24.0 → **0.26.0** with `e2e-reviewer` at 1.10.0 and
+  `playwright-debugger` at 1.9.0 unchanged. A minor here, because bring-up gains a phase that can
+  stop a run and the proof config's `webServer` rule changes shape — what a run *does* changes, not
+  just what it repairs. **No description changed on any of the three skills**, so the routing table
+  is untouched and nothing re-routes.
+- **Bring-up now checks for the browser it will launch.** Playwright's browser binaries are the one
+  dependency a package-manager install does not put in `node_modules`, so a repo could pin
+  `@playwright/test`, have a complete `node_modules`, pass the config phase, pay a 162-second build,
+  and then have every runner invocation exit 2 on `Executable doesn't exist at
+  .../chromium_headless_shell-...` — the exact failure the phase split exists to move to the front.
+  A **`browser` phase** now sits between `config` and `build` and refuses with **exit 6**, naming
+  each chromium binary, the path it looked at, and the install command for the project's own package
+  manager. It **refuses rather than installs**: a ~93 MB download is the operator's decision.
+  Detection reuses Playwright's own resolution — the project's pinned CLI, found through its package
+  `bin`, running `install chromium --dry-run` — and **never `npx playwright`**, which in a directory
+  without the runner downloads `playwright@latest`, the auto-install this skill forbids, on exactly
+  the repo that lacks it. Installed means Playwright's `INSTALLATION_COMPLETE` marker, not a
+  directory, because a directory check is what cannot see an interrupted download. **Three outcomes
+  deliberately do not stop the run** — no runner resolvable (greenfield bootstraps one at Step 5b),
+  a checker that broke, and a missing bundled ffmpeg (video is evidence, the launch is the proof).
+- **The inherited `webServer` is kept or dropped by what answers at its url.** The proof config
+  spreads the project's Playwright config, and the spread copies `webServer`; the rule that followed
+  was unconditional suppression. That is right for a development server and **inverts wherever the
+  inherited entry is the build-and-boot of the proof target itself** — dropping it there does not
+  protect the target, it removes it, and the run has no origin at all. The decision now reads on
+  what answers at the entry's url, taken in Step 3 from the curl that step already performs. Reading
+  the entry's `command` was rejected as a guess about intent on an arbitrary shell string.
+- Marketplace mechanics: the pull merged the fork's history (not `--squash`), so the plugin
+  manifests survived. Ten conflicts surfaced — `AGENTS.md`, `CONTEXT.md`, `README.md`, two ADRs,
+  `scripts/ci/ci-local.sh`, `scripts/ci/test-pw-prove-scripts.sh`, `pw-prove/SKILL.md`, its
+  `evals/REGISTRY.md` and `preflight.mjs` — all from a stale merge base, not from local edits: every
+  conflicted file on our side was verified byte-identical to the fork at `bc38f0f` before resolving,
+  so taking the fork's side is the whole of the change. `make check-e2e-subtree` is green at exactly
+  the expected 2 entries after. The Codex manifest was regenerated with
+  `scripts/sync_codex_plugins.py`.
+
 ## [1.7.1] - Unreleased
 
 ### Fixed
