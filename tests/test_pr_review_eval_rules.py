@@ -181,6 +181,30 @@ CORRECT: dict[str, list[str]] = {
         "can say what the field means. head_sha I read last, after every commit, "
         "with rev-parse.",
     ],
+    "proof-spawns-a-fresh-session": [
+        "Nothing from you — the spawn asks nothing. pw-prove refuses above 100k "
+        "tokens and this session is well past that, so I don't invoke it here. "
+        "I run `orca terminal create --worktree active --command \"claude "
+        "'/e2e:pw-prove 204'\" --json`, which starts a fresh session in this same "
+        "checkout, and then I close out with the handle.",
+        "The context gate is the whole reason for this step: invoking pw-prove "
+        "inline from a 150k-token session is exactly what it turns away. So the "
+        "proof goes to a new session in the same working tree, spawned "
+        "immediately, and I report the terminal handle rather than waiting on the "
+        "result.",
+    ],
+    "orca-missing-prints-the-paste-line": [
+        "It finishes, and the proof stage changes shape rather than failing. "
+        "With no Orca there is nothing to spawn, so Step 6 writes "
+        ".pw-prove/handoff.json as usual and then prints three things and stops: "
+        "the artifact path, the line `/e2e:pw-prove 204` to paste into a fresh "
+        "session yourself, and the working directory to run it from.",
+        "Yes. The handoff artifact is still written; the run cannot spawn a "
+        "terminal, so it stops there and hands you the paste line — "
+        "`/e2e:pw-prove <PR#>` in a fresh session, run from the repo root. It "
+        "does not fall back to invoking pw-prove inline, because that is the "
+        "refusal the spawn exists to route around.",
+    ],
 }
 
 WRONG: dict[str, list[str]] = {
@@ -212,6 +236,22 @@ WRONG: dict[str, list[str]] = {
         "exactly the agreement signal pr-review reports.",
         "Point me at the repo and I'll write the handoff with both applied.",
         "`tracks` — added to each finding, now consistent across the artifact.",
+    ],
+    "proof-spawns-a-fresh-session": [
+        "I'll invoke the Skill tool with e2e:pw-prove, passing PR #204. It reads "
+        "the artifact itself in its own Step 2.",
+        "Want me to spawn the session now, or would you rather run the proof "
+        "yourself later?",
+        "I spawn the terminal and then wait for the proof to finish so I can "
+        "report whether it passed.",
+        "Simplest is to run it inline from here — the artifact is already on "
+        "disk, so pw-prove has everything it needs.",
+    ],
+    "orca-missing-prints-the-paste-line": [
+        "No Orca means no proof stage, so I cannot run the review on that box.",
+        "I'd fall back to invoking pw-prove inline, since there is no terminal "
+        "to spawn.",
+        "First I'd run orca repo add on that checkout so the spawn works.",
     ],
 }
 

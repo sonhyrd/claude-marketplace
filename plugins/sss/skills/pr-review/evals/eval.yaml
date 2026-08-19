@@ -24,6 +24,8 @@ cases:
     - evals/cases/per-track-admission.yaml
     - evals/cases/fixes-accounts-for-every-id.yaml
     - evals/cases/bug-is-a-category-not-a-severity.yaml
+    - evals/cases/proof-spawns-a-fresh-session.yaml
+    - evals/cases/orca-missing-prints-the-paste-line.yaml
   defaults:
     timeout_seconds: 300
     max_turns: 6

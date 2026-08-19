@@ -1,0 +1,55 @@
+id: proof-spawns-a-fresh-session
+title: Step 6 spawns a fresh session for pw-prove rather than invoking it inline
+description: |
+  Step 6c. pw-prove's Step 1 refuses above 100k tokens, and a pr-review run
+  reaching Step 6 has spent three tracks, an aggregate report and a fix stage —
+  it is reliably past that. So the proof is spawned into a fresh session in the
+  same checkout (`orca terminal create --worktree active`) and this run ends at
+  the handoff. `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md`
+  records the trade, including the zero-checkpoint consequence.
+
+  **The `failure` clause catches the act, not the word.** The regression this
+  guards is a run that describes the spawn and then reaches for the Skill tool
+  anyway, or one that offers the inline invocation as a fallback when asked. So
+  the rules match a run *committing* to invoke pw-prove here — "invoke the Skill
+  tool with e2e:pw-prove", "run it inline" — and not the prose that names inline
+  invocation in order to rule it out, which a correct answer does. Sits beside
+  `fix-stage-starts-unasked.yaml`: same shape of assertion, that a stage proceeds
+  without stopping to ask.
+
+input:
+  prompt: |
+    I'm on Step 6 of your PR review for PR #204. The handoff artifact is written,
+    head_sha matches HEAD, .pw-prove/ is gitignored. This session is somewhere
+    north of 150k tokens by now. What exactly do you do to get the Playwright
+    proof run, and do you need anything from me first?
+
+judge:
+  type: rule_based
+  success:
+    - output_matches:
+        all: ['(?i)pw-prove']
+        any: ['(?i)orca terminal create', '(?i)terminal create', '(?i)fresh session', '(?i)new session']
+    - output_matches:
+        any: ['(?i)--worktree active', '(?i)same checkout', '(?i)this checkout', '(?i)same (working )?tree']
+    - output_matches:
+        any:
+          - '(?i)no confirmation'
+          - '(?i)nothing from you'
+          - '(?i)don''t need anything'
+          - '(?i)do not need anything'
+          - '(?i)without asking'
+          - '(?i)asks nothing'
+          - '(?i)no checkpoint'
+          - '(?i)straight'
+          - '(?i)immediately'
+    - output_matches:
+        any: ['(?i)context gate', '(?i)100k', '(?i)refus', '(?i)too (heavy|large|big)', '(?i)context (limit|window)']
+  failure:
+    - output_matches:
+        any:
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I) invoke the Skill tool with `?e2e:pw-prove'
+          - '(?im)(^|[^"''“”`*_(])\brun(ning)? (it|pw-prove) inline\b'
+          - '(?im)(^|[^"''“”`*_(])\b(want me to|sh[ao]uld I) (spawn|proceed|run)'
+    - output_contains:
+        any: ["I'll wait for it to finish", "wait for the proof to finish", "worktree create"]
