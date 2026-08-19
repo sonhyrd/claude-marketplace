@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// preflight.mjs — bring the PROOF TARGET up in three phases that fail distinctly (SKILL Step 3).
+// preflight.mjs — bring the PROOF TARGET up in four phases that fail distinctly (SKILL Step 3).
 //
 // The proof target is the BUILT application served by its preview server, so
-// bring-up is three separate things that used to collapse into one ninety-second readiness poll and
-// one not-ready verdict. That verdict was a misdiagnosis often enough to matter: a run that was
+// bring-up is several separate things that used to collapse into one ninety-second readiness poll
+// and one not-ready verdict. That verdict was a misdiagnosis often enough to matter: a run that was
 // really missing an environment variable was read as "server not ready" and answered with five
 // rebuilds and a port kill. Each phase now has its own budget, its own diagnostic, and its own exit
 // code:
@@ -12,6 +12,12 @@
 //           Seconds, and it names the keys. A production build does not supply the defaults a
 //           development server did, so `Missing required configuration` after a 174-second build is
 //           the exact failure this phase exists to move to the front.
+//   browser check that the browser the run will LAUNCH is installed, before anything expensive is
+//           paid for it. Playwright's browsers are the one dependency a package-manager install does
+//           not place in node_modules, so a repository with a complete `node_modules` can pay a
+//           162-second build and then have every runner invocation exit 2 on
+//           `Executable doesn't exist at ...`. Checked, never installed: a ~93 MB download is the
+//           operator's decision. Chromium only — what the probe and the proof run actually launch.
 //   build   run the build as a tracked subprocess and wait on it AS one, so a build failure is a
 //           build failure carrying its standard error — not a server that never became ready.
 //   serve   poll the preview server on a SHORT budget: a preview binds in under a second and serves
@@ -24,11 +30,11 @@
 // port, start it, read the port back out of its own log) — a script-started server can bind a
 // sibling worktree on the WRONG branch. Auth and selector recon happen in the spec / first run.
 //
-//   node preflight.mjs [phase ...]        phases: config build serve   (default: all three, in order)
+//   node preflight.mjs [phase ...]        phases: config browser build serve   (default: all four, in order)
 //
 // The agent normally runs it twice, because it owns what happens in between:
 //
-//   REQUIRED_ENV=... BUILD_COMMAND='pnpm build' node preflight.mjs config build
+//   REQUIRED_ENV=... BUILD_COMMAND='pnpm build' node preflight.mjs config browser build
 //   # ...start the preview server on the resolved port...
 //   BASE_URL=http://localhost:4000 node preflight.mjs serve
 //
@@ -88,15 +94,24 @@
 //                  optional — the MCP endpoint, for testing and self-hosted deployments. Absent,
 //                  the endpoint is the token's own `aud` claim.
 //
-//   exit 1 = usage   exit 4 = configuration failure   exit 5 = build failure   exit 3 = serve failure
+//   exit 1 = usage
+//   in phase order: exit 4 = configuration   exit 6 = browser   exit 5 = build   exit 3 = serve
 //
-// The three failure codes are the point: they are what makes "the key is missing", "the build broke"
-// and "nothing is listening" three answers instead of one.
+// The codes do not run in numeric order and are not renumbered to make them: they are stable
+// operator-facing contracts. The failure codes are the point — they are what makes "the key is
+// missing", "the browser was never installed", "the build broke" and "nothing is listening" four
+// answers instead of one.
+//
+// The browser phase has three outcomes that deliberately do NOT stop the run — no runner resolvable
+// (greenfield bootstraps one at Step 5b), a checker that broke, and a missing bundled ffmpeg — each
+// reported by name. A gate that halts bring-up for a reason that is not about the application would
+// be the very misdiagnosis this phase split exists to remove.
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { VAULT_ADD_COMMAND, clipsConfig, probeImportCredential, vaultLeaseCommand } from './clips.mjs';
 import { pwproveRun } from './pwprove-run.mjs';
@@ -112,11 +127,11 @@ const EXIT_BUILD = 5;
 // Run ledger + version banner. The banner is the FIRST output line, before any validation, so
 // every run's transcript records what executed — stale-install drift is visible at a glance instead
 // of discovered mid-run.
-const SKILL = pwproveRun(import.meta.url, 'bringup'); // was 'readiness' — the gate is three phases now
+const SKILL = pwproveRun(import.meta.url, 'bringup'); // was 'readiness' — the gate is four phases now
 out(`preflight: ${SKILL.skill} v${SKILL.version} (${SKILL.commit})\n`);
 
 // --- phase selection --------------------------------------------------------------------------
-const ALL_PHASES = ['config', 'build', 'serve'];
+const ALL_PHASES = ['config', 'browser', 'build', 'serve'];
 const requested = process.argv.slice(2);
 const unknown = requested.filter((p) => !ALL_PHASES.includes(p));
 if (unknown.length) {
@@ -274,6 +289,159 @@ if (phases.includes('config')) {
   }
 }
 
+// --- phase 2: browser ----------------------------------------------------------------------------
+// Playwright's browser binaries are the one dependency a package-manager install does NOT place in
+// node_modules. So a repository can pin @playwright/test, have a complete node_modules, pass the
+// config phase, pay a 162-second build — and then have every runner invocation exit 2 on
+// `Executable doesn't exist at .../chromium_headless_shell-...`. That is the exact failure the phase
+// split exists to prevent: paying for the expensive phase to learn something checkable beforehand.
+//
+// Checked, not installed. A ~93 MB download is the operator's decision, consistent with the skill's
+// never-auto-install rule outside greenfield.
+//
+// Chromium only, because that is what the skill itself launches (probe.mjs calls chromium.launch()
+// headless) and what greenfield bootstrap installs — so a chromium-absent machine fails every run.
+// A webkit-only or firefox-only project is a real but rarer gap, and the refusal says so rather than
+// this script growing a TypeScript-config parser to find out.
+//
+// Three outcomes never stop the run, because a gate that stops bring-up for a reason that is not
+// about the application is the misdiagnosis this whole design removes: no runner (greenfield reaches
+// Step 3 before Step 5b bootstraps it), a checker that broke, and a missing bundled ffmpeg (video is
+// evidence; the launch is the proof).
+const EXIT_BROWSER = 6;
+
+// The project's OWN pinned CLI, found through the package's own `bin` declaration — `playwright/cli.js`
+// is not in its exports map, so it cannot be resolved as a subpath, but `playwright/package.json` can.
+// Never `npx playwright`: measured 2026-08-19, npx in a directory without the runner tries to DOWNLOAD
+// playwright@latest, which is the auto-install this skill forbids, on exactly the repository that
+// lacks it.
+function resolvePlaywrightCli() {
+  try {
+    const req = createRequire(path.join(APP_ROOT, 'preflight-resolution-root.js'));
+    const pkgPath = req.resolve('playwright/package.json');
+    const bin = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).bin;
+    const rel = typeof bin === 'string' ? bin : bin?.playwright;
+    if (!rel) return null;
+    const cli = path.join(path.dirname(pkgPath), rel);
+    return fs.existsSync(cli) ? cli : null;
+  } catch {
+    return null;
+  }
+}
+
+// `<pm> exec playwright install chromium` — read from the project, never passed in: it is one more
+// thing an invocation can get wrong, for a fact sitting one directory away. The declarative field
+// wins over a lockfile, which a repository can carry long after switching.
+function installCommand() {
+  const pmField = (() => {
+    try {
+      const declared = JSON.parse(fs.readFileSync(inApp('package.json'), 'utf8')).packageManager;
+      return typeof declared === 'string' ? declared.split('@')[0].trim() : '';
+    } catch {
+      return '';
+    }
+  })();
+  const fromLock = ['pnpm-lock.yaml', 'yarn.lock', 'bun.lockb', 'bun.lock', 'package-lock.json']
+    .find((f) => fs.existsSync(inApp(f)));
+  const pm =
+    pmField ||
+    { 'pnpm-lock.yaml': 'pnpm', 'yarn.lock': 'yarn', 'bun.lockb': 'bun', 'bun.lock': 'bun', 'package-lock.json': 'npm' }[fromLock] ||
+    '';
+  if (pm === 'npm') return 'npm exec -- playwright install chromium';
+  if (pm === 'bun') return 'bunx playwright install chromium';
+  if (pm) return `${pm} exec playwright install chromium`;
+  return 'npx playwright install chromium'; // no signal at all: the command every project can run
+}
+
+// `install <browser> --dry-run` reports where each binary WOULD go whether or not it is there, needs
+// no network, and reuses Playwright's own resolution — so PLAYWRIGHT_BROWSERS_PATH and the per-OS
+// cache defaults keep working without this script owning those rules. Parsed by the header line's
+// own `(playwright <name> vNNNN)` marker, so an entry is never matched to the wrong path.
+function dryRunLocations(cli) {
+  const r = spawnSync(process.execPath, [cli, 'install', 'chromium', '--dry-run'], {
+    cwd: APP_ROOT,
+    encoding: 'utf8',
+    // 30s, not 10: measured 2026-08-19, a real dry-run took 5.0-6.6s on a warm machine. A ceiling
+    // close to the observed cost turns an ordinary slow run into a false `probe-failed` skip, and
+    // 30s is still nothing against the 104-201s build this phase sits in front of.
+    timeout: 30_000,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (r.error || r.status !== 0) return null;
+  const found = [];
+  let pending = null;
+  for (const line of (r.stdout ?? '').split('\n')) {
+    const header = line.match(/\(playwright ([\w-]+) v[^)]*\)\s*$/);
+    if (header) { pending = header[1]; continue; }
+    const loc = line.match(/^\s*Install location:\s+(.+?)\s*$/);
+    if (loc && pending) { found.push({ name: pending, dir: loc[1] }); pending = null; }
+  }
+  return found.length ? found : null;
+}
+
+if (phases.includes('browser')) {
+  const skip = (reason, note) => {
+    summary.push('BROWSER=skipped');
+    summary.push(`BROWSER_SKIP=${reason}`);
+    warn(`preflight: WARN - browser check skipped (${reason}) - ${note}\n`);
+  };
+  const cli = resolvePlaywrightCli();
+  if (!cli) {
+    // Greenfield. Step 5b bootstraps the runner and installs chromium with it, so refusing here
+    // would block a run that is about to be fixed.
+    skip('no-runner', `no Playwright resolves from ${APP_ROOT}; a greenfield run bootstraps it at Step 5b`);
+  } else {
+    const locations = dryRunLocations(cli);
+    if (!locations) {
+      // The checker broke, which says nothing about the browser. A false stop here is the one thing
+      // this phase must never be: the run continues and, if the browser really is absent, fails at
+      // the runner's exit 2 — which the Step-7 failure table now routes to this same fix.
+      skip('probe-failed', `${cli} did not report install locations; the run continues unchecked`);
+    } else {
+      // Playwright writes INSTALLATION_COMPLETE when a download finishes. Checking the directory
+      // instead is exactly what cannot see an interrupted download — the state an operator most
+      // needs told apart from an empty cache.
+      const state = ({ dir }) =>
+        !fs.existsSync(dir) ? 'missing' : fs.existsSync(path.join(dir, 'INSTALLATION_COMPLETE')) ? 'ok' : 'partial';
+      const browsers = locations.filter((l) => l.name !== 'ffmpeg');
+      const ffmpeg = locations.find((l) => l.name === 'ffmpeg');
+      const bad = browsers.filter((b) => state(b) !== 'ok');
+
+      // The bundled ffmpeg is Playwright's own, and a different binary from the system ffmpeg the
+      // PROBE_HOSTING probe checks. Reported either way, never part of the exit code.
+      summary.push(`FFMPEG=${ffmpeg ? (state(ffmpeg) === 'ok' ? 'ok' : 'missing') : 'unknown'}`);
+      if (ffmpeg && state(ffmpeg) !== 'ok') {
+        warn(
+          `preflight: WARN - Playwright's bundled ffmpeg is ${state(ffmpeg)} at ${ffmpeg.dir} - video ` +
+            'recording will not land, which costs the run its evidence, not its proof.\n',
+        );
+      }
+
+      if (bad.length) {
+        const partial = bad.some((b) => state(b) === 'partial');
+        warn(
+          `preflight: STOP - browser ${partial ? 'install incomplete' : 'not installed'}: ` +
+            `${bad.length} of ${browsers.length} chromium binaries unusable\n`,
+        );
+        for (const b of bad) warn(`preflight:   ${b.name} — ${state(b)} at ${b.dir}\n`);
+        warn(
+          `preflight:   Playwright's browsers are NOT installed by a package-manager install. Run:\n` +
+            `preflight:     ${installCommand()}\n` +
+            'preflight:   Only chromium was checked — it is what the recon probe and the proof run launch. ' +
+            'A project whose config runs firefox or webkit needs those installed too.\n',
+        );
+        summary.push(`BROWSER=${partial ? 'partial' : 'missing'}`);
+        summary.push(`BROWSER_MISSING=${bad.map((b) => b.name).join(',')}`);
+        summary.push(`BROWSER_PATH=${bad[0].dir}`);
+        finish(EXIT_BROWSER, 'browser');
+      }
+      warn(`preflight: browser ok - ${browsers.length} chromium binaries present\n`);
+      summary.push('BROWSER=ok');
+      summary.push(`BROWSER_PATH=${browsers[0].dir}`);
+    }
+  }
+}
+
 // --- the build-reuse check ------------------------------------------------------------------------
 // A build costs 104-201 seconds (measured). Paid once per proof it
 // IS the cost of the built proof target; paid once per batch it rounds to nothing — which is how the
@@ -356,7 +524,7 @@ function reuseDecision(fingerprint, command) {
   return { hit: true, reason: 'commit-and-tree-unchanged', stamp };
 }
 
-// --- phase 2: build ------------------------------------------------------------------------------
+// --- phase 3: build ------------------------------------------------------------------------------
 // Waited on AS a subprocess. A non-zero exit is reported as a build failure with the build's own
 // standard error attached, because "the server never became ready" sent an operator to the wrong
 // half of the system.
@@ -470,7 +638,7 @@ if (phases.includes('build')) {
   }
 }
 
-// --- phase 3: serve ------------------------------------------------------------------------------
+// --- phase 4: serve ------------------------------------------------------------------------------
 // Poll until the preview server RESPONDS, on a short budget. 502/503/504 and a refused connection
 // are "not up"; ANY other code — 2xx, 3xx, 401, 403, 404 — means "up and serving", so a 404 is a
 // PASS: we are probing liveness, not routing. Keep using curl rather than fetch(): fetch would need
