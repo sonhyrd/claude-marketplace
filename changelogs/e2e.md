@@ -7,9 +7,63 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 > it would break both `git subtree pull` and `git subtree push`.
 >
 > Unlike `plugins/mattpocock-skills/`, **this subtree is editable in place.** Author changes here,
-> then `git subtree push --prefix=plugins/e2e-skills e2e-fork main`.
+> then push back with a **targeted push** — build a commit on `e2e-fork/main` carrying only the
+> paths the fork owns and `git push e2e-fork <sha>:main`. Not `git subtree push`: it splits the
+> whole prefix and lands the two plugin manifests the fork deliberately does not ship. See
+> `CLAUDE.md` and `docs/adr/0005`.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased]
+
+### Changed
+
+- **Subtree synced to the fork's `bc38f0f`** — 132 commits since the last pull, taking
+  `pw-prove` from `0.1.0` to `0.24.0` and `e2e-reviewer` from `1.9.0` to `1.10.0`. The merge was
+  resolved to the documented invariant rather than hunk by hunk: the prefix is now the fork's tree
+  byte-for-byte plus the two marketplace-only plugin manifests, and `make check-e2e-subtree` agrees
+  (exactly 2 expected entries, no unexpected divergence). No skill in the bundle carries
+  `disable-model-invocation`, so the un-pinned state of `pw-prove` and `e2e-reviewer` survived the
+  merge — which is the specific thing a `git subtree pull` can silently revert.
+- **`pw-prove` gained coverage-gap mode, and the split with `e2e-reviewer` is now in both
+  descriptions.** With no change to prove, `pw-prove` maps a project's routes and pages against its
+  existing specs and plans the missing tests. `e2e-reviewer` correspondingly narrowed to the specs a
+  project *already has* — an untested-routes audit or coverage-gap report routes to `pw-prove`, a
+  weak-or-silently-passing-spec review to `e2e-reviewer`. Both descriptions previously claimed
+  "coverage gaps", so the request reached whichever skill the model happened to list first.
+- **A run now writes back what it learned.** `.pw-prove/profile.md` at the target repo root records
+  the repository facts an earlier run paid for (bring-up, auth, ports); Step 1 reads it, Step 4
+  reports it in one line — applied, nothing applicable, or CONTRADICTED, in which case the run
+  follows the observation and not the profile. It is staged by exact path (`git add -f`) because
+  `.pw-prove/` is otherwise excluded via `.git/info/exclude`, never the repo's committed
+  `.gitignore`.
+- **The proof run is concurrent, and split in two.** `--workers=1` is no longer forced; concurrency
+  is Playwright's to choose ([ADR 0017](../plugins/e2e-skills/docs/adr/0017-proof-run-is-concurrent.md)).
+  The run is now an **audit run** (no dwell paid, traces for the hermetic audit and the heal loop)
+  followed by a separate **filming run** whose webms are the only ones standing at publish time
+  ([ADR 0020](../plugins/e2e-skills/docs/adr/0020-audit-before-filming-rebuild-when-needed.md)).
+- **A heavy session is refused, not survived** — a new Step 1 context gate stops rather than
+  degrading through a run it cannot finish ([ADR 0019](../plugins/e2e-skills/docs/adr/0019-pw-prove-refuses-a-heavy-session.md)).
+  The heal loop likewise stops early when the failure stops changing, and PR-mode exits through a
+  declared **handover stop** instead of a silent give-up.
+- **`REQUIRED_ENV` is the one declaration form**; `ENV_CONTRACT` is gone. The AC table is also now
+  written for the reviewer rather than the diff's author.
+- **HAR is scrubbed at capture**, not before commit — the raw recording lands in a private staging
+  file and only the scrubbed result reaches the committed path.
+
+### Added
+
+- **An eval suite for `pw-prove`** — 55 cases under `skills/pw-prove/evals/` with a `REGISTRY.md`
+  that is closed over every case file on disk, plus `.skill-up.yaml`. Cases are graded on what a run
+  *did* where possible, not on what it said. Five new ADRs (0016–0020) and two measurement studies
+  (`docs/studies/`) arrive with them.
+
+### Fixed
+
+- **The spec-set pathspec returned nothing on a flat test dir.** `<testDir>/**/*.spec.*` is not glob
+  mode in git, so `**/` demanded a subdirectory most projects do not have — and an empty set filmed
+  an empty set without saying so. Measured against a real 7-spec PR: the old form returned 0, the
+  new one 7.
 
 ## [1.0.0] - Unreleased
 
