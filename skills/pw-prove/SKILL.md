@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.26.0"
+  version: "0.27.0"
 ---
 
 # pw-prove
@@ -414,6 +414,17 @@ the proof of the PR.
    curl -s "http://localhost:$PORT" | grep -o '/_nuxt/[^"]*' | head -3   # or /_next/, /@fs/, /assets/
    ```
    A foreign path → a sibling's server: start on a free port and set `PLAYWRIGHT_TEST_BASE_URL` to yours. `lsof`/`ps` are the **fallback only** — both are blind under sandboxing, so never conclude "free" or "mine" from either alone.
+
+   **Exception — a suite whose recordings pin an origin.** Playwright's HAR replay matches on exact request-URL string equality, so a recording whose entries carry a concrete `host:port` can only replay on *that* port. Allocating a free one makes every entry unmatchable, every read aborts under `notFound: 'abort'`, and the app dies on its loading splash — so the symptoms are missing elements and they point at your locators, not at the port. Before allocating, ask the recordings themselves:
+   ```bash
+   # Any committed HAR under the test dir whose entries name a concrete origin. Empty output → allocate freely.
+   for h in $(git ls-files '<testDir>/*.har'); do
+     node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).log.entries||[];
+       const u=[...new Set(e.map(x=>{try{const n=new URL(x.request.url);return n.host}catch{return ""}}).filter(Boolean))];
+       if(u.length) console.log(process.argv[1], u.join(","))' "$h"
+   done
+   ```
+   A named origin → that port is **not** a preference, it is part of the match key: serve on the recorded port and shift only on an actual `EADDRINUSE`. This is decided from the HAR's own entries rather than from a scrubber marker, because every recording committed before such a marker existed is pinned and carries none.
 2. **Validate configuration, check the browser, then build — one call, three phases that fail apart.** `<skill-base>` is the Skill tool's "Base directory":
    ```bash
    # Name the keys recon found the app fails fast on. Read its committed .env.example to find them,
@@ -767,6 +778,8 @@ Most recordings need nothing more: a credential that travelled only in headers a
 ```json
 { "__PWPROVE_SCRUBBED__": "<the token this run's session uses>" }
 ```
+
+**When the project owns rebinding, skip the `--origin` bind and say so.** Some repos ship their own replay helper that rebinds the recording to whatever origin the run is on (an `installApiHar()` over `routeFromHAR`, typically honouring `PW_PROVE_HAR` itself). You will have read it in Step 1. Where one is present, `har-scrub.mjs bind --origin` is duplicating work the app does at runtime — drop the `--origin` rebind and note it in the report. **Keep everything else**: if exit 4 names a placeholder sitting in the match key, that binding is still yours to do, and a repo-owned rebinder does not supply it. Dropping the whole block on the strength of a runtime helper is how a token in a query string turns back into an aborted read.
 
 Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
 
