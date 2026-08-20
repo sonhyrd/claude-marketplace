@@ -1213,7 +1213,7 @@
     },
     {
       "name": "matt",
-      "version": "1.2.3",
+      "version": "1.2.4",
       "source": "./plugins/mattpocock-skills",
       "description": "Matt Pocock's agent skills for real engineering — grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 25 skills upstream's plugin.json declares.",
       "author": {
@@ -1237,7 +1237,7 @@
       "name": "e2e",
       "version": "1.8.1",
       "source": "./plugins/e2e-skills",
-      "description": "End-to-end test agent skills, grafted from sonhyrd/e2e-skills as an editable git subtree. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. playwright-debugger: root-cause diagnosis of failed Playwright runs from reports, traces and screenshots. They are model-invocable so they can chain: pw-prove into e2e-reviewer at its quality gate, and a review skill into pw-prove, which confirms before a model-invoked run.",
+      "description": "End-to-end test agent skills, from sonhyrd/e2e-skills. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. playwright-debugger: root-cause diagnosis of failed Playwright runs from reports, traces and screenshots. All three are model-invocable and chain, and pw-prove confirms before a model-invoked run.",
       "author": {
         "name": "sonhyrd"
       },
@@ -1255,7 +1255,7 @@
     },
     {
       "name": "sss",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "source": "./plugins/sss",
       "description": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a schema with a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable — portless-owned ports and a Liveness Proof. skill-upper: author and run Agent Skill evals via the skill-up CLI. autoship, delegate-tickets and setup-cursor-worker drive autonomous Orca workers.",
       "author": {

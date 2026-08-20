@@ -1,6 +1,6 @@
 {
   "name": "matt",
-  "version": "1.2.3+codex.16578bb5e743",
+  "version": "1.2.4+codex.a9be98f02f0a",
   "description": "Matt Pocock's agent skills for real engineering \u2014 grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 25 skills upstream's plugin.json declares.",
   "author": {
     "name": "Matt Pocock"
