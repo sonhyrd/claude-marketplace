@@ -12,6 +12,41 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.8.1] - Unreleased
+
+### Fixed
+
+- **Subtree pulled from `e2e-fork/main`** (`618a6ef` → `e455514`, 4 commits — two fixes and their
+  merges), moving `pw-prove` 0.26.0 → **0.27.0** with `e2e-reviewer` at 1.10.0 and
+  `playwright-debugger` at 1.9.0 unchanged. A patch, because both changes are guards inside steps
+  that already existed — no step gains or loses a phase, and no skill description changed, so the
+  routing table is untouched.
+- **A recording that pins an origin makes the port part of the match key, not a preference.**
+  Step 1's port rule was unconditional: allocate a free port, a configured port is only a
+  preference. That is right for its stated hazard (a sibling worktree holding the port) and wrong
+  for a suite whose committed HAR entries carry a concrete `host:port`. Playwright's replay matches
+  on exact request-URL string equality, so an allocated port makes every entry unmatchable, every
+  read aborts under `notFound: 'abort'`, and the app dies on its loading splash — with symptoms
+  that read as broken locators rather than as a wrong port. Step 1 now asks the recordings
+  themselves (a loop over committed `.har` files under the test dir, reading each entry's host);
+  a named origin means serve on the recorded port and shift only on an actual `EADDRINUSE`. The
+  carve-out is decided from the HAR's own entries rather than from a scrubber marker, because every
+  recording committed before such a marker existed is pinned and carries none.
+- **Where the project owns rebinding, Step 7 drops the `--origin` bind and says so.** A repo that
+  ships its own replay helper (an `installApiHar()` over `routeFromHAR`) rebinds to the run's origin
+  at runtime, so `har-scrub.mjs bind --origin` duplicates it. The rest of the block **stays**: an
+  exit-4 placeholder sitting in the match key is still the run's to bind, and a runtime rebinder
+  does not supply it.
+- **Step 8 no longer pushes a shared worktree's branch blind.** The push assumed the run owns the
+  tree and the branch; a second agent session or the operator can commit to the branch mid-run, and
+  `git push` carries every unpushed commit rather than the run's own — publishing work-in-progress
+  to the remote, to CI, and onto a PR under review. The push now reads `@{upstream}..HEAD` first
+  (`<base>..HEAD` with no upstream) and checks each commit against the two this run makes; a
+  foreign commit is a blocking no-skip-form stop that names it and hands over the exact `git push`
+  command. A `HEAD` that moved under the run is reported as an observation with `git reflog -5`
+  named as the check, rather than reasoned about as lost work — a run that concludes its work was
+  destroyed and re-does it makes things worse.
+
 ## [1.8.0] - Unreleased
 
 ### Fixed
