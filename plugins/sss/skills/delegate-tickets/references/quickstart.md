@@ -18,7 +18,7 @@ It never re-derives dependencies. The blocking edges [to-tickets](https://aihero
 
 ## When to reach for it
 
-You invoke this by typing `/delegate-tickets <feature-slug>` — the agent won't reach for it on its own, because it dispatches many agents and spends accordingly.
+Type `/delegate-tickets <feature-slug>`, or let a coordinator skill hand off to it. Because it dispatches many agents and spends accordingly, a run the user did not ask for by name stops and confirms first.
 
 Reach for it when a ticket tree exists and you'd rather the tree were worked in parallel than one `/implement` at a time. For a single ticket, or when you want to watch each slice land yourself, use [implement](https://aihero.dev/skills-implement) directly.
 
