@@ -16,21 +16,30 @@ These live as skills so they load only when you're doing the task:
   lines with `<skill-name> skill:`. See the `release-version-bump` skill for which changelog to touch.
 - Keep vendored/ported plugin code **verbatim** from upstream — do not reformat it. The lint targets
   deliberately exclude `plugins/*/scripts/`.
-- `plugins/mattpocock-skills/` is a **git subtree** of [mattpocock/skills](https://github.com/mattpocock/skills),
-  not hand-maintained code, and it is published as the plugin **`matt`** (so skills invoke as
-  `/matt:<skill>`). Never edit anything in it beyond the two known deviations: `plugin.json`'s
-  `"name"` is `matt`, not `mattpocock-skills`, and `.codex-plugin/plugin.json` is generated. Every
-  other byte matches upstream. Sync with
-  `git subtree pull --prefix=plugins/mattpocock-skills mattpocock main`, then mirror upstream's new
-  version number into `.claude-plugin/marketplace.json`. It keeps upstream's category-nested
-  `skills/<category>/<name>/` layout — do not flatten it, or subtree pulls will recreate the nested
-  paths alongside the flattened copies. Locally-authored skills built on top of it live in
-  `plugins/sss/`, never here. The directory keeps its `mattpocock-skills` name because it is the
-  subtree prefix; do not rename it to match the plugin. Note that despite the name, it has never
-  been a real `git subtree` graft — commit `9a7aa85` has a single parent and the repo holds no
-  `git-subtree-dir` metadata for it. It is a plain copy with a `mattpocock` remote configured so
-  `git subtree pull` can be used later, and it has never been pushed. Do not cite it as precedent
-  for how `git subtree push` behaves.
+- `plugins/mattpocock-skills/` is a **git subtree** of
+  [mattpocock/skills](https://github.com/mattpocock/skills), not hand-maintained code, and it is
+  published as the plugin **`matt`** (so skills invoke as `/matt:<skill>`). Never edit anything in
+  it beyond the two known deviations: `plugin.json`'s `"name"` is `matt`, not `mattpocock-skills`,
+  and `.codex-plugin/plugin.json` is generated. Every other byte matches upstream. Sync with `git
+  subtree pull --prefix=plugins/mattpocock-skills mattpocock main`, then mirror upstream's new
+  version number into `.claude-plugin/marketplace.json` — **unless upstream's number did not move**,
+  which happens whenever the pull crosses commits upstream is still holding as unreleased
+  changesets. Mirroring an unchanged number ships changed content under a version a plugin cache is
+  keyed on, and such a cache never re-fetches. In that case bump the patch digit locally instead and
+  say so in `changelogs/matt.md`; `1.2.4` against upstream's `1.2.3` is the first of these. The
+  `mattpocock` remote is not always configured in a fresh clone — `git remote add mattpocock
+  https://github.com/mattpocock/skills.git` if `git remote -v` does not list it. Give the merge
+  commit the `git-subtree-dir` / `git-subtree-mainline` / `git-subtree-split` trailers, and never
+  pass a plain `-m` that drops them: without a recorded split the next pull diffs against the last
+  commit that had one and replays every intervening upstream rewrite as a conflict. It keeps
+  upstream's category-nested `skills/<category>/<name>/` layout — do not flatten it, or subtree
+  pulls will recreate the nested paths alongside the flattened copies. Locally-authored skills built
+  on top of it live in `plugins/sss/`, never here. The directory keeps its `mattpocock-skills` name
+  because it is the subtree prefix; do not rename it to match the plugin. Note that the graft itself
+  was never a real `git subtree` one — commit `9a7aa85` has a single parent — and it has never been
+  pushed, so do not cite it as precedent for how `git subtree push` behaves. Inbound is a different
+  story: `d46eb83` and the `0ab1b63` sync both carry `git-subtree-dir` metadata, so `git subtree
+  pull` works and is the only supported way in.
 - `plugins/e2e-skills/` is a real, **editable, bidirectional** git subtree of
   [sonhyrd/e2e-skills](https://github.com/sonhyrd/e2e-skills), published as the plugin **`e2e`** (so
   skills invoke as `/e2e:pw-prove`). **The verbatim rule above does not apply here** — this is the

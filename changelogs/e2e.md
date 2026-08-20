@@ -16,6 +16,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The marketplace entry's description was 59 characters over the schema cap**, and had been since
+  this version landed, so `make validate` and `make validate-strict` were red on `main` for every
+  change that followed — the one gate `CLAUDE.md` requires before a commit. `maxLength` is 500 and
+  the description was 559; it is now 446. Two clauses went: the subtree provenance, which belongs in
+  `CLAUDE.md` and not in a discovery surface, and the enumeration of which skill chains into which,
+  kept only as *all three are model-invocable and chain*. The three per-skill trigger sentences —
+  the part a host actually routes on — are untouched. No plugin version bump: the description lives
+  in `.claude-plugin/marketplace.json`, which is read live, not in the versioned plugin directory.
 - **Subtree pulled from `e2e-fork/main`** (`618a6ef` → `e455514`, 4 commits — two fixes and their
   merges), moving `pw-prove` 0.26.0 → **0.27.0** with `e2e-reviewer` at 1.10.0 and
   `playwright-debugger` at 1.9.0 unchanged. A patch, because both changes are guards inside steps

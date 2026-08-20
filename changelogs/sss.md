@@ -4,7 +4,7 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [1.5.0] - Unreleased
 
 ### Added
 
@@ -118,6 +118,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Removed
 
 - `delegate-tickets` skill: `PROFILES.md` deleted, with no central fallback — a two-tier lookup would make "which of these two is stale?" a permanent question. New: `references/profile-template.md` (the field schema an interview fills), and `references/unmigrated-profiles.md`, a temporary archive holding verbatim the profiles for repos not checked out at migration time. The skill does not read the archive; each entry is to be moved into its repo and deleted
+
+### Notes
+
+- **The version is the point of this entry.** Everything above landed on `main` under an unchanged `1.4.0`, which is invisible to any host that caches a plugin by version — the installed copy stayed pinned at the commit that last moved the number and never saw `hotfix-draft-release`, the `delegate-tickets` restructure, or the `pr-review` steps. A minor rather than a patch because `hotfix-draft-release` is a new skill in a `"skills": ["./skills"]` directory, so it appears in the roster the moment the version invalidates the cache. `1.4.0` itself was bumped in `79b2d84` with no changelog section of its own; nothing above belongs to it — the section was empty at that commit and every line here was written after it.
 
 ## [1.3.0] - 2026-08-02
 
