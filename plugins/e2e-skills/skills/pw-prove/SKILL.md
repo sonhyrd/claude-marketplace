@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.26.0"
+  version: "0.27.0"
 ---
 
 # pw-prove
@@ -414,6 +414,17 @@ the proof of the PR.
    curl -s "http://localhost:$PORT" | grep -o '/_nuxt/[^"]*' | head -3   # or /_next/, /@fs/, /assets/
    ```
    A foreign path → a sibling's server: start on a free port and set `PLAYWRIGHT_TEST_BASE_URL` to yours. `lsof`/`ps` are the **fallback only** — both are blind under sandboxing, so never conclude "free" or "mine" from either alone.
+
+   **Exception — a suite whose recordings pin an origin.** Playwright's HAR replay matches on exact request-URL string equality, so a recording whose entries carry a concrete `host:port` can only replay on *that* port. Allocating a free one makes every entry unmatchable, every read aborts under `notFound: 'abort'`, and the app dies on its loading splash — so the symptoms are missing elements and they point at your locators, not at the port. Before allocating, ask the recordings themselves:
+   ```bash
+   # Any committed HAR under the test dir whose entries name a concrete origin. Empty output → allocate freely.
+   for h in $(git ls-files '<testDir>/*.har'); do
+     node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).log.entries||[];
+       const u=[...new Set(e.map(x=>{try{const n=new URL(x.request.url);return n.host}catch{return ""}}).filter(Boolean))];
+       if(u.length) console.log(process.argv[1], u.join(","))' "$h"
+   done
+   ```
+   A named origin → that port is **not** a preference, it is part of the match key: serve on the recorded port and shift only on an actual `EADDRINUSE`. This is decided from the HAR's own entries rather than from a scrubber marker, because every recording committed before such a marker existed is pinned and carries none.
 2. **Validate configuration, check the browser, then build — one call, three phases that fail apart.** `<skill-base>` is the Skill tool's "Base directory":
    ```bash
    # Name the keys recon found the app fails fast on. Read its committed .env.example to find them,
@@ -767,6 +778,8 @@ Most recordings need nothing more: a credential that travelled only in headers a
 ```json
 { "__PWPROVE_SCRUBBED__": "<the token this run's session uses>" }
 ```
+
+**When the project owns rebinding, skip the `--origin` bind and say so.** Some repos ship their own replay helper that rebinds the recording to whatever origin the run is on (an `installApiHar()` over `routeFromHAR`, typically honouring `PW_PROVE_HAR` itself). You will have read it in Step 1. Where one is present, `har-scrub.mjs bind --origin` is duplicating work the app does at runtime — drop the `--origin` rebind and note it in the report. **Keep everything else**: if exit 4 names a placeholder sitting in the match key, that binding is still yours to do, and a repo-owned rebinder does not supply it. Dropping the whole block on the strength of a runtime helper is how a token in a query string turns back into an aborted read.
 
 Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
 
@@ -1158,6 +1171,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it, plus `.pw-prove/profile.md`.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
 4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<share links + AC table + mutation verdict>"`. **ONE comment carries every recording's `/share/<id>` link, listed above the table in AC order**, and those are the only clips URLs in it. Each AC row names its recording and chapter timestamp as plain text (`clip 2 · 1:47`), which is navigation inside a link already listed; keep every `/embed/<id>?t=` URL out of the comment. GitHub unfurls a clips `/embed/` URL into a video player, and in a table cell that player inflates every row into a tall black block that overflows the column and buries the AC text. The per-chapter deep links still belong in the **completion report**, where the operator reads them as text. **Copy the per-chapter deep links from the publish log's stderr — never build one by appending `?t=` to the share URL.** They are `/embed/<id>?t=<seconds>`, a different route from `/share/<id>`, because on the share route `t` is the agent-access token and a timestamp appended there is silently discarded: the reviewer lands at 0:00 and reads the wrong footage as the criterion.
+   - **Before pushing, read what the push will carry.** A worktree is not exclusively this run's: a second agent session, or the operator, can commit to the branch while a proof run is in progress, and `git push` carries every unpushed commit rather than the run's own. So run `git log --oneline @{upstream}..HEAD` first — `git log --oneline <base>..HEAD` on a branch with no upstream — and check each line against the commits this run made: the Step-3 base-merge commit and the commit above. If those are the only ones, push. If the list carries a commit this run did not make, **do not push**; this is the no-skip-form stop below — name each foreign commit by subject and author, and hand the operator the exact `git push` command to run themselves. Publishing a concurrent session's work-in-progress to a shared remote, to CI, and onto a PR somebody is reviewing is not something a proof run can do blind. Where `HEAD` moved under the run, report it as an observation and name `git reflog -5` as the check: a tree that lost modifications between two of the run's own snapshots reads exactly like destroyed work and is not, and a run that concludes its work was destroyed and re-does it makes things worse.
    - **Supersede the earlier proof page.** An incrementally proven PR accumulates a proof comment per run, each a partial film of the same PR, and a reviewer scrolling the thread meets the oldest one first. Supersession is per **comment**, so it retires all of that comment's links at once: this comment opens with `Supersedes <the previous pw-prove comment's URL>`, and the previous comment is edited in place to carry `**Superseded by <this comment's URL>**` at its top: `gh api --method PATCH /repos/{owner}/{repo}/issues/comments/<id> -f body=<the amended body>`. Edit only comments this skill authored; a link nobody marked stale is reviewed as though it were current.
    - **No PR exists** (prose/branch run): push, `gh pr create` with the AC table as body, comment there.
    - **Merged-PR retarget** (Step 2): fresh test-only branch off the default, push, `gh pr create`, comment there.
