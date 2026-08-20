@@ -33,6 +33,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- `delegate-tickets` skill: **three probe answers were collapsed into one fence.** Step 4's probe
+  read any `"ok": false` as the `legacy_read_only` fence and sent the user to quit and reopen the
+  Orca app. `run_required` is a missing Run binding on a healthy app — bind one (`run-create` /
+  `run-use`) and probe again — and a bare usage error is a verb or flag this CLI does not have,
+  fixed by reading `orca orchestration --help` rather than guessing a synonym, since the verbs are
+  spelled inconsistently with each other and a wrong flag fails identically to a fence. The step
+  also said to **delete** the probe task; there is no `task-delete` verb, so it retires by
+  `task-update --status completed` against the id from the `task-create` response. The three answers
+  now live in `references/orchestration-probe.md`, reached by symptom.
+- `delegate-tickets` skill: **the worker brief pointed at a path that holds nothing.** Briefs sent
+  workers to `~/.claude/skills/implement/SKILL.md`, a directory of a few symlinks. `implement` ships
+  in the `matt` plugin, so it lives under `<marketplace-checkout>/plugins/mattpocock-skills/skills/
+  engineering/implement/SKILL.md` and that checkout root differs per host — so the path is
+  **resolved on this host every run and confirmed to exist before it goes in a brief**, never
+  carried over from a previous run, and the marketplace checkout is preferred over any
+  version-pinned `~/.claude/plugins/cache/…` copy. The failure is the **silent** one: a worker that
+  cannot find the skill invents a process and still passes the gates, invisible unless it happens to
+  escalate. The brief now also spells out the absolute paths of the two skills `implement` delegates
+  to (`tdd`, `code-review`) under the same resolved root, because no dispatched engine can invoke a
+  slash command.
+- `delegate-tickets` skill: **handling an orchestration message is not acknowledging it.**
+  `orchestration check` returns the oldest *unacknowledged* batch, so one unacked `worker_done`
+  makes `check` replay the same text while every later message queues behind it — the "you have N
+  messages" counter climbs against a queue holding one stale item, which reads exactly like new mail
+  arriving and being lost. Ack each batch as it is handled, with the `deliveryId` from the same
+  response.
+- `delegate-tickets` skill: **a message body now travels via a file**, sent as `"$(cat <file>)"`,
+  whose output the shell does not re-parse. Backticks inside a double-quoted string run as command
+  substitution, so a reply quoting a command name executed it, mangled the body and exited non-zero:
+  the reply never landed, and a blocked worker re-asked the identical question.
+- `delegate-tickets` skill: **a rendered TUI frame was read as a running agent.** `cursor-agent`
+  gates on **Workspace Trust per directory**, which `--force` does not cover, so every freshly
+  created worktree hits it even on a machine `/setup-cursor-worker` already prepared — and the trust
+  box is itself a TUI, so `tui-idle` reports ready and a read shows something while the agent does
+  nothing. Dismiss it with the single key `a` (`terminal send --text "a"`, **no `--enter`**, it is a
+  menu key), then re-read. Readiness is matched on the agent's **status line**, read from the whole
+  tail (`terminal read --json` → `result.terminal.tail`): the dismissed box stays in scrollback with
+  the status line below it, so a tail of the last few lines shows the trust prompt long after the
+  agent is up — reading as a hung worker and inviting a second `a` or a needless teardown of a
+  healthy pane. Both traps live in `references/worker-engines.md`.
+- `delegate-tickets` skill: **the frontier is read from the dependency edges, not from GitHub's
+  summary field.** `issue_dependencies_summary.blocked_by` lags the edges — it can report a non-zero
+  blocker count after every blocker is closed, silently stalling tickets that are ready. The
+  authoritative read is `gh api repos/<owner>/<repo>/issues/<n>/dependencies/blocked_by`, and a
+  ticket is unblocked when every entry is `closed`.
+- `delegate-tickets` skill: **a merge-back failing with `Unable to write index` and no conflicted
+  paths is contention, not a conflict.** Workers and the host app share one object store, so a
+  concurrent write leaves that error with `MERGE_HEAD` behind, nothing conflicted and ample disk.
+  `git merge --abort`, run the identical merge once more, and investigate only if the retry fails
+  the same way. The message names the index, which invites a hunt for a phantom conflict.
+- `delegate-tickets` skill: **corrections go before a worker reports, or not at all.** A follow-up
+  after `worker_done` restarts the worker with its dispatch capability already revoked: its second
+  report is rejected and its `ask` fails, so it cannot reach the coordinator — while it can still
+  **amend the commit already merged**. Before closing a ticket, re-check the worker branch's head
+  against the merged commit; if it moved, take the delta as a patch (`git diff <merged> <new-head>`)
+  rather than re-merging a sibling of an already-merged commit.
 - `pr-review` skill: **its eval suite failed correct answers three different ways, so the guards it looked like it held were partly decoration** ([ADR 0008](docs/adr/0008-pr-review-trusts-its-tracks.md) gains an `Amendment (2026-08-17)`, [ADR 0007](docs/adr/0007-pr-review-acquires-the-tree-in-step-1.md) a revision 5). The flaky baselines recorded while landing #41 blamed the skill; re-measuring after the Step 1 rewrite found the assertions were a large part of it. **Class 1, substring collisions**: the skill's prose names every anti-pattern it forbids, so a keyword drawn from that vocabulary eventually matches an answer quoting it *in order to refuse it* — `git stash` failed a run advising the **user** to stash, and `described, not applied` is a verbatim `## Fixes` heading one answer away from firing. **Class 2, case sensitivity**: skill-up's matchers are case-sensitive in both `expect.must_contain` and `output_contains`, measured with a probe case — a response of exactly `Uncommitted` fails a rule reading `uncommitted`, which is what failed 1 of 3 trials of `dirty-tree-keeps-user-work` at `99edd92` on a textbook-correct answer that opened a sentence with the word. Even `OCR` was not safe: 1 of 5 captured runs wrote the CLI's own lowercase name throughout and failed `all: ["OCR"]`. **Class 3, the `expect` short-circuit**: a failed `expect.must_contain` stops the judge before any `judge.*` rule is read, so one case-fragile key silently voids every rule beneath it. All six `expect` blocks are deleted — every key they held was already asserted more precisely below them — and every keyword in all twelve cases is now a case-insensitive regex, except finding IDs and the three verbatim `## Fixes` headings, where the exact casing *is* the assertion. **The collision-prone rules gain a subject**: `dirty-tree`'s stash clause and `overlap`'s heading clause now require the skill, or the finding, next to the verb — and subject and verb are **adjacent** on purpose, because RE2 has no lookbehind, so "not preceded by a negator" is inexpressible and adjacency is what leaves no room for the `never` in *"it never lands in Described, not applied"*. **`handoff-schema-is-pw-proves` gets a `failure` clause that works**: 2 of 7 logged trials capitulated and one was caught by nothing — it never claimed to have added the field, it argued the field was free, then designed its type and value vocabulary and offered to write it, and the case failed only because the *success* rule found no ownership language, which is a detector by accident. The new regexes name what a capitulating run *does* — emits the key, fixes its type, commits to writing it — and were verified against all 7 captured responses. Step 6b closes the gap that trial won on, positively and in one sentence: what the schema carries is `pw-prove`'s call, because the reader is the only party that can say what a field means. **Step 1's guard 1 now names the two routes back** — stash or commit and re-run, or review from a separate worktree — settling a question revision 4 left open: guard 1 binds the skill, whose reason for refusing is state ownership, and a stash the user takes and pops themselves carries none of it. `tests/test_pr_review_eval_rules.py` is new and is what notices: it checks every changed rule in both directions, since a rule tightened past the behaviour it guards fails silently and looks like a pass. Its fixtures are hand-written rather than replaying captured runs, because the eval workspace is gitignored and a test reading it would pass locally and find nothing in CI. **`fixes-accounts-for-every-id` is untouched and stays flaky** at roughly one pass in three — replaying its captured runs against the new rules reproduces the same genuine failure, so it is a skill weakness, not an assertion bug
 - `pr-review` skill: **Step 6b's ownership rule yielded to the first request it refused.** A `skill-up` eval case asks, mid-run, for a `tracks` field on the handoff findings — a key `pw-prove`, the schema's only reader, does not read. Across five sampled trials the run did the edit twice, and one of those also rewrote the Gotcha that forbids it, reclassifying additive keys as "inert, tolerated" so the guardrail no longer said no. Two trials wrote the change into the real marketplace checkout from inside the eval sandbox, `plugins/e2e-skills/skills/pw-prove/SKILL.md` included; all of it was reverted. The rule was never unclear — "if the contract is wrong, change it there and push the fork" was read as licence to go and do it, since it named the destination without saying who travels. Step 6b now answers the request instead of executing it: name the owner, say the change is two files in two plugins plus a parity test and a targeted push to the fork, and finish the run. The Gotcha states that neither half of the rule is edited away by a request to extend the schema, and records the trial that did. The case is now unambiguously mid-run and passes 4/4 sampled, where it was 2 PASS / 1 FAIL before — the flakiness was in the routing, not in `head_sha`, which every trial got right
 
