@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.27.0"
+  version: "0.27.1"
 ---
 
 # pw-prove
@@ -1170,8 +1170,8 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
    - **Append what proving taught to `.pw-prove/profile.md`** — gated routes, the HAR's scope, a carve-out this repo forces — under the admission test in [Step 1](#the-run-writes-the-profile-back), then stage it by exact path: `git add -f .pw-prove/profile.md`. The forced add is load-bearing: `.pw-prove/` is excluded, an exclude hides untracked files, and without `-f` a first-ever profile is committed by nothing and silently lost.
    - What remains staged is exactly the spec + POM + scrubbed `api.har` (+ shared helper if written), in the conventional test dir — never shadowing a route dir — plus `playwright.proof.config.ts` on the run that created it, plus `.pw-prove/profile.md`.
 3. **Commit** to the PR branch: `test(e2e): prove PR #<N> — <short scenario list>`. The Step 3 base-merge commit rides along.
+   - **A `HEAD` that moved under the run is an observation, not a loss.** A worktree is not exclusively this run's: a second agent session, or the operator, can commit to the branch while a proof run is in progress. Report the movement and name `git reflog -5` as the check — a tree that lost modifications between two of the run's own snapshots reads exactly like destroyed work and is not, and a run that concludes its work was destroyed and re-does it makes things worse.
 4. **Push**, then **post the proof on the PR**: `gh pr comment <N> --body "<share links + AC table + mutation verdict>"`. **ONE comment carries every recording's `/share/<id>` link, listed above the table in AC order**, and those are the only clips URLs in it. Each AC row names its recording and chapter timestamp as plain text (`clip 2 · 1:47`), which is navigation inside a link already listed; keep every `/embed/<id>?t=` URL out of the comment. GitHub unfurls a clips `/embed/` URL into a video player, and in a table cell that player inflates every row into a tall black block that overflows the column and buries the AC text. The per-chapter deep links still belong in the **completion report**, where the operator reads them as text. **Copy the per-chapter deep links from the publish log's stderr — never build one by appending `?t=` to the share URL.** They are `/embed/<id>?t=<seconds>`, a different route from `/share/<id>`, because on the share route `t` is the agent-access token and a timestamp appended there is silently discarded: the reviewer lands at 0:00 and reads the wrong footage as the criterion.
-   - **Before pushing, read what the push will carry.** A worktree is not exclusively this run's: a second agent session, or the operator, can commit to the branch while a proof run is in progress, and `git push` carries every unpushed commit rather than the run's own. So run `git log --oneline @{upstream}..HEAD` first — `git log --oneline <base>..HEAD` on a branch with no upstream — and check each line against the commits this run made: the Step-3 base-merge commit and the commit above. If those are the only ones, push. If the list carries a commit this run did not make, **do not push**; this is the no-skip-form stop below — name each foreign commit by subject and author, and hand the operator the exact `git push` command to run themselves. Publishing a concurrent session's work-in-progress to a shared remote, to CI, and onto a PR somebody is reviewing is not something a proof run can do blind. Where `HEAD` moved under the run, report it as an observation and name `git reflog -5` as the check: a tree that lost modifications between two of the run's own snapshots reads exactly like destroyed work and is not, and a run that concludes its work was destroyed and re-does it makes things worse.
    - **Supersede the earlier proof page.** An incrementally proven PR accumulates a proof comment per run, each a partial film of the same PR, and a reviewer scrolling the thread meets the oldest one first. Supersession is per **comment**, so it retires all of that comment's links at once: this comment opens with `Supersedes <the previous pw-prove comment's URL>`, and the previous comment is edited in place to carry `**Superseded by <this comment's URL>**` at its top: `gh api --method PATCH /repos/{owner}/{repo}/issues/comments/<id> -f body=<the amended body>`. Edit only comments this skill authored; a link nobody marked stale is reviewed as though it were current.
    - **No PR exists** (prose/branch run): push, `gh pr create` with the AC table as body, comment there.
    - **Merged-PR retarget** (Step 2): fresh test-only branch off the default, push, `gh pr create`, comment there.
@@ -1199,7 +1199,7 @@ Proof page: https://clips.paulsjob.ai/share/<id> (clip 1 of N, M chapters[, K om
 Proof page: https://clips.paulsjob.ai/share/<id2> (clip 2 of N, M chapters)   # one line per recording; omit when the table fits one
 - <AC7> -> https://clips.paulsjob.ai/embed/<id2>?t=<seconds>
 Committed: <short-sha> on <branch>
-Pushed: <remote>/<branch>
+Pushed: <remote>/<branch> — <N> commits: <subject>, <subject>
 PR comment: <url>
 ```
 
