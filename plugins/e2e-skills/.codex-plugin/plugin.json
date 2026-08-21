@@ -1,6 +1,6 @@
 {
   "name": "e2e",
-  "version": "1.8.1+codex.690087614e5b",
+  "version": "1.8.2+codex.5782b8a82354",
   "description": "End-to-end test agent skills, from sonhyrd/e2e-skills. pw-prove: prove a PR/branch/ticket/diff with a Playwright E2E test, fast. e2e-reviewer: static review of Playwright/Cypress specs and Page Objects, catching tests that pass CI but prove nothing. playwright-debugger: root-cause diagnosis of failed Playwright runs from reports, traces and screenshots. All three are model-invocable and chain, and pw-prove confirms before a model-invoked run.",
   "author": {
     "name": "sonhyrd"

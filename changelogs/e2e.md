@@ -12,6 +12,12 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.8.2] - Unreleased
+
+### Fixed
+
+- **The subtree is pulled up to `e2e-fork/main` (`e455514` → `b659f9f`, 2 commits — one fix and its merge), moving `pw-prove` 0.27.0 → 0.27.1** with `e2e-reviewer` at 1.10.0 and `playwright-debugger` at 1.9.0 unchanged. A patch: it repairs a guard 1.8.1 shipped rather than changing what a run proves. **Step 8's pre-push guard stopped on the operator's own commits.** 1.8.1 taught the push to read `@{upstream}..HEAD` before publishing, and to refuse when the list carries a commit the run did not make — right, and it folded a second case into the same paragraph: a `HEAD` that moved under the run. Those are not the same event. A moved `HEAD` is an *observation* (a tree that lost modifications between two of the run's own snapshots reads exactly like destroyed work and is not, so the answer is `git reflog -5`, not a stop), while a foreign commit is a refusal. Read as one rule, the guard stopped a run on the operator committing to their own branch mid-proof — the very thing a proof run is expected to tolerate. The two now sit as separate bullets, the observation first, so the refusal keeps its narrow trigger. The completion report's `Pushed:` line gains the commit count and subjects, which is what makes the guard's decision legible after the fact. **No description changed on any of the three skills**, so the routing table is untouched. The pull merged the fork's history (not `--squash`), so the plugin manifests survived; the single conflict — `pw-prove/SKILL.md` — came from the stale merge base rather than a local edit, and both sides were verified byte-identical to the fork before and after resolving. `make check-e2e-subtree` is green at exactly the expected 2 entries after. The Codex manifest was regenerated with `scripts/sync_codex_plugins.py`.
+
 ## [1.8.1] - Unreleased
 
 ### Fixed
