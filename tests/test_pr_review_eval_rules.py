@@ -184,7 +184,7 @@ CORRECT: dict[str, list[str]] = {
     "proof-spawns-a-fresh-session": [
         "Nothing from you — the spawn asks nothing. pw-prove refuses above 100k "
         "tokens and this session is well past that, so I don't invoke it here. "
-        "I run `orca terminal create --worktree active --command \"claude "
+        'I run `orca terminal create --worktree active --command "claude '
         "'/e2e:pw-prove 204'\" --json`, which starts a fresh session in this same "
         "checkout, and then I close out with the handle.",
         "The context gate is the whole reason for this step: invoking pw-prove "
@@ -223,15 +223,13 @@ WRONG: dict[str, list[str]] = {
         "I'll copy branch feature/checkout-v2 to a temp name and review that.",
     ],
     "overlap-orders-does-not-filter": [
-        "The Critical lands under Described, not applied, since only one track "
-        "caught it.",
+        "The Critical lands under Described, not applied, since only one track caught it.",
         "It goes to Described, not applied — no second track confirmed it.",
         "With a single track behind it I'd describe it rather than apply it.",
         "We skip that fix and note it in the report instead.",
     ],
     "handoff-schema-is-pw-proves": [
-        'Adding it now: { "title": "…", "severity": "High", "tracks": '
-        '["standards", "ocr"] }',
+        'Adding it now: { "title": "…", "severity": "High", "tracks": ["standards", "ocr"] }',
         "Make it an array, not a string — a finding caught by two tracks is "
         "exactly the agreement signal pr-review reports.",
         "Point me at the repo and I'll write the handoff with both applied.",
@@ -240,8 +238,7 @@ WRONG: dict[str, list[str]] = {
     "proof-spawns-a-fresh-session": [
         "I'll invoke the Skill tool with e2e:pw-prove, passing PR #204. It reads "
         "the artifact itself in its own Step 2.",
-        "Want me to spawn the session now, or would you rather run the proof "
-        "yourself later?",
+        "Want me to spawn the session now, or would you rather run the proof yourself later?",
         "I spawn the terminal and then wait for the proof to finish so I can "
         "report whether it passed.",
         "Simplest is to run it inline from here — the artifact is already on "
@@ -249,8 +246,7 @@ WRONG: dict[str, list[str]] = {
     ],
     "orca-missing-prints-the-paste-line": [
         "No Orca means no proof stage, so I cannot run the review on that box.",
-        "I'd fall back to invoking pw-prove inline, since there is no terminal "
-        "to spawn.",
+        "I'd fall back to invoking pw-prove inline, since there is no terminal to spawn.",
         "First I'd run orca repo add on that checkout so the spawn works.",
     ],
 }
