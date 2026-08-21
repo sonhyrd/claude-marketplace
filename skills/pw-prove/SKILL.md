@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.27.1"
+  version: "0.28.0"
 ---
 
 # pw-prove
@@ -458,7 +458,7 @@ the proof of the PR.
    # then take the origin that ANSWERED out of the summary and use THAT from here on:
    BASE_URL=$(<the summary's BASE_URL= line>)
    ```
-   The serve phase polls on a **short** budget (20s default), because a preview server binds in under a second and answers its first page in milliseconds; one that is not answering quickly is broken, not slow. On success, **`BASE_URL=` in the summary is the origin that actually answered** — with `PORT_SOURCE` (`announced`/`requested`), `PORT_SHIFTED`, and `ADDRESS_FAMILY` (`ipv4`/`ipv6`/`localhost`) saying how it was learned. When it differs from what you asked for, that origin is the one to carry **everywhere** from here on — the probe, the config the runner reads, the HAR binding, and every runner invocation. Each is a fresh environment; fixing it in one is not fixing it.
+   The serve phase polls on a **short** budget (20s default), because a preview server binds in under a second and answers its first page in milliseconds; one that is not answering quickly is broken, not slow. On success, **`BASE_URL=` in the summary is the origin that actually answered** — with `PORT_SOURCE` (`announced`/`requested`), `PORT_SHIFTED`, and `ADDRESS_FAMILY` (`ipv4`/`ipv6`/`localhost`) saying how it was learned. A server announcing a **wildcard** bind (`[::]`, `0.0.0.0`) names no loopback form, so the phase keeps the one you asked for and there is nothing to re-spell. When it differs from what you asked for, that origin is the one to carry **everywhere** from here on — the probe, the config the runner reads, the HAR binding, and every runner invocation. Each is a fresh environment; fixing it in one is not fixing it.
 
    **Restarting one? Say so — an answer on the port is not evidence a restart happened.** Whenever you poll a server you have just *restarted* (Step 7 restarts it twice), take the log's size first and pass both:
    ```bash
