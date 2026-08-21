@@ -161,13 +161,29 @@ skill does not sync, and would only apply inside Claude Code rather than to any 
    DRY_RUN=1 "$SKILL_DIR/scripts/apply-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
    ```
    Show the user what is missing, confirm, then run it without `DRY_RUN`. Lines starting `=`
-   are already present and will be skipped; `+` is a change; `!` is a directory-sourced
-   marketplace whose path could not be resolved, and the epilogue prints the one command that
-   finishes those:
+   are already present and will be skipped; `+` is a change; `!` is either a directory-sourced
+   marketplace whose path could not be resolved, or an item that failed. **A failure no longer
+   aborts the run** — the roster finishes, the epilogue lists what failed, and the script exits
+   non-zero. Read the exit code, not the absence of a crash; an aborted run used to skip every
+   plugin after the failing one silently. For an unresolved path the epilogue prints the one
+   command that finishes those:
    ```bash
    SSS_MARKETPLACE_PATH=/path/to/claude-marketplace \
      "$SKILL_DIR/scripts/apply-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
    ```
+   **A plugin that fails to clone means this host has no usable SSH to GitHub.** It hits only
+   plugins whose marketplace entry declares their own `github` source — those are fetched by a
+   *second* clone, separate from the marketplace's, while a `"source": "./"` plugin is served
+   from the marketplace clone that already succeeded. So one plugin fails while every plugin
+   around it installs, which reads as a broken plugin rather than a broken host. The remedy is
+   `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`, which makes the CLI skip its SSH probe and clone over
+   HTTPS; the epilogue prints it. It is **machine-local** — it states that *this* host has no
+   usable SSH, which is a fact about the host exactly as `CLAUDE_HOST_LABEL` is — so it goes in
+   that machine's `settings.json` `env` and never in the baseline, where it would force HTTPS
+   onto machines whose SSH keys work fine. There is deliberately no preflight for this:
+   `command -v ssh` passes on a box that has `ssh` but no key accepted by GitHub, and a check
+   that cannot detect the condition is worse than reporting it after the fact.
+
    Apply also installs Node dependencies for any newly installed skill that ships a
    `package.json` with no `node_modules` — `web-search` vendors upstream's manifest without a
    lockfile, so without this it installs and then fails its first call on a missing
