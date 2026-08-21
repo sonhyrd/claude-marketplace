@@ -25,6 +25,18 @@ run() {
   if [ "$dry" = 1 ]; then echo "DRY: $*"; else "$@"; fi
 }
 
+# One plugin that will not install must not take the rest of the roster with it. Under `set -e` a
+# single failure aborted the run mid-list, silently skipping every plugin after it — which reads as
+# a crash, not as a report, and leaves the operator to work out which half of the list is missing.
+# Collect and carry on; the exit code at the end still tells the truth.
+failures=()
+attempt() {
+  local what="$1"; shift
+  if run "$@"; then return 0; fi
+  echo "! $what failed — continuing with the rest of the roster"
+  failures+=("$what")
+}
+
 # Where does directory-sourced marketplace $1 live on THIS machine? Prints nothing and returns
 # 1 when it cannot be answered, which is the normal state of a machine that has never had it.
 resolve_local_path() {
@@ -63,7 +75,7 @@ ensure_skill_deps() {
     dir="$(dirname "$pkg")"
     [ -d "$dir/node_modules" ] && continue
     echo "+ installing dependencies for $(basename "$dir") ($mgr)"
-    run bash -c "cd \"\$1\" && $mgr install" _ "$dir"
+    attempt "deps for $(basename "$dir")" bash -c "cd \"\$1\" && $mgr install" _ "$dir"
   done < <(find "$root" -name package.json -not -path '*/node_modules/*' 2>/dev/null)
 }
 
@@ -77,7 +89,7 @@ while IFS=$'\t' read -r name repo; do
     echo "= marketplace $name already registered"
   else
     echo "+ adding marketplace $name ($repo)"
-    run claude plugin marketplace add "$repo"
+    attempt "marketplace $name" claude plugin marketplace add "$repo"
   fi
 done < <(jq -r '.marketplaces | to_entries[] | select(.value.source.repo) | [.key, .value.source.repo] | @tsv' "$roster")
 
@@ -89,7 +101,7 @@ while read -r id; do
     echo "= plugin $id already installed"
   else
     echo "+ installing plugin $id"
-    run claude plugin install "$id"
+    attempt "$id" claude plugin install "$id"
   fi
 done < <(jq -r '.enabledPlugins | to_entries[] | select(.value == true) | .key' "$roster")
 
@@ -110,7 +122,7 @@ while IFS= read -r mk; do
     echo "= marketplace $mk already registered ($path)"
   else
     echo "+ adding marketplace $mk ($path)"
-    run claude plugin marketplace add "$path"
+    attempt "marketplace $mk" claude plugin marketplace add "$path"
   fi
 
   while read -r plugin; do
@@ -120,7 +132,7 @@ while IFS= read -r mk; do
       echo "= plugin $id already installed"
     else
       echo "+ installing plugin $id"
-      run claude plugin install "$id"
+      attempt "$id" claude plugin install "$id"
     fi
     # Only ever look inside a cache dir that exists — a dry run installed nothing.
     for cached in "$HOME/.claude/plugins/cache/$mk/$plugin"/*/; do
@@ -133,6 +145,25 @@ echo
 if [ "$unresolved" = 1 ]; then
   echo "roster applied, minus the directory-sourced plugins listed above. To finish:"
   echo "  SSS_MARKETPLACE_PATH=/path/to/claude-marketplace $0 $roster"
-else
+elif [ ${#failures[@]} -eq 0 ]; then
   echo "roster applied."
+fi
+
+# A plugin whose marketplace entry declares its own `github` source is fetched by a SECOND clone,
+# separate from the marketplace's. On a host with no working SSH to GitHub that clone can fail
+# ("ssh: not found", or a key that GitHub rejects) while every `"source": "./"` plugin around it
+# installs fine, because those are served from the already-cloned marketplace. There is no reliable
+# preflight for it — `command -v ssh` passes on a box that has ssh but no key — so the remedy is
+# offered here, after the fact. CLAUDE_CODE_PLUGIN_PREFER_HTTPS makes the CLI skip the SSH probe
+# entirely and clone over HTTPS; it is machine-local (it states that THIS host has no usable SSH),
+# so it belongs in that host's settings.json env, not in the shared baseline.
+if [ ${#failures[@]} -gt 0 ]; then
+  echo "roster applied with ${#failures[@]} failure(s):"
+  printf '  ! %s\n' "${failures[@]}"
+  echo
+  echo "If any of those failed to clone, this host has no usable SSH to GitHub. Retry with:"
+  echo "  CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1 $0 $roster"
+  echo "and if that fixes it, make it stick by adding to ~/.claude/settings.json:"
+  echo '  "env": { "CLAUDE_CODE_PLUGIN_PREFER_HTTPS": "1" }'
+  exit 1
 fi
