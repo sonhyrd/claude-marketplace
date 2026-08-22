@@ -1,0 +1,356 @@
+"""Tests that `sss:delegate-tickets` still carries the clauses that cost a run.
+
+One file for one skill. It consolidates `test_delegate_tickets_review_gate.py`
+and `test_delegate_tickets_wait_loop.py`, which it replaces, and adds the
+step-0 clauses from #71. Grouping them is deliberate: the guarded failure mode
+in every case is a maintainer trimming a clause for length, which takes several
+clauses at once, so this fails loudly in one place rather than quietly in
+three. Assertions match on the load-bearing tokens only, never on phrasing a
+rewrite may legitimately change.
+
+## Step 0 — resolve the binary, load the live guide (#71)
+
+Measured on this host (Orca `1.4.187`, Linux): bare `orca` is the Electron
+launcher. It prints a single-instance notice and **exits 0** for every argument
+list it is given, so a coordinator running `orca orchestration task-create`
+reads a clean exit code for a run in which nothing was orchestrated. The skill
+claimed "step 4's probe resolves it once for every command below"; step 4 held
+no resolution logic at all, and every command in the file spelled the bare
+binary.
+
+Three clauses answer that, and each has a test below:
+
+1. **Resolution runs at step 0**, before any profile read, worktree, terminal
+   or lifecycle call — a run that discovers the wrong binary at dispatch time
+   has already mutated.
+2. **Selection is by proof, not by platform.** Preference orders the candidates
+   (`orca-ide` outside an Orca-managed pane, `orca` inside); what selects one is
+   whether it answers `orchestration --help`. Exit 0 is exactly what the
+   launcher gives, so exit 0 cannot be the test.
+3. **The guide is loaded from the binary**, version-matched to it, before the
+   first lifecycle call. `/orchestration` was never a marketplace plugin and is
+   not installed on any machine here, so a deferral to it named nothing.
+
+`scripts/check-delegate-cli.sh` asks the live binary the same question and is
+the real instrument; these are its static, offline half — they fail on a host
+with no Orca at all, where that script skips.
+
+One clause is **retired** rather than carried over: the wait-loop file asserted
+`skill_text.count("orca-ide") == 1`, guarding a binary name parenthesised per
+mention against drift. Step 0 supersedes it — the name is now resolved once in
+one place and the commands below carry no binary name at all — and
+`test_no_command_is_spelled_against_the_bare_binary` holds the anti-drift force
+it held, against the spelling that actually costs a run.
+
+## The review receipt (ADR-0010)
+
+The gate exists because a dispatched worker's code review was the run's only
+quality bar and nothing checked that it ran. Measured over this host's Claude
+Code history (82 ticket-worker sessions, 40 coordinator sessions, 2026-08-02 to
+2026-08-21):
+
+1. **22 of 82 workers ran no review at all.** Each read `implement`'s "Once done,
+   use /code-review" into context and never mentioned it again.
+2. **7 more ran the wrong review** — a bare `/code-review` resolves to a built-in
+   skill, not matt's two-axis pair. One spent 33-35 agents on it.
+3. **Coordinators opened a worker's review 0 times in 40 sessions.** The review
+   reached them only as a clause in a 3-sentence `worker_done` body, so an absent
+   review and a clean one were indistinguishable. Two incidents followed: a P0
+   that hollowed out an acceptance gate shipped, and a worker found two real
+   defects in already-merged code after its dispatch capability was revoked.
+
+## The `check --wait` resting state
+
+Measured on run `run_97a82d3add36` (2026-08-22, Opus 5 coordinator, Orca
+1.4.187): the coordinator left `check --wait` to do local work step 6 itself
+asks for — a measurement, a filed issue, a profile amend — finished it, and
+ended the turn on a recap that *named* the next merge and the next dispatch.
+The pane sat at an empty prompt. #1063's `worker_done` landed `read: 0`,
+`delivered_at: null`, and stayed unread until a human sent a keystroke; the
+coordinator then ran `check` immediately and correctly. Claude Code is
+turn-based, the Run mailbox does not poke an idle TUI, and the only wake is
+`check --wait` executing in that terminal.
+
+Two things make that rule survivable, and each has a test below:
+
+1. **A closed list of permitted turn-ends**, not an open "don't yield".
+   "Don't yield" is checked by judgement and rationalised past by any model
+   holding a tidy recap; "is this stop on the list" is a lookup.
+2. **An explicit `--timeout-ms`.** The loaded guide documents no default —
+   it says *always pass it*, and 900000 is only its example value. An empty
+   40-second wait and an empty 15-minute wait are byte-identical JSON, so an
+   omitted flag disguises a bug in the coordinator's own command line as a
+   checkpoint.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+SKILL_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "plugins"
+    / "sss"
+    / "skills"
+    / "delegate-tickets"
+)
+SKILL = SKILL_DIR / "SKILL.md"
+
+RECEIPT_PATH = "/tmp/<ticket-slug>/review.md"
+STEP_0 = "0. Resolve the CLI and load the live guide"
+
+# `orca <group> <verb>` — the spelling that is a silent no-op on a host whose
+# `orca` is the desktop launcher. Matched the way check-delegate-cli.sh matches
+# it: a group the skill uses, then a verb. `Usage: orca orchestration` quoted as
+# a grep pattern is not an invocation and does not match.
+BARE_BINARY = re.compile(
+    r"(?<![\w-])orca\s+(?:orchestration|terminal|worktree|skills)\s+[a-z][a-z0-9-]*"
+)
+
+# `/orchestration` as a slash command — not the `references/orchestration-probe.md`
+# path, and not the `orchestration` command group.
+INVOCABLE_GUIDE = re.compile(r"(?<![\w/-])/orchestration\b(?!-)")
+
+
+def flat(text: str) -> str:
+    """One line, blockquote markers dropped.
+
+    SKILL.md wraps its prose, so a clause can straddle a line break and a
+    blockquote continues with `> `. Neither is phrasing, and neither should
+    decide whether a clause is present.
+    """
+    return re.sub(r"\s+", " ", re.sub(r"^>[ \t]?", "", text, flags=re.MULTILINE))
+
+
+@pytest.fixture(scope="module")
+def skill_text() -> str:
+    return SKILL.read_text(encoding="utf-8")
+
+
+def section(text: str, heading: str) -> str:
+    """The body of one `## ` section, up to the next `## ` or EOF."""
+    match = re.search(
+        rf"^## {re.escape(heading)}.*?(?=^## |\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert match, f"SKILL.md has no '## {heading}' section"
+    return match.group(0)
+
+
+@pytest.fixture(scope="module")
+def preamble(skill_text: str) -> str:
+    """Everything above step 0 — where a standing invariant belongs."""
+    head, _, _ = skill_text.partition(f"## {STEP_0}")
+    assert head, "SKILL.md has no step 0"
+    return head
+
+
+@pytest.fixture(scope="module")
+def prerequisites(preamble: str) -> str:
+    """The preamble flattened — its block is a wrapped blockquote.
+
+    The invariant clauses below deliberately keep the raw text they have always
+    matched on; only the block that needs unwrapping gets it.
+    """
+    return flat(preamble)
+
+
+@pytest.fixture(scope="module")
+def step_zero(skill_text: str) -> str:
+    return flat(section(skill_text, STEP_0))
+
+
+@pytest.fixture(scope="module")
+def dispatch(skill_text: str) -> str:
+    return section(skill_text, "5. Dispatch the frontier")
+
+
+@pytest.fixture(scope="module")
+def merge_back(skill_text: str) -> str:
+    return section(skill_text, "6. Merge back in DAG order")
+
+
+@pytest.fixture(scope="module")
+def completion(skill_text: str) -> str:
+    return section(skill_text, "7. Run to completion")
+
+
+# --- Step 0: the binary and the guide ---------------------------------------
+
+
+def test_step_zero_runs_before_anything_mutates(skill_text: str, step_zero: str) -> None:
+    """A wrong binary found at dispatch time has already spent the setup budget."""
+    assert skill_text.index(f"## {STEP_0}") < skill_text.index("## 1. Resolve the repo profile")
+    assert re.search(r"[Nn]othing runs above this step", step_zero)
+    for mutation in ("profile read", "worktree", "terminal", "lifecycle call"):
+        assert mutation in step_zero, mutation
+
+
+def test_the_binary_is_chosen_by_proof_not_by_platform(step_zero: str) -> None:
+    """Preference orders the candidates; answering `orchestration --help` picks one."""
+    assert "orca-ide" in step_zero
+    assert "orchestration --help" in step_zero
+    assert re.search(r"[Aa]nswers", step_zero)
+
+
+def test_an_exit_zero_that_answers_nothing_is_rejected(step_zero: str) -> None:
+    """The launcher's reply to every command is exit 0, so exit 0 proves nothing."""
+    assert "exit 0" in step_zero
+    assert re.search(r"launcher", step_zero)
+
+
+def test_the_guide_is_loaded_from_the_resolved_binary(step_zero: str) -> None:
+    """Version-matched to the runtime being called, so it cannot age against it."""
+    assert "skills get orchestration --full" in step_zero
+    assert re.search(r"version-matched", step_zero)
+
+
+def test_the_guide_is_read_before_the_first_lifecycle_call(step_zero: str) -> None:
+    """Loading it after a `run-create` is loading it after the first flag guess."""
+    assert re.search(r"[Rr]ead it before the first lifecycle call", step_zero)
+
+
+def test_no_command_is_spelled_against_the_bare_binary() -> None:
+    """The defect itself: `orca <group> <verb>` orchestrates nothing on this host.
+
+    `scripts/check-delegate-cli.sh` reports this as BARE BINARY against the live
+    CLI; here it is asserted statically, over every doc the plugin ships.
+    """
+    offenders = {
+        f"{doc.relative_to(SKILL_DIR)}: {match.group(0)}"
+        for doc in sorted(SKILL_DIR.rglob("*.md"))
+        for match in BARE_BINARY.finditer(doc.read_text(encoding="utf-8"))
+    }
+    assert not offenders, offenders
+
+
+def test_orchestration_is_never_named_as_an_invocable_skill() -> None:
+    """It is not a marketplace plugin and is installed on no machine here."""
+    for doc in sorted(SKILL_DIR.rglob("*.md")):
+        assert not INVOCABLE_GUIDE.search(doc.read_text(encoding="utf-8")), doc
+
+
+def test_quickstart_is_gone_and_nothing_links_it(skill_text: str) -> None:
+    """It documented a different repo's install lines and a path that never existed."""
+    assert not (SKILL_DIR / "references" / "quickstart.md").exists()
+    assert "quickstart" not in skill_text
+
+
+def test_prerequisites_are_named_in_the_skill_itself(prerequisites: str) -> None:
+    """`quickstart.md` was what SKILL.md pointed at for these, and it omitted them."""
+    assert "`sss`" in prerequisites and "`matt`" in prerequisites
+    assert re.search(r"Orca install", prerequisites)
+    assert re.search(r"experimental", prerequisites)
+
+
+def test_every_reference_link_resolves(skill_text: str) -> None:
+    """A pointer to a deleted file reads as disclosure and discloses nothing."""
+    links = re.findall(r"\]\((references/[^)#]+)", skill_text)
+    assert links, "SKILL.md links no references/ file"
+    for link in links:
+        assert (SKILL_DIR / link).is_file(), link
+
+
+# --- The review receipt (ADR-0010) ------------------------------------------
+
+
+def test_brief_names_the_receipt_and_the_fix_all_bar(dispatch: str) -> None:
+    """Failure 1: the worker's exit condition has to name a file, not a habit."""
+    assert RECEIPT_PATH in dispatch
+    assert "--report-path" in dispatch
+    assert re.search(r"[Ee]very finding is the worker's to fix", dispatch)
+
+
+def test_receipt_precedes_the_report(dispatch: str) -> None:
+    """A review landing after `worker_done` amends an already-merged commit."""
+    assert re.search(r"before\W+`?worker_done", dispatch)
+
+
+def test_prohibited_findings_have_a_named_exit(dispatch: str) -> None:
+    """Without HANDOFF, 'fix all' is unsatisfiable and gets met with a lie.
+
+    Prohibition 7 forbids editing the profile; Prohibition 10 forbids closing
+    your own ticket. Findings landing there are the coordinator's.
+    """
+    assert "HANDOFF" in dispatch
+    assert "Prohibitions" in dispatch
+
+
+def test_brief_names_the_shadowed_skill(dispatch: str) -> None:
+    """Failure 2: `/code-review` by bare name is a different, built-in skill."""
+    assert "built-in" in dispatch
+    assert re.search(r"resolved absolute path", dispatch)
+
+
+def test_definition_of_done_names_both_axes(dispatch: str) -> None:
+    """The second half of the shadow guard: a built-in run writes no axes."""
+    assert "Standards" in dispatch and "Spec" in dispatch
+
+
+def test_merge_back_refuses_a_missing_receipt(merge_back: str) -> None:
+    """Failure 3: the teeth. Absence has to block, not pass silently."""
+    assert "No receipt, no merge" in merge_back
+    assert RECEIPT_PATH in merge_back
+    assert re.search(r"Standards axis", merge_back)
+    assert "HANDOFF" in merge_back
+
+
+# --- The `check --wait` resting state ----------------------------------------
+
+
+def test_invariant_sits_above_step_one(preamble: str) -> None:
+    """The failure fires during dispatch and merge-back, not at the end.
+
+    Filed under step 7 it reads as an end-of-run instruction, which is
+    precisely how a coordinator mid-merge-back reads past it.
+    """
+    assert re.search(r"resting state", preamble)
+    assert "check --wait" in preamble
+
+
+def test_only_check_wait_wakes_the_coordinator(preamble: str) -> None:
+    """The mechanism, stated once: a mailbox message does not poke a TUI."""
+    assert re.search(r"does not wake", preamble)
+    assert "unread" in preamble
+
+
+def test_permitted_turn_ends_are_a_closed_list(preamble: str) -> None:
+    """All three, or the list stops being closed and becomes a suggestion."""
+    assert re.search(r"final report", preamble)
+    assert re.search(r"escalation", preamble)
+    assert re.search(r"gate", preamble)
+
+
+def test_the_recap_shape_is_named(preamble: str) -> None:
+    """The exact shape that shipped the incident: a recap reading as progress."""
+    assert "recap" in preamble
+
+
+def test_wait_loop_pins_the_timeout(completion: str) -> None:
+    """The guide has no default; an unpinned window fakes a checkpoint."""
+    assert "--timeout-ms 900000" in completion
+    assert re.search(r"[Aa]lways pass", completion)
+    assert "no default" in completion
+
+
+def test_a_timeout_is_a_checkpoint_not_completion(completion: str) -> None:
+    assert "checkpoint" in completion
+    assert "{count:0}" in completion
+    assert re.search(r"15.60 minutes", completion)
+
+
+def test_local_work_returns_to_the_wait(skill_text: str) -> None:
+    """Step 6 asks for local work; both it and step 5 have to hand back."""
+    merge_back = section(skill_text, "6. Merge back in DAG order")
+    dispatch = section(skill_text, "5. Dispatch the frontier")
+    assert re.search(r"[Aa]cking is not waiting", dispatch)
+    assert re.search(r"step 7", merge_back)
+
+
+def test_settled_terminals_are_accounted_for(completion: str) -> None:
+    """The guide's own rule, one clause, its verbs left upstream."""
+    assert "release" in completion
