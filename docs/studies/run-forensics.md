@@ -78,10 +78,15 @@ Filed here as it is produced:
   than there, because they are properties of the exercise and not of the list. First, the ranking
   contract this charter set is the one that file implements: frequency orders it, severity overrides
   it, and measured time is reported alongside rather than folded into a composite score. Second, the
-  list does **not** yet carry the HEAD re-check — every finding above the cut is still to be
-  re-checked against the current `SKILL.md` and shipped scripts, and that re-check doubles as an
-  adversarial verification, so a sub-agent that read a normal step as thrashing is caught before the
-  finding reaches a spec.
+  **HEAD re-check has landed**, in that file's
+  [HEAD verification](friction-findings.md#head-verification) section: each of the 25 findings above
+  the cut carries a verdict — `confirmed`, `confirmed-fixed` or `refuted` — reached by reading the
+  body and the shipped scripts *at the version each session ran* as well as at HEAD, so a finding is
+  never argued against a rule its own version did not carry. The re-check doubled as an adversarial
+  verification and caught what it exists to catch: two findings' stated mechanism did not survive
+  contact with the code, and one headline count was replaced by a measurement over all 26
+  transcripts. No finding was refuted outright and the ranking is unchanged; three sub-claims moved
+  to `confirmed-fixed` with the version that fixed them named.
 - A **profile audit** of the two target repositories' `.pw-prove/profile.md` files, judged entry by
   entry: whether any run applied the entry, whether any run contradicted it, and whether a
   contradicting run declared the contradiction. The live profile files are read and never written —
