@@ -47,6 +47,13 @@ An elapsed wait window that returned nothing. Evidence the run is still live, ne
 finished — the opposite of a **worker_done**, and not a failure of any kind.
 _Avoid_: timeout, empty poll, no-op wait
 
+**Refusal-to-start**:
+A turn that ends before any work begins — a declined confirmation gate, or any preflight stop. One
+of the three permitted ways a **Coordinator**'s turn ends, and the only one that leaves nothing
+behind: no **Run**, no worktree, no **Dispatch**. Distinct from an escalation, which interrupts a
+run already under way.
+_Avoid_: abort, bail, early exit, hard stop
+
 **Receipt**:
 The review file a **Worker** writes before it reports, naming every finding and the fix that answers
 it. Evidence that the review happened, which a report cannot carry on its own: absence and a clean
