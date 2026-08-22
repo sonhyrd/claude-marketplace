@@ -175,7 +175,7 @@ the two target repositories earn their keep, judged entry by entry on applied / 
 declared, plus the two findings that outrank every entry: the file a run reads is not the file the
 last run wrote, and the contradiction line the skill requires appears in none of the 26 sessions ·
 [setup — nuxt-hyrd-chrysus](docs/studies/setup-nuxt-hyrd-chrysus.md) — what that repository could
-provide so the next proof against it does not re-pay for it: the build that is 15–29% of every run,
+provide so the next proof against it does not re-pay for it: the build that is 10–29% of every run,
 the preview server whose announced pid is never the listener, the specs that had never been run, and
 the application facts a 321-line profile is failing to deliver ·
 [setup — hyrd-widget](docs/studies/setup-hyrd-widget.md) — the same for the other repository, which

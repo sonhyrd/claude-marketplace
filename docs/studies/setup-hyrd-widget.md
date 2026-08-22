@@ -83,7 +83,14 @@ assembled the wrong one.
 and `proof:serve:<target>` — and one table, in `CONTRIBUTING.md`, saying which surfaces each one can
 prove. A run then names a target instead of assembling one, and the "which root serves `/meet/`"
 class of error stops existing. This is the highest-value change available to this repository: it is
-the only one in this study that prevented a *published, fully-gated, wrong* proof.
+the only one in this study that would have prevented a *published, fully-gated, wrong* proof.
+
+**Boundary case, and the other half is the skill's.** `0259fd57`'s distillation attributes the
+wrong-subject proof to pw-prove — "nothing in Step 5, Step 6 or Step 7 asks whether the artifact in
+frame is the artifact the AC is about; the clip inspection table diagnoses framing, dwell and
+settling, never subject identity". A target table cannot make a run ask that question, and the
+question would have caught this run four minutes in. It is listed again under
+[Not this repository's to fix](#not-this-repositorys-to-fix).
 
 **Also worth saying plainly:** `.pw-prove/AGENTS.md` is repository-authored documentation that a
 proof run treats as authoritative, and it was wrong. It needs the same review as code, or it should
@@ -143,7 +150,9 @@ unsuppressed hits in its own new spec (line 304 against line 719).
 
 **Recommendation.** Triage the 30 P0s once and put the standing count in a check that can only go
 down. That is the whole recommendation; the second-scan cost disappears on its own once the
-directory-wide number means something.
+directory-wide number means something. The sibling repository carries 13 of the same class and the
+same second-scan cost — see [setup — nuxt-hyrd-chrysus](setup-nuxt-hyrd-chrysus.md) §3, where the
+first recommendation differs because its suite also holds specs that had never been run at all.
 
 ---
 
@@ -241,8 +250,7 @@ Widget's builds cost a third of chrysus's, and the repository already knows why 
 needs no restart at all. From the profile's *Bring-up — the widget static target* entry:
 
 > The widget app target rebuilds in **~200 s** for the SDK+app pair, and `serve` reads from disk per
-> request — so a rebuild needs **no restart** and the whole `SERVE_RESTART=1` dance is unnecessary
-> here. That is what makes a mutation check on this target cheap.
+> request — so a rebuild needs **no restart** […] here.
 
 Two runs used that fact and said so: `befb0456` (line 331) and `f28c3493` (line 425). Both then had a
 mutation verdict with no `RESTART=proven` to license reading it — sound in both cases, because a
@@ -259,7 +267,7 @@ either repository holds, and it currently lives in a profile that the next run m
 
 **And one target-specific fact that is not in the repo docs and should be.** From the profile's
 *Bring-up — the SSR start page's first render is not the tenant's*: the first request after the
-origin boots answers 200 with the generic title and `x-hyrd-og-source: tenant-fallback`; the tenant's
+origin boots answers 200 with the generic title and a tenant-fallback marker header; the tenant's
 own title appears from the second request on. A spec whose first navigation carries its assertion
 reads a healthy-looking page naming the wrong thing. That is a bring-up contract, not a runtime
 observation — it belongs with the serve script.
@@ -277,10 +285,8 @@ agent could only diagnose by finally starting a probe session (line 362). The ca
 The other side of it is that aborting everything is not safe either. From the profile's *Gotchas —
 proving the SSR origin's OWN output in a browser*:
 
-> Aborting EVERY off-origin request on `/chat/embed/start` is not the safe default it looks like: the
-> client's own `search-jobs-candidate` then fails and hydration REPLACES the 12 server-rendered job
-> cards with the listing's transport-error state, so any card assertion races that swap (two observed
-> false reds).
+> Aborting EVERY off-origin request on `/chat/embed/start` is not the safe default it looks like […]
+> hydration REPLACES the 12 server-rendered job cards (two observed false reds).
 
 So the right set is neither "none" nor "all", and today every spec derives it again. `3deeddd7`
 eventually wrote `helpers/incidentalThirdParties.ts` (lines 653–675) — after its report had shipped.
@@ -309,8 +315,10 @@ global tooling and the node version it must live under in `CONTRIBUTING.md`.
 
 **No e2e `tsconfig.json`.** `240d63c1` ran `tsc --noEmit -p tests/e2e/tsconfig.json`; it answered
 `error TS5058: The specified path does not exist` and the shell `||` fallback grep printed nothing —
-*"which reads exactly like a clean typecheck"* (line 313). A gate that cannot fail. Recovered against
-the root config at line 318. **Recommendation:** add `tests/e2e/tsconfig.json`.
+*"which reads exactly like a clean typecheck"* (line 313). A gate that cannot fail — which is worse
+than the sibling repository's version of the same gap, where the typecheck simply did not run
+([setup — nuxt-hyrd-chrysus](setup-nuxt-hyrd-chrysus.md) §7). Recovered against the root config at
+line 318. **Recommendation:** add `tests/e2e/tsconfig.json`.
 
 **The map has no readiness signal.** `af23ab55` spent three navigations and ~2 minutes finding one: a
 9000 ms settle reported `hasMap:false` (line 222), 12000 ms reported `hasMap:true,
@@ -356,16 +364,14 @@ measurably worse:
 
 The mechanism is in the skill's own contract — Step 8 stages the profile with the proof commit, so a
 fact learned on branch A reaches branch B only after A merges and the reader's checkout syncs — and
-that half belongs to [#138](run-forensics.md). The repository's half is the checkout that is nine
+that half belongs to the pw-prove fix spec (#138). The repository's half is the checkout that is nine
 commits behind, and the decision about whether `.pw-prove/profile.md` is repository state at all.
 
 **The good news, and it is worth saying because chrysus has not done it.** This repository's profile
 preamble already carries an eviction rule:
 
 > An entry leaves this file as soon as the thing it describes has been addressed anywhere. Nothing
-> here is a repository defect (fix it, and document the result where agents already look) … How to
-> bring up each Proof Target, and every workaround this repository owes, is in the repo root's
-> `CONTRIBUTING.md` and `AGENTS.md` — not here.
+> here is a repository defect (fix it, and document the result where agents already look).
 
 That rule is why this file is 217 lines against chrysus's 321, and the recommendations above are
 mostly a request to finish what it started: the target table (§1), the per-target build costs (§6),
@@ -383,8 +389,12 @@ pipeline is doing more than shortening a search. If the target table lands in `C
 ## Not this repository's to fix
 
 Recorded so the boundary is stated rather than implied. Each cost a widget session something and
-belongs to [#138](run-forensics.md) or outside the exercise:
+belongs to the pw-prove fix spec (#138) or outside the exercise:
 
+- **Nothing in the pipeline asks whether the artifact in frame is the artifact the AC is about.**
+  The other half of §1: every gate passed over `0259fd57`'s arm-1 film and only the operator caught
+  it. The clip-inspection table diagnoses framing, dwell and settling, and has no row for subject
+  identity.
 - **`preflight.mjs` reading a pre-bind banner as a restart proof** (`0259fd57` line 492). The
   repository's half is §2; the check is the skill's.
 - **`.git/info/exclude` written as a literal path in a linked worktree** — `998dd2c1` (lines 497 →

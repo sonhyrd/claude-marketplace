@@ -10,7 +10,7 @@ better than a blank worktree. Part of [run forensics](run-forensics.md), drawn f
 repository was read and not written: no file in the `nuxt-hyrd-chrysus` checkout was modified,
 and `.pw-prove/profile.md` in particular was read at its live path and left at 321 lines.
 
-**What separates this study from [#138's](run-forensics.md) fix spec** is the question each answers.
+**What separates this study from the pw-prove fix spec (#138)** is the question each answers.
 This one asks *what did the repository fail to provide* — a convention the skill had to infer, a
 bring-up fact it rediscovered every run, an environment value it had to be told. #138 asks what
 pw-prove itself got wrong. Where an item straddles the line it is recorded here **and** named in
@@ -127,7 +127,7 @@ the listener and the banner a bind proof. Today the workaround costs ~25 lines o
 entries and has still not stopped the failure recurring.
 
 **Boundary note.** `preflight.mjs` trusting a banner it should be checking against a bind is
-pw-prove's half, and it is [#138's](run-forensics.md). The repository's half is that no caller can
+pw-prove's half, and it is the pw-prove fix spec's (#138). The repository's half is that no caller can
 obtain the listener's pid at all, which is what makes the skill's check unfixable from outside.
 
 ---
@@ -162,8 +162,7 @@ repository ships and CI is green over them.
 in its first audit run that they had never run. Its own report (line 665):
 
 > Two of the three carried wizard scenarios had never passed. They called `goToReview()`, which polls
-> for a submittable review, so they burned 60 s and failed on the poll rather than their own
-> assertions.
+> for a submittable review, so they burned 60 s and failed on the poll.
 
 The distillation records the PR body saying the suite was never run. Cost: roughly **6.3 minutes** in
 two identical 3-minute audit runs, plus the **25 m 24 s** to the rewrite onto a different Page
@@ -179,6 +178,11 @@ pass at the merge base. A proof run cannot distinguish *"this PR broke it"* from
 red"* without paying a full audit run to find out, and it pays that price on every branch. Then
 triage the 13 P0s once and put the standing count in a check that can only go down.
 
+The widget repository has the same shape at a larger scale — 30 P0 findings, carried scenarios that
+film nothing, and a spec that fails at the merge base — and it is written up there rather than merged
+with this one, because the recommendations differ in what to do first. See
+[setup — hyrd-widget](setup-hyrd-widget.md) §3 and §4.
+
 ### 3c. The deliberate proof-clip dwells are written on two lines
 
 The repository writes the dwell as `if (process.env.PW_PROVE_CLIP)` and then an indented
@@ -188,8 +192,17 @@ non-comment line — the `if` — so the `// JUSTIFIED:` above the block is neve
 records the count). `clip-fidelity.mjs` accepts the same code. Two shipped scripts disagree about the
 same lines, on every run.
 
+**Boundary case, and this study takes both halves.** The repository's half is the two-line shape,
+and writing it on one line is a mechanical edit within its reach. The scanner's half is that
+`scan.mjs`'s `lineIsJustified` breaks at the first non-comment line, so a `// JUSTIFIED:` above an
+enclosing block never suppresses the hit inside it — which is what `AGENTS.md`'s own Conventions line
+("or above the enclosing block") promises and the scanner does not deliver. It is listed again under
+[Not this repository's to fix](#not-this-repositorys-to-fix), and the widget study records the same
+defect from the scanner's side.
+
 **Recommendation.** Write the dwell on one line, as pw-prove's own Step-5 template does. That is a
-mechanical edit to the suite and it retires 34 standing findings.
+mechanical edit to the suite and it retires 34 standing findings — without waiting on the scanner
+half, which no target repository can fix.
 
 ---
 
@@ -242,9 +255,9 @@ values, which is a `.env` value committed to a shared file.
    entry C3 tells a human to copy by hand; a `pnpm setup:worktree` that writes them, and picks a free
    port, ends both the copying and the profile entry.
 
-**A related note on `NUXT_PAUL_API_BASE_URL`.** A copied `.env` can drop the `/dev/v1` suffix; the
-app then answers 200 on the main API and 404s every `/api/dev/v1/...` call, and the page renders
-"Error loading data" — which reads as a broken tenant. The profile's *Env* entry records PR #3274's
+**A related note on `NUXT_PAUL_API_BASE_URL`.** Its value is required to carry a path suffix, and a
+copied `.env` can drop it. The app then answers 200 on the main API, 404s every call that joins a
+path onto it, and the page renders "Error loading data" — which reads as a broken tenant. The profile's *Env* entry records PR #3274's
 description misdiagnosing exactly that. `pnpm check:env` passes either way, because it only checks
 presence. **Recommendation:** check the shape, not just the key.
 
@@ -280,9 +293,40 @@ lines against 332 on `origin/main`.** Eight of its thirty entries are stamped wi
 
 **Recommendation.** Move the application facts into the repository's own
 `docs/agents/e2e-and-typecheck.md` — the file the profile's own preamble already names as their
-owner, that a base merge distributes, that a human reviews, and that CI can lint. Keep in `.pw-prove/profile.md` only what is genuinely unsettled and unencodable, which is what
-the preamble says it is for. The widget repository has already done this and its file is visibly
-cleaner for it (217 lines against chrysus's 321, with an explicit eviction rule in its preamble).
+owner, that a base merge distributes, that a human reviews, and that CI can lint. Keep in
+`.pw-prove/profile.md` only what is genuinely unsettled and unencodable, which is what the preamble
+says it is for. The widget repository has already done this and its file is visibly cleaner for it
+(217 lines against chrysus's 321, with an explicit eviction rule in its preamble).
+
+### The six entries that are not repository facts at all, and where each one goes
+
+[`profile-audit.md`](profile-audit.md) names six chrysus entries that fail admission test 1 —
+"is it about the repository?" — and says the reason is structural rather than careless: *"a run that
+learns something about `preflight.mjs` has exactly one write surface — the target repository's
+profile — and `SKILL.md` gives it no other."* Where they belong instead is partly a setup question
+and partly not, so this study answers it entry by entry rather than as a block:
+
+| Entry | What it describes | Where it belongs |
+|---|---|---|
+| **C5**, **C29** | `pnpm preview` is three processes; `RESTART=proven` over an `EADDRINUSE` death | **This repository.** They are two entries and ~25 lines describing one defect in `scripts/preview.mjs`. §2 above is the fix; once it lands, both entries leave under the profile's own eviction rule |
+| **C3** | a macOS checkout with no `.env`, written by hand from `config/env.ts`'s constants | **This repository, as a script.** §5's `pnpm setup:worktree` recommendation is exactly this entry stopping being prose. It also carries two configuration values in a committed file, which is the redaction line the profile is not holding |
+| **C4** | `rg` resolves to a Claude Code shell function, not a binary, so any tool spawning it dies | **Neither repository.** It is a property of the operator's host runtime and would be identically true of any project. Nothing in this study can give it a home |
+| **C20** | the Clips publish endpoint is intermittently unreachable from the macOS worktree | **Neither repository.** A hosting-service observation about one machine on two dates |
+| **C21** | `agent-native` is not on PATH on macOS; the vault lease must wrap the `PROBE_HOSTING` probe | **Neither repository** — though the widget study's §8 shows the adjacent case where a *repository* file (`mise.toml`) selects the runtime that lacks the tooling, and there the repository does own the fix |
+
+**So four of the six have nowhere to go, and that is the finding.** C4, C20 and C21 are true, each
+cost a live pass, and each is about the machine rather than about either repository — and a run that
+learns one has exactly one place to write it. Two consequences follow, and only the second is this
+repository's:
+
+- **Not this repository's.** pw-prove has no host-facts surface, so the target repository's profile
+  absorbs them by default. That is a skill-side gap and it is named under
+  [Not this repository's to fix](#not-this-repositorys-to-fix).
+- **This repository's.** Nothing stops the absorption from the reading side either. `hyrd-widget`'s
+  profile preamble does — *"nothing here is true of every repository using the skill (that is a skill
+  defect)"* — and chrysus's has no such rule, which is the plainest single reason its file has drifted
+  to 321 lines while widget's holds at 217. **Adopt the widget preamble's eviction rule.** It costs
+  four sentences and it is the only one of these recommendations that pays for itself immediately.
 
 Two smaller repository fixes belong under the same heading, because they are what make the wizard and
 the toasts costly rather than merely quirky:
@@ -303,7 +347,9 @@ the toasts costly rather than merely quirky:
 `tests/tsconfig.json`, found neither, and ran **no typecheck at all** after hand-editing seven specs.
 `cbe2813b` (Friction 6) guessed the same path, got `TS5058`, and recovered with the repo's own
 `pnpm typecheck:scoped` at a cost of 3 m 32 s. **Recommendation:** add `tests/e2e/tsconfig.json`, or
-name `pnpm typecheck:scoped` as the e2e typecheck in the repo's agent docs.
+name `pnpm typecheck:scoped` as the e2e typecheck in the repo's agent docs. The widget repository is
+missing the same file, with a sharper consequence — see
+[setup — hyrd-widget](setup-hyrd-widget.md) §8.
 
 **`pnpm typecheck:scoped` has pre-existing errors, so there is no clean baseline.** `7cc7e6bc`
 (Rework 1) tried to take a before/after delta with `git checkout HEAD~1 -- $FILES`, which resurrected
@@ -330,10 +376,15 @@ twice, in two passes. Minor, and it is the repository's lint convention rather t
 ## Not this repository's to fix
 
 Recorded so the boundary is stated rather than implied. Each of these cost a chrysus session
-something and belongs to [#138](run-forensics.md) or outside the exercise:
+something and belongs to the pw-prove fix spec (#138) or outside the exercise:
 
 - **`preflight.mjs` trusting a pre-bind banner as a restart proof** (`3072aa9b`, `c871a4f2`). The
   repository's half is §2 above; the check itself is the skill's.
+- **The mutation check does not stop the preview server before its forced rebuild.** The other half
+  of §1's killed build: `a7cdcd1c`'s distillation is explicit that "the body's own mutation-check step
+  does not tell the run to stop the preview server *before* the forced rebuild, only to restart it
+  after, so pw-prove's ordering contributed". The repository can make the build refuse; the skill can
+  make the collision not happen.
 - **`ENV_CONTRACT=none` documented in the body and unimplemented in the script** — `d32c2495` line
   122, `a7cdcd1c` line 438, `fa0cc83b`, `6f307a2f`. Body and shipped script of the same version
   disagreed. Gone in 0.28.0, which removed the key from both.
@@ -346,6 +397,14 @@ something and belongs to [#138](run-forensics.md) or outside the exercise:
   cannot glob (`3072aa9b` line 1123, `67b624f4` line 603). Silently does nothing.
 - **The clip-fidelity audit's five-line `// JUSTIFIED:` lookback**, which a longer rationale block
   overruns (profile, *Clips (toast payoffs)*).
+- **pw-prove gives a run no place to write a host fact.** The other half of §6's six-entry table:
+  C4, C20 and C21 describe the operator's machine, belong to neither target repository, and land in
+  a target repository's profile because it is the only write surface the skill offers.
+- **`scan.mjs`'s `// JUSTIFIED:` suppression not reaching through an enclosing block.** The other
+  half of §3c: the scanner walks up from the hit line and stops at the first non-comment line, so a
+  rationale above an `if` never suppresses the statement inside it. `AGENTS.md`'s Conventions line
+  promises "or above the enclosing block" and the scanner does not deliver it. The widget study
+  records the same defect from four of its own sessions.
 - **Orca, the harness and the model API.** Five API 529 stalls costing `b6dbd8be` ~35 minutes; the
   10-minute Bash ceiling that killed `fe171475`'s first audit run; `index.lock` contention from
   `orca-ide`; the worktree auto-sync that moved the remote branch under `18697484`. Excluded by the
