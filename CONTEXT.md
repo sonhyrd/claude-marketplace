@@ -410,6 +410,13 @@ dropped when it straddles the line. The word is *finding*, not verdict: it is ev
 act on, never a decision that anything will change — which is why a finding whose cause is already
 gone is recorded as confirmed-fixed rather than deleted.
 
+A finding above the ranking cut also carries a **Verdict** field once the HEAD re-check has run:
+`confirmed`, `confirmed-fixed` or `refuted`, in the sense `agents/e2e-finding-verifier.md` already
+uses the word — a judgement about *this finding's* standing against the current body and scripts.
+That is not the sense the paragraph above rules out. The finding is still not a decision; the verdict
+says only whether there is still something there to decide about, and a `refuted` or
+`confirmed-fixed` verdict never deletes the row or frees its ID.
+
 ## Span
 The stretch of a session transcript in which pw-prove actually ran. A transcript is a whole work
 session — up to 25 MB of it — and pw-prove is a region inside, bracketed by the first and last run

@@ -14,8 +14,10 @@ read this one.
 what survived. The ranking itself is still taken from what the transcripts contain at the version
 each session actually ran; verification is a second, adversarial reading laid over it, and what it
 read is recorded finding by finding in [HEAD verification](#head-verification). Verification changed
-no rank. It changed two findings' stated *mechanism*, added a measurement behind FR11's headline
-number, and moved three sub-claims to `confirmed-fixed`.
+no rank. It corrected two findings' stated *mechanism* (FR4 and FR22, both corrected in the rows
+themselves and not only in the verification paragraph), refined a third's (FR1), replaced FR11's
+headline count with a measurement and then corrected its denominator, and moved three sub-claims to
+`confirmed-fixed`.
 
 ## How this list is ordered
 
@@ -263,13 +265,15 @@ that puts FR1 first.
 | **Citations** | `1927b90c:235`/`:240` (`tail -60`, then the same scan grepped) · `18697484:365`/`:372`/`:376` (`tail -30` → `grep -nE` → `sed -n '3,7p'`) · `67b624f4:381` (*"Need the LIVE section — it scrolled off."*) · `998dd2c1:303`/`:308` · `c871a4f2` two scans |
 | **Versions** | 0.20.0, 0.21.0, 0.22.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
 | **Fault** | **boundary case** — the invocations are pw-prove's, the output shapes are the two scripts', and the filters are the agent's |
-| **Verdict** | **confirmed**, with its stated mechanism corrected — [see §HEAD verification](#fr4-verification) |
+| **Verdict** | **confirmed**; the row's description of `hermetic.mjs`'s output order was inverted and has been corrected above — [see §HEAD verification](#fr4-verification) |
 
 The most frequent finding in the corpus, and the cheapest per instance. Both scripts emit more output
 than a turn can hold, so a run pipes them through `tail`, `head`, `grep` or `sed`, discovers the
 pipe cut off the load-bearing half, and re-runs the identical command with a different pipe.
-`hermetic.mjs`'s verdict is at the top and its LIVE list further down; `scan.mjs`'s summary and per-hit
-rows are at opposite ends of a whole-directory report.
+`hermetic.mjs` prints its LIVE list first and its verdict **last**, and `scan.mjs`'s summary and
+per-hit rows are at opposite ends of a whole-directory report — so a `tail` keeps hermetic's verdict
+and loses the LIVE list it exists to check, which is `67b624f4:381` exactly. (This sentence said the
+opposite until [verification](#fr4-verification) read the script; the evidence never changed.)
 
 Two consequences make it more than an ergonomics complaint. First, in a repository with a large
 pre-existing scanner backlog (FR25) the first `scan.mjs` run is unreadable by construction, so the
@@ -510,7 +514,7 @@ shortfall in prose two paragraphs later — so the number is misleading while th
 | **Citations** | `1927b90c:308` (*"the no-progress checkpoint trips"*), `:349`/`:350` (the checkpoint put to the operator as a three-option form instead), `:351` (answered 9m47s later) · `a7cdcd1c:845` (*"the no-progress checkpoint trips, so the heal loop stops here"*), then `:852`/`:858`/`:866` continue to green · `af23ab55:587` (*"Final fix"*, the fourth) · `9899ba51:1011`/`:1026`/`:1039`/`:1049` (four edits against three) |
 | **Versions** | 0.21.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0 |
 | **Fault** | **pw-prove** — the rule is unambiguous and was in the body every one of these runs was handed |
-| **Verdict** | **confirmed**, and the zero-invocation figure upgraded from inference to measurement — [see §HEAD verification](#fr11-verification) |
+| **Verdict** | **confirmed**; the figure is now measured over all 26 transcripts, and its denominator corrected to **0 of the 6 sessions where the rule fired** — [see §HEAD verification](#fr11-verification) |
 
 The strongest single number in this corpus: `playwright-debugger` is the prescribed next move when
 the loop is exhausted, and it is invoked **nowhere in 26 sessions**. In five of the six, the
@@ -687,7 +691,7 @@ Note the counter-examples, because they say the rule is keepable: `d3c037d9`, `f
 `f28c3493` all ran `-g`-scoped reruns during the loop and one full-spec gate after the last fix,
 exactly as written.
 
-#### FR22 — Step 8's hygiene `git checkout -- '**/…'` silently matches nothing
+#### FR22 — Step 8's hygiene `git checkout -- '**/…'` silently skips the repository-root file
 
 | | |
 |---|---|
@@ -699,11 +703,14 @@ exactly as written.
 | **Citations** | `3072aa9b:1123` and `67b624f4:603`, both `error: pathspec '**/auto-imports.d.ts' did not match any file(s) known to git` |
 | **Versions** | 0.24.0, 0.26.0 |
 | **Fault** | **pw-prove** |
-| **Verdict** | **confirmed**, and worse than the title says; the title's stated mechanism is **refuted** — [see §HEAD verification](#fr22-verification) |
+| **Verdict** | **confirmed**, and worse than first stated; the original mechanism is **refuted** and the heading and mechanism paragraph above are rewritten to what was measured — [see §HEAD verification](#fr22-verification) |
 
-Git's default pathspec is not glob mode, so `**/` is literal. In both sessions the sweep happened to
-have nothing to do, so the error was cosmetic — but a sweep that cannot match is a sweep that will
-silently fail to revert codegen churn on the run where it matters. `3072aa9b`'s distillation notes the
+Git's default pathspec is wildmatch **without** pathname mode, so `**/x` is not literal and is not
+`x` either: it matches any path containing a `/` and misses the repository-root file. Measured in
+[verification](#fr22-verification) — the sweep reverts `app/auto-imports.d.ts`, leaves a root
+`auto-imports.d.ts` modified, and **exits 0**. In both sessions the sweep happened to have nothing to
+do, so the error was cosmetic — but a sweep that half-matches and reports success is a sweep that
+will silently fail to revert codegen churn on the run where it matters. `3072aa9b`'s distillation notes the
 irony: it is the same `**/` trap the body warns about at length in Step 7's spec-set derivation. The
 bullet is unchanged at 0.28.0.
 
@@ -870,8 +877,6 @@ instructions, one followed and one declined, combine into a 22-minute loss. The 
 
 ---
 
----
-
 ## HEAD verification
 
 Every finding above the cut carries a verdict, reached by reading the skill twice: **at the version
@@ -881,18 +886,39 @@ convict a body of a rule it never carried — #133's first pass cited a rule abs
 body its session ran on — and a finding argued only from the transcript cannot say whether anything
 still needs fixing.
 
-**Where the cut falls.** Above the cut is the **ranked list** — the 25 pw-prove-fault and boundary
-findings the Rank column orders, `FR1` through `FR23` plus `FR32`. Below it is
+**Where the cut falls, and who decided.** Neither #136 nor #137 states a cut, and the ranked list
+carries none — so this pass **set** one, and says so rather than presenting it as a reading. The cut
+is drawn at the bottom of the **ranked list**: above it are the 25 findings the Rank column orders,
+`FR1` through `FR23` plus `FR32`; below it are the
 [repository-fault and boundary findings](#repository-fault-and-boundary-findings), which the list
-itself describes as *recorded, not ranked*: they belong to the per-repository setup studies and no
-ranking compares them with these. Verifying them against pw-prove's HEAD would be verifying the
-wrong artifact.
+itself calls *recorded, not ranked* and routes to the per-repository setup studies.
+
+Two consequences a reader should weigh rather than take on trust. First, the boundary is a
+**fault-side partition**, not a rank threshold, so no pw-prove-fault finding can fall below it: the
+cut buys no reduction in scope on the skill side, and every skill-fault finding was verified. That is
+more than #137's *"Only findings above the cut are verified"* asks for, not less, and it costs the
+saving that sentence was protecting. Second, verifying the repository-fault rows against pw-prove's
+HEAD would be verifying the wrong artifact — the current `SKILL.md` says nothing about a target
+repository's `.env.example` or its committed HAR — so they need a different instrument, not this
+one. If a later reader wants a narrower cut, the rank order is where to draw it and nothing here
+prevents that.
 
 **The posture is adversarial, and it is this repository's own.** `agents/e2e-finding-verifier.md`
 sets it for reviewer findings: read the contract, read the real context, actively try to **refute**,
-and confirm only when refutation fails. The burden is on the finding. Two findings' stated mechanism
-did not survive that and is corrected below; nothing was confirmed on the strength of the
-distillation alone where the body or the script could be read instead.
+and confirm only when refutation fails. The burden is on the finding.
+
+**How far the refutation reached, stated plainly, because it is uneven.** Five verdicts went back to
+primary evidence and could have come back negative: FR11 (all 26 transcripts scanned, twice — once
+for invocations and once for availability), FR13 and FR5 (the ledger rows re-read), FR22 (the git
+behaviour reproduced in a throwaway repository), and FR1 (the script's control flow traced against
+the observed `after 0s` poll). The other twenty tested the half a document can test — **is the
+instruction still there, in the version that ran and at HEAD** — and took the behavioural half from
+the distillation. That is a real limit and it is not evenly distributed: FR8, FR10, FR12, FR15, FR19
+and FR21 are behavioural claims (recon skipped, clips described unread, a plan skipped, the whole
+spec re-run, the budget overrun) confirmed from prose that has not changed. Their instruction half is
+verified; their frequency counts are #134's and are inherited, not re-measured. A reader who wants to
+argue with one of those should argue with the distillation, and the citation index says which file to
+open.
 
 ### What was read
 
@@ -906,12 +932,16 @@ distillation alone where the body or the script could be read instead.
   0.24.0 forward.
 - **`skills/e2e-reviewer/scripts/scan.mjs` at HEAD**, for the two findings that turn on it.
 - **The 26 corpus transcripts**, for the one finding whose headline is a count (FR11).
-- **The per-session version map from `span-index.json`**, reproduced below, because every Versions
-  cell in this document is a claim about it and none of them had been checked against it.
+- **The per-session version map from the span index**, reproduced below, because every Versions cell
+  in this document is a claim about it and none of them had been checked against it. The index itself
+  is scratchpad output and is **not** committed — like the distillations, it is regenerated by running
+  `scripts/forensics/span-index.py`, and the map below is the part of it this document needed to be
+  readable without one.
 
 ### The session → version map
 
-Read from the committed span index, and used to check every Versions cell above. All 26 agree.
+Read from the span index this exercise produced (scratchpad only; regenerate with
+`scripts/forensics/span-index.py`), and used to check every Versions cell above. All 26 agree.
 
 | Version | Corpus sessions |
 |---|---|
@@ -933,7 +963,7 @@ Read from the committed span index, and used to check every Versions cell above.
 | 3 | FR3 | confirmed |
 | 4 | FR20 | confirmed |
 | 5 | FR24 | confirmed (by-design cost) |
-| 6 | FR4 | confirmed; stated mechanism corrected |
+| 6 | FR4 | confirmed; row's stated mechanism corrected |
 | 7 | FR5 | confirmed |
 | 8 | FR6 | confirmed |
 | 9 | FR9 | confirmed; two instances confirmed-fixed at 0.22.0 |
@@ -942,7 +972,7 @@ Read from the committed span index, and used to check every Versions cell above.
 | 12 | FR10 | confirmed |
 | 13 | FR12 | confirmed |
 | 14 | FR14 | confirmed |
-| 15 | FR11 | confirmed; the count upgraded from inference to measurement |
+| 15 | FR11 | confirmed; count measured, denominator corrected to 0 of 6 |
 | 16 | FR13 | confirmed |
 | 17 | FR15 | confirmed |
 | 18 | FR16 | confirmed |
@@ -950,7 +980,7 @@ Read from the committed span index, and used to check every Versions cell above.
 | 20 | FR17 | **confirmed-fixed at 0.24.0** |
 | 21 | FR21 | confirmed |
 | 22 | FR19 | confirmed |
-| 23 | FR22 | confirmed, and worse than stated; the title's mechanism **refuted** |
+| 23 | FR22 | confirmed, and worse than stated; original mechanism **refuted**, row rewritten |
 | 24 | FR32 | **confirmed-fixed at 0.22.0** |
 | 25 | FR23 | confirmed |
 
@@ -970,11 +1000,11 @@ three sessions were handed and it is in the body now.
 
 The script half needed correcting, and the correction makes the finding stronger. `preflight.mjs`
 **does** carry a bind-failure check — `BIND_FAILURE = /EADDRINUSE|already in use/gi` and
-`failedToBind()` at `preflight.mjs:771`–`779` — and that function is identical at 0.24.0 and at
+`failedToBind()` at `preflight.mjs:775`–`780` — and that function is identical at 0.24.0 and at
 0.28.0. So the false positive is not the absence of a check. It is a **read-order race**: each poll
 round reads the log once, tests it for a bind failure, and then curls the candidates; the moment
-something answers on a port the new process announced, the round `break`s (`preflight.mjs:939`–`941`)
-and never re-reads the log. `pnpm preview` prints its `serving …` banner **before** it binds, so on a
+something answers on a port the new process announced, the candidate loop breaks (`preflight.mjs:903`–`904`) and the poll round breaks with it
+(`preflight.mjs:907`–`910`) — and the log is never re-read. `pnpm preview` prints its `serving …` banner **before** it binds, so on a
 sub-second restart the announcement is already past the mark, the `EADDRINUSE` lands microseconds
 after preflight's read, and the *predecessor* answers the curl. `c871a4f2:523` shows exactly that
 shape — `ready - HTTP 307 … after 0s`. There is no PID check anywhere in the file to catch it: the
@@ -996,7 +1026,14 @@ film, no video. The script has no clip-count reconciliation of any kind: nothing
 which is the whole of `bbae9aa2`'s 4-said-3-delivered case, and the body still says nothing anywhere
 about a `browser.newContext()` not inheriting `use.video`.
 
-The diagnosis table at `SKILL.md:1002`–`1007` still has exactly the four rows the finding names —
+One refinement the finding does not make, in the gate's favour: the **body** does carry a manual
+count check, at `SKILL.md:1071` — *"Confirm the clips survived: `ls test-results/*/video.webm | wc -l`
+equals the **PR spec set's** scenario count"*. It was there at 0.23.1 when `bbae9aa2` ran, and
+performing it would have caught that one instance. It does not change the verdict: it is a step in a
+list, not a gate, it fires after the film rather than before it, and it is blind to the three other
+shapes in this row, all of which produce the right *number* of clips.
+
+The diagnosis table's four rows at `SKILL.md:1003`–`1006` still has exactly the four rows the finding names —
 payoff not held, element off-frame, payoff expired, never settled. There is no row for a frame whose
 *subject* is not the criterion's subject (`0259fd57`'s landed false proof) and no rule for a frame
 that is legible but off-payoff (`cbe2813b`). `SKILL.md:905` states the design position plainly — *"No
@@ -1026,7 +1063,7 @@ seconds after publishing is still reachable at HEAD in exactly the same place.
 each ran a body carrying both, and the finding's claim that the two cases *slip past* them rather
 than predate them holds. At HEAD they are at `SKILL.md:1157`–`1158`.
 
-The handover stop's one-line version is unchanged at `SKILL.md:947`: *"Run the Step-8 hygiene beats
+The handover stop's one-line version is unchanged at `SKILL.md:957`: *"Run the Step-8 hygiene beats
 that release resources — stop a dev server this run started, sweep `test-results/` — and nothing else
 from Step 8."* It still carries neither guard, and the proof config still writes video on every run,
 so a non-delivering run still destroys the only visual artifact it produced.
@@ -1058,7 +1095,7 @@ explanatory clause should be read as corrected here.
 #### FR5 verification
 
 **Confirmed.** The report template still requires the line — `SKILL.md:1192`,
-`e2e-reviewer: N P0 (fixed), N P1 (listed below)` — and Step 6's rule at `SKILL.md:759` still says
+`e2e-reviewer: N P0 (fixed), N P1 (listed below)` — and Step 6's rule at `SKILL.md:753` still says
 *"P1/P2 found: output in the final report"*, with nothing that makes the tally reachable except
 reading the scanner's own summary. That summary is the last thing `scan.mjs` prints.
 
@@ -1078,7 +1115,8 @@ Phase …"*.
 The other half also holds: pw-prove's canonical template at `SKILL.md:690`–`693` writes the guard and
 the wait on **one** line, which `lineIsJustified` does honour. So the two scripts agree on the shape
 the body prescribes and disagree on the shape several runs wrote, which is exactly the boundary the
-row describes. `scan.mjs` is at 1.10.0 for the whole corpus and unchanged since.
+row describes. `e2e-reviewer` is at 1.10.0 for the whole corpus — that is the skill's `metadata.version`, not a
+version string inside `scan.mjs`, which carries none — and the file is unchanged since.
 
 #### FR9 verification
 
@@ -1171,13 +1209,34 @@ transcript.
 
 So the transcripts were scanned. All 26 corpus transcripts were read end to end for any `tool_use`
 block whose input names `playwright-debugger` — the shape a Skill-tool invocation takes, namespaced
-or not. **Zero, in all 26.** The count in the heading is now a measurement over the whole corpus, not
-an inference from what the distillations happened to mention, and it is stronger for it.
+or not. **Zero, in all 26.** The count in the heading is now a measurement, not an inference from
+what the distillations happened to mention.
+
+**But the denominator is wrong, and the correction cuts both ways.** `0 of 26` counts sessions, and
+the rule only fires when the loop is exhausted or the checkpoint trips — which happened in **6**
+sessions, the ones the Frequency cell already names. Twenty sessions never reached the exit, so they
+are not evidence of anything. The defensible figure is **0 of 6**: every session that reached the
+prescribed handover declined to take it. That is a smaller number and a stronger claim, because it
+is a rate rather than a headcount, and the row's *"invoked in **zero** of 26 sessions"* should be
+read with it.
+
+**The one route that would have changed the fault side was tried and closed.** If the skill had not
+been reachable, this would be a packaging finding rather than a skill-body one. It was reachable: all
+six trigger sessions carry `e2e:playwright-debugger` in the runtime's own available-skills listing,
+with its description, alongside `e2e:pw-prove`. The skill was on offer in every session that needed
+it, and was not called.
 
 The rule is unchanged at HEAD. `SKILL.md:936`: *"When the loop ends without a green run … **invoke
 `playwright-debugger`** (Skill tool) pointed at `playwright-report/` … Do not attempt a 4th fix."*
 The bound, the checkpoint table at `SKILL.md:927` and the handover stop at `SKILL.md:938` are all
 still there, so a rule with a perfect breach record is still shipping unchanged.
+
+**The same weakness is unmeasured elsewhere in this list, and is flagged rather than fixed.** Three
+other counts rest on the same footing — what a distillation reported, aggregated across 26 files:
+FR7's eight runs that asked at the push, FR2's eight sessions, FR9's six improvisations. None was
+re-measured here; a transcript scan is cheap for a count with a machine-detectable shape (a tool
+call) and expensive for one without (a question asked in prose). A later pass that wants to harden
+them should say which of the three has a detectable shape before spending on all three.
 
 #### FR13 verification
 
@@ -1231,7 +1290,7 @@ adjudicate it either.
 
 **Confirmed-fixed at 0.24.0**, by commit `cb8aecb` (*"remove ENV_CONTRACT, leaving REQUIRED_ENV as
 the one declaration form"*). The transition is exact and was measured rather than taken from the
-distillations: `ENV_CONTRACT` appears 6 times in the body and 5 times in `preflight.mjs` at 0.23.1,
+distillations: `ENV_CONTRACT` appears on 6 lines of the body and 6 lines of `preflight.mjs` at 0.23.1,
 and **0 times in either** at 0.24.0, 0.26.0, 0.27.0, 0.27.1 and 0.28.0.
 
 That also confirms the finding was true when observed. All four sessions ran 0.22.0 or 0.23.1
@@ -1279,8 +1338,9 @@ doing so**. The two observed `did not match any file(s)` errors are the case whe
 was at the root, or where there was nothing to revert at all.
 
 That makes the finding's conclusion — a sweep that will silently fail to revert codegen churn on the
-run where it matters — correct and understated. The heading *"silently matches nothing"* should be
-read as *silently misses the repository-root file, and says nothing about it*. The fix is the same
+run where it matters — correct and understated, and the row above has been corrected to say so: its
+heading read *"silently matches nothing"* and its mechanism paragraph said `**/` was literal. Both
+now say what was measured, because a fix spec reads the row, not this paragraph. The fix is the same
 either way: `:(glob)**/…` with an explicit top-level pathspec beside it, or a plain
 `git checkout -- .` scoped to the generated paths.
 
