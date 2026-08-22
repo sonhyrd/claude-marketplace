@@ -18,6 +18,12 @@ _Avoid_: subagent, child agent
 The tickets whose blockers have all merged back, and which can therefore dispatch now.
 _Avoid_: ready queue, next batch
 
+**Run**:
+The namespace one delegation's **Dispatch**es and messages belong to, and the **Coordinator**'s
+inbox for them. A durable address, never a scheduler: it places no **Worker** and decides no order —
+the **Frontier** does that.
+_Avoid_: session, batch, job, orchestration
+
 **Dispatch**:
 One attempt at a ticket, assigned to one terminal and carrying its own identity and lifecycle. The
 ticket names the work and is attemptable more than once; a Dispatch names one of those attempts, and
