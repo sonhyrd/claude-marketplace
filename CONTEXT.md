@@ -370,3 +370,42 @@ a list** — there is deliberately no fixed fast tier, because a named tier is a
 falls out of sync with the map it was derived from. What this buys is that a re-baseline costs one to
 three cases instead of the whole suite; what it costs is that the registry's section map has to be
 right, which is why it is the registry's load-bearing column.
+
+# Run forensics vocabulary
+
+The third part of this glossary. The first part names part of a proof; the second names part of the
+instrument that measures the skill; this part names the **exercise that reads finished runs** — what
+pw-prove actually cost across a week of real work. Nothing below is a gate: no run passes or fails
+anything defined here, and nothing here describes behaviour pw-prove exhibits while it is running.
+The method and the evidence live in `docs/studies/run-forensics.md`; this is the vocabulary only.
+
+## Run forensics
+The exercise of reading a bounded set of **already-finished** pw-prove sessions for what they cost
+the operator — where runs stalled, what was re-run, where a human had to intervene by hand, and which
+instruction the agent was following at that moment. Distinct from the two per-run gates it is most
+easily confused with: the [hermetic audit](#hermetic-audit) and the [clip fidelity
+contract](#clip-fidelity-contract) each pass or fail **one** run against a rule, whereas run
+forensics is neither a gate nor about one run. Distinct too from [clip
+inspection](#clip-inspection), a beat inside a live run, and from [environment
+facts](#environment-facts), which is what a run derives about a repository in order to proceed. Its
+output is evidence and nothing more; a decision that reads that evidence is a separate document.
+
+## Session distillation
+The fixed-schema record one session yields to [run forensics](#run-forensics), covering that
+session's identity, shape, cost, friction, mistakes, and the instruction each friction and mistake
+item is attributed to. One session, one record, written to disk before it is returned. A **record,
+not prose**: an empty field is a stated gap, and a friction item carrying no attribution is
+incomplete rather than a finding. A no-progress loop noted in one is an *observation* about where a
+run circled, not the [no-progress checkpoint](#no-progress-checkpoint), which is the rule Step 7
+applies live. Distinct too from the [runtime profile](#runtime-profile), which is a file a run writes
+into the target repository for the next run to read; a distillation is written outside every
+repository, after the fact, and no run ever reads one.
+
+## Friction finding
+One ranked item drawn from the [session distillations](#session-distillation): a named cost, carrying
+how many sessions hit it, how severe it is, what it cost in time, the `SKILL.md` section or script it
+is attributed to, the skill version it was observed on, and a citation a reader can verify a month
+later. Marked as pw-prove's fault or the target repository's, or as a boundary case rather than
+dropped when it straddles the line. The word is *finding*, not verdict: it is evidence a reader may
+act on, never a decision that anything will change — which is why a finding whose cause is already
+gone is recorded as confirmed-fixed rather than deleted.
