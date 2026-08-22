@@ -33,6 +33,7 @@ Exit codes:
 """
 
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -49,11 +50,28 @@ SESSIONLESS_SCHEMAS = {1}
 # evidence of struggle. Everything else is out.
 CORPUS_REPOS = {"nuxt-hyrd-chrysus", "hyrd-widget"}
 CONTROL_REPOS = {"e2e-skills"}
+KNOWN_REPOS = CORPUS_REPOS | CONTROL_REPOS
 
 LEDGER_PREFIX = "PWPROVE_RUN "
 DEFAULT_LEDGER = os.path.join(os.path.expanduser("~"), ".ptg", "ledger.jsonl")
 DEFAULT_TRANSCRIPTS = os.path.join(os.path.expanduser("~"), ".claude", "projects")
 DEFAULT_SINCE = "2026-08-15"
+
+
+def end_of(ts, duration_ms):
+    """The ISO timestamp a record's script finished at: its start plus its measured duration.
+
+    String arithmetic is not an option and a dependency is not either, so this goes through the
+    standard library's own parser and comes back in the same shape the ledger writes.
+    """
+    if not isinstance(duration_ms, int) or duration_ms <= 0:
+        return ts
+    try:
+        started = datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ")
+    except ValueError:
+        return ts
+    ended = started + datetime.timedelta(milliseconds=duration_ms)
+    return ended.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (ended.microsecond // 1000)
 
 
 def die(message, code=1):
@@ -118,13 +136,17 @@ def read_ledger(path, since, until):
                 continue
 
             entry = sessions.setdefault(rec["session"], {
-                "records": 0, "nonzero_exits": 0, "first_ts": ts, "last_ts": ts, "versions": {},
+                "records": 0, "nonzero_exits": 0, "first_ts": ts, "last_ts": ts,
+                "span_until": ts, "versions": {},
             })
             entry["records"] += 1
             if rec.get("exit") != 0:
                 entry["nonzero_exits"] += 1
             entry["first_ts"] = min(entry["first_ts"], ts)
             entry["last_ts"] = max(entry["last_ts"], ts)
+            # `ts` is when the script STARTED. Ending the span there would cut the last invocation
+            # off before it wrote its own result, which is the part a forensic reader most wants.
+            entry["span_until"] = max(entry["span_until"], end_of(ts, rec.get("duration_ms")))
             skill = rec.get("skill") or "unknown"
             version = rec.get("version") or "unknown"
             entry["versions"].setdefault(skill, set()).add(version)
@@ -136,16 +158,22 @@ def read_ledger(path, since, until):
 
 
 def index_transcripts(root):
-    """Map session id -> transcript path. Paths only; no body is read here."""
+    """Map session id -> sorted list of transcript paths. Paths only; no body is read here.
+
+    A list rather than a path because one session id can appear under two project directories (a
+    session resumed after a `cd`, or a copied tree). Keeping only the first one os.walk happened to
+    reach would decide silently which transcript the whole exercise reads, and this file's rule is
+    that ambiguity is stated. The caller reports the collision and takes the first by sort order.
+    """
     found = {}
     for dirpath, _dirnames, filenames in os.walk(root):
         for name in filenames:
             if name.endswith(".jsonl"):
-                found.setdefault(name[:-len(".jsonl")], os.path.join(dirpath, name))
-    return found
+                found.setdefault(name[:-len(".jsonl")], []).append(os.path.join(dirpath, name))
+    return {sid: sorted(paths) for sid, paths in found.items()}
 
 
-def scan_transcript(path, first_ts, last_ts):
+def scan_transcript(path, window):
     """Locate the region of `path` that the ledger window brackets.
 
     Reads one line at a time and looks at each line's top-level `timestamp` only — enough to place
@@ -153,8 +181,10 @@ def scan_transcript(path, first_ts, last_ts):
     no timestamp (a transcript opens with `mode` and `permission-mode` records that have none)
     cannot be placed, so they never bound a span.
 
-    Returns the span dict, or (None, reason) when nothing falls inside the window.
+    `window` is the (first_ts, last_ts) pair the session's ledger records bracket, inclusive at
+    both ends. Always returns a (span, reason) pair; exactly one half is None.
     """
+    first_ts, last_ts = window
     line_start = line_end = None
     byte_start = byte_end = None
     entries = 0
@@ -207,17 +237,26 @@ def split_cwd(cwd):
 
     Two layouts appear in practice: an Orca worktree under `.../workspaces/<repo>/<worktree>`, and
     a primary checkout whose last segment is the repository itself.
+
+    A session entered at a SUBDIRECTORY is the trap here. Taking the last segment would read
+    `.../nuxt-hyrd-chrysus/apps/web` as a repository called `web` and exclude it with a reason that
+    reads perfectly right — a wrong classification that announces itself as a correct one, which is
+    exactly the silent failure this index exists to prevent. So a known repository name anywhere in
+    the path wins over the last segment.
     """
     parts = [p for p in cwd.split("/") if p]
+    if not parts:
+        return None, None
     if "workspaces" in parts:
         i = parts.index("workspaces")
         if len(parts) > i + 2:
             return parts[i + 1], parts[i + 2]
         if len(parts) > i + 1:
             return parts[i + 1], None
-    if parts:
-        return parts[-1], None
-    return None, None
+    for segment in reversed(parts):
+        if segment in KNOWN_REPOS:
+            return segment, None
+    return parts[-1], None
 
 
 def read_cwd(path):
@@ -257,6 +296,58 @@ def classify(repository):
 # --- assembly ----------------------------------------------------------------------------------
 
 
+def tally_fields(sid, tally):
+    """The half of a session entry that comes from the ledger alone."""
+    return {
+        "session": sid,
+        "records": tally["records"],
+        "nonzero_exits": tally["nonzero_exits"],
+        "first_ts": tally["first_ts"],
+        "last_ts": tally["last_ts"],
+        "span_until": tally["span_until"],
+        "versions": {k: sorted(v) for k, v in sorted(tally["versions"].items())},
+    }
+
+
+def unplaced():
+    """The half of a session entry for a session with no transcript on disk.
+
+    Stated, never dropped: a gap the exercise can see is worth more than a corpus that quietly
+    shrank by one session.
+    """
+    return {
+        "transcript": None,
+        "no_transcript": True,
+        "cwd": None,
+        "repository": None,
+        "worktree": None,
+        "class": "excluded",
+        "reason": ("no transcript on disk for this session, so its repository cannot be "
+                   "determined and its span cannot be located"),
+        "span": None,
+        "span_note": "no transcript",
+    }
+
+
+def placed(path, tally):
+    """The half of a session entry that comes from the transcript: where it ran, and where to look."""
+    cwd = read_cwd(path)
+    repository, worktree = split_cwd(cwd) if cwd else (None, None)
+    span, note = scan_transcript(path, (tally["first_ts"], tally["span_until"]))
+    class_, reason = classify(repository)
+    return {
+        "transcript": path,
+        "no_transcript": False,
+        "cwd": cwd,
+        "repository": repository,
+        "worktree": worktree,
+        "class": class_,
+        "reason": reason,
+        "span": span,
+        "span_note": note,
+    }
+
+
 def build(args):
     if not os.path.isfile(args.ledger):
         die("ledger not found: %s" % args.ledger)
@@ -275,40 +366,14 @@ def build(args):
     transcripts = index_transcripts(args.transcripts)
 
     sessions = []
-    for sid, agg in ledger_sessions.items():
-        path = transcripts.get(sid)
-        entry = {
-            "session": sid,
-            "records": agg["records"],
-            "nonzero_exits": agg["nonzero_exits"],
-            "first_ts": agg["first_ts"],
-            "last_ts": agg["last_ts"],
-            "versions": {k: sorted(v) for k, v in sorted(agg["versions"].items())},
-            "transcript": path,
-        }
-        if path is None:
-            # Stated, never dropped: a gap the exercise can see is worth more than a corpus that
-            # quietly shrank by one session.
-            entry["no_transcript"] = True
-            entry["repository"] = None
-            entry["worktree"] = None
-            entry["cwd"] = None
-            entry["class"] = "excluded"
-            entry["reason"] = ("no transcript on disk for this session, so its repository cannot "
-                               "be determined and its span cannot be located")
-            entry["span"] = None
-            entry["span_note"] = "no transcript"
-        else:
-            entry["no_transcript"] = False
-            cwd = read_cwd(path)
-            repository, worktree = split_cwd(cwd) if cwd else (None, None)
-            entry["cwd"] = cwd
-            entry["repository"] = repository
-            entry["worktree"] = worktree
-            entry["class"], entry["reason"] = classify(repository)
-            span, note = scan_transcript(path, agg["first_ts"], agg["last_ts"])
-            entry["span"] = span
-            entry["span_note"] = note
+    ambiguous = []
+    for sid, tally in ledger_sessions.items():
+        paths = transcripts.get(sid) or []
+        if len(paths) > 1:
+            ambiguous.append({"session": sid, "paths": paths})
+        entry = dict(tally_fields(sid, tally))
+        entry.update(placed(paths[0], tally) if paths else unplaced())
+        entry["transcript_also_at"] = paths[1:]
         sessions.append(entry)
 
     sessions.sort(key=lambda s: (s["first_ts"], s["session"]))
@@ -324,6 +389,7 @@ def build(args):
         "refused_records": len(refusals),
         "malformed_lines": counts["malformed"],
         "out_of_window_records": counts["out_of_window"],
+        "ambiguous_transcripts": len(ambiguous),
     }
 
     return {
@@ -335,6 +401,7 @@ def build(args):
         },
         "totals": totals,
         "refusals": refusals,
+        "ambiguous_transcripts": ambiguous,
         "sessions": sessions,
     }
 
@@ -360,6 +427,15 @@ def main(argv):
 
     for refusal in index["refusals"]:
         print("span-index: refused ledger line %d: %s" % (refusal["line"], refusal["reason"]),
+              file=sys.stderr)
+    for entry in index["sessions"]:
+        if entry["no_transcript"]:
+            print("span-index: session %s is in the ledger with %d record(s) but has no transcript "
+                  "on disk; it cannot be classified or spanned" % (entry["session"], entry["records"]),
+                  file=sys.stderr)
+    for clash in index["ambiguous_transcripts"]:
+        print("span-index: session %s has %d transcripts on disk; reading %s and naming the rest "
+              "in transcript_also_at" % (clash["session"], len(clash["paths"]), clash["paths"][0]),
               file=sys.stderr)
 
     text = json.dumps(index, indent=2, sort_keys=False) + "\n"

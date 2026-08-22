@@ -106,7 +106,7 @@ Each `skills/<name>/SKILL.md` is the contract. Everything in the skill body shou
 **task-actionable instructions for the agent**, not narrative documentation; supporting reference
 material (long tables, framework references) goes in sibling `.md` files and is read on demand.
 
-### Shipped scripts are Node; repo scripts are shell
+### Shipped scripts are Node; repo scripts are shell and python3
 
 The shipped scripts under `skills/*/scripts/` run inside a **user's** repository, so they are plain
 ESM `.mjs` on the Node standard library — **no npm dependency, no build step, nothing installed into

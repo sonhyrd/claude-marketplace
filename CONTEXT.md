@@ -370,3 +370,28 @@ a list** — there is deliberately no fixed fast tier, because a named tier is a
 falls out of sync with the map it was derived from. What this buys is that a re-baseline costs one to
 three cases instead of the whole suite; what it costs is that the registry's section map has to be
 right, which is why it is the registry's load-bearing column.
+
+## Span
+The stretch of a session transcript in which pw-prove actually ran. A transcript is a whole work
+session — up to 25 MB of it — and pw-prove is a region inside, bracketed by the first and last run
+ledger record the session left behind. The word matters because the alternative reading, "the
+transcript is the run", is what makes an exercise read 226 MB to answer a question about 9% of it.
+
+## Span index
+The one computed artifact of [run forensics](#run-forensics): `scripts/forensics/span-index.py`
+takes the run ledger and the local transcript tree and emits one entry per session — repository,
+worktree, transcript path, skill versions, ledger record and non-zero-exit counts, first and last
+ledger timestamp, and the transcript line and byte range those timestamps bracket. It is computed
+once and read by everything downstream, so no later step re-derives which sessions matter or where
+inside a transcript to look. It is the exercise's only tested seam because it is the only component
+whose failure is silent: a mis-sliced [span](#span) yields a confident distillation of the wrong
+turns with nothing reporting an error.
+
+## Corpus, control and excluded
+The three classes the [span index](#span-index) sorts sessions into. **Corpus** is the two
+repositories under audit and is what the findings are drawn from. **Control** is this repository's
+own dev and CI sessions, retained rather than deleted: their failures are deliberate, so a taxonomy
+that cannot tell one of them from real struggle is exposed as defective. **Excluded** is everything
+else, and it always carries a stated reason — including the sessions the ledger knows but no
+transcript exists for, which are emitted with an explicit marker because a corpus that silently
+shrinks is worse than one that reports a gap.

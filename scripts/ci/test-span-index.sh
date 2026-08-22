@@ -75,8 +75,10 @@ run_index() {
   rc=$?
 }
 
-# jq_like <json-file> <python-expression over `d`>
-q() { python3 -c '
+# field <json-file> <python expression over the loaded index `d`, with a session(id) helper>
+# The eval() is deliberate: this is a fixture harness reading expressions written literally a few
+# lines below, which keeps an assertion readable as one line instead of a bespoke accessor each.
+field() { python3 -c '
 import json, sys
 d = json.load(open(sys.argv[1]))
 def session(sid):
@@ -115,11 +117,11 @@ if [ "$rc" != "0" ]; then
 else
   ok "bracketing run exited 0"
   expect "span starts at the first entry at or after the first ledger ts" \
-    "$(q "$W/o1" 'session("'"$S1"'")["span"]["line_start"]')" 4
+    "$(field "$W/o1" 'session("'"$S1"'")["span"]["line_start"]')" 4
   expect "span ends at the last entry at or before the last ledger ts" \
-    "$(q "$W/o1" 'session("'"$S1"'")["span"]["line_end"]')" 6
+    "$(field "$W/o1" 'session("'"$S1"'")["span"]["line_end"]')" 6
   expect "span counts only the entries inside the window" \
-    "$(q "$W/o1" 'session("'"$S1"'")["span"]["entries"]')" 3
+    "$(field "$W/o1" 'session("'"$S1"'")["span"]["entries"]')" 3
   # The byte range must be seekable: reading [byte_start, byte_end) yields exactly those lines.
   sliced=$(python3 -c '
 import json, sys
@@ -129,18 +131,18 @@ with open(d["sessions"][0]["transcript"], "rb") as fh:
 print(len([l for l in buf.decode().splitlines() if l]))
 ' "$W/o1")
   expect "byte range is seekable and holds exactly the spanned lines" "$sliced" 3
-  expect "record count is the ledger's" "$(q "$W/o1" 'session("'"$S1"'")["records"]')" 2
-  expect "non-zero exits are counted" "$(q "$W/o1" 'session("'"$S1"'")["nonzero_exits"]')" 1
+  expect "record count is the ledger's" "$(field "$W/o1" 'session("'"$S1"'")["records"]')" 2
+  expect "non-zero exits are counted" "$(field "$W/o1" 'session("'"$S1"'")["nonzero_exits"]')" 1
   expect "first ledger timestamp is carried" \
-    "$(q "$W/o1" 'session("'"$S1"'")["first_ts"]')" 2026-08-16T10:00:00.000Z
+    "$(field "$W/o1" 'session("'"$S1"'")["first_ts"]')" 2026-08-16T10:00:00.000Z
   expect "last ledger timestamp is carried" \
-    "$(q "$W/o1" 'session("'"$S1"'")["last_ts"]')" 2026-08-16T10:05:00.000Z
+    "$(field "$W/o1" 'session("'"$S1"'")["last_ts"]')" 2026-08-16T10:05:00.000Z
   expect "every skill version seen in the session is carried" \
-    "$(q "$W/o1" '",".join(session("'"$S1"'")["versions"]["pw-prove"])')" 0.26.0,0.27.1
+    "$(field "$W/o1" '",".join(session("'"$S1"'")["versions"]["pw-prove"])')" 0.26.0,0.27.1
   expect "repository is resolved from the transcript's cwd" \
-    "$(q "$W/o1" 'session("'"$S1"'")["repository"]')" hyrd-widget
+    "$(field "$W/o1" 'session("'"$S1"'")["repository"]')" hyrd-widget
   expect "worktree is resolved from the transcript's cwd" \
-    "$(q "$W/o1" 'session("'"$S1"'")["worktree"]')" krill
+    "$(field "$W/o1" 'session("'"$S1"'")["worktree"]')" krill
 fi
 
 # --- case 2: no transcript ----------------------------------------------------------------------
@@ -157,16 +159,16 @@ if [ "$rc" != "0" ]; then
   bad "no-transcript run exited $rc, wanted 0"; sed 's/^/         /' "$W/e2" | head -3
 else
   expect "the transcript-less session is still emitted" \
-    "$(q "$W/o2" 'len([s for s in d["sessions"] if s["session"] == "'"$S2"'"])')" 1
+    "$(field "$W/o2" 'len([s for s in d["sessions"] if s["session"] == "'"$S2"'"])')" 1
   expect "it carries the explicit no-transcript marker" \
-    "$(q "$W/o2" 'session("'"$S2"'")["no_transcript"]')" True
+    "$(field "$W/o2" 'session("'"$S2"'")["no_transcript"]')" True
   expect "its transcript path is null, not a guess" \
-    "$(q "$W/o2" 'session("'"$S2"'")["transcript"] is None')" True
+    "$(field "$W/o2" 'session("'"$S2"'")["transcript"] is None')" True
   expect "its span is null, not a fabricated range" \
-    "$(q "$W/o2" 'session("'"$S2"'")["span"] is None')" True
-  expect "the gap is counted in the totals" "$(q "$W/o2" 'd["totals"]["no_transcript"]')" 1
+    "$(field "$W/o2" 'session("'"$S2"'")["span"] is None')" True
+  expect "the gap is counted in the totals" "$(field "$W/o2" 'd["totals"]["no_transcript"]')" 1
   expect "its ledger record count survives the gap" \
-    "$(q "$W/o2" 'session("'"$S2"'")["records"]')" 1
+    "$(field "$W/o2" 'session("'"$S2"'")["records"]')" 1
 fi
 
 # --- case 3: classification ---------------------------------------------------------------------
@@ -191,17 +193,17 @@ run_index "$W/o3" "$W/e3" "$L"
 if [ "$rc" != "0" ]; then
   bad "classification run exited $rc, wanted 0"; sed 's/^/         /' "$W/e3" | head -3
 else
-  expect "a chrysus worktree is corpus"        "$(q "$W/o3" 'session("'"$SC"'")["class"]')" corpus
-  expect "a widget checkout is corpus"         "$(q "$W/o3" 'session("'"$SW"'")["class"]')" corpus
-  expect "a primary checkout has no worktree"  "$(q "$W/o3" 'session("'"$SW"'")["worktree"] is None')" True
-  expect "an e2e-skills worktree is control"   "$(q "$W/o3" 'session("'"$SE"'")["class"]')" control
+  expect "a chrysus worktree is corpus"        "$(field "$W/o3" 'session("'"$SC"'")["class"]')" corpus
+  expect "a widget checkout is corpus"         "$(field "$W/o3" 'session("'"$SW"'")["class"]')" corpus
+  expect "a primary checkout has no worktree"  "$(field "$W/o3" 'session("'"$SW"'")["worktree"] is None')" True
+  expect "an e2e-skills worktree is control"   "$(field "$W/o3" 'session("'"$SE"'")["class"]')" control
   expect "control says why it is not corpus"   \
-    "$(q "$W/o3" '"deliberate" in session("'"$SE"'")["reason"]')" True
-  expect "any other repository is excluded"    "$(q "$W/o3" 'session("'"$SX"'")["class"]')" excluded
+    "$(field "$W/o3" '"deliberate" in session("'"$SE"'")["reason"]')" True
+  expect "any other repository is excluded"    "$(field "$W/o3" 'session("'"$SX"'")["class"]')" excluded
   expect "exclusion names the repository"      \
-    "$(q "$W/o3" '"hyrd-ui-library" in session("'"$SX"'")["reason"]')" True
+    "$(field "$W/o3" '"hyrd-ui-library" in session("'"$SX"'")["reason"]')" True
   expect "totals count each class"             \
-    "$(q "$W/o3" '"%d/%d/%d" % (d["totals"]["corpus"], d["totals"]["control"], d["totals"]["excluded"])')" 2/1/1
+    "$(field "$W/o3" '"%d/%d/%d" % (d["totals"]["corpus"], d["totals"]["control"], d["totals"]["excluded"])')" 2/1/1
 fi
 
 # --- case 4: unknown schema ---------------------------------------------------------------------
@@ -218,10 +220,10 @@ if [ "$rc" != "0" ]; then
   bad "unknown-schema run exited $rc, wanted 0"; sed 's/^/         /' "$W/e4" | head -3
 else
   expect "the refused record produces no session" \
-    "$(q "$W/o4" 'len([s for s in d["sessions"] if s["session"] == "'"$S7"'"])')" 0
-  expect "the refusal is counted"        "$(q "$W/o4" 'd["totals"]["refused_records"]')" 1
-  expect "the refusal names the schema"  "$(q "$W/o4" '"99" in d["refusals"][0]["reason"]')" True
-  expect "the refusal names the line"    "$(q "$W/o4" 'd["refusals"][0]["line"]')" 2
+    "$(field "$W/o4" 'len([s for s in d["sessions"] if s["session"] == "'"$S7"'"])')" 0
+  expect "the refusal is counted"        "$(field "$W/o4" 'd["totals"]["refused_records"]')" 1
+  expect "the refusal names the schema"  "$(field "$W/o4" '"99" in d["refusals"][0]["reason"]')" True
+  expect "the refusal names the line"    "$(field "$W/o4" 'd["refusals"][0]["line"]')" 2
   if grep -q 'schema' "$W/e4"; then
     ok "the refusal is announced on stderr, not only buried in the JSON"
   else
@@ -246,10 +248,10 @@ run_index "$W/o5" "$W/e5" "$L"
 if [ "$rc" != "0" ]; then
   bad "sessionless-schema run exited $rc, wanted 0"; sed 's/^/         /' "$W/e5" | head -3
 else
-  expect "only the attributable session is indexed" "$(q "$W/o5" 'len(d["sessions"])')" 1
-  expect "the sessionless record is refused"        "$(q "$W/o5" 'd["totals"]["refused_records"]')" 1
+  expect "only the attributable session is indexed" "$(field "$W/o5" 'len(d["sessions"])')" 1
+  expect "the sessionless record is refused"        "$(field "$W/o5" 'd["totals"]["refused_records"]')" 1
   expect "the refusal names the session field"      \
-    "$(q "$W/o5" '"session" in d["refusals"][0]["reason"]')" True
+    "$(field "$W/o5" '"session" in d["refusals"][0]["reason"]')" True
 fi
 
 # --- case 5: empty window -----------------------------------------------------------------------
@@ -286,11 +288,107 @@ run_index "$W/o7" "$W/e7" "$L" --since 2026-08-16 --until 2026-08-17
 if [ "$rc" != "0" ]; then
   bad "bounded-window run exited $rc, wanted 0"; sed 's/^/         /' "$W/e7" | head -3
 else
-  expect "the record at --since is in"      "$(q "$W/o7" 'len(d["sessions"])')" 1
-  expect "the record at --until is out"     "$(q "$W/o7" 'd["sessions"][0]["session"]')" "$S1"
+  expect "the record at --since is in"      "$(field "$W/o7" 'len(d["sessions"])')" 1
+  expect "the record at --until is out"     "$(field "$W/o7" 'd["sessions"][0]["session"]')" "$S1"
 fi
 
-# --- case 7: input errors -----------------------------------------------------------------------
+# --- case 7: a cwd below the repository root -----------------------------------------------------
+echo ""
+echo "-- a session entered at a subdirectory is still attributed to its repository --"
+S8=88888888-8888-8888-8888-888888888888
+L="$W/l8.jsonl"
+ledger_line "$S8" 2026-08-16T10:00:00.000Z 0 > "$L"
+transcript proj-chrysus-subdir "$S8" "$WORK/nuxt-hyrd-chrysus/apps/web" 2026-08-16T10:00:00.000Z
+run_index "$W/o10" "$W/e10" "$L"
+if [ "$rc" != "0" ]; then
+  bad "subdirectory run exited $rc, wanted 0"; sed 's/^/         /' "$W/e10" | head -3
+else
+  # Reading the last path segment would name the repository `web` and exclude it with a reason
+  # that reads perfectly right — a wrong verdict wearing a right one's clothes.
+  expect "the repository is the checkout, not the subdirectory" \
+    "$(field "$W/o10" 'session("'"$S8"'")["repository"]')" nuxt-hyrd-chrysus
+  expect "and it is still corpus" "$(field "$W/o10" 'session("'"$S8"'")["class"]')" corpus
+fi
+
+# --- case 8: the last record's duration ----------------------------------------------------------
+echo ""
+echo "-- the span covers the last invocation's OUTPUT, not just the moment it started --"
+S9=99999999-9999-9999-9999-999999999999
+L="$W/l9.jsonl"
+# One record starting at 10:00:00 and running 90s. Its result lands at 10:01:00, after the only
+# ledger timestamp there is; a span ending at the start would cut the last run's outcome off.
+python3 -c '
+import json
+print("PWPROVE_RUN " + json.dumps({"schema": 2, "script": "probe.mjs", "phase": "recon",
+      "skill": "pw-prove", "version": "0.27.1", "commit": "deadbee",
+      "session": "'"$S9"'", "session_src": "host", "ts": "2026-08-16T10:00:00.000Z",
+      "duration_ms": 90000, "exit": 1}))' > "$L"
+transcript proj-widget-duration "$S9" "$WS/hyrd-widget/krill" \
+  2026-08-16T10:00:00.000Z 2026-08-16T10:01:00.000Z 2026-08-16T10:02:00.000Z
+run_index "$W/o11" "$W/e11" "$L"
+if [ "$rc" != "0" ]; then
+  bad "duration run exited $rc, wanted 0"; sed 's/^/         /' "$W/e11" | head -3
+else
+  expect "the span reaches the entry inside the last run's duration" \
+    "$(field "$W/o11" 'session("'"$S9"'")["span"]["entries"]')" 2
+  expect "the span's upper bound is the run's end, not its start" \
+    "$(field "$W/o11" 'session("'"$S9"'")["span_until"]')" 2026-08-16T10:01:30.000Z
+  expect "the last ledger timestamp is reported unchanged" \
+    "$(field "$W/o11" 'session("'"$S9"'")["last_ts"]')" 2026-08-16T10:00:00.000Z
+fi
+
+# --- case 9: two transcripts for one session id --------------------------------------------------
+echo ""
+echo "-- one session id under two project directories is reported, not resolved by walk order --"
+L="$W/l10.jsonl"
+ledger_line "$S9" 2026-08-16T10:00:00.000Z 0 > "$L"
+transcript proj-alpha-copy "$S9" "$WS/hyrd-widget/krill" 2026-08-16T10:00:00.000Z
+run_index "$W/o12" "$W/e12" "$L"
+if [ "$rc" != "0" ]; then
+  bad "ambiguous-transcript run exited $rc, wanted 0"; sed 's/^/         /' "$W/e12" | head -3
+else
+  expect "the collision is counted"        "$(field "$W/o12" 'd["totals"]["ambiguous_transcripts"]')" 1
+  expect "the unread transcript is named"  \
+    "$(field "$W/o12" 'len(session("'"$S9"'")["transcript_also_at"])')" 1
+  expect "the one that was read is chosen by sort order, not walk order" \
+    "$(field "$W/o12" 'session("'"$S9"'")["transcript"] < session("'"$S9"'")["transcript_also_at"][0]')" True
+  if grep -q 'transcripts on disk' "$W/e12"; then
+    ok "the collision is announced on stderr"
+  else
+    bad "nothing on stderr named the transcript collision"
+  fi
+fi
+
+# --- case 10: --out ------------------------------------------------------------------------------
+echo ""
+echo "-- --out writes the index to a file and leaves stdout clean --"
+L="$W/l11.jsonl"
+ledger_line "$S1" 2026-08-16T10:00:00.000Z 0 > "$L"
+run_index "$W/o13" "$W/e13" "$L" --out "$W/index.json"
+if [ "$rc" != "0" ]; then
+  bad "--out run exited $rc, wanted 0"; sed 's/^/         /' "$W/e13" | head -3
+elif [ -s "$W/o13" ]; then
+  bad "--out still wrote the index to stdout"
+else
+  expect "the file holds the index" "$(field "$W/index.json" 'd["totals"]["sessions"]')" 1
+fi
+
+# --- case 11: a transcript-less session is announced, not only tallied ---------------------------
+echo ""
+echo "-- a gap in the corpus is stated on stderr, where a reader will meet it --"
+L="$W/l12.jsonl"
+{
+  ledger_line "$S1" 2026-08-16T10:00:00.000Z 0
+  ledger_line "$S2" 2026-08-16T11:00:00.000Z 1
+} > "$L"
+run_index "$W/o14" "$W/e14" "$L"
+if grep -q "$S2" "$W/e14" && grep -qi 'no transcript' "$W/e14"; then
+  ok "the transcript-less session is named on stderr"
+else
+  bad "stderr did not name the transcript-less session: $(head -1 "$W/e14")"
+fi
+
+# --- case 12: input errors -----------------------------------------------------------------------
 echo ""
 echo "-- a missing input is a usage error, not an empty index --"
 run_index "$W/o8" "$W/e8" "$W/nope.jsonl"
