@@ -11,7 +11,15 @@ baseline, known-noise test, or environment trap.
   prefixes its own user segment and flattens the slash, yielding `sonhyrd/ticket-<slug>`. Merge-back
   is unaffected, but address a worker's branch by what `git branch --show-current` reports in its
   worktree, never by the name you passed.
-- **Post-merge check**: `make validate`. Baseline **3/3 passing, 0 failures** as of `fa20228`
+- **Post-merge check**: `make ci`, **not** `make validate`. CI runs
+  `validate-strict test lint type-check format-check`, and `validate` is a strict subset of it —
+  seven merge-backs passed `validate` while `format-check` drifted, and the PR went red on
+  `ruff format --check scripts/ tests/` after every ticket had merged. Where `make` is absent, run
+  the bodies: `uv run scripts/validators/validate_all.py --strict`, `uv run pytest tests/ -q`,
+  `uv run ruff check scripts/ tests/`, `uv run ruff format --check scripts/ tests/`,
+  `uv run ty check scripts/ tests/`. **`ruff format --check` over the whole repo is not the gate** —
+  ten files outside `scripts/`/`tests/` are unformatted and pre-existing; CI scopes to those two
+  directories and so must you. Baseline **3/3 passing, 0 failures** as of `fa20228`
   (2026-08-07): File Structure, JSON Manifest, YAML Frontmatter. No known-noise failures — any
   failure is a regression. **Neither `make` nor `shellcheck` is installed on this host** — run the
   target's recipe body instead: `uv run scripts/validators/validate_all.py`. Bare `python3` fails on

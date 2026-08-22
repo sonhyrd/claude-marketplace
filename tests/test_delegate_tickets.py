@@ -206,11 +206,7 @@ from pathlib import Path
 import pytest
 
 SKILL_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "plugins"
-    / "sss"
-    / "skills"
-    / "delegate-tickets"
+    Path(__file__).resolve().parent.parent / "plugins" / "sss" / "skills" / "delegate-tickets"
 )
 SKILL = SKILL_DIR / "SKILL.md"
 
@@ -787,9 +783,7 @@ def test_the_cap_is_justified_by_review_surface_alone(dispatch: str) -> None:
 def test_briefs_and_receipts_share_one_placeholder(skill_docs: dict[Path, str]) -> None:
     """A coordinator reading `/tmp/<slug>/…` opens a path no worker wrote."""
     placeholders = {
-        match
-        for text in skill_docs.values()
-        for match in re.findall(r"/tmp/(<[a-z-]+>)/", text)
+        match for text in skill_docs.values() for match in re.findall(r"/tmp/(<[a-z-]+>)/", text)
     }
     assert placeholders == {"<ticket-slug>"}, placeholders
 
@@ -879,9 +873,7 @@ def test_a_failed_start_is_read_not_guessed_at(dispatch: str) -> None:
     assert "--retry-of" in flat_dispatch
 
 
-def test_custom_argv_is_only_the_escape_hatch(
-    dispatch: str, skill_docs: dict[Path, str]
-) -> None:
+def test_custom_argv_is_only_the_escape_hatch(dispatch: str, skill_docs: dict[Path, str]) -> None:
     """The path the live CLI supersedes, kept for what `worker-start` cannot express.
 
     `scripts/check-delegate-cli.sh` reports the default spelling as SUPERSEDED

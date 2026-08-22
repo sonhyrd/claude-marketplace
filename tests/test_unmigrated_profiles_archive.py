@@ -38,11 +38,7 @@ def archive_text() -> str:
 def test_archive_is_not_under_plugins() -> None:
     """The published plugin ships no copy of the archive, under any name."""
     assert not OLD_PATH.exists(), f"{OLD_PATH} is published to every installer"
-    stray = [
-        path
-        for path in (REPO / "plugins").rglob("*.md")
-        if "unmigrated" in path.name
-    ]
+    stray = [path for path in (REPO / "plugins").rglob("*.md") if "unmigrated" in path.name]
     assert not stray, f"archive copies still under plugins/: {stray}"
 
 
@@ -73,11 +69,7 @@ def test_header_states_the_completion_condition(archive_text: str) -> None:
 def test_template_pointer_resolves_from_the_new_location(archive_text: str) -> None:
     """The `profile-template.md` link is relative to `docs/agents/`, not the plugin."""
     assert TEMPLATE.is_file(), "the template the archive points at is gone"
-    hrefs = [
-        href
-        for href in MARKDOWN_LINK.findall(archive_text)
-        if "profile-template.md" in href
-    ]
+    hrefs = [href for href in MARKDOWN_LINK.findall(archive_text) if "profile-template.md" in href]
     assert hrefs, "the archive no longer points at the profile template"
     for href in hrefs:
         resolved = (ARCHIVE.parent / href).resolve()
