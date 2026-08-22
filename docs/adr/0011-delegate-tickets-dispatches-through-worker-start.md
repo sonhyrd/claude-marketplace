@@ -29,6 +29,12 @@ a `worker_dispatches` row"; settled `worker-retain` and `worker-release` "report
 every settled worker terminal since it was written. On the path step 5 built, neither verb did
 anything.
 
+> **Correction (#74).** Step 7 no longer states that rule: the loaded guide carries it verbatim
+> ("Coordinators must account for every settled worker terminal before waiting again or ending the
+> turn"), and step 0 loads the guide on every run, so the skill's copy was a duplicate. The argument
+> above is unaffected — the accounting is still asked of the coordinator, and it is still the
+> supervised path that makes it act on anything. Only the second copy went.
+
 **The readiness loop was approximating an exit code.** `worker-start` "exits 0 only for ready", and
 readiness is decided on process identity — `out/shared/shell-process-detection.js` states that a
 bare shell is the negative signal for "is an agent running". That is what the `tui-idle` wait plus
