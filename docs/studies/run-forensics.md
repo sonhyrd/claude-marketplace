@@ -43,9 +43,13 @@ Filed here as it is produced:
 
 - A **span index** — one entry per session with repository, worktree, transcript path, skill versions
   seen, ledger record count, non-zero-exit count, first and last ledger timestamp, the transcript
-  range those timestamps bracket, and the corpus/control/excluded classification. Sessions the ledger
+  range those timestamps bracket, the bounded [reaction tail](../../CONTEXT.md#reaction-tail) that
+  follows it, and the corpus/control/excluded classification. Sessions the ledger
   knows but no transcript exists for are marked `no-transcript` rather than dropped, so a gap in the
-  corpus is stated rather than silently shrinking it.
+  corpus is stated rather than silently shrinking it. Built by `scripts/forensics/span-index.py`;
+  over the corpus it reports **632 shipped-script records and 57 non-zero exits across the 26
+  sessions**, which supersedes the 656/60 quoted while designing the exercise — that figure was taken
+  one repository too wide, before `hyrd-ui-library` was excluded.
 - One **session distillation** per session. Its schema is fixed here, not in the glossary: identity
   (session, repository, worktree, skill versions, commit, transcript path, span bounds); shape (steps
   entered, steps reached, terminal state); cost (turns and wall-clock per step, tool calls per step,
@@ -56,7 +60,9 @@ Filed here as it is produced:
   stay in the scratchpad and are never committed: 226 MB of real work transcripts do not get
   partially reproduced in a git history. Sub-agents redact at source — no values from `.env`, request
   or response headers, cookies or HAR bodies, and nothing key-shaped — so an unredacted quote is
-  never written and then trimmed.
+  never written and then trimmed. The schema, the prompt that produces it and the reach of the read
+  are fixed in [session distillation](session-distillation.md), which also records the one session
+  the instrument was proven on before the rest were run.
 - The **ranked friction findings**. Frequency orders the list, severity overrides it, and measured
   time cost is reported as a third column rather than folded into a composite score, so the ranking
   can be argued with. Every finding above the cut is re-checked against HEAD, and that re-check
