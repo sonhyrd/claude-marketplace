@@ -139,6 +139,53 @@ Two things make that rule survivable, and each has a test below:
    40-second wait and an empty 15-minute wait are byte-identical JSON, so an
    omitted flag disguises a bug in the coordinator's own command line as a
    checkpoint.
+
+## What the loaded guide already says (#74)
+
+Step 0 loads all 408 lines of the live orchestration guide on **every** run, so
+a rule this file restates is a second copy that ages independently of the one
+the coordinator has in context. Six were verified against the loaded guide and
+deleted; each is asserted absent over the whole plugin tree below, because a
+clause retired from `SKILL.md` and left standing in a reference still ships.
+
+| Deleted | Guide |
+|---|---|
+| ack-or-replay | "replays that exact batch until `--ack <delivery_id>`" |
+| a timeout / `{count:0}` is a checkpoint | "Treat a `check --wait` timeout or `{count:0}` as a checkpoint" |
+| workers run 15-60 minutes | "Long coding tasks routinely run 15-60 minutes" |
+| account for settled terminals by reuse / `worker-retain` / release | "Coordinators must account for every settled worker terminal" |
+| keep rolling until every Dispatch settles | "keep waiting until every expected Dispatch settles" |
+| the dispatch-capability revocation note | "do not reuse the settled Dispatch's lifecycle IDs" |
+
+**Five rules stay because the guide does not carry them**, plus the shared-stash
+rule, and each has a test below. The stash rule keeps its "never" *and* its
+reasoning: `git stash` is the correct reflex in a single checkout, the damage
+lands in a sibling worktree nobody looks at, and the positive form alone does
+not explain why the obvious move is wrong.
+
+Deleting the duplicates makes step 5's preamble false as well as redundant — it
+justified carrying Orca's rules on the grounds that `orca-cli` and
+`orchestration` are outside this repo's write access, which was written when the
+guide was not loaded. One line replaces it.
+
+## Three statements that were false (#74)
+
+1. **"A turn ends in exactly three places"** named the final report, an
+   escalation, and step 1's gate — while step 4 alone stops in four more. A
+   closed list that is demonstrably incomplete stops being a lookup, which is
+   the entire reason it was written as a closed list. The fix keeps the closed
+   form and widens the third entry to **refusal-to-start**, of which every
+   preflight stop is one kind.
+2. **"No receipt, no merge"** was a heading its own body contradicted: the body
+   runs the Standards axis on a missing receipt and then *merges*. The rule is
+   ADR-0010's and is not the defect — a measured ~1-in-3 trip rate would strand
+   a third of all branches on an escalation. The heading is what changed, to the
+   claim the body actually makes: a branch merges reviewed or not at all.
+3. **Two `/tmp` placeholders.** Briefs and receipts have to share one, or the
+   coordinator reads a path no worker wrote.
+
+Four prohibitions became the positive instruction they were guarding, which is
+the shape a reader can act on rather than one to avoid.
 """
 
 from __future__ import annotations
@@ -498,12 +545,29 @@ def test_definition_of_done_names_both_axes(dispatch: str) -> None:
     assert "Standards" in dispatch and "Spec" in dispatch
 
 
-def test_merge_back_refuses_a_missing_receipt(merge_back: str) -> None:
-    """Failure 3: the teeth. Absence has to block, not pass silently."""
-    assert "No receipt, no merge" in merge_back
+def test_merge_back_acts_on_a_missing_receipt(merge_back: str) -> None:
+    """Failure 3: the teeth. Absence has to cost something, not pass silently.
+
+    ADR-0010's clauses, unchanged: the coordinator opens the receipt before the
+    merge, a missing one buys a Standards pass on that branch, and `HANDOFF`
+    entries are the coordinator's to fix in the merge commit.
+    """
     assert RECEIPT_PATH in merge_back
     assert re.search(r"Standards axis", merge_back)
     assert "HANDOFF" in merge_back
+    assert re.search(r"[Bb]efore the merge", merge_back)
+
+
+def test_the_receipt_heading_matches_its_body(merge_back: str) -> None:
+    """"No receipt, no merge" promised a refusal the body does not perform.
+
+    The body runs the Standards axis and then merges — deliberately, per
+    ADR-0010, because at a ~1-in-3 trip rate a refusal strands a third of all
+    branches. So the heading is what was wrong: a branch merges reviewed, or it
+    does not merge.
+    """
+    assert "No receipt, no merge" not in merge_back
+    assert re.search(r"merges reviewed, or not at all", merge_back), merge_back
 
 
 # --- The `check --wait` resting state ----------------------------------------
@@ -529,7 +593,22 @@ def test_permitted_turn_ends_are_a_closed_list(preamble: str) -> None:
     """All three, or the list stops being closed and becomes a suggestion."""
     assert re.search(r"final report", preamble)
     assert re.search(r"escalation", preamble)
-    assert re.search(r"gate", preamble)
+    assert re.search(r"refusal-to-start", preamble)
+
+
+def test_the_closed_list_of_turn_ends_is_true(preamble: str) -> None:
+    """It named step 1's gate and stopped, while step 4 alone stops four times.
+
+    A list that a reader can falsify from the same file is worse than no list:
+    it is consulted once, found incomplete, and thereafter treated as advice.
+    Widening the third entry to *refusal-to-start* keeps the lookup and absorbs
+    every preflight stop, so the count survives the next stop being added.
+    """
+    flat_preamble = flat(preamble)
+    assert "exactly three places" in flat_preamble
+    assert re.search(
+        r"preflight[^.]*refusal-to-start|refusal-to-start[^.]*preflight", flat_preamble
+    ), flat_preamble
 
 
 def test_the_recap_shape_is_named(preamble: str) -> None:
@@ -544,31 +623,145 @@ def test_wait_loop_pins_the_timeout(completion: str) -> None:
     assert "no default" in completion
 
 
-def test_a_timeout_is_a_checkpoint_not_completion(completion: str) -> None:
-    assert "checkpoint" in completion
-    assert "{count:0}" in completion
-    assert re.search(r"15.60 minutes", completion)
-
-
 def test_local_work_returns_to_the_wait(skill_text: str) -> None:
     """Step 6 asks for local work; both it and step 5 have to hand back."""
     merge_back = section(skill_text, "6. Merge back in DAG order")
     dispatch = section(skill_text, "5. Dispatch the frontier")
-    assert re.search(r"[Aa]cking is not waiting", dispatch)
+    assert re.search(r"step 7", flat(dispatch)), dispatch
     assert re.search(r"step 7", merge_back)
 
 
-def test_settled_terminals_are_accounted_for(completion: str) -> None:
-    """The guide's own rule, one clause — and now a reachable one.
+# --- What the loaded guide already says (#74) --------------------------------
 
-    Reuse and release are both operations on a supervised Dispatch. On the
-    `terminal create` path step 5 used to build, Orca wrote no
-    `worker_dispatches` row at all, so `worker-release` took no action and this
-    clause named nothing a coordinator could do.
+# Each entry is (name, pattern) for a rule verified present in the live guide
+# `orca-ide skills get orchestration --full` prints. Matched over every doc the
+# plugin ships, not just SKILL.md: a clause retired here and left in a reference
+# is still a second copy.
+GUIDE_DUPLICATES = (
+    ("ack-or-replay", re.compile(r"replay|unacknowledged|[Aa]cking is not waiting")),
+    ("a timeout is a checkpoint", re.compile(r"\{count:0\}")),
+    ("workers run 15-60 minutes", re.compile(r"15.60 minutes")),
+    ("settled-terminal accounting", re.compile(r"worker-retain|worker-release")),
+    ("keep rolling until every Dispatch settles", re.compile(r"[Kk]eep rolling")),
+    ("dispatch-capability revocation", re.compile(r"capability is revoked")),
+)
+
+
+@pytest.mark.parametrize(("name", "pattern"), GUIDE_DUPLICATES, ids=[d[0] for d in GUIDE_DUPLICATES])
+def test_the_guide_is_not_restated(
+    name: str, pattern: re.Pattern[str], skill_docs: dict[Path, str]
+) -> None:
+    """A rule the loaded guide carries is a second copy that ages on its own.
+
+    Step 0 loads all 408 lines every run, so the coordinator already has these
+    in context by the time it reaches step 5. A pointer into the guide would go
+    stale the same way, only more quietly, so the duplicates are deleted rather
+    than summarised.
     """
-    assert "worker-release" in completion
-    assert "--dispatch" in completion
-    assert "--terminal" in completion
+    offenders = {doc: pattern.search(text).group(0) for doc, text in skill_docs.items() if pattern.search(text)}
+    assert not offenders, (name, offenders)
+
+
+def test_step_five_defers_lifecycle_to_the_guide(dispatch: str) -> None:
+    """The preamble justifying a second copy went with the copies.
+
+    It rested on `orca-cli` and `orchestration` being outside this repo's write
+    access — true, and irrelevant once the guide is loaded on every run.
+    """
+    flat_dispatch = flat(dispatch)
+    assert "outside this repo's write access" not in flat_dispatch
+    assert re.search(r"guide is authoritative", flat_dispatch), flat_dispatch
+
+
+# Rules the guide does not carry, verified against the loaded text. Each names
+# a failure the guide has no opinion about, so deleting it deletes the only copy.
+SURVIVING_RULES = (
+    ("always pass --timeout-ms", r"[Aa]lways pass\*?\*? `--timeout-ms`"),
+    ("message bodies via $(cat <file>)", r'"\$\(cat <file>\)"'),
+    ("verify --base-branch took", r"git merge-base <integration-branch> HEAD"),
+    ("Unable to write index is contention", r"Unable to write index"),
+    ("blocked_by lags the real edges", r"blocked_by"),
+)
+
+
+@pytest.mark.parametrize(("name", "pattern"), SURVIVING_RULES, ids=[r[0] for r in SURVIVING_RULES])
+def test_the_rules_the_guide_does_not_carry_survive(
+    name: str, pattern: str, skill_text: str
+) -> None:
+    """Five rules, and the deletion sweep above is what makes them easy to lose.
+
+    Trimming for length takes whatever is nearby, and these sit beside the six
+    that went. Each is the only copy in existence of a trap measured on a run.
+    """
+    assert re.search(pattern, skill_text), name
+
+
+def test_the_shared_stash_rule_keeps_its_prohibition_and_its_reasoning(
+    merge_back: str,
+) -> None:
+    """The one case where the correct single-checkout reflex damages a sibling.
+
+    `git stash` is right in one checkout, the stack is shared across every
+    worktree of the repo, and the damage lands in a tree nobody is looking at.
+    The positive form ("park work in a commit") does not explain why the obvious
+    move is wrong, so this one keeps its "never" as well.
+    """
+    flat_merge = flat(merge_back)
+    assert re.search(r"[Nn]ever[^.]*`git stash`", flat_merge), flat_merge
+    assert re.search(r"shared", flat_merge)
+    assert re.search(r"other worktree|every other|another worker", flat_merge), flat_merge
+
+
+def test_the_cap_is_justified_by_review_surface_alone(dispatch: str) -> None:
+    """`worker-start` retired the contention half of the argument.
+
+    A half-built worker is now a nonzero exit naming its residuals, so a
+    setup-hook fan-out that blocks past the Bash timeout is a read verdict
+    rather than a silent one. The merge-back review surface is what still caps
+    it at 2.
+    """
+    flat_dispatch = flat(dispatch)
+    assert re.search(r"cap concurrency at 2", flat_dispatch), flat_dispatch
+    assert re.search(r"review surface", flat_dispatch)
+    assert "contention" not in flat_dispatch, flat_dispatch
+
+
+def test_briefs_and_receipts_share_one_placeholder(skill_docs: dict[Path, str]) -> None:
+    """A coordinator reading `/tmp/<slug>/…` opens a path no worker wrote."""
+    placeholders = {
+        match
+        for text in skill_docs.values()
+        for match in re.findall(r"/tmp/(<[a-z-]+>)/", text)
+    }
+    assert placeholders == {"<ticket-slug>"}, placeholders
+
+
+# Prohibitions that became the instruction they were guarding. The negative form
+# names a move to avoid and leaves the reader to derive the one to make; the
+# positive form is the one they can act on. The stash rule is the exception and
+# is tested above.
+POSITIVE_INSTRUCTIONS = (
+    ("message bodies", r"never backticks"),
+    ("merge-base diff", r"never `<integration-branch>\.\.HEAD`"),
+    ("the tickets' edges are the DAG", r"never re-derive"),
+    ("resolve implement's path", r"never copy the last one you saw"),
+)
+
+
+@pytest.mark.parametrize(
+    ("name", "banned"), POSITIVE_INSTRUCTIONS, ids=[p[0] for p in POSITIVE_INSTRUCTIONS]
+)
+def test_the_prohibition_became_an_instruction(name: str, banned: str, skill_text: str) -> None:
+    assert not re.search(banned, skill_text, re.IGNORECASE), name
+
+
+def test_the_positive_instructions_still_say_what_to_do(skill_text: str) -> None:
+    """Dropping the "never" must not drop the rule with it."""
+    flat_skill = flat(skill_text)
+    assert re.search(r"blocking edges ARE the dependency DAG", flat_skill)
+    assert re.search(r"[Ww]rite every message body to a file", flat_skill)
+    assert re.search(r"Review each worker's branch against `git merge-base", flat_skill)
+    assert re.search(r"[Rr]esolve that path on THIS machine every run", flat_skill)
 
 
 # --- Step 5: one supervised `worker-start` (#73) ------------------------------
