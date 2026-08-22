@@ -394,9 +394,15 @@ instrument; the findings are ranked under [run forensics](run-forensics.md).
 | Corpus sessions in the index | 26 |
 | Records on disk | 26 |
 | Sessions that could not be distilled | 0 |
-| Transcript lines read | 20,164, out of 214 MB on disk |
+| Transcript lines read | 20,164, out of 224 MB on disk |
 | Lines read per session | 327–1,539, median 715 |
-| Sub-agent cost per session | ~107k–176k tokens, 5–11 minutes |
+| Sub-agent cost per session | roughly 110k–175k tokens and five to eleven minutes |
+
+Every row above except the last is a sum over the committed index — `python3
+scripts/forensics/span-index.py` emits the ranges and the transcript paths, and the read is
+`tail.line_end - lead.line_start + 1` per corpus entry. The last row is what this run happened to
+cost and is observed, not derivable. The 224 MB is the same 226 MB the charter quotes, measured
+again; the earlier figure predates `hyrd-ui-library` leaving the corpus.
 
 Every heading is present in every record, and no heading is blank — an empty one reads "None
 observed." as the schema requires. `7cc7e6bc`, the one session whose lead reports `not-found`, was
@@ -412,8 +418,9 @@ a credential vault path in a third — in each case the record says it declined 
 is the rule working as written rather than being lucky. A scan of all twenty-six records for JWTs,
 `sk-`/`ghp_`/`pk_` prefixes, AWS keys, private-key blocks, bearer and `Set-Cookie` values, connection
 strings, email addresses, query-string URLs, base64 blobs and non-session UUIDs returns nothing.
-`scripts/ci/pre-push-security.sh` remains the backstop for what is committed, and no raw distillation
-is committed at all.
+That scan is a scratchpad instrument over uncommitted files and leaves no artefact here, so it is
+reported rather than citable — which is the same reason the records themselves are not committed.
+No raw distillation is committed at all.
 
 ### Three things the corpus taught the instrument, for the next run and not this one
 
@@ -426,28 +433,37 @@ they are recorded here for whoever runs it next.
   the body does not sanction — a green result and an improvised three-way question — and one
   (`befb0456`) is neither: it is still mid-delivery, blocked at a self-imposed push gate, when the
   tail's time cap cuts. Both records said so in the field instead of forcing a fit, which is the
-  behaviour to keep; the vocabulary is what needs a fourth term.
+  behaviour to keep. What the corpus shows is that the triple is short a term, not which term.
 - **There is a third record shape that looks like the operator.** The prompt names two — a tool
   result, and harness-injected content. `7cc7e6bc` found a third: an Orca task-notification arriving
   as `type: "user"` with `origin.kind: "task-notification"` and `promptSource: "system"`. It reads
   exactly like a mid-run correction and is not one. The record caught it; a future prompt should name
-  it alongside the other two.
+  it alongside the other two — an addition for whoever writes the next prompt to weigh, not a change
+  made here.
 - **Some transcripts serialise every `thinking` block empty.** Roughly a third of the corpus is
   affected, and in those the agent's *reasoning* is unquotable — only its actions and its prose
   survive. Those records say so under *What I could not determine* rather than inferring intent from
   behaviour, which is the rule holding; but it bounds what any distillation of those sessions can
   claim, and the bound is a property of the transcript, not of the reader.
 
-### The attribution field did what it was built to do
+### How often `unattributed` was the answer
 
 Twelve of the twenty-six records attribute every friction and mistake item to an exactly quoted
-`SKILL.md` heading. The other fourteen carry twenty-two items marked **`unattributed`** together with
+`SKILL.md` heading. The other fourteen carry twenty-three items marked **`unattributed`** together with
 what was searched for — a shell working-directory rule, a section governing a model-API outage, a
 mid-run operator amendment, working-tree hygiene beyond Step 8's item 2. Those are not failures of
 the record. Each says the behaviour is a gap in the instructions rather than a departure from them,
 which is a different ticket from the ones the attributed items will produce.
 
-Eleven skill versions ran across the window and eight appear in the corpus (0.20.0 through 0.27.1)
-against a working tree at 0.28.0. Records name the version they read and, where a heading has since
-moved or been renamed, say so — one session's finding turns on a rule that did not exist in the body
-it ran, and would have been filed against the wrong place without the lead.
+### The lead earned its keep more than once
+
+The index sees ten pw-prove versions in the window and eight of them in the corpus, 0.20.0 through
+0.27.1, against a working tree at 0.28.0. (The charter's "eleven versions" counts the five days
+rather than this ledger window; the eight is what the corpus actually ran.) Records name the version
+they read and, where a heading has since moved or been renamed, say so.
+
+At n=1 that changed a finding. Over the corpus it did so repeatedly: several records attribute a
+body-versus-script disagreement to `ENV_CONTRACT`, a knob that exists in neither the body nor
+`preflight.mjs` at 0.28.0, and one attributes an improvised operator question to a subsection its own
+0.27.0 body cites and does not contain. Read against HEAD, each of those would have been filed
+against the wrong place, or against nothing at all.
