@@ -20,7 +20,7 @@ evidence; every entry below names something editable and says what not editing i
 Three things it deliberately does not do.
 
 **It files no tickets.** That is the operator's call after reading this list, and it is the whole
-reason the ranking exists. Filing forty issues from an unread audit is how the audit gets abandoned.
+reason the ranking exists — see [Out of Scope](#out-of-scope) for the parent's reasoning.
 
 **It sets no line-count target for `SKILL.md`.** The body is 1,236 lines. That number appears here
 once, in this sentence, and is never used as an argument. Where a section is cut below, the reason is
@@ -60,6 +60,10 @@ order was inverted.
 
 ### The ranked list in one screen
 
+Severities are the study's own — `S1` a proof that passed while proving nothing, down to `S4` turns
+spent but not minutes; the [definitions](../studies/friction-findings.md#how-this-list-is-ordered)
+are not restated here.
+
 | Rank | Finding | n/26 | Sev | Fix target | Fix class |
 |---|---|---|---|---|---|
 | 1 | [FR1](#1--fr1-preflightmjs-certifies-a-restart-that-died) | 3 | S1 | `preflight.mjs` + Step 3 | script + body |
@@ -93,9 +97,8 @@ argues for, and **FR17** and **FR32** are `confirmed-fixed`. A `confirmed-fixed`
 a fix; whether it gets a *guard* is a separate question and both entries answer it.
 
 The [repository-fault and boundary findings](../studies/friction-findings.md#repository-fault-and-boundary-findings)
-— FR25, FR26, FR27, FR28, FR29, FR30, FR31 — are **not in this spec**. They belong to the two
-target-repository setup studies. Where pw-prove owns half of one, that half appears here under the
-skill-side finding it is twinned with, and the entry says so.
+— FR25 through FR31 — are **not in this spec**; [Out of Scope](#out-of-scope) says where each half
+went.
 
 ---
 
@@ -116,9 +119,10 @@ poll round reads the log once, tests it with `failedToBind()`, then curls the ca
 preview` prints `serving …` **before** it binds, so on a sub-second restart the announcement is
 already past the restart mark, the `EADDRINUSE` lands microseconds after preflight's read, the
 predecessor answers the curl, the candidate loop breaks (`:903`–`904`) and the poll round breaks with
-it (`:907`–`910`) — the log is never re-read. There is no PID check anywhere in the file; the only
-mention of process inspection is a comment at `:652` naming `lsof`/`ps` as a fallback that is never
-reached.
+it (`:907`–`910`) — the log is never re-read. There is no PID check anywhere in the file, and the
+file's comment at `:652` says why nothing reaches for one: *"`lsof`/`ps` are blind under sandboxing,
+so neither can establish that a port is free or that a listener is ours."* That is a documented
+refusal, not an oversight, and any fix here has to respect it.
 
 **The change, in two halves that must ship together.**
 
@@ -127,10 +131,14 @@ reached.
    `RESTART=proven`. A bind failure found there is `SERVE_CAUSE=restart-port-in-use`, which the body
    already documents and already tells the run how to fix. This is the minimal correct change: it
    closes the read-order race without adding a dependency or a new phase.
-2. **Confirm the listener is the new process.** Record the restarted server's PID at launch and
-   confirm the process answering on the port is that PID. `preflight.mjs` already records PIDs, and
-   `git`-free process inspection is already contemplated at `:652`. Where the platform will not give
-   it cheaply, half 1 alone still closes every instance the corpus recorded.
+2. **Confirm the restarted process is still alive.** The body's own restart recipe (`SKILL.md:1040`)
+   already tells the run to record the new PID; have restart mode accept it and check it with Node's
+   own `process.kill(pid, 0)` before declaring `RESTART=proven`. A restart that died on
+   `EADDRINUSE` **exited**, so a liveness check on the recorded PID catches exactly the observed
+   shape — and it is a Node standard-library call, so it neither adds a dependency nor reaches for
+   `lsof`/`ps`, which `:652` refuses and which `AGENTS.md` does not permit as subprocesses. It does
+   not prove the survivor holds the port; that is half 1's job, and half 1 alone closes every
+   instance the corpus recorded. Half 2 is the cheap second signal, not a substitute.
 
 **And the body must stop forbidding the cross-check that caught it three times out of three.**
 `SKILL.md:472` reads *"`RESTART=proven` is proven — do not re-litigate a fast one."* Keep the
@@ -321,9 +329,10 @@ exists to check — which is `67b624f4:381` exactly: *"Need the LIVE section —
 3. **Stop piping into `head`.** Several runs did, which closes the pipe and makes the script exit
    non-zero on `SIGPIPE` — so the ledger records a gate failure that never happened (`67b624f4`,
    `a7cdcd1c`, `d3c037d9`), and in `d3c037d9` the run declared a hermetic audit passing without ever
-   having seen a zero exit code for it. State this in both sections: read these scripts' output whole
-   or through their summary flag, never through `head`, because a truncated read of a gate is a gate
-   whose exit code you have not seen.
+   having seen a zero exit code for it. State this in both sections: read `hermetic.mjs`'s output
+   whole — change 1 makes its verdict survive a `tail`, and it gains no flag here — and `scan.mjs`'s
+   through `--summary`; never pipe either through `head`, because a truncated read of a gate is a
+   gate whose exit code you have not seen.
 
 **Boundary, kept as one.** The invocations are pw-prove's, the output shapes are the two scripts',
 and the filters are the agent's. Half of the instances are downstream of
@@ -834,15 +843,13 @@ Where the body shows a command, show the scoped one.
 **Act on the corrected mechanism.** Git's default pathspec is wildmatch **without** pathname mode, so
 `**/x` is neither literal nor `x`: it matches any path containing a `/` and misses the repository-root
 file. The sweep therefore *partially* matches — it reverts nested codegen, leaves root-level codegen
-dirty, and **exits 0 while doing so**. Reproduced for this spec in a throwaway repository, git 2.43.0,
-with one modified `auto-imports.d.ts` at the root and one under `app/`:
+dirty, and **exits 0 while doing so**. That half is
+[#137's measurement](../studies/friction-findings.md#fr22-verification), not this spec's, and is not
+re-derived here.
 
-```
-$ git checkout -- '**/auto-imports.d.ts'            # exit 0 — root still modified, app/ reverted
-$ git checkout -- ':(glob)**/auto-imports.d.ts'     # exit 0 — both reverted
-```
-
-So the fix is one pathspec form, and it needs no companion top-level pathspec:
+What this spec adds is the confirmation a prescription owes: the prescribed form was run against the
+same fixture (git 2.43.0, one modified `auto-imports.d.ts` at the root and one under `app/`) and
+reverts **both**, so the fix needs no companion top-level pathspec:
 
 ```
 git checkout -- ':(glob)**/auto-imports.d.ts' ':(glob)**/components.d.ts'
@@ -1013,7 +1020,7 @@ promise change, and it should not be made without the record of why.
 
 ---
 
-## What this spec does not cover
+## Out of Scope
 
 **Repository-fault findings.** FR25, FR26, FR27, FR28, FR29, FR30 and FR31 belong to the two
 target-repository setup studies. Where pw-prove owns half of one, that half is inside the entry it is

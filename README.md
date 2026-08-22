@@ -158,7 +158,7 @@ Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md) �
 turned into changes to the prompt and the shipped scripts, in the ranking the evidence gave them:
 what to change and where, what not changing it measurably cost, the two findings that get a
 regression guard instead of a fix, and the three ADR numbers reserved for the decisions that are
-structural. It files no tickets and sets no line-count target for `SKILL.md`.
+structural. It proposes; it files no tickets.
 
 Studies: [proof target measurements](docs/studies/proof-target-measurements.md) — development server
 against a built preview, measured, plus the two claims that were verified by running them ·
