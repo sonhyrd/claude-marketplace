@@ -78,7 +78,10 @@ Filed here as it is produced:
 - A **profile audit** of the two target repositories' `.pw-prove/profile.md` files, judged entry by
   entry: whether any run applied the entry, whether any run contradicted it, and whether a
   contradicting run declared the contradiction. The live profile files are read and never written —
-  the artefact under audit is not mutated mid-audit.
+  the artefact under audit is not mutated mid-audit. **Filed as
+  [profile audit](profile-audit.md)**, which also reports two findings that sit upstream of any
+  individual entry: where the write-back lands, and which of the skill's two `Profile:` lines the
+  corpus actually emits.
 
 The two deliverables the evidence feeds — a fix spec for pw-prove's prompt and scripts, and a
 per-repository setup recommendation for each target repository — are **not** filed here. They are
