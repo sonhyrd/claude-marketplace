@@ -61,7 +61,14 @@ Stated as a definition-of-done clause, not as process — step 5 already forbids
 `implement` or hand-writing a substitute into the brief.
 
 `receipt` is deliberate vocabulary. It carries proof-produced-at-the-time and presentable-on-demand
-without defining either, and it gives the merge-back rule a binary form: no receipt, no merge.
+without defining either, and it gives the merge-back rule a binary form: a branch merges reviewed,
+or not at all.
+
+> **Correction (#74).** This paragraph originally read *"no receipt, no merge"*, and `SKILL.md`
+> carried it as a heading. It was never the rule the decision above states: a missing receipt buys
+> a Standards pass and **then** merges, deliberately, because at the measured ~1-in-3 trip rate a
+> real refusal would strand a third of all branches on an escalation. The decision is unchanged;
+> only the slogan, which promised a refusal neither this ADR nor the skill performs.
 
 Three alternatives were weighed and rejected:
 

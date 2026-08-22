@@ -151,17 +151,27 @@ clause retired from `SKILL.md` and left standing in a reference still ships.
 | Deleted | Guide |
 |---|---|
 | ack-or-replay | "replays that exact batch until `--ack <delivery_id>`" |
-| a timeout / `{count:0}` is a checkpoint | "Treat a `check --wait` timeout or `{count:0}` as a checkpoint" |
+| a timeout / `{count:0}` is a checkpoint | "Treat a ... timeout or `{count:0}` as a checkpoint" |
 | workers run 15-60 minutes | "Long coding tasks routinely run 15-60 minutes" |
-| account for settled terminals by reuse / `worker-retain` / release | "Coordinators must account for every settled worker terminal" |
+| account for settled terminals | "must account for every settled worker terminal" |
 | keep rolling until every Dispatch settles | "keep waiting until every expected Dispatch settles" |
 | the dispatch-capability revocation note | "do not reuse the settled Dispatch's lifecycle IDs" |
 
-**Five rules stay because the guide does not carry them**, plus the shared-stash
-rule, and each has a test below. The stash rule keeps its "never" *and* its
-reasoning: `git stash` is the correct reflex in a single checkout, the damage
-lands in a sibling worktree nobody looks at, and the positive form alone does
-not explain why the obvious move is wrong.
+The last row is the **weakest** of the six and is recorded as such. The guide
+never says a capability is revoked, a second report rejected, or an `ask`
+failed; L386 and L408 say only that a settled worker sends no further lifecycle
+messages and that a stale preamble is not one to report against. That covers the
+consequence — a reported worker cannot be reached through the lifecycle — and
+not the mechanism, so what went is the mechanism. The **instruction** it carried
+stays in step 6 in its own right: re-tasking the worker is not on the table, and
+the review is the coordinator's to run.
+
+**Five rules stay**, plus the shared-stash rule, and each has a test below. Four
+of the five the guide simply does not carry; `--timeout-ms` is kept on the
+narrower ground recorded at `SURVIVING_RULES`. The stash rule keeps its "never"
+*and* its reasoning: `git stash` is the correct reflex in a single checkout, the
+damage lands in a sibling worktree nobody looks at, and the positive form alone
+does not explain why the obvious move is wrong.
 
 Deleting the duplicates makes step 5's preamble false as well as redundant — it
 justified carrying Orca's rules on the grounds that `orca-cli` and
@@ -559,7 +569,7 @@ def test_merge_back_acts_on_a_missing_receipt(merge_back: str) -> None:
 
 
 def test_the_receipt_heading_matches_its_body(merge_back: str) -> None:
-    """"No receipt, no merge" promised a refusal the body does not perform.
+    """The old heading promised a refusal the body does not perform.
 
     The body runs the Standards axis and then merges — deliberately, per
     ADR-0010, because at a ~1-in-3 trip rate a refusal strands a third of all
@@ -589,23 +599,20 @@ def test_only_check_wait_wakes_the_coordinator(preamble: str) -> None:
     assert "unread" in preamble
 
 
-def test_permitted_turn_ends_are_a_closed_list(preamble: str) -> None:
-    """All three, or the list stops being closed and becomes a suggestion."""
-    assert re.search(r"final report", preamble)
-    assert re.search(r"escalation", preamble)
-    assert re.search(r"refusal-to-start", preamble)
+def test_permitted_turn_ends_are_a_closed_list_and_a_true_one(preamble: str) -> None:
+    """All three, closed — and now actually exhaustive.
 
-
-def test_the_closed_list_of_turn_ends_is_true(preamble: str) -> None:
-    """It named step 1's gate and stopped, while step 4 alone stops four times.
-
-    A list that a reader can falsify from the same file is worse than no list:
-    it is consulted once, found incomplete, and thereafter treated as advice.
-    Widening the third entry to *refusal-to-start* keeps the lookup and absorbs
-    every preflight stop, so the count survives the next stop being added.
+    The old third entry was "a decline at step 1's gate", while step 4 alone
+    stops four more times. A list a reader can falsify from the same file is
+    worse than no list: it is consulted once, found incomplete, and thereafter
+    treated as advice. Widening the third entry to *refusal-to-start* keeps the
+    lookup and absorbs every preflight stop, so the count survives the next stop
+    being added.
     """
     flat_preamble = flat(preamble)
     assert "exactly three places" in flat_preamble
+    for turn_end in ("final report", "escalation", "refusal-to-start"):
+        assert turn_end in flat_preamble, turn_end
     assert re.search(
         r"preflight[^.]*refusal-to-start|refusal-to-start[^.]*preflight", flat_preamble
     ), flat_preamble
@@ -637,17 +644,41 @@ def test_local_work_returns_to_the_wait(skill_text: str) -> None:
 # `orca-ide skills get orchestration --full` prints. Matched over every doc the
 # plugin ships, not just SKILL.md: a clause retired here and left in a reference
 # is still a second copy.
+# Each pattern targets the *rule*, never a word the rule happens to use. Too
+# broad and it bans ordinary English across the plugin forever; too narrow and
+# any rewording walks straight past it. So each alternation carries the clause's
+# load-bearing phrase plus the near-synonym a rewrite would reach for first.
 GUIDE_DUPLICATES = (
-    ("ack-or-replay", re.compile(r"replay|unacknowledged|[Aa]cking is not waiting")),
+    (
+        "ack-or-replay",
+        re.compile(r"oldest \*?\*?unacknowledged|makes `check` replay|[Aa]cking is not waiting"),
+    ),
     ("a timeout is a checkpoint", re.compile(r"\{count:0\}")),
     ("workers run 15-60 minutes", re.compile(r"15.60 minutes")),
-    ("settled-terminal accounting", re.compile(r"worker-retain|worker-release")),
-    ("keep rolling until every Dispatch settles", re.compile(r"[Kk]eep rolling")),
-    ("dispatch-capability revocation", re.compile(r"capability is revoked")),
+    # The coordinator's *rule*, not the verb: step 5's escape-hatch bullet still
+    # names `worker-release` to say it takes no action on an unsupervised worker,
+    # which is ADR-0011's point and not this accounting instruction.
+    (
+        "settled-terminal accounting",
+        re.compile(r"[Aa]ccount for every settled|worker-retain|worker-release --dispatch"),
+    ),
+    (
+        "keep rolling until every Dispatch settles",
+        re.compile(r"[Kk]eep rolling|until every expected Dispatch|until every Dispatch settles"),
+    ),
+    (
+        "dispatch-capability revocation",
+        re.compile(
+            r"capability is revoked|dispatch capability[^.]*revoke"
+            r"|second report is rejected"
+        ),
+    ),
 )
 
 
-@pytest.mark.parametrize(("name", "pattern"), GUIDE_DUPLICATES, ids=[d[0] for d in GUIDE_DUPLICATES])
+@pytest.mark.parametrize(
+    ("name", "pattern"), GUIDE_DUPLICATES, ids=[d[0] for d in GUIDE_DUPLICATES]
+)
 def test_the_guide_is_not_restated(
     name: str, pattern: re.Pattern[str], skill_docs: dict[Path, str]
 ) -> None:
@@ -658,7 +689,11 @@ def test_the_guide_is_not_restated(
     stale the same way, only more quietly, so the duplicates are deleted rather
     than summarised.
     """
-    offenders = {doc: pattern.search(text).group(0) for doc, text in skill_docs.items() if pattern.search(text)}
+    offenders = {}
+    for doc, text in skill_docs.items():
+        match = pattern.search(text)
+        if match:
+            offenders[doc] = match.group(0)
     assert not offenders, (name, offenders)
 
 
@@ -673,12 +708,19 @@ def test_step_five_defers_lifecycle_to_the_guide(dispatch: str) -> None:
     assert re.search(r"guide is authoritative", flat_dispatch), flat_dispatch
 
 
-# Rules the guide does not carry, verified against the loaded text. Each names
-# a failure the guide has no opinion about, so deleting it deletes the only copy.
+# Rules that survive the sweep above, verified against the loaded text. Four of
+# the five are simply absent from the guide, so deleting one deletes the only
+# copy. `--timeout-ms` is the exception and is kept on narrower grounds: the
+# guide *does* say "Always pass `--timeout-ms`" (L379), but it documents no
+# default, and it is that gap — an omitted flag leaving the window to the
+# runtime, so a bug in the command line arrives as an empty wait — the skill
+# states and the guide does not.
 SURVIVING_RULES = (
     ("always pass --timeout-ms", r"[Aa]lways pass\*?\*? `--timeout-ms`"),
     ("message bodies via $(cat <file>)", r'"\$\(cat <file>\)"'),
-    ("verify --base-branch took", r"git merge-base <integration-branch> HEAD"),
+    # The *verification*, not the flag and not step 6's merge-base diff — both
+    # of which are asserted elsewhere and would pass this on their own.
+    ("verify --base-branch took", r"must equal the integration branch head"),
     ("Unable to write index is contention", r"Unable to write index"),
     ("blocked_by lags the real edges", r"blocked_by"),
 )
@@ -691,9 +733,25 @@ def test_the_rules_the_guide_does_not_carry_survive(
     """Five rules, and the deletion sweep above is what makes them easy to lose.
 
     Trimming for length takes whatever is nearby, and these sit beside the six
-    that went. Each is the only copy in existence of a trap measured on a run.
+    that went. Four are the only copy in existence of a trap measured on a run;
+    `--timeout-ms` survives for the gap named above rather than for absence.
+
+    Flattened, because `SKILL.md` wraps its prose and more than one of these
+    clauses straddles a line break — which is not phrasing and must not decide
+    whether the rule is present.
     """
-    assert re.search(pattern, skill_text), name
+    assert re.search(pattern, flat(skill_text)), name
+
+
+def test_the_timeout_rule_is_kept_for_the_gap_not_for_absence(completion: str) -> None:
+    """The guide says *always pass it* too — what it does not say is the default.
+
+    Keeping the line on "the guide has no opinion here" would be the same defect
+    this ticket is fixing, one file over. The clause has to name the gap it
+    actually fills, or the next maintainer checks the guide, finds the sentence,
+    and deletes a rule whose real content was never in it.
+    """
+    assert "no default" in completion, completion
 
 
 def test_the_shared_stash_rule_keeps_its_prohibition_and_its_reasoning(
@@ -708,8 +766,8 @@ def test_the_shared_stash_rule_keeps_its_prohibition_and_its_reasoning(
     """
     flat_merge = flat(merge_back)
     assert re.search(r"[Nn]ever[^.]*`git stash`", flat_merge), flat_merge
-    assert re.search(r"shared", flat_merge)
-    assert re.search(r"other worktree|every other|another worker", flat_merge), flat_merge
+    assert re.search(r"one shared stack per repo", flat_merge), flat_merge
+    assert re.search(r"another worker's uncommitted work", flat_merge), flat_merge
 
 
 def test_the_cap_is_justified_by_review_surface_alone(dispatch: str) -> None:
@@ -736,32 +794,42 @@ def test_briefs_and_receipts_share_one_placeholder(skill_docs: dict[Path, str]) 
     assert placeholders == {"<ticket-slug>"}, placeholders
 
 
-# Prohibitions that became the instruction they were guarding. The negative form
-# names a move to avoid and leaves the reader to derive the one to make; the
-# positive form is the one they can act on. The stash rule is the exception and
-# is tested above.
+# Prohibitions that became the instruction they were guarding, each as
+# (name, the negative form that must be gone, the positive one that replaced
+# it). Both halves belong in one row: dropping the "never" without leaving an
+# instruction behind deletes the rule, and the two assertions are what catch
+# each half of that. The stash rule is the deliberate exception, tested above.
 POSITIVE_INSTRUCTIONS = (
-    ("message bodies", r"never backticks"),
-    ("merge-base diff", r"never `<integration-branch>\.\.HEAD`"),
-    ("the tickets' edges are the DAG", r"never re-derive"),
-    ("resolve implement's path", r"never copy the last one you saw"),
+    ("message bodies", r"never backticks", r"[Ww]rite every message body to a file"),
+    (
+        "merge-base diff",
+        r"never `<integration-branch>\.\.HEAD`",
+        r"Review each worker's branch against `git merge-base",
+    ),
+    (
+        "the tickets' edges are the DAG",
+        r"never re-derive",
+        r"blocking edges ARE the dependency DAG",
+    ),
+    (
+        "resolve implement's path",
+        r"never copy the last one you saw",
+        r"[Rr]esolve that path on THIS machine every run",
+    ),
 )
 
 
 @pytest.mark.parametrize(
-    ("name", "banned"), POSITIVE_INSTRUCTIONS, ids=[p[0] for p in POSITIVE_INSTRUCTIONS]
+    ("name", "banned", "required"),
+    POSITIVE_INSTRUCTIONS,
+    ids=[p[0] for p in POSITIVE_INSTRUCTIONS],
 )
-def test_the_prohibition_became_an_instruction(name: str, banned: str, skill_text: str) -> None:
+def test_the_prohibition_became_an_instruction(
+    name: str, banned: str, required: str, skill_text: str
+) -> None:
+    """The negative form goes, and the rule it carried stays."""
     assert not re.search(banned, skill_text, re.IGNORECASE), name
-
-
-def test_the_positive_instructions_still_say_what_to_do(skill_text: str) -> None:
-    """Dropping the "never" must not drop the rule with it."""
-    flat_skill = flat(skill_text)
-    assert re.search(r"blocking edges ARE the dependency DAG", flat_skill)
-    assert re.search(r"[Ww]rite every message body to a file", flat_skill)
-    assert re.search(r"Review each worker's branch against `git merge-base", flat_skill)
-    assert re.search(r"[Rr]esolve that path on THIS machine every run", flat_skill)
+    assert re.search(required, flat(skill_text)), name
 
 
 # --- Step 5: one supervised `worker-start` (#73) ------------------------------

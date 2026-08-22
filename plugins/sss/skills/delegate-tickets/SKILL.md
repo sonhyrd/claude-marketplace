@@ -221,8 +221,9 @@ Coordinate through the orchestration lifecycle whose guide step 0 loaded — rea
 The guide is authoritative for lifecycle; this file carries only what it does not.
 
 - **One supervised `worker-start` per ticket.** It composes the child worktree, the terminal, the
-  readiness check and the dispatch into one call, and it is the only path on which the terminal
-  accounting step 7 asks for exists at all. Write the brief — the one the bullets below specify —
+  readiness check and the dispatch into one call, and it is the only path on which the
+  settled-terminal accounting the guide asks of a coordinator exists at all. Write the brief — the
+  one the bullets below specify —
   to `/tmp/<ticket-slug>/brief.md` first, and pass it as the task's `--spec`:
 
   ```bash
@@ -261,9 +262,10 @@ The guide is authoritative for lifecycle; this file carries only what it does no
 - **The low-level path is the escape hatch, not the default.** `worktree create` plus a `terminal
   create` carrying custom argv (`--command`) is what the loaded guide keeps for topology or argv
   that `worker-start` cannot express. A worker built that way and dispatched into with `dispatch
-  --inject` is **unsupervised** — Orca writes no `worker_dispatches` row for it — so the
-  settled-terminal accounting the guide asks of a coordinator has nothing to act on, and the
-  lifecycle verbs that would do it report `no_owned_resource`. Take that path only for a stated
+  --inject` is **unsupervised**: Orca writes no `worker_dispatches` row, `worker-show` /
+  `worker-read` / `worker-list` report it as `unsupervised`, and `worker-stop` / `worker-release`
+  report `no_owned_resource` and take no process action — so the settled-terminal accounting the
+  guide asks of a coordinator has nothing to act on. Take that path only for a stated
   reason, and say which. [ADR-0011](../../../../docs/adr/0011-delegate-tickets-dispatches-through-worker-start.md)
   records the trade.
 
@@ -271,7 +273,7 @@ The guide is authoritative for lifecycle; this file carries only what it does no
 
 As each worktree finishes: merge it into the current branch, resolve conflicts, rerun the profile's post-merge check on the merged result, mark the ticket done (edit the ticket file's Status locally; close the issue on GitHub), then dispatch any tickets it just unblocked — the frontier advances. Every action here is local work with workers still live; each one ends back in step 7's wait.
 
-**A branch merges reviewed, or not at all.** Open `/tmp/<ticket-slug>/review.md` before the merge — the `worker_done` body paraphrases the review, and a paraphrase of a review that never ran reads exactly like a paraphrase of a clean one. Where it is missing, run `code-review`'s **Standards axis** on that branch first, then merge the result: the review is what a missing receipt costs you, not the merge. Standards is the axis your own merge-back read leaves uncovered: that read is a diff read, and it earns its place on cross-branch damage — silent same-name-different-signature merges, colliding ADR numbers, gates green on a worker tree and red on the merged one. Three of the four findings measured shipping in silence were standards findings. `HANDOFF` entries in a receipt are yours to fix in the merge commit. Either way the review is yours to run, not the worker's to redo.
+**A branch merges reviewed, or not at all.** Open `/tmp/<ticket-slug>/review.md` before the merge — the `worker_done` body paraphrases the review, and a paraphrase of a review that never ran reads exactly like a paraphrase of a clean one. Where it is missing, run `code-review`'s **Standards axis** on that branch first, then merge the result: the review is what a missing receipt costs you, not the merge. Standards is the axis your own merge-back read leaves uncovered: that read is a diff read, and it earns its place on cross-branch damage — silent same-name-different-signature merges, colliding ADR numbers, gates green on a worker tree and red on the merged one. Three of the four findings measured shipping in silence were standards findings. `HANDOFF` entries in a receipt are yours to fix in the merge commit. **Re-tasking the worker is not on the table for either case** — a reported worker is settled, and the review is yours to run rather than its to redo.
 
 **Recompute the frontier from the edges themselves, not from a summary field.** On GitHub, `issue_dependencies_summary.blocked_by` lags behind the real edges: a dependent issue can still report a non-zero blocker count after every blocker is closed, which silently stalls tickets that are actually ready. The authoritative read is the dependency list — `gh api repos/<owner>/<repo>/issues/<n>/dependencies/blocked_by --jq '.[] | "#\(.number) \(.state)"'` — and a ticket is unblocked when every entry is `closed`.
 
