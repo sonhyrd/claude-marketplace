@@ -276,27 +276,64 @@ guarding against.
 
 ## What the instrument did at n = 1
 
-Proven on `d3c037d9` — `nuxt-hyrd-chrysus`, worktree `bocaccio`, 17 August, the corpus's heaviest
-session by both record count (56) and non-zero exits (6). Chosen for exactly that: an instrument
-that cannot find friction in the worst session is not worth running on the other twenty-five.
+Proven on `d3c037d9` — `nuxt-hyrd-chrysus`, worktree `bocaccio`, 17 August, pw-prove 0.20.0. Chosen
+as the corpus's heaviest session by both record count (56) and non-zero exits (6): an instrument that
+cannot find friction in the worst session is not worth running on the other twenty-five.
 
-The record is a scratchpad file and is not committed, here or anywhere. What is recorded here is
-what the run proved about the **instrument**:
+The record itself is a scratchpad file and is not committed, here or anywhere. What belongs here is
+what the run proved about the **instrument**, and it took two passes to get there — which is the
+result, not a delay before it.
 
-- **The span plus tail held the whole run.** Span lines 177–1187, tail 25 lines to the operator's
-  next turn at 1212 — the final report and the operator's reply to it both landed inside the tail,
-  which is exactly what the span alone would have cut.
-- **The schema was filled end to end**, every heading populated from a 1,036-line read of a
-  1,333-line transcript.
-- **Attribution held.** Every friction and mistake item named a `SKILL.md` section heading or a
-  shipped script.
-- **The redaction rule was never tested against a real secret** in this session, which is a limit of
-  n=1 and is stated rather than glossed: the session ran against a local development server, so the
-  instrument's hardest rule has been exercised by review of the prompt and not by the corpus. The
-  twenty-five remaining sessions are where that gets its real test, and
-  `scripts/ci/pre-push-security.sh` stays the backstop.
+### It found two defects in its own reach, and both are now fixed
 
-The one change the run forced in the prompt is recorded above rather than as a diff: the read
-instruction is explicit that the transcript must be sliced with `sed`/`jq` rather than read whole,
-because a 25 MB file and single lines of tens of kilobytes will otherwise exhaust a sub-agent's
-context before it reaches its own span.
+**A loaded skill's body was read as the operator speaking.** Pass 1's tail ended on line 1212 and
+reported it as the operator's next turn. It is the injected body of a *different* skill the agent
+called — `type: "user"`, prose content, nobody typed it. The record said so in its own Identity
+section, which is how it was caught. `isMeta` and `sourceToolUseID` now disqualify a record from
+ending a tail; with the fix the tail runs to line 1315, where the operator actually types.
+
+**Steps 1 and 2 were outside the span entirely.** Pass 1's own *What I could not determine* section
+opened with them: they run no shipped script, so the ledger cannot see them, so the span could not
+either. That is 172 lines in this session and 47–396 across the corpus — including the turn where
+the run checks for `.pw-prove/profile.md`, which four of the exercise's own questions are about.
+
+### The lead changed a finding, not just its coverage
+
+Pass 1 attributed a false-proof item to `SKILL.md`'s rule that "a scope qualifier rides on every row
+it weakens". Pass 2 read the 0.20.0 body **out of the lead** — the harness injects it verbatim at the
+load turn — and found the rule does not exist in 0.20.0. The run had followed the body it actually
+had; the finding is that the body of the day let a weakened row read unweakened, which is a different
+fix in a different place from "the agent broke a rule". Version churn was already named as this
+exercise's confounder, and the lead is what turns the contemporaneous instruction into evidence
+instead of an assumption. Pass 2 also recovered a second such item in the opposite direction: 0.20.0
+has no profile-writeback instruction at all, so a run that never wrote one broke nothing.
+
+### The schema held
+
+Every heading was filled from a 1,311-line read of a 1,333-line transcript. Three items came back
+marked **unattributed** with a note on what was searched for — the mark of the rule working, not
+failing: each is a gap in the instructions rather than a departure from them, which is exactly the
+distinction the attribution field exists to force. The wrapper skill's own work inside the range was
+recorded as out-of-scope with line numbers rather than silently dropped.
+
+### What n=1 could not prove
+
+**The redaction rule never met a real secret.** The session ran against a local development server;
+the sub-agent reported the redactions it did apply — a share id, a comment id, a tenant-named auth
+file, and a description-instead-of-quote for API paths carrying person identifiers — but nothing
+key-shaped was in its path. The hardest rule in the prompt has been exercised by review and not by
+the corpus. The remaining twenty-five sessions are where it gets its test, and
+`scripts/ci/pre-push-security.sh` stays the backstop rather than the mechanism.
+
+**One session is not a distribution.** Cost, for planning the rest: roughly seven to nine minutes and 140k
+to 160k tokens of sub-agent context per session, over a 5.4 MB transcript and a 1,311-line read.
+
+### What the prompt inherited from the run
+
+Three changes, all of them in the version recorded above:
+
+- The read range is the **lead, span and tail**, with each part's bounds and the mark or reason that
+  set them, rather than the span alone.
+- The three record shapes are spelled out, because two of them look like the operator and are not.
+- The transcript is sliced with `sed`/`jq` and never read whole: single lines run to tens of
+  kilobytes and a whole-file read exhausts a sub-agent before it reaches its own span.
