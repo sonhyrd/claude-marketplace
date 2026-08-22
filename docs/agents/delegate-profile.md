@@ -79,6 +79,20 @@ Taking one side silently deletes a worker's evals. pw-prove's copy was retired i
 now one file per case, where the same trap appears as two workers adding a case with the same id —
 but `e2e-reviewer` and `playwright-debugger` still carry the array form.
 
+### Merge-back trap: two workers appending to `CONTEXT.md` land under the wrong heading
+
+`CONTEXT.md` is a glossary that grows by appending at the tail, so two workers adding terms in the
+same frontier conflict there every time — the same shape as the `metadata.version` trap above, and
+it happened on the first pair of the #130 tree (#131 and #132).
+
+**Resolve by keeping both sides, then check which heading each side's entries belong under.** The
+conflict is trivial; the real defect is invisible in it. A worker that adds a new glossary *part*
+(an H1) and a worker that adds entries to the tail cannot see each other, so the second one's
+entries sit under whatever H1 was last on its own branch — semantically wrong, with no marker.
+#132's `Span` / `Span index` / `Corpus, control and excluded` were authored under `# Eval
+vocabulary` and belonged under `# Run forensics vocabulary`, which only existed on #131's branch.
+Cross-links between the two sides resolve only after this is fixed.
+
 ### Known noise: `test-parity.sh` drift smoke has failed once, unreproducibly
 
 During #50 (2026-08-13) one full `ci-local.sh` run showed a single drift-smoke failure in
