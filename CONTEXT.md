@@ -409,3 +409,28 @@ later. Marked as pw-prove's fault or the target repository's, or as a boundary c
 dropped when it straddles the line. The word is *finding*, not verdict: it is evidence a reader may
 act on, never a decision that anything will change — which is why a finding whose cause is already
 gone is recorded as confirmed-fixed rather than deleted.
+
+## Span
+The stretch of a session transcript in which pw-prove actually ran. A transcript is a whole work
+session — up to 25 MB of it — and pw-prove is a region inside, bracketed by the first and last run
+ledger record the session left behind. The word matters because the alternative reading, "the
+transcript is the run", is what makes an exercise read 226 MB to answer a question about 9% of it.
+
+## Span index
+The one computed artifact of [run forensics](#run-forensics): `scripts/forensics/span-index.py`
+takes the run ledger and the local transcript tree and emits one entry per session — repository,
+worktree, transcript path, skill versions, ledger record and non-zero-exit counts, first and last
+ledger timestamp, and the transcript line and byte range those timestamps bracket. It is computed
+once and read by everything downstream, so no later step re-derives which sessions matter or where
+inside a transcript to look. It is the exercise's only tested seam because it is the only component
+whose failure is silent: a mis-sliced [span](#span) yields a confident distillation of the wrong
+turns with nothing reporting an error.
+
+## Corpus, control and excluded
+The three classes the [span index](#span-index) sorts sessions into. **Corpus** is the two
+repositories under audit and is what the findings are drawn from. **Control** is this repository's
+own dev and CI sessions, retained rather than deleted: their failures are deliberate, so a taxonomy
+that cannot tell one of them from real struggle is exposed as defective. **Excluded** is everything
+else, and it always carries a stated reason — including the sessions the ledger knows but no
+transcript exists for, which are emitted with an explicit marker because a corpus that silently
+shrinks is worse than one that reports a gap.
