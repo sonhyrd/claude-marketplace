@@ -1,20 +1,21 @@
-# Run forensics — what pw-prove cost across 26 real sessions
+# Run forensics — the plan and index for what pw-prove cost across 26 real sessions
 
-This is the index for the [run forensics](../../CONTEXT.md) exercise: the entry point a reader starts
-from, and the place every later part of the exercise writes into.
+This is the index for the [run forensics](../../CONTEXT.md#run-forensics) exercise: the entry point a
+reader starts from, and the place every later part of the exercise writes into. Until those parts
+land it is a charter and nothing else — it states the method and what it will produce, and holds none
+of it yet.
 
 Nothing here is a decision. `docs/adr/` holds decisions and `docs/specs/` holds specs; this file, and
 everything filed beneath it, holds **evidence** — what 26 already-finished pw-prove sessions cost the
 operator, with the citation that lets a reader confirm each item without being asked to take it on
-trust. A [friction finding](../../CONTEXT.md) recorded here is something a reader may act on. It is
-not a commitment that anything will change, and a ticket exists only once the operator has read the
-ranked list.
+trust. A [friction finding](../../CONTEXT.md#friction-finding) recorded here is something a reader may act
+on. It is not a commitment that anything will change, and a ticket exists only once the operator has
+read the ranked list.
 
 The vocabulary is fixed before the work starts, in `CONTEXT.md` under *Run forensics vocabulary* —
-**run forensics**, **session distillation**, **friction finding**. Use those words for those things.
-In particular, run forensics is not an audit in the sense this repository already uses that word: the
-hermetic audit and the clip fidelity contract each pass or fail one run against a rule, and this
-exercise is neither a gate nor about one run.
+**run forensics**, **session distillation**, **friction finding**. Use those words for those things,
+and read the entries rather than re-deriving them here; in particular the entry for run forensics is
+where this exercise is held apart from the two per-run gates whose names sound like it.
 
 ## What the exercise covers
 
@@ -45,14 +46,22 @@ Filed here as it is produced:
   range those timestamps bracket, and the corpus/control/excluded classification. Sessions the ledger
   knows but no transcript exists for are marked `no-transcript` rather than dropped, so a gap in the
   corpus is stated rather than silently shrinking it.
-- One **session distillation** per session, to the fixed schema `CONTEXT.md` names. Raw distillations
+- One **session distillation** per session. Its schema is fixed here, not in the glossary: identity
+  (session, repository, worktree, skill versions, commit, transcript path, span bounds); shape (steps
+  entered, steps reached, terminal state); cost (turns and wall-clock per step, tool calls per step,
+  ledger scripts and exits); friction (human interventions with turn and trigger, same-script
+  retries, no-progress loops); mistakes, each with a turn citation; the `SKILL.md` section or named
+  script every friction and mistake item is attributed to; and three to five verbatim lines. Raw
+  distillations
   stay in the scratchpad and are never committed: 226 MB of real work transcripts do not get
   partially reproduced in a git history. Sub-agents redact at source — no values from `.env`, request
   or response headers, cookies or HAR bodies, and nothing key-shaped — so an unredacted quote is
   never written and then trimmed.
-- The **ranked friction findings**, frequency first, severity overriding it, measured time cost
-  reported as a third column and never folded into a composite score. Every finding above the cut is
-  re-checked against HEAD; one already fixed is recorded as confirmed-fixed.
+- The **ranked friction findings**. Frequency orders the list, severity overrides it, and measured
+  time cost is reported as a third column rather than folded into a composite score, so the ranking
+  can be argued with. Every finding above the cut is re-checked against HEAD, and that re-check
+  doubles as an adversarial verification: a sub-agent that read a normal step as thrashing is caught
+  before the finding reaches a spec.
 - A **profile audit** of the two target repositories' `.pw-prove/profile.md` files, judged entry by
   entry: whether any run applied the entry, whether any run contradicted it, and whether a
   contradicting run declared the contradiction. The live profile files are read and never written —
@@ -65,14 +74,14 @@ decisions and they live under `docs/specs/`.
 ## Scope boundaries
 
 Stated so that an absence of findings in these areas is not misread as evidence that the area was
-fine. Nothing in the following was examined:
+fine. Nothing in the following is examined:
 
 - The wrapper skills that spawned pw-prove. The exercise is about pw-prove.
 - Orca and terminal problems. Infrastructure noise does not become skill findings.
 - Genuine application bugs in the target repositories. pw-prove is not blamed for finding what it was
   asked to find.
 - A `pw-prove-forensics` skill. Deliberately deferred: writing it before the exercise has been done
-  once would encode a guess at the method.
+  once would encode a guess at the method. It is written afterwards, from a method that worked.
 
 Stable identifiers for friction categories are assigned only after the evidence is in, so the
 taxonomy fits what was observed rather than what was imagined.

@@ -163,9 +163,9 @@ and the twelve behaviours no fixture shows ·
 [Playwright config composition](docs/studies/playwright-config-composition.md) — what Playwright
 itself documents and implements about `webServer`, `reuseExistingServer`, deriving one config from
 another, and the four places the current `webServer: undefined` rule outruns its sources ·
-[run forensics](docs/studies/run-forensics.md) — the index for what pw-prove cost across 26 real
-sessions: the corpus, the span index, the session distillations, the ranked friction findings and the
-profile audit, with the scope boundaries stated so an absence of findings is not read as an all-clear.
+[run forensics](docs/studies/run-forensics.md) — the plan and index for what pw-prove cost across 26
+real sessions: the corpus and the three groups it splits into, what the exercise will file here, and
+the scope boundaries stated up front so an absence of findings is not read as an all-clear.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
