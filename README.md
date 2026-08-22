@@ -153,7 +153,12 @@ Scope: [framework scope](docs/framework-scope.md) (Playwright and Cypress only) 
 Agent workflow config: [delegation profile](docs/agents/delegate-profile.md) ·
 [issue tracker](docs/agents/issue-tracker.md). Agent guide: [AGENTS.md](./AGENTS.md).
 
-Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md).
+Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md) ·
+[the pw-prove fix spec](docs/specs/0002-pw-prove-fix-spec.md) — the 25 verified friction findings
+turned into changes to the prompt and the shipped scripts, in the ranking the evidence gave them:
+what to change and where, what not changing it measurably cost, the two findings that get a
+regression guard instead of a fix, and the three ADR numbers reserved for the decisions that are
+structural. It files no tickets and sets no line-count target for `SKILL.md`.
 
 Studies: [proof target measurements](docs/studies/proof-target-measurements.md) — development server
 against a built preview, measured, plus the two claims that were verified by running them ·
