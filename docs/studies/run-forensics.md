@@ -70,11 +70,17 @@ Filed here as it is produced:
   never written and then trimmed. The schema, the prompt that produces it and the reach of the read
   are fixed in [session distillation](session-distillation.md), which also records the one session
   the instrument was proven on before the rest were run.
-- The **ranked friction findings**. Frequency orders the list, severity overrides it, and measured
-  time cost is reported as a third column rather than folded into a composite score, so the ranking
-  can be argued with. Every finding above the cut is re-checked against HEAD, and that re-check
-  doubles as an adversarial verification: a sub-agent that read a normal step as thrashing is caught
-  before the finding reaches a spec.
+- The **ranked friction findings** — **filed, at [friction findings](friction-findings.md)**.
+  Frequency orders the list, severity overrides it, and measured time cost is reported as a third
+  column rather than folded into a composite score, so the ranking can be argued with. Thirty-two
+  stable `FR` categories came out of the 26 records, assigned after the evidence was in; four are
+  lifted above the frequency order by severity and each one names the rank it was lifted from. Two
+  are already recorded as **confirmed-fixed** on evidence inside the corpus itself, keeping their
+  identifiers rather than being deleted. Repository-fault findings are collected separately for the
+  setup studies and boundary cases are kept as boundary cases. What that list does **not** yet carry
+  is the HEAD re-check: every finding above the cut is still to be re-checked against the current
+  `SKILL.md` and shipped scripts, and that re-check doubles as an adversarial verification, so a
+  sub-agent that read a normal step as thrashing is caught before the finding reaches a spec.
 - A **profile audit** of the two target repositories' `.pw-prove/profile.md` files, judged entry by
   entry: whether any run applied the entry, whether any run contradicted it, and whether a
   contradicting run declared the contradiction. The live profile files are read and never written —

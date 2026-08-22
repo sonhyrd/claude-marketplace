@@ -169,7 +169,12 @@ the scope boundaries stated up front so an absence of findings is not read as an
 [session distillation](docs/studies/session-distillation.md) — the instrument that exercise reads a
 session with: the fixed schema, the sub-agent prompt verbatim, the redaction rule that runs at
 source because nothing sandboxes it, how far past the last script exit a distillation reads, and what
-running it over all 26 sessions said about the instrument itself.
+running it over all 26 sessions said about the instrument itself ·
+[friction findings](docs/studies/friction-findings.md) — the ranked list those 26 records produce:
+thirty-two stable `FR` categories assigned from the evidence, ordered frequency-first with every
+severity lift stated, time reported alongside rather than folded in, each one attributed to a
+`SKILL.md` section or a named script and stamped with the version it was observed on, repository
+faults kept separate and boundary cases kept as boundary cases.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
