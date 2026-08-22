@@ -91,3 +91,12 @@ is the deliberate replacement, and it inherits no placement on purpose.
 on `terminal create --command` whenever `orchestration worker-start` exists in the live binary — so
 this decision is asserted against the CLI, not held as an opinion in prose. Its static half is
 `tests/test_delegate_tickets.py`.
+
+**How it goes green is worth stating, because it is not "the path is gone".** The escape hatch still
+names that path; what changed is that it is no longer written as an invocation. The script harvests
+each command's flags from the tokens following it *in the same code span*, so `terminal create` and
+`--command` in one span is a command line and fires, while prose naming the verb and the flag
+separately does not. That is the script's own design — "a sentence mentioning a verb is not an
+instruction to run it" — and it is the distinction this ADR wants: the default is a `worker-start`
+command line, and the low-level path is a described alternative rather than a command to copy. A
+future step 5 that spells the invocation again, for any reason, fires the finding again.

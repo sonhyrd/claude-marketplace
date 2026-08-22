@@ -241,6 +241,19 @@ def launch_ref() -> str:
 
 
 @pytest.fixture(scope="module")
+def skill_docs() -> dict[Path, str]:
+    """Every Markdown file the plugin ships, for the whole-tree sweeps.
+
+    A clause retired from `SKILL.md` and left standing in a reference is still
+    shipped, so absence has to be asserted over the tree rather than the file.
+    """
+    return {
+        doc.relative_to(SKILL_DIR): doc.read_text(encoding="utf-8")
+        for doc in sorted(SKILL_DIR.rglob("*.md"))
+    }
+
+
+@pytest.fixture(scope="module")
 def dispatch(skill_text: str) -> str:
     return section(skill_text, "5. Dispatch the frontier")
 
@@ -583,15 +596,14 @@ def test_a_nonzero_exit_is_what_means_the_worker_did_not_start(dispatch: str) ->
     assert re.search(r"[Nn]onzero exit", flat_dispatch)
 
 
-def test_the_five_retry_readiness_loop_is_gone() -> None:
+def test_the_five_retry_readiness_loop_is_gone(skill_docs: dict[Path, str]) -> None:
     """Readiness is decided on process identity, not on a rendered frame.
 
     A bare shell is the negative signal for "is an agent running", so the
     `tui-idle` wait and the re-read loop that approximated it are both
     redundant against a call that exits 0 only for ready.
     """
-    for doc in sorted(SKILL_DIR.rglob("*.md")):
-        text = doc.read_text(encoding="utf-8")
+    for doc, text in skill_docs.items():
         assert "tui-idle" not in text, doc
         assert not re.search(r"re-read(ing)? up to", text), doc
 
@@ -606,7 +618,9 @@ def test_a_failed_start_is_read_not_guessed_at(dispatch: str) -> None:
     assert "--retry-of" in flat_dispatch
 
 
-def test_custom_argv_is_only_the_escape_hatch(dispatch: str) -> None:
+def test_custom_argv_is_only_the_escape_hatch(
+    dispatch: str, skill_docs: dict[Path, str]
+) -> None:
     """The path the live CLI supersedes, kept for what `worker-start` cannot express.
 
     `scripts/check-delegate-cli.sh` reports the default spelling as SUPERSEDED
@@ -614,8 +628,7 @@ def test_custom_argv_is_only_the_escape_hatch(dispatch: str) -> None:
     """
     assert "escape hatch" in dispatch
     assert "unsupervised" in dispatch
-    for doc in sorted(SKILL_DIR.rglob("*.md")):
-        text = doc.read_text(encoding="utf-8")
+    for doc, text in skill_docs.items():
         assert "terminal create --command" not in text, doc
 
 

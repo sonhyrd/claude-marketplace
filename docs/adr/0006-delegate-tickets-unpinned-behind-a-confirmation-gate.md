@@ -20,10 +20,9 @@ blocks **chained** Skill-tool launches too. `e2e-reviewer` briefly carried the f
 to disable-model-invocation`, inside a run the user had started by name. And `delegate-tickets`
 itself documents a live instance of the same constraint in step 5: because `implement` is pinned, a
 dispatched worker cannot Skill-invoke it and must be told to read `implement`'s `SKILL.md` by
-absolute path instead. **Correction (2026-08-22, #73):** that path is the marketplace checkout's
+absolute path instead. *(Correction, #73: that path is the marketplace checkout's
 `plugins/mattpocock-skills/skills/engineering/implement/SKILL.md`, resolved per host — not
-`~/.claude/skills/implement/SKILL.md`, which holds only symlinks and sends a worker nowhere. The
-decision below is unaffected.
+`~/.claude/skills/implement/SKILL.md`, which holds only symlinks. The decision below is unaffected.)*
 
 `autoship` is the coordinator that wants to chain here — an idea or Issue through spec → Issues →
 Frontier drain. With the pin in place, the hand-off into a parallel delegation cannot exist as a

@@ -14,13 +14,11 @@ Claude Code session.
 | -------------- | ------------------ |
 | nothing | `--agent claude` |
 | an engine | `--agent cursor` |
-| an engine and a model | `--agent cursor --model <opaque provider model id>` |
-| an engine, a model and an effort | `--agent claude --model <id> --effort <level>` |
+| an engine and a model | `--agent <engine> --model <opaque provider model id>` |
+| an engine, a model and an effort | `--agent <engine> --model <id> --effort <level>` |
 
-There is no argv column. There was one until [ADR-0011](../../../../../docs/adr/0011-delegate-tickets-dispatches-through-worker-start.md),
-and the only thing it carried that mattered was the permissionless flag — which Orca supplies from
-app config, keyed by engine id, so a column restating it could only ever agree with the setting
-redundantly or contradict it silently.
+There is no argv column, and [ADR-0011](../../../../../docs/adr/0011-delegate-tickets-dispatches-through-worker-start.md)
+says why there is not.
 
 **`--effort` requires `--model`, and neither combines with `--terminal`.** Step 7's terminal reuse
 is where that trips: it hands a settled terminal to the next Dispatch as `--terminal <handle>`, and
