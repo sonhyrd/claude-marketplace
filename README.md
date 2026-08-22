@@ -178,7 +178,15 @@ last run wrote, and the contradiction line the skill requires appears in none of
 thirty-two stable `FR` categories assigned from the evidence, ordered frequency-first with every
 severity lift stated, time reported alongside rather than folded in, each one attributed to a
 `SKILL.md` section or a named script and stamped with the version it was observed on, repository
-faults kept separate and boundary cases kept as boundary cases.
+faults kept separate and boundary cases kept as boundary cases ·
+[setup — nuxt-hyrd-chrysus](docs/studies/setup-nuxt-hyrd-chrysus.md) — what that repository could
+provide so the next proof against it does not re-pay for it: the build that is 10–29% of every run,
+the preview server whose announced pid is never the listener, the specs that had never been run, and
+the application facts a 321-line profile is failing to deliver ·
+[setup — hyrd-widget](docs/studies/setup-hyrd-widget.md) — the same for the other repository, which
+differs: three proof targets and no way to name one (a published, fully-gated proof of the wrong
+subject), thirty standing P0 findings, carried scenarios that film nothing, and a push rule that
+stopped five runs for a question a narrower rule could answer.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·

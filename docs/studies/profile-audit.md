@@ -208,7 +208,7 @@ stamp and content resolve to, where one does.
 | C11 | 119–125 | the tenant's application payload carries no `Source` | `a7cdcd1c` | **—** |
 | C12 | 127–133 | filter catalogue: display field is `Label`; the picker is a second dialog | `a7cdcd1c` (lines 964, 991) | **—** no later run applied it |
 | C13 | 135–157 | fixture authoring: two traps, plus fixture-scoped UUIDs | `fe171475` (Rework 2, 3) | **—** no later run applied it |
-| C14 | 159–168 | a copied `.env` can drop the `/dev/v1` suffix | *unattributed in corpus* | **—** |
+| C14 | 159–168 | a copied `.env` can drop a required path suffix from an API base URL (value withheld) | *unattributed in corpus* | **—** |
 | C15 | 170–176 | promoted job titles: 10 chips, 8 share a prefix; compare whole lists | *unattributed* | **—** |
 | C16 | 178–186 | base merge conflicts in `types/paul-api.gen.ts`; regenerate, don't resolve | `67b624f4` (Friction 1) | **—** no later run applied it |
 | C17 | 188–194 | there is no in-band spelling for "no contract file" — omit the variable | `d32c2495` / `a7cdcd1c` | **A, X, D-partial** — see below |
