@@ -35,6 +35,7 @@ So preference only orders the candidates — `orca-ide` first outside an Orca-ma
 first inside one — and what *selects* one is whether it answers `orchestration --help`:
 
 ```bash
+ORCA=""
 first=orca-ide; second=orca
 if [ -n "${ORCA_PANE_KEY:-}" ] || [ "${TERM_PROGRAM:-}" = "Orca" ]; then
   first=orca; second=orca-ide
@@ -42,18 +43,23 @@ fi
 
 for candidate in "$first" "$second"; do
   command -v "$candidate" >/dev/null 2>&1 || continue
-  "$candidate" orchestration --help 2>/dev/null | grep -q '^Usage: orca orchestration' || continue
+  # Materialize the help before matching it: under `pipefail`, a `grep -q` that
+  # exits on the first match can SIGPIPE the binary and turn a match into a
+  # non-zero pipeline -- which reads as "answers nothing" about the one that does.
+  help="$("$candidate" orchestration --help 2>/dev/null || true)"
+  grep -q '^Usage: orca orchestration' <<<"$help" || continue
   ORCA="$candidate"; break
 done
 ```
 
-**No `$ORCA` means stop**, and say which names were on `PATH`: a host with no working Orca CLI is
-not something a run can preflight its way past. `scripts/check-delegate-cli.sh` in this repo
-resolves the binary the same way and asks it whether every command this skill names still exists.
+**An empty `$ORCA` means stop**, and say which names were on `PATH`: a host with no working Orca CLI is
+not something a run can preflight its way past. `check-delegate-cli.sh`, in the marketplace repo
+this skill ships from, resolves the binary the same way and asks it whether every command named
+here still exists.
 
 Substitute the resolved name into every command in this file and under `references/`. Where they
 read `<orca> …`, a host that resolved `orca-ide` runs `orca-ide orchestration check`, `orca-ide
-terminal read`, `orca-ide worktree create`. Nothing below spells the binary itself.
+terminal read`, `orca-ide worktree create`. No command below spells a binary name of its own.
 
 ### Load the live guide
 

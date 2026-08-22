@@ -35,6 +35,13 @@ Three clauses answer that, and each has a test below:
 the real instrument; these are its static, offline half — they fail on a host
 with no Orca at all, where that script skips.
 
+One clause is **retired** rather than carried over: the wait-loop file asserted
+`skill_text.count("orca-ide") == 1`, guarding a binary name parenthesised per
+mention against drift. Step 0 supersedes it — the name is now resolved once in
+one place and the commands below carry no binary name at all — and
+`test_no_command_is_spelled_against_the_bare_binary` holds the anti-drift force
+it held, against the spelling that actually costs a run.
+
 ## The review receipt (ADR-0010)
 
 The gate exists because a dispatched worker's code review was the run's only
@@ -139,7 +146,17 @@ def preamble(skill_text: str) -> str:
     """Everything above step 0 — where a standing invariant belongs."""
     head, _, _ = skill_text.partition(f"## {STEP_0}")
     assert head, "SKILL.md has no step 0"
-    return flat(head)
+    return head
+
+
+@pytest.fixture(scope="module")
+def prerequisites(preamble: str) -> str:
+    """The preamble flattened — its block is a wrapped blockquote.
+
+    The invariant clauses below deliberately keep the raw text they have always
+    matched on; only the block that needs unwrapping gets it.
+    """
+    return flat(preamble)
 
 
 @pytest.fixture(scope="module")
@@ -223,11 +240,11 @@ def test_quickstart_is_gone_and_nothing_links_it(skill_text: str) -> None:
     assert "quickstart" not in skill_text
 
 
-def test_prerequisites_are_named_in_the_skill_itself(preamble: str) -> None:
+def test_prerequisites_are_named_in_the_skill_itself(prerequisites: str) -> None:
     """`quickstart.md` was what SKILL.md pointed at for these, and it omitted them."""
-    assert "`sss`" in preamble and "`matt`" in preamble
-    assert re.search(r"Orca install", preamble)
-    assert re.search(r"experimental", preamble)
+    assert "`sss`" in prerequisites and "`matt`" in prerequisites
+    assert re.search(r"Orca install", prerequisites)
+    assert re.search(r"experimental", prerequisites)
 
 
 def test_every_reference_link_resolves(skill_text: str) -> None:
