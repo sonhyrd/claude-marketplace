@@ -370,3 +370,53 @@ a list** — there is deliberately no fixed fast tier, because a named tier is a
 falls out of sync with the map it was derived from. What this buys is that a re-baseline costs one to
 three cases instead of the whole suite; what it costs is that the registry's section map has to be
 right, which is why it is the registry's load-bearing column.
+
+# Run forensics vocabulary
+
+The third part of this glossary. The first half names part of a proof; the second half names part of
+the instrument that measures the skill; this part names the **exercise that reads finished runs** —
+what pw-prove actually cost across a week of real work. Nothing below is a gate: no run passes or
+fails anything defined here, and nothing here describes behaviour pw-prove exhibits while it is
+running. `docs/studies/run-forensics.md` is where the evidence lands.
+
+## Run forensics
+The exercise of reading a bounded set of **already-finished** pw-prove sessions for what they cost
+the operator — where runs stalled, what was re-run, where a human had to intervene by hand, and which
+instruction the agent was following at that moment. The corpus comes from the run ledger
+(`~/.ptg/ledger.jsonl`), whose timestamps bracket the pw-prove **span** inside an otherwise unrelated
+work session, so a transcript is never read end to end. Distinct from the two per-run gates it is
+most easily confused with: the [hermetic audit](#hermetic-audit) and the [clip fidelity
+contract](#clip-fidelity-contract) each pass or fail **one** run against a rule, whereas run
+forensics is neither a gate nor about one run — it ranks evidence across many, and decides nothing on
+its own. Distinct too from [clip inspection](#clip-inspection), which is a beat inside a live run,
+and from [environment facts](#environment-facts), which is what a run derives about a repository in
+order to proceed. Its output is evidence; the fix spec that reads that evidence is a separate
+document under `docs/specs/`.
+
+## Session distillation
+The fixed-schema record one session yields to [run forensics](#run-forensics): identity (session,
+repository, worktree, skill versions, commit, transcript path, span bounds); shape (steps entered,
+steps reached, terminal state — delivered, [handover stop](#handover-stop), or abandoned); cost
+(turns and wall-clock per step, tool calls per step, ledger scripts and exits); friction (human
+interventions with turn and trigger, same-script retries, observed no-progress loops); mistakes, each
+with a turn citation; the `SKILL.md` section or named script every friction and mistake item is
+attributed to; and three to five verbatim lines, redacted at source. One session, one record, one
+sub-agent, written to disk before it is returned. A **record, not prose**: an empty field is a stated
+gap, and a friction item carrying no attribution is incomplete rather than a finding. Note that a
+no-progress loop here is an *observation* about where a run circled, not the
+[no-progress checkpoint](#no-progress-checkpoint), which is the rule Step 7 applies live. Distinct
+also from the [runtime profile](#runtime-profile), which is a file a run writes into the target
+repository for the next run to read; a distillation is written outside every repository, after the
+fact, and no run ever reads one.
+
+## Friction finding
+One ranked item drawn from the [session distillations](#session-distillation): a named cost, the
+count of sessions that hit it, its severity, its measured time cost reported beside those two rather
+than folded into a composite score, the `SKILL.md` section or script it is attributed to, the skill
+version it was observed on, and a transcript-and-turn citation a reader can verify a month later.
+Frequency orders the list and severity overrides it. Every finding above the ranking cut is
+re-checked against HEAD, and one whose cause is already gone is recorded as **confirmed-fixed**
+rather than dropped, so the week's churn stays visible. Each is marked as pw-prove's fault or the
+target repository's, and one that straddles the line is marked a boundary case rather than dropped.
+The word is *finding*, not verdict: it is evidence a reader may act on, never a decision that
+anything will change.
