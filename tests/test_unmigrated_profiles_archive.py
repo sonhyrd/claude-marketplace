@@ -15,21 +15,18 @@ that says when it may be deleted.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 ARCHIVE = REPO / "docs" / "agents" / "unmigrated-delegate-profiles.md"
-OLD_PATH = (
-    REPO
-    / "plugins"
-    / "sss"
-    / "skills"
-    / "delegate-tickets"
-    / "references"
-    / "unmigrated-profiles.md"
-)
+REFERENCES = REPO / "plugins" / "sss" / "skills" / "delegate-tickets" / "references"
+OLD_PATH = REFERENCES / "unmigrated-profiles.md"
+TEMPLATE = REFERENCES / "profile-template.md"
+
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 
 @pytest.fixture(scope="module")
@@ -51,12 +48,16 @@ def test_archive_is_not_under_plugins() -> None:
 
 def test_no_plugin_file_points_at_the_old_path() -> None:
     """Nothing the plugin ships sends a reader to the pre-move path."""
+    readable = [
+        path
+        for pattern in ("*.md", "*.json")
+        for path in (REPO / "plugins").rglob(pattern)
+        if path.is_file() and not path.is_symlink()
+    ]
     offenders = [
         path.relative_to(REPO)
-        for path in (REPO / "plugins").rglob("*")
-        if path.is_file()
-        and not path.is_symlink()
-        and "unmigrated-profiles" in path.read_text(encoding="utf-8", errors="ignore")
+        for path in readable
+        if "unmigrated-profiles" in path.read_text(encoding="utf-8", errors="ignore")
     ]
     assert not offenders, f"files under plugins/ reference the old path: {offenders}"
 
@@ -71,25 +72,16 @@ def test_header_states_the_completion_condition(archive_text: str) -> None:
 
 def test_template_pointer_resolves_from_the_new_location(archive_text: str) -> None:
     """The `profile-template.md` link is relative to `docs/agents/`, not the plugin."""
-    target = (
-        REPO
-        / "plugins"
-        / "sss"
-        / "skills"
-        / "delegate-tickets"
-        / "references"
-        / "profile-template.md"
-    )
-    assert target.is_file(), "the template the archive points at is gone"
-    links = [
-        line for line in archive_text.splitlines() if "profile-template.md" in line
+    assert TEMPLATE.is_file(), "the template the archive points at is gone"
+    hrefs = [
+        href
+        for href in MARKDOWN_LINK.findall(archive_text)
+        if "profile-template.md" in href
     ]
-    assert links, "the archive no longer points at the profile template"
-    for line in links:
-        start = line.index("(", line.index("profile-template.md") - 200)
-        href = line[start + 1 : line.index(")", start)]
+    assert hrefs, "the archive no longer points at the profile template"
+    for href in hrefs:
         resolved = (ARCHIVE.parent / href).resolve()
-        assert resolved == target.resolve(), f"broken template link: {href}"
+        assert resolved == TEMPLATE.resolve(), f"broken template link: {href}"
 
 
 def test_no_entry_claims_the_fork_still_ships_the_generator(archive_text: str) -> None:

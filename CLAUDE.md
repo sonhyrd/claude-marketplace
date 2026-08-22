@@ -135,4 +135,7 @@ Single-context: `CONTEXT.md` + `docs/adr/` at the repo root, both created lazily
 ### Delegation profile
 
 Branch prefix, post-merge check, commit policy, and worker constraints for `/delegate-tickets`.
-See `docs/agents/delegate-profile.md`.
+See `docs/agents/delegate-profile.md`. Profiles for repos that were not checked out when the move
+off the central list was made are parked in `docs/agents/unmigrated-delegate-profiles.md` — the
+skill does not read it, each entry is to be written into the repo it describes as that repo's own
+`docs/agents/delegate-profile.md`, and the file is deleted when the last entry goes.
