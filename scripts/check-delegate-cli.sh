@@ -28,6 +28,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SKILL_DIR="${DELEGATE_CLI_SKILL_DIR:-${REPO_ROOT}/plugins/sss/skills/delegate-tickets}"
 
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [--help]
@@ -43,20 +48,20 @@ EOF
 while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help) usage; exit 0 ;;
-        *) echo "error: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+        *) echo -e "${RED}error:${NC} unknown argument: $1" >&2; usage >&2; exit 2 ;;
     esac
     shift
 done
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
 
 setup_error() {
     echo -e "${RED}✗ setup error:${NC} $1" >&2
     exit 2
 }
+
+# A skill directory that is not there is a setup error wherever it is noticed,
+# and noticing it before the binary keeps it from hiding behind the no-binary
+# skip on a host that has no Orca at all.
+[ -d "$SKILL_DIR" ] || setup_error "skill directory not found: ${SKILL_DIR}"
 
 # --- Resolve the binary the way the skill has to ------------------------------
 #
@@ -106,8 +111,6 @@ if [ -z "$BIN" ]; then
     setup_error "$(printf 'found %s on PATH, but none of them answers `orchestration --help`.\n  That is not a skill defect -- it is a host with no working Orca CLI.\n' "${PRESENT[*]}")"
 fi
 
-[ -d "$SKILL_DIR" ] || setup_error "skill directory not found: ${SKILL_DIR}"
-
 if [ "$BIN" != "${CANDIDATES[0]}" ]; then
     echo -e "${GREEN}✓${NC} resolved Orca CLI: ${BIN} (${CANDIDATES[0]} is present but answers nothing)"
 else
@@ -149,7 +152,8 @@ load_verb_help() {
 }
 
 has_flag() {
-    grep -qE -e "(^|[^A-Za-z0-9_-])${2}([^A-Za-z0-9_-]|$)" <<<"$1"
+    local help="$1" flag="$2"
+    grep -qE -e "(^|[^A-Za-z0-9_-])${flag}([^A-Za-z0-9_-]|$)" <<<"$help"
 }
 
 # --- Extract every command the skill names ------------------------------------
@@ -161,11 +165,16 @@ has_flag() {
 # Prose outside a code span is deliberately not scanned: a sentence mentioning a
 # verb is not an instruction to run it.
 
-fenced_commands() {
-    awk '
+# One fence walker, asked twice: `--inside` joins each fenced block's
+# backslash-continued lines into whole commands, `--outside` hands back the
+# prose for the span scan below.
+fence_scan() {
+    awk -v want="$2" '
         BEGIN { fence = 0; buf = "" }
         /^[[:space:]]*```/ { fence = !fence; next }
-        fence {
+        (fence ? 1 : 0) != want { next }
+        want == 0 { print; next }
+        {
             line = $0
             if (buf != "") { line = buf " " line }
             if (line ~ /\\$/) { sub(/\\$/, "", line); buf = line }
@@ -174,12 +183,12 @@ fenced_commands() {
     ' "$1"
 }
 
+fenced_commands() {
+    fence_scan "$1" 1
+}
+
 inline_spans() {
-    awk '
-        BEGIN { fence = 0 }
-        /^[[:space:]]*```/ { fence = !fence; next }
-        !fence { print }
-    ' "$1" | tr '\n' ' ' | grep -o '`[^`]*`' || true
+    fence_scan "$1" 0 | tr '\n' ' ' | grep -o '`[^`]*`' || true
 }
 
 CAND_FILE=()
@@ -220,6 +229,16 @@ declare -A CMD_SRC=()
 declare -A CMD_BARE=()
 CMDS=()
 
+# The flags of one invocation are the `--x` tokens that follow it, up to
+# whatever starts the next one.
+flags_after() {
+    local seg="$1" sep
+    for sep in ' orca ' ' orca-ide ' ' && ' ' ; ' ' | '; do
+        seg="${seg%%"$sep"*}"
+    done
+    grep -oE -e '--[a-z][a-z0-9-]*' <<<"$seg" | LC_ALL=C sort -u | tr '\n' ' ' || true
+}
+
 record() {
     local key="$1" flags="$2" src="$3" bare="$4"
     if [ -z "${CMD_FLAGS[$key]+set}" ]; then
@@ -248,11 +267,7 @@ for i in "${!CAND_TEXT[@]}"; do
             tail="${rest#*"${BASH_REMATCH[0]}"}"
             # Flags belong to the invocation they follow, so stop at anything
             # that starts a new one.
-            seg="$tail"
-            for sep in ' orca ' ' orca-ide ' ' && ' ' ; ' ' | '; do
-                seg="${seg%%"$sep"*}"
-            done
-            flags="$(grep -oE -e '--[a-z][a-z0-9-]*' <<<"$seg" | LC_ALL=C sort -u | tr '\n' ' ' || true)"
+            flags="$(flags_after "$tail")"
             if [ "$prefix" = "orca" ]; then
                 record "${grp} ${verb}" "$flags" "$src" bare
             else
@@ -292,16 +307,18 @@ for i in "${!CAND_TEXT[@]}"; do
         rest="$text"
         while [[ "$rest" =~ (^|[[:space:]])"${verb}"[[:space:]]+-- ]]; do
             tail="${rest#*"${BASH_REMATCH[0]}"}"
-            seg="--${tail}"
-            for sep in ' orca ' ' orca-ide ' ' && ' ' ; ' ' | '; do
-                seg="${seg%%"$sep"*}"
-            done
-            flags="$(grep -oE -e '--[a-z][a-z0-9-]*' <<<"$seg" | LC_ALL=C sort -u | tr '\n' ' ' || true)"
+            flags="$(flags_after "--${tail}")"
             record "${grp} ${verb}" "$flags" "$src" ""
             rest="$tail"
         done
     done
 done
+
+# A group with no verb after it satisfies the pass-1 gate and leaves nothing to
+# check -- `orca orchestration --help` is a doc telling you to read the help, not
+# an invocation. Nothing was scanned, so this is the same setup error as finding
+# no command at all rather than a clean run.
+[ "${#CMDS[@]}" -gt 0 ] || setup_error "found no 'orca <group> <verb>' invocation under ${SKILL_DIR} -- only bare groups (${DOC_GROUPS[*]}), which name no command to check"
 
 # --- Verdict ------------------------------------------------------------------
 

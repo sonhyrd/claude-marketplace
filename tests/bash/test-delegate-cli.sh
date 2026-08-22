@@ -322,6 +322,29 @@ else
     nope "a skill naming no orca command exits 2 rather than passing silently" "rc=$rc: $out"
 fi
 
+# A group named with no verb after it is the same nothing: `orca orchestration
+# --help` tells the reader to go read the help, and names no command to check.
+# It clears the group gate, so without its own guard the scan reaches the verdict
+# loop with an empty command list.
+SKILL_GROUP_ONLY="${TMPROOT}/skill-group-only"
+write_skill "$SKILL_GROUP_ONLY" 'Read `orca orchestration --help` and use what it prints.'
+
+out="$(run_check "$CLI_BIN" "$SKILL_GROUP_ONLY")" && rc=0 || rc=$?
+if [ "$rc" -eq 2 ] && grep -qi "no .orca <group> <verb>. invocation" <<<"$out"; then
+    ok "a skill naming a group but no verb exits 2 and says so"
+else
+    nope "a skill naming a group but no verb exits 2 and says so" "rc=$rc: $out"
+fi
+
+# And a skill directory that does not exist is a setup error even where there is
+# no binary to ask -- otherwise a typo'd path reads as a clean skip.
+out="$(run_check "$EMPTY_BIN" "${TMPROOT}/no-such-skill")" && rc=0 || rc=$?
+if [ "$rc" -eq 2 ] && grep -qi "skill directory not found" <<<"$out"; then
+    ok "a missing skill directory exits 2 rather than skipping"
+else
+    nope "a missing skill directory exits 2 rather than skipping" "rc=$rc: $out"
+fi
+
 # --- Commands written with neither binary nor group ----------------------------
 
 echo -e "${YELLOW}A command written with no binary and no group is still checked${NC}"
