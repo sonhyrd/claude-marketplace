@@ -50,7 +50,9 @@ Filed here as it is produced:
   over the corpus it reports **632 shipped-script records and 57 non-zero exits across the 26
   sessions**, which supersedes the 656/60 quoted while designing the exercise — that figure was taken
   one repository too wide, before `hyrd-ui-library` was excluded.
-- One **session distillation** per session. Its schema is fixed here, not in the glossary: identity
+- One **session distillation** per session — **all twenty-six now exist**, none refused, none
+  silently dropped, and the one session whose lead could not be anchored (`7cc7e6bc`) records Steps 1
+  and 2 as missing from its range rather than as not performed. Its schema is fixed here, not in the glossary: identity
   (session, repository, worktree, skill versions, commit, transcript path, span bounds); shape (steps
   entered, steps reached, terminal state); cost (turns and wall-clock per step, tool calls per step,
   ledger scripts and exits); friction (human interventions with turn and trigger, same-script

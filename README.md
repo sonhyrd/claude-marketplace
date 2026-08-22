@@ -168,7 +168,8 @@ real sessions: the corpus and the three groups it splits into, what the exercise
 the scope boundaries stated up front so an absence of findings is not read as an all-clear ·
 [session distillation](docs/studies/session-distillation.md) — the instrument that exercise reads a
 session with: the fixed schema, the sub-agent prompt verbatim, the redaction rule that runs at
-source because nothing sandboxes it, and how far past the last script exit a distillation reads.
+source because nothing sandboxes it, how far past the last script exit a distillation reads, and what
+running it over all 26 sessions said about the instrument itself.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
