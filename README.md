@@ -173,7 +173,15 @@ running it over all 26 sessions said about the instrument itself ·
 [profile audit](docs/studies/profile-audit.md) — whether 538 lines of `.pw-prove/profile.md` across
 the two target repositories earn their keep, judged entry by entry on applied / contradicted /
 declared, plus the two findings that outrank every entry: the file a run reads is not the file the
-last run wrote, and the contradiction line the skill requires appears in none of the 26 sessions.
+last run wrote, and the contradiction line the skill requires appears in none of the 26 sessions ·
+[setup — nuxt-hyrd-chrysus](docs/studies/setup-nuxt-hyrd-chrysus.md) — what that repository could
+provide so the next proof against it does not re-pay for it: the build that is 15–29% of every run,
+the preview server whose announced pid is never the listener, the specs that had never been run, and
+the application facts a 321-line profile is failing to deliver ·
+[setup — hyrd-widget](docs/studies/setup-hyrd-widget.md) — the same for the other repository, which
+differs: three proof targets and no way to name one (a published, fully-gated proof of the wrong
+subject), thirty standing P0 findings, carried scenarios that film nothing, and a push rule that
+stopped five runs for a question a narrower rule could answer.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·

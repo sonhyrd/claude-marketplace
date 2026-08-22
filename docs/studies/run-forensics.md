@@ -83,9 +83,20 @@ Filed here as it is produced:
   individual entry: where the write-back lands, and which of the skill's two `Profile:` lines the
   corpus actually emits.
 
-The two deliverables the evidence feeds — a fix spec for pw-prove's prompt and scripts, and a
-per-repository setup recommendation for each target repository — are **not** filed here. They are
-decisions and they live under `docs/specs/`.
+- A **per-repository setup recommendation**, one per target repository, asking what the *repository*
+  failed to provide rather than what pw-prove got wrong: conventions the skill had to infer, bring-up
+  facts it rediscovered every run, environment values it had to be told. Each recommendation names
+  the sessions that paid for its absence, and a finding that straddles the repository/skill line is
+  recorded on both sides rather than dropped. Neither target repository is changed by them and
+  neither `.pw-prove/profile.md` is written to — whether to adopt any of it is a separate decision
+  the operator makes after reading. Filed as [setup — nuxt-hyrd-chrysus](setup-nuxt-hyrd-chrysus.md)
+  and [setup — hyrd-widget](setup-hyrd-widget.md). They are two documents and not one because the
+  repositories genuinely differ: chrysus is a single proof target whose build dominates every run,
+  widget is three targets whose builds are cheaper and whose specs are heavier, and a merged document
+  would hide which recommendation belongs where.
+
+The one deliverable the evidence feeds that is **not** filed here is the fix spec for pw-prove's own
+prompt and scripts. That is a decision and it lives under `docs/specs/`.
 
 ## Scope boundaries
 
