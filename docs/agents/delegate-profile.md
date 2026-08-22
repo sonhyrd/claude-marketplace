@@ -104,6 +104,25 @@ Treat a lone drift-smoke failure as suspect, not as a verdict: **re-run before a
 second failure, or one that names a file the branch touched, is real and must be investigated.
 Do not add a retry to the script to make this go away — that would hide the real case too.
 
+### Known noise: publish-proof's three credential-probe cases are network-dependent
+
+On 2026-08-22, a **docs-only** merge (#136, three markdown files) produced three `[FAIL]`s in
+`scripts/ci/test-publish-proof.sh`:
+
+```
+a refused credential warns without blocking — exit 3, wanted 0
+a refused credential makes the run's delivery not ready — exit 3, wanted 0
+no rejected-credential warning on 401
+```
+
+All three are the credential-probe cases, all three reach the network, and the merged diff could not
+have touched them. Two immediate re-runs — the suite alone, then the whole of `ci-local.sh` — came
+back **128 passed, 0 failed** and all-green.
+
+**Re-run before acting on a failure in these three.** Same rule as the drift smoke above: a second
+failure, or a failure in a case that is not one of the three, is real. Do not add a retry to the
+script — that would hide the real case too.
+
 ### Dispatch note: the whole `worker-*` family does not know low-level dispatches
 
 Workers launched with the engine argv go through `terminal create --command …` plus
