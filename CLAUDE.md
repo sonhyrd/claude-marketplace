@@ -71,11 +71,13 @@ These live as skills so they load only when you're doing the task:
     the script. A test asserts this paragraph names every path the script expects, so the two cannot
     silently disagree. The check fetches the fork, so it is deliberately not part of `make validate`,
     which is static and offline. Its own tests are `make test-e2e-subtree-check`.
-  - Only two of the three on-disk skills are declared in `plugin.json`: `pw-prove` and
-    `e2e-reviewer`. The third — `playwright-debugger` — still loads and still appears to the host as
-    `e2e:playwright-debugger`; the `skills` array shapes the published manifest, not host discovery.
-    Re-declaring one is a one-line `skills` array edit in *both*
-    `plugins/e2e-skills/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
+  - All three on-disk skills are declared in `plugin.json`: `pw-prove`, `e2e-reviewer`, and
+    `playwright-debugger`. It was two for a while, and the omitted one still loaded and still
+    appeared to the host as `e2e:playwright-debugger` — the `skills` array shapes the published
+    manifest, not host discovery, so an undeclared skill is invisible to installers and present to
+    the model. Declaring one is a one-line `skills` array edit in
+    `plugins/e2e-skills/.claude-plugin/plugin.json`; the `e2e` entry in `.claude-plugin/marketplace.json`
+    carries no `skills` array and needs no matching edit.
   - `playwright-test-generator` and `cypress-debugger` are **gone**, retired by the fork itself
     (`652c696 retire(playwright-test-generator)`), not disabled here. This repo used to disable the
     former by renaming its `SKILL.md` to `SKILL.md.disabled` — that rename was a marketplace-only
