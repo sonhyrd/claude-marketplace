@@ -92,30 +92,64 @@ performed the base merge.
 538 lines this ticket names. The audit below judges the 538 lines as asked; the reader should hold
 alongside it that the mechanism's delivery is broken independently of the entries' quality.
 
-## The declaration rule is not being followed
+## The two `Profile:` lines, and which one goes missing
 
-`SKILL.md` is unambiguous:
+`SKILL.md` requires the profile to be reported **twice**, in two different places. They are different
+lines with different forms, and the corpus treats them very differently.
 
-> `Profile:` has **no skip form** … `Profile: .pw-prove/profile.md — N entries applied (<the ones
-> that steered a decision>)` … `Profile: … — CONTRADICTED on <what>` … **A contradiction must produce
-> its line**: it is the signal that the profile has rotted, and it is the only thing that will make
-> anyone go and fix it.
+**The read verdict** lives in Step 4's Assumptions block. It is the one that would have made this
+audit possible:
 
-**Not one of the twenty-six distillations records a Step-1 `Profile:` verdict line** — not the
-`N entries applied` form, not `read, nothing applicable`, not `CONTRADICTED on`. Six distillations do
-record the *Step-8* write-back half (`profile updated`, `profile written`, `profile append`:
-`a7cdcd1c` line 618, `1927b90c` line 632, `b6dbd8be` line 916, `af23ab55` lines 357/892, `a273eefa`
-line 766, `cbe2813b` line 598), so the two halves of the loop are not equally observed.
+> **Profile** is the Step-1 verdict, and it is **one line, never zero** when a `.pw-prove/profile.md`
+> was read:
+>
+> - `Profile: .pw-prove/profile.md — N entries applied (<the ones that steered a decision>)`
+> - `Profile: .pw-prove/profile.md — read, nothing applicable to this change`
+> - `Profile: … — CONTRADICTED on <what>: profile says <x>, Step 3 observed <y>; ran on the observation`
+>
+> **A contradiction must produce its line**: it is the signal that the profile has rotted, and it is
+> the only thing that will make anyone go and fix it.
 
-Calibration, stated because it matters: no distillation was asked to look for that line, and most
-reproduce a completion report only in part. But four distillations (`1927b90c` line 86, `af23ab55`
-line 115, `998dd2c1` line 73, `cbe2813b` line 76) enumerate the delivered report's tail lines
-*exhaustively* in order to check each against the range, and none of the four names a profile verdict
-among them. That is the strongest available evidence, and it points one way.
+**The write verdict** lives in Step 8's completion report — `written (N entries) | updated (N entries,
+M rewritten) | unchanged` — and it is *that* line the report invariant says has **no skip form**.
+
+**The write verdict is being emitted. The read verdict is not.**
+
+Six distillations record the Step-8 write line (`a7cdcd1c` line 618, `1927b90c` line 632, `b6dbd8be`
+line 916, `af23ab55` lines 357/892, `a273eefa` line 766, `cbe2813b` line 598). Two of those are
+*exhaustive* tail checks that name it among the delivered report's own rows — `1927b90c` line 86
+lists "profile updated (632)" alongside the Clips link and the mutation verdict, and `af23ab55` line
+115 checks `Profile updated: 5 entries added` against its two appends. So that half is observed
+directly, not inferred.
+
+**Not one of the twenty-six records a Step-4 read verdict** — no `N entries applied`, no `read,
+nothing applicable`, no `CONTRADICTED on`.
+
+The structural reason is in the same corpus: **the block that line lives in was often not written at
+all.**
+
+| Session | Step 4 |
+|---|---|
+| `fe171475` | never entered — *"no plan block, no Locator Mapping Table, no Assumptions block anywhere in 27–1104"* |
+| `b6dbd8be` | not entered — no scenario list, no locator table, no Assumptions block in the range |
+| `67b624f4` | never entered — the range was searched for "Assumptions"; zero hits outside the injected body |
+| `a7cdcd1c` | entered and abandoned — one sentence, *"no Scenarios block, no Locator Mapping Table and no Assumptions block"* |
+| `befb0456` | entered, one sentence, none of the three required blocks (Wrong turn 2) |
+| `7cc7e6bc` | not a pipeline run at all; its Steps 1–2 are recorded as **missing from range**, not as not performed, so it evidences nothing either way |
+
+Five pipeline runs in twenty-six emitted no Assumptions block, so the profile's read verdict had
+nowhere to go by construction. Two runs that did emit one — `18697484` (line 73) and `cbe2813b`
+(line 259) — have their Assumptions blocks quoted or enumerated in their distillations, and neither
+names a Profile line among its contents.
+
+Calibration, stated because it matters: no distillation was asked to look for this line, and none
+reproduces an Assumptions block in full. The claim is therefore "no distillation records one",
+which is what the evidence supports, rather than "no run emitted one".
 
 The practical effect is visible in the three contradictions the corpus does contain: in each, the
-entry was corrected (the second half of the rule) while no distillation evidences the declaration
-(the first half). The signal the skill installed to make somebody go and look was not emitted.
+entry was corrected — and correcting the entry is the *write* half, which the corpus shows working.
+The *read* half, the line that tells a human the profile has rotted, is what none of the twenty-six
+records.
 
 ## The three contradictions, and how each was handled
 
@@ -152,14 +186,17 @@ the entry: it was evicted before this audit read the file.
 ## Entry-by-entry — `nuxt-hyrd-chrysus` (321 lines, 32 units)
 
 `A` = applied, `X` = contradicted, `D` = declared, `R` = re-paid, `—` = no corpus evidence.
-"Author" names the corpus session whose range the entry's stamp and content resolve to, where one does.
+`D-partial` = the entry was rewritten but no distillation records the declaration line;
+`A, harmful` = applied, and the application made the run worse; `A-before-admission` = runs acted on
+the fact before it was in the profile. "Author" names the corpus session whose range the entry's
+stamp and content resolve to, where one does.
 
 | # | Lines | Entry | Author | Verdict |
 |---|---|---|---|---|
 | H | 3–9 | `env` header (`ENV_CONTRACT=omit`, `REQUIRED_ENV`, `BUILD_COMMAND`, `SERVE_COMMAND`, `BASE_URL_FORM`) | — | **A, X, D-partial** — see below |
 | P | 11–16 | preamble: what stays here, and the two repo docs that own the rest | — | — |
-| C1 | 19–21 | serve binds `[::]`, answers on ipv4; address the tenant subdomain | *unstamped* | **A** — `c871a4f2` and `1927b90c` both address the subdomain form |
-| C2 | 23–26 | the port is yours; `installApiHar` rebinds every recording | `18697484` | **A** — `c871a4f2` line 70 reads the helper and declines the Step-7 bind on it; `cbe2813b` line 323 does the same |
+| C1 | 19–21 | serve binds `[::]`, answers on ipv4; address the tenant subdomain | *unstamped* | **—** — `c871a4f2` and `1927b90c` both served from a tenant-subdomain origin, but each mentions it only in a redaction note; neither attributes the choice to the profile |
+| C2 | 23–26 | the port is yours; `installApiHar` rebinds every recording | `18697484` | **—, consistent** — `c871a4f2` (line 70) and `cbe2813b` (line 323) both decline the Step-7 HAR bind on the repo's own helper, which is what C2 describes; but `c871a4f2`'s distiller states plainly that *"the range does not contain the agent stating that reasoning"*, and `cbe2813b` cites `replayablePath`, not the profile. Consistent with C2, attributed to it by neither |
 | C3 | 28–37 | macOS worktree with no `.env`: write it by hand | *stamp unresolvable* | **—** (structurally disqualified, below) |
 | C4 | 39–44 | `rg` is a shell function under Claude Code; shim it | *stamp unresolvable* | **—** (structurally disqualified) |
 | C5 | 46–63 | stopping the preview server: `pnpm preview` is three processes | *stamp unresolvable* | **R** — the fact was learned in-corpus by `0259fd57` (widget, 08-19, Wrong turn 2) and `c871a4f2`; entry lives in the wrong repo's profile |
@@ -210,7 +247,15 @@ script refused it as a literal file path:
 
 The current header reads `ENV_CONTRACT=omit` and C17 carries the *because*. So the contradiction was
 absorbed and the entry corrected — but by the profile's own header/prose split, and only after two
-runs paid for it. **Neither distillation records the `Profile: … CONTRADICTED` line.**
+runs paid for it. **Neither distillation records the Step-4 `Profile: … CONTRADICTED` line.**
+
+**And the key is now obsolete, which nobody has noticed.** `d32c2495`'s own attribution row already
+said so — *"the 0.28.0 `preflight.mjs` has no `ENV_CONTRACT` at all — the knob is now `ENV_FILES`"* —
+and this repo's tree confirms it: `ENV_CONTRACT` appears **zero** times in `skills/pw-prove/SKILL.md`
+and zero times in `skills/pw-prove/scripts/preflight.mjs`, which uses `ENV_FILES` instead. The live
+chrysus header still carries `ENV_CONTRACT=omit` and C17 still explains a variable the shipped script
+no longer reads. Six lines of the profile's most load-bearing surface are now inert, and the loop has
+no path that would ever notice: nothing re-reads an entry against the script it names.
 
 **And the write-back armed the trap in the first place.** In `hyrd-widget`, `6f307a2f` (2026-08-18,
 0.22.0) wrote `ENV_CONTRACT=none` *into the profile header* at transcript line 233 — the exact value
@@ -242,7 +287,11 @@ And then it was applied, twice, in one later session — once well and once badl
 
 - **Well.** `cbe2813b` (08-21) read a profile of ~20 entries at line 36 and reported at line 317 that
   the 20 `waitForTimeout` hits *"are the JUSTIFIED proof-clip dwells (suppression position 2)"* — the
-  triage C24's tail prescribes, reached without re-deriving it. That is the entry paying for itself.
+  triage C24's tail prescribes, reached without re-deriving it. That is the entry paying for itself,
+  with one caveat its own distillation records: the verdict was published over a `scan.mjs` run that
+  had exited 1, from output the agent's own `grep` had stripped the severity lines from, and one
+  sub-claim in it (that the four `.first()` hits sit on a documented contract) is unevidenced in the
+  range (cbe2813b › False proof 2). The entry saved a re-derivation; it did not make the verdict sound.
 - **Badly.** In the same session, at line 503, two published chapters held the settled post-dialog
   state instead of the transient one, and the agent classified them as *"on-topic and legible, **the
   timing variance the profile documents**"* and published — declining the skill's own diagnose →
@@ -303,8 +352,8 @@ only write surface a run has.
 | W10 | 93–96 | `/feature-flags` is requested twice per direct page | `998dd2c1` era | **—** |
 | W11 | 98–103 | `useFeatureFlags().isError` can never be true | `998dd2c1` era | **—** |
 | W12 | 105–109 | live staging renders "Not available here" for this tenant | `998dd2c1` era | **—** |
-| W13 | 113–119 | the embeds live under `build/chat`; a spec navigating `/meet/` gets a 404 shell | 08-19 | **A** — `befb0456` and `0259fd57` both serve `build/chat` |
-| W14 | 123–126 | the static target rebuilds in ~200 s and needs **no restart** | `998dd2c1`/`f28c3493` era | **A-before-admission, harmful** — see below |
+| W13 | 113–119 | the embeds live under `build/chat`; a spec navigating `/meet/` gets a 404 shell | 08-19 | **R** — `0259fd57` paid a 118 s build to learn exactly this (Rework 2, line 334: *"Cost me one 118s build to learn"*), misled by the repo's sibling `.pw-prove/AGENTS.md`, whose proof-target table recorded the `build/chat` root as the *rejected* alternative |
+| W14 | 123–126 | the static target rebuilds in ~200 s and needs **no restart** | `998dd2c1`/`f28c3493` era | **—** — no run applied it; two acted on the same fact from `CONTRIBUTING.md` *before* it was admitted, and the entry now stands as repo-resident licence to skip a precondition. See below |
 | W15 | 128–131 | `SPEC_BASE_URL` needs no `PW_PROVE_BASE_URL`; the config raises the timeout to 15 s | 08-20 | **—** |
 | W16 | 133–136 | a direct page can be fully hermetic by registering an abort predicate first | 08-20 | **R** — `3deeddd7` (08-21) re-derived exactly this, expensively |
 | W17 | 141–147 | on a staging bundle the tracker resolves onto the console; props need `message.args()` | `240d63c1` era | **—** |
@@ -334,7 +383,13 @@ yet"*, which is precisely the question `preflight.mjs build` returns an answer t
 So the profile did what it was written to do — it informed — and what it informed was the skipping of
 a step `SKILL.md` makes a completion condition for Step 3.
 
-### W14 — applied before it was admitted, to bypass a precondition
+One limit on that reading, from the distillation itself: it marks the item a boundary case *because*
+its author read the profile but **not** `CONTRIBUTING.md`'s contents, so it could not say whether the
+hand-rolled static-origin recipe was prescribed by the repo or invented by the agent. What is
+established is that the profile's own header scoping is the reason the deviation was treated as
+sanctioned; what is not established is that the profile was its only licence.
+
+### W14 — admitted after the fact, as standing licence to bypass a precondition
 
 W14 records that the static target's `serve` reads from disk per request, *"so a rebuild needs **no
 restart** and the whole `SERVE_RESTART=1` dance is unnecessary here."*
@@ -351,9 +406,11 @@ Two corpus runs acted on that fact *before* it was in the profile, citing `CONTR
 W14 was then written into the profile, which converts a twice-improvised bypass into standing
 repo-resident permission to skip a precondition. Nothing in the loop asks whether an entry is
 licensing a departure from the body rather than shortening a search. Together with C24-at-`cbe2813b`
-and the preamble-at-`8eb0585c`, that is **three measured cases in twenty-six sessions** where an
-entry's effect was to excuse a skipped or altered gate — against one case (C19) where an entry was
-cleanly contradicted, declared and repaired.
+and the preamble-at-`8eb0585c`, that is **three measured cases in twenty-six sessions** where a
+profile entry's effect was to excuse a skipped or altered gate — two of them by an entry a run read
+(the preamble, C24), and this one by an entry written to bless a bypass two runs had already
+improvised. Against all three stands **one** case (C19) where an entry was cleanly contradicted,
+declared and repaired.
 
 ## Entries that no run in the corpus applied
 
@@ -380,11 +437,12 @@ loop is not working.
 |---|---|---|
 | C24 | `3072aa9b`, `67b624f4`, `c871a4f2` | ~9 min, one wasted sanctioned re-film, one film over budget |
 | C29 / C5 | `c871a4f2` (after `3072aa9b`, `0259fd57`) | a mutation run against the wrong artifact, redone |
-| W16 / W24 | `3deeddd7` | ~10 min: a 114.5 s `goto` timeout, an unplanned probe session, two re-films |
+| W16 / W24 | `3deeddd7` | ~10 min: a 114.5 s `goto` timeout, an unplanned probe session, two re-films. **Weakest of the five**: the distillation attributes that cost to Step 3's recon being done with `curl` instead of `probe.mjs`, not to an unread entry, and its range contains no profile read at all — so what this shows is that the fact was on disk and the run did not have it, not that the run declined it |
 | C25 | `18697484` (after `fa0cc83b`) | one hermetic-audit cycle and a spec edit, twice discovered before admission |
 | C8 | `a7cdcd1c` | one heal cycle on the singular/plural tab query, admitted two days later |
 
-**Tier 3 — no corpus evidence either way.** Twenty-three chrysus entries and twenty widget entries.
+**Tier 3 — no corpus evidence either way.** Twenty-three chrysus entries and twenty-two widget
+entries — forty-five of fifty-six.
 This list is *not* a deletion recommendation and the study declines to make one from it: a
 successfully applied entry is invisible to a friction-and-mistakes distillation, and no transcript in
 the corpus preserves the reasoning that would settle it. **What would settle it is the `Profile:`
@@ -436,9 +494,9 @@ contains, because the header is the part that gets pasted into commands.
 
 **2 — The reading half leaves no receipt, so nothing can be audited or fixed.** The `Profile:`
 Assumptions line is required, has no skip form, and appears in none of the twenty-six distillations.
-Its absence is why this audit can score only five of fifty-six entries as applied and must leave
-forty-three unresolved. It is also why a contradiction becomes visible only when a run narrates it in
-prose, as `b6dbd8be` happened to.
+Its absence is why this audit can score only **four of fifty-six entries as applied** (C17, C19, C24,
+W1) and must leave **forty-five unresolved**. It is also why a contradiction becomes visible only
+when a run narrates it in prose, as `b6dbd8be` happened to.
 
 **3 — The delivery is branch-local, and the corpus proves it fails.** A fact reaches the next run only
 if its PR merges and the reader's checkout syncs. Right now `hyrd-widget`'s live file is missing ten
@@ -446,24 +504,41 @@ entries and `nuxt-hyrd-chrysus`'s is behind by four commits. Five corpus session
 in the 538 lines this ticket names. Whatever the admission test says, the loop is not closing.
 
 **The narrow verdict on the question asked.** Over twenty-six sessions and five days, fifty-six
-entries produced **one clean applied-contradicted-declared-repaired cycle** (C19), **four other
-demonstrated applications** (the header, C2, C24, W13, plus the preamble), **three cases where an
-entry's effect was to license a skipped or altered gate**, and **five cases where a later run paid the
-cost an on-disk entry existed to prevent**. The profile is not dead weight — C24 saved `cbe2813b` a
-re-derivation, C2 saved two runs a Step-7 bind, the header is genuinely load-bearing — but on this
-evidence it is not paying for 538 lines read at every Step 1, and the largest single improvement
-available is not a stricter admission test. It is a receipt: make the run say which entries it
-applied, and the next audit will not have to guess.
+entries produced **four entries scored as applied** (C17, C19, C24, W1), plus the chrysus `env`
+header and the widget preamble. Counted as *events* — C24 was applied twice in one session, once well
+and once badly — that is six demonstrated applications, and they distribute badly:
+
+| The application | What it did |
+|---|---|
+| C19 at `b6dbd8be` | the one clean cycle — read, contradicted, declared in visible text, rewritten |
+| W1 at `0259fd57` | contradicted and rewritten; the declaration line not evidenced |
+| the chrysus header + C17 at `d32c2495` and `a7cdcd1c` | one event over two units — the header holds the value a run pastes, C17 the *because*. Pasted verbatim as designed, and wrong; two runs paid for it |
+| C24 at `cbe2813b`, first use | saved a re-derivation; the entry paying for itself |
+| C24 at `cbe2813b`, second use | licensed publishing two off-payoff clips instead of the prescribed fix |
+| the widget preamble at `8eb0585c` | licensed skipping Step 3's three-phase bring-up gate entirely |
+| *(the evicted `[::1]`/`localhost` pin at `b6dbd8be`)* | beat a live observation, by preference, undeclared |
+
+Against those: **seven entries a later run re-paid** — C5, C8, C25, C29, W13, W16 and W24, each a
+cost an on-disk entry existed to prevent — and **forty-five entries unresolved**, which is a property
+of the instrument rather than a verdict against them.
+
+The profile is not dead weight. C24 saved `cbe2813b` a re-derivation it would otherwise have paid, and
+the header is genuinely load-bearing precisely because it is pasted rather than paraphrased. But two
+of the six applications made a run *worse*, and on this evidence 538 lines read at every Step 1 are
+not paying for themselves. The largest single improvement available is not a stricter admission test.
+It is a receipt: make the run emit the `Profile:` line the skill already requires, and the next audit
+will not have to guess.
 
 ## What I could not determine
 
 - **Whether any Tier-3 entry was ever applied.** The distillations record friction, mistakes and
   attribution; a quiet application leaves no trace, every transcript serialises `thinking` empty, and
-  no run emitted the `Profile:` line that would have said so. Forty-three entries are unresolved for
-  that reason, not because the corpus says they are unused.
-- **Whether the `Profile:` Assumptions line was truly never emitted.** Zero of twenty-six
-  distillations record one, and four record the delivered tail exhaustively without naming it. That is
-  strong and not conclusive: no sub-agent was asked to look for it.
+  no distillation records the Step-4 `Profile:` line that would have said so. Forty-five entries are
+  unresolved for that reason, not because the corpus says they are unused.
+- **Whether the Step-4 `Profile:` Assumptions line was truly never emitted.** Zero of twenty-six
+  distillations record one; five pipeline runs emitted no Assumptions block at all, and the two whose
+  blocks are enumerated do not name it. That is strong and not conclusive: no sub-agent was asked to
+  look for it, and none reproduces an Assumptions block in full.
 - **The authorship of eight chrysus entries.** `ea311fa9` and `dfa75b4f4` are not commits in the
   repository, so C3, C4, C5, C6, C8, C9, C21 and C26 cannot be traced to a session. They read as a
   macOS worktree outside the corpus. I did not guess which.
