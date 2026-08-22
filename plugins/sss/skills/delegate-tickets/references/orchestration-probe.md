@@ -36,13 +36,10 @@ Guessing a verb from memory fails identically to both of the causes above.
 
 ## An empty or non-yolo `agentDefaultArgs` — a manual-mode host
 
-Step 4's read answers with nothing, or with arguments that do not carry the engine's bypass flag
-(`--dangerously-skip-permissions` for `claude`, `--yolo` for `cursor`).
+Step 4's read answers with nothing, or with arguments that do not carry the engine's bypass flag.
 
-**Stop before any worktree.** The fix is Settings → Agents on the host, restoring that engine's
-default arguments — this is app config, and no argument the skill passes at launch substitutes for
-it. A run that continues past this launches workers that sit at an approval prompt nobody is
-watching, and a hung worker and a slow one are the same thing until its dispatch times out.
+**Stop before any worktree.** Step 4 owns this one — the read, the refusal, and the fix are stated
+there and are not restated here.
 
 ## `run_required` — a missing binding
 

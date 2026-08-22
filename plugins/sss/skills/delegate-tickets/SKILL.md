@@ -155,7 +155,9 @@ ORCA_ROOT="${XDG_CONFIG_HOME:-$HOME/.config}/orca"                # Linux
 [ -f "$ORCA_ROOT/orca-profile-index.json" ] \
   || ORCA_ROOT="$HOME/Library/Application Support/orca"           # macOS
 
-python3 - "$ORCA_ROOT" claude <<'READ_DEFAULT_ARGS'
+ENGINE=claude   # the run's engine id, per step 5: claude | cursor | …
+
+python3 - "$ORCA_ROOT" "$ENGINE" <<'READ_DEFAULT_ARGS'
 import json, pathlib, sys
 root, engine = pathlib.Path(sys.argv[1]), sys.argv[2]
 index = json.loads((root / "orca-profile-index.json").read_text())

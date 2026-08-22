@@ -200,9 +200,7 @@ def preflight(skill_text: str) -> str:
 
 @pytest.fixture(scope="module")
 def probe_ref() -> str:
-    return (SKILL_DIR / "references" / "orchestration-probe.md").read_text(
-        encoding="utf-8"
-    )
+    return (SKILL_DIR / "references" / "orchestration-probe.md").read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="module")
@@ -325,18 +323,24 @@ def test_no_run_leaves_a_task_it_does_not_use() -> None:
 
     Retiring it with `task-update --status completed` left the row behind, so
     every run added one. The Run the coordinator needs anyway is the probe now.
+
+    Scoped to the *throwaway* task, not to `task-create`, which stays a
+    legitimate verb: a supervised `worker-start --task <id>` needs a task, so
+    banning it outright would fail the next ticket for doing the right thing.
     """
     for doc in sorted(SKILL_DIR.rglob("*.md")):
         text = doc.read_text(encoding="utf-8")
         assert "PROBE" not in text, doc
-        assert "task-create" not in text, doc
         assert "--status completed" not in text, doc
 
 
 def test_run_create_is_the_fence_probe(preflight: str) -> None:
     """Same evidence as the throwaway task, and no artifact left behind."""
-    assert "run-create" in preflight
-    assert re.search(r"fence", preflight)
+    heading = "### The fence probe"
+    assert heading in preflight, preflight
+    fence_probe = preflight.split(heading)[-1]
+    assert "run-create" in fence_probe
+    assert re.search(r"fence", fence_probe)
     assert re.search(r"[Bb]efore .*(worktree|brief)", flat(preflight))
 
 
@@ -361,12 +365,18 @@ def test_the_permission_mode_is_read_not_passed(preflight: str) -> None:
     assert "--dangerously-skip-permissions" in flat_preflight
     assert "--yolo" in flat_preflight
     assert re.search(r"app config", flat_preflight)
-    assert re.search(r"[Ss]top|[Rr]efuse", flat_preflight)
+    assert re.search(r"manual-mode host: \*\*stop\*\*", flat_preflight), flat_preflight
 
 
 def test_a_disabled_feature_is_told_apart_from_a_fence(preflight: str) -> None:
-    """Absent lifecycle verbs read like a fenced runtime and are not one."""
-    assert re.search(r"experimental", flat(preflight))
+    """Absent lifecycle verbs read like a fenced runtime and are not one.
+
+    Naming the feature is not enough: the clause has to say it is *not* the
+    fence, or a coordinator reads the same symptom and quits the app.
+    """
+    clause = flat(preflight)
+    assert re.search(r"experimental", clause)
+    assert re.search(r"experimental[^.]*not a fenced runtime", clause), clause
 
 
 def test_every_preflight_failure_has_one_next_step(probe_ref: str) -> None:
