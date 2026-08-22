@@ -5,17 +5,71 @@ description: Delegate an approved ticket tree to parallel Orca workers — one c
 
 # Delegate Tickets
 
-Delegate a ticket tree produced by `/to-tickets` to parallel workers, coordinated with the `/orchestration` skill: one Orca child worktree per ticket, dispatched in DAG order, merged back into the current branch as each finishes.
+Delegate a ticket tree produced by `/to-tickets` to parallel workers, coordinated through Orca's own orchestration lifecycle: one Orca child worktree per ticket, dispatched in DAG order, merged back into the current branch as each finishes.
 
 The tickets' **blocking edges ARE the dependency DAG** — use them as-is, never re-derive dependencies. Wide refactors already serialize through their edges by construction.
 
-**A coordinator's resting state is `orca orchestration check --wait`**, and it returns there after every action, because the mailbox does not wake an idle TUI: a `worker_done` sits unread until that command runs in this terminal, or until a human pokes the pane. So a turn ends in exactly three places — the final report in step 7, an escalation raised to the user, a decline at step 1's gate. A recap naming the next merge or the next dispatch is not one of them; it ends the turn while reading like progress, which is how a finished worker goes unnoticed for an hour. Steps 5, 6 and 7 each hand back to the wait.
+**A coordinator's resting state is `<orca> orchestration check --wait`**, and it returns there after every action, because the mailbox does not wake an idle TUI: a `worker_done` sits unread until that command runs in this terminal, or until a human pokes the pane. So a turn ends in exactly three places — the final report in step 7, an escalation raised to the user, a decline at step 1's gate. A recap naming the next merge or the next dispatch is not one of them; it ends the turn while reading like progress, which is how a finished worker goes unnoticed for an hour. Steps 5, 6 and 7 each hand back to the wait.
 
-On Linux outside an Orca-managed pane the binary is `orca-ide`; step 4's probe resolves it once for every command below.
+Every command below is written `<orca> …`. **Step 0 resolves that name and proves it answers**, before anything mutates — the binary is not the same on every host, and the wrong one fails silently rather than loudly.
 
-> **Plugin prerequisites.** Requires the `matt` plugin from this marketplace (for
-> `/to-tickets` and `/implement`) and an Orca install (for `/orchestration`). See
-> [references/quickstart.md](references/quickstart.md).
+> **Prerequisites.** The `sss` and `matt` plugins from this marketplace — `matt` supplies
+> `/to-tickets` and the `implement` skill every worker runs, `sss` supplies this one. An **Orca
+> install**, whose CLI step 0 resolves and whose bundled guide step 0 loads. Orca's **experimental
+> orchestration feature**, enabled in the app's settings: with it off the lifecycle verbs are
+> absent, which reads like a fenced runtime and is not one.
+
+## 0. Resolve the CLI and load the live guide
+
+**Nothing runs above this step** — no profile read, no worktree, no terminal, no lifecycle call.
+Each of those mutates, and every one of them is a silent no-op against the wrong binary.
+
+### Resolve the binary, and prove it
+
+Two names can sit on `PATH` and only one of them is the CLI: on Linux the desktop **launcher** is
+also called `orca`, and it answers *every* argument list with a single-instance notice and **exit
+0**. A coordinator reading that exit 0 gets clean exit codes for a run in which nothing was
+orchestrated.
+
+So preference only orders the candidates — `orca-ide` first outside an Orca-managed pane, `orca`
+first inside one — and what *selects* one is whether it answers `orchestration --help`:
+
+```bash
+first=orca-ide; second=orca
+if [ -n "${ORCA_PANE_KEY:-}" ] || [ "${TERM_PROGRAM:-}" = "Orca" ]; then
+  first=orca; second=orca-ide
+fi
+
+for candidate in "$first" "$second"; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  "$candidate" orchestration --help 2>/dev/null | grep -q '^Usage: orca orchestration' || continue
+  ORCA="$candidate"; break
+done
+```
+
+**No `$ORCA` means stop**, and say which names were on `PATH`: a host with no working Orca CLI is
+not something a run can preflight its way past. `scripts/check-delegate-cli.sh` in this repo
+resolves the binary the same way and asks it whether every command this skill names still exists.
+
+Substitute the resolved name into every command in this file and under `references/`. Where they
+read `<orca> …`, a host that resolved `orca-ide` runs `orca-ide orchestration check`, `orca-ide
+terminal read`, `orca-ide worktree create`. Nothing below spells the binary itself.
+
+### Load the live guide
+
+```bash
+<orca> skills get orchestration --full
+```
+
+408 lines, bundled in the binary and **version-matched** to it. **Read it before the first lifecycle
+call** — before any Run is created or bound, before any `task-*`, before any dispatch — and take
+every lifecycle fact from it rather than from memory or from prose in this repo.
+
+It is loaded, never vendored and never installed as a snapshot: a copy under `~/.claude/skills/` or
+in this repo ages against the runtime you are calling, and a flag invented from an old copy fails
+the same way a fenced runtime does. There is no orchestration *skill* to invoke — it is not a
+marketplace plugin and is installed on no machine here. Where a step below leaves a verb to the
+guide, this is the text it means.
 
 ## 1. Resolve the repo profile
 
@@ -68,7 +122,7 @@ Read every ticket file/issue. Print the DAG: which tickets are unblocked now, wh
 Before building any briefs, worktrees, or terminals, prove the orchestration lifecycle actually writes. `run-create` succeeding proves nothing — the runtime can be fenced per-command:
 
 ```bash
-orca orchestration task-create --spec "PROBE" --json
+<orca> orchestration task-create --spec "PROBE" --json
 ```
 
 **Retire the probe by completing it, not by deleting it** — there is no `task-delete` verb. Set its status instead (`task-update --status completed`), taking the id from the `task-create` response.
@@ -79,17 +133,17 @@ This step is cheap and it is the whole point of doing it first: a run that disco
 
 ## 5. Dispatch the frontier
 
-Coordinate through the `/orchestration` skill — real Orca task/dispatch state, not generic subagents.
+Coordinate through the orchestration lifecycle whose guide step 0 loaded — real Orca task/dispatch state, not generic subagents.
 
 Some rules below are Orca's rather than this skill's. They live here because `orca-cli` and `orchestration` are outside this repo's write access, and a trap belongs beside the step that trips it.
 
 - One Orca **child worktree** per ticket, cut from the integration branch as
-  `<branch-prefix><ticket-slug>`. **Pass `--base-branch <integration-branch>`** — `orca worktree
+  `<branch-prefix><ticket-slug>`. **Pass `--base-branch <integration-branch>`** — `<orca> worktree
   create` defaults to the repo's default base, so an omitted flag cuts every worker from `main`.
   Then **verify it took**: `git merge-base <integration-branch> HEAD` in the new worktree must equal
   the integration branch head. An ignored flag and an absent flag fail identically, and both stay
   invisible until merge-back hands you a branch carrying commits its worker never wrote.
-- Dispatch the unblocked frontier in parallel, but **cap concurrency at 2 workers** unless the user raises it. Each worktree creation fires the repo's setup hook (`pnpm install` and friends); a wider fan-out puts those in contention and `orca terminal create` blocks past the Bash timeout, leaving half-built workers. It also keeps the merge-back review surface small enough to actually check. A blocked ticket dispatches only after ALL its blockers have merged back.
+- Dispatch the unblocked frontier in parallel, but **cap concurrency at 2 workers** unless the user raises it. Each worktree creation fires the repo's setup hook (`pnpm install` and friends); a wider fan-out puts those in contention and `<orca> terminal create` blocks past the Bash timeout, leaving half-built workers. It also keeps the merge-back review surface small enough to actually check. A blocked ticket dispatches only after ALL its blockers have merged back.
 - Each worker gets a fresh session in its worktree. Its prompt must tell it to **read and follow `implement`'s `SKILL.md` by absolute path**, then name its ticket ref, then carry the profile's **Prohibitions** verbatim.
   - **Resolve that path on THIS machine every run; never copy the last one you saw.** `implement` ships in the `matt` plugin, so it lives at `<marketplace-checkout>/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md` — and the checkout root differs per host. `~/.claude/skills/` is the wrong place to send a worker: that directory holds a handful of symlinks, so a worker pointed there finds nothing, and **a worker that cannot find the skill invents a process and still passes the gates** — the omission is silent unless the worker happens to escalate. Locate it (`ls` the candidate, or search the marketplace checkout) and confirm the file exists **before** it goes in a brief. Prefer the marketplace checkout over any `~/.claude/plugins/cache/…` copy, which is version-pinned.
   - The brief must also spell out the absolute paths of the skills `implement` delegates to — `.../skills/engineering/tdd/SKILL.md` and `.../skills/engineering/code-review/SKILL.md` — under the same resolved root. A dispatched worker of any engine cannot invoke a slash command, so an unresolved name is a dead end for it. Leave its **Conventions** field where it is — a pointer to the repo's agent guide, which the worker loads on its own; injecting those too buries the ten rules that cost a rerun under thirty that don't. Path-reading rather than `/implement` is deliberate: `implement` is user-only (`disable-model-invocation: true`), so no dispatched worker of any engine can Skill-invoke it. `implement` drives TDD and `code-review` itself — don't re-specify them, and never hand-write a substitute process into the brief.
@@ -134,13 +188,13 @@ correction here only while that file is outside your write access.
 Return to the wait after every local action — a merge-back, a profile amend, a conflict resolution, a filed issue, a measurement:
 
 ```bash
-orca orchestration check --ack <delivery_id> --wait \
+<orca> orchestration check --ack <delivery_id> --wait \
   --types worker_done,escalation,question --timeout-ms 900000 --json
 ```
 
-**Always pass `--timeout-ms`.** `/orchestration` documents no default, so an omitted flag leaves the window to the runtime, which can close it inside a minute — and an empty 40-second wait is the same JSON as an empty 15-minute one. The flag is what keeps a bug in your own command line from reading as a checkpoint.
+**Always pass `--timeout-ms`.** The loaded guide documents no default, so an omitted flag leaves the window to the runtime, which can close it inside a minute — and an empty 40-second wait is the same JSON as an empty 15-minute one. The flag is what keeps a bug in your own command line from reading as a checkpoint.
 
-A timeout or `{count:0}` **is** that checkpoint: the run is live, not finished. Read liveness (`task-list`, `terminal read` on the worker), then wait again — workers routinely run 15–60 minutes, and one window is not the run. Account for every settled worker terminal before the next wait: reuse it for the next Dispatch, or release it. `/orchestration` owns those verbs.
+A timeout or `{count:0}` **is** that checkpoint: the run is live, not finished. Read liveness (`task-list`, `terminal read` on the worker), then wait again — workers routinely run 15–60 minutes, and one window is not the run. Account for every settled worker terminal before the next wait: reuse it for the next Dispatch, or release it. The loaded guide owns those verbs.
 
 Keep rolling until every expected Dispatch has a processed `worker_done` or `escalation`.
 
