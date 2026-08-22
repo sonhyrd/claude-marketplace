@@ -33,7 +33,11 @@ Three groups come out of that corpus, and the distinction is load-bearing:
 - **corpus** — sessions against the two repositories above. These produce the findings.
 - **control** — the `e2e-skills` dev sessions, retained rather than deleted. They deliberately
   exercise failure paths, so they must not masquerade as real struggle; a taxonomy that cannot tell
-  one of them from a genuine failure is thereby exposed as defective.
+  one of them from a genuine failure is thereby exposed as defective. There are five, and they are
+  named here rather than only regenerable, because a control list that has to be recomputed to be
+  consulted is one nobody consults: `d411a27c`, `4bcf393a`, `7c1f2e12`, `bb119765`, `8ab5f720`. They
+  carry 488 of the window's ledger records and 268 of its non-zero exits — four fifths of the raw
+  failure count, from five of the thirty-two sessions. None is distilled as corpus.
 - **excluded** — everything else, each with its reason stated. `hyrd-ui-library` is excluded because
   the question asked was about two repositories.
 
@@ -50,7 +54,10 @@ Filed here as it is produced:
   over the corpus it reports **632 shipped-script records and 57 non-zero exits across the 26
   sessions**, which supersedes the 656/60 quoted while designing the exercise — that figure was taken
   one repository too wide, before `hyrd-ui-library` was excluded.
-- One **session distillation** per session. Its schema is fixed here, not in the glossary: identity
+- One **session distillation** per session — **all twenty-six now exist**, none refused, none
+  silently dropped, and the one session whose lead could not be anchored (`7cc7e6bc`) records Steps 1
+  and 2 as missing from its range rather than as not performed. The distillation's schema is fixed
+  here, not in the glossary: identity
   (session, repository, worktree, skill versions, commit, transcript path, span bounds); shape (steps
   entered, steps reached, terminal state); cost (turns and wall-clock per step, tool calls per step,
   ledger scripts and exits); friction (human interventions with turn and trigger, same-script
