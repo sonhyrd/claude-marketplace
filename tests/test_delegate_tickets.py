@@ -2,7 +2,7 @@
 
 One file for one skill. It consolidates `test_delegate_tickets_review_gate.py`
 and `test_delegate_tickets_wait_loop.py`, which it replaces, and adds the
-step-0 clauses from #71. Grouping them is deliberate: the guarded failure mode
+step-0 clauses from #71 and the step-4 clauses from #72. Grouping them is deliberate: the guarded failure mode
 in every case is a maintainer trimming a clause for length, which takes several
 clauses at once, so this fails loudly in one place rather than quietly in
 three. Assertions match on the load-bearing tokens only, never on phrasing a
@@ -41,6 +41,35 @@ mention against drift. Step 0 supersedes it — the name is now resolved once in
 one place and the commands below carry no binary name at all — and
 `test_no_command_is_spelled_against_the_bare_binary` holds the anti-drift force
 it held, against the spelling that actually costs a run.
+
+## Step 4 — the preflight (#72)
+
+Step 4 proved the lifecycle writes by creating a throwaway task
+(`--spec "PROBE"`) and retiring it with a status update, because the CLI has
+no delete verb. Two costs, both measured against Orca `1.4.188`:
+
+1. **Permanent litter.** A completed task is still a task. Every run added a
+   row that no run ever used.
+2. **A false alarm on a clean machine.** The probe ran before any Run was
+   bound, so its likeliest answer was `run_required` — a setup step that reads
+   as a failure.
+
+The run creates a Run anyway, and that `run-create` is the first *mutating*
+lifecycle call, so it carries the same evidence with no artifact. The step-4
+argument survives intact: still cheap, still ahead of every worktree.
+
+Two omitted preconditions join it. `status --json` must show a reachable
+runtime — help text is local and every `orchestration` verb is an RPC, so a
+binary that resolves and answers `--help` still reaches nothing when the app is
+closed. And the host's **agent permission mode** is load-bearing: Orca supplies
+`--dangerously-skip-permissions` (cursor's `--yolo`) from `agentDefaultArgs` in
+the active profile's `orca-data.json`, which is app config no skill argument can
+set. A host left on manual produces workers that stop at an approval prompt
+nobody is watching — which never reports as a failure.
+
+The dropped claim was "`run-create` succeeding proves nothing — the runtime can
+be fenced per-command". It could not be reproduced, and
+`references/orchestration-probe.md` says the *whole lifecycle* is fenced.
 
 ## The review receipt (ADR-0010)
 
@@ -165,6 +194,18 @@ def step_zero(skill_text: str) -> str:
 
 
 @pytest.fixture(scope="module")
+def preflight(skill_text: str) -> str:
+    return section(skill_text, "4. Preflight the orchestration runtime")
+
+
+@pytest.fixture(scope="module")
+def probe_ref() -> str:
+    return (SKILL_DIR / "references" / "orchestration-probe.md").read_text(
+        encoding="utf-8"
+    )
+
+
+@pytest.fixture(scope="module")
 def dispatch(skill_text: str) -> str:
     return section(skill_text, "5. Dispatch the frontier")
 
@@ -253,6 +294,87 @@ def test_every_reference_link_resolves(skill_text: str) -> None:
     assert links, "SKILL.md links no references/ file"
     for link in links:
         assert (SKILL_DIR / link).is_file(), link
+
+
+# --- Step 4: the preflight (#72) ---------------------------------------------
+
+
+def test_the_preflight_is_one_ordered_sequence(preflight: str) -> None:
+    """Each check is a precondition of the next, so the first failure is the one to act on.
+
+    Out of order, the sequence misreads itself: a `run-create` run before the
+    runtime check reports a transport error, and a permission-mode read run
+    after the Run is bound has already mutated.
+    """
+    order = [
+        "resolve",
+        "orchestration --help",
+        "status --json",
+        "guide",
+        "permission mode",
+        "run-create",
+    ]
+    items = re.findall(r"^\d+\. .*?(?=^\d+\. |^\n)", preflight, re.MULTILINE | re.DOTALL)
+    assert len(items) == len(order), items
+    for item, token in zip(items, order):
+        assert token in item, (token, item)
+
+
+def test_no_run_leaves_a_task_it_does_not_use() -> None:
+    """The probe task was permanent litter: there is no `task-delete` verb.
+
+    Retiring it with `task-update --status completed` left the row behind, so
+    every run added one. The Run the coordinator needs anyway is the probe now.
+    """
+    for doc in sorted(SKILL_DIR.rglob("*.md")):
+        text = doc.read_text(encoding="utf-8")
+        assert "PROBE" not in text, doc
+        assert "task-create" not in text, doc
+        assert "--status completed" not in text, doc
+
+
+def test_run_create_is_the_fence_probe(preflight: str) -> None:
+    """Same evidence as the throwaway task, and no artifact left behind."""
+    assert "run-create" in preflight
+    assert re.search(r"fence", preflight)
+    assert re.search(r"[Bb]efore .*(worktree|brief)", flat(preflight))
+
+
+def test_the_unverifiable_fence_claim_is_gone(skill_text: str) -> None:
+    """`orchestration-probe.md` says the *whole lifecycle* is fenced.
+
+    The claim that `run-create` succeeding proves nothing rested on a
+    per-command fence nobody could reproduce, and it was the only reason the
+    preflight needed a task of its own.
+    """
+    assert "proves nothing" not in skill_text
+
+
+def test_the_permission_mode_is_read_not_passed(preflight: str) -> None:
+    """Orca supplies the bypass flag as app config, so a skill cannot pass it.
+
+    A host left on manual produces workers that hang on an approval prompt
+    nobody is watching — which is not a failure and never reports as one.
+    """
+    flat_preflight = flat(preflight)
+    assert "agentDefaultArgs" in flat_preflight
+    assert "--dangerously-skip-permissions" in flat_preflight
+    assert "--yolo" in flat_preflight
+    assert re.search(r"app config", flat_preflight)
+    assert re.search(r"[Ss]top|[Rr]efuse", flat_preflight)
+
+
+def test_a_disabled_feature_is_told_apart_from_a_fence(preflight: str) -> None:
+    """Absent lifecycle verbs read like a fenced runtime and are not one."""
+    assert re.search(r"experimental", flat(preflight))
+
+
+def test_every_preflight_failure_has_one_next_step(probe_ref: str) -> None:
+    """Four failures look alike at the CLI and take four different actions."""
+    for cause in ("fenced", "not running", "experimental", "manual"):
+        assert cause in probe_ref, cause
+    assert "run-create" in probe_ref
+    assert "task-create" not in probe_ref
 
 
 # --- The review receipt (ADR-0010) ------------------------------------------
