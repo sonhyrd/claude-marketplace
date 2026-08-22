@@ -18,10 +18,10 @@ baseline, known-noise test, or environment trap.
   a missing `rich`; the dependencies live in the uv environment, so the `uv run` prefix is
   load-bearing, not optional. `make lint-shellcheck` cannot be verified here at all, so a shell
   script's lint status is unknown until it reaches a host that has it.
-  `make check-delegate-cli` is **expected red** — it exits 1 with a `BARE BINARY` and a
-  `SUPERSEDED PATH` finding, which are the defects tickets #71 and #73 exist to remove. It is not a
-  post-merge gate and it turns green when that chain lands; until then, a red run is the check
-  working. `make validate` is static and offline; it deliberately excludes
+  `make check-delegate-cli` is **expected red** — since #71 merged it exits 1 with exactly one
+  finding, `SUPERSEDED PATH` on `terminal create --command`, which is the defect ticket #73 exists
+  to remove. It is not a post-merge gate and it turns green when #73 lands; until then, that single
+  finding is the check working. A second finding, or a different one, is a regression. `make validate` is static and offline; it deliberately excludes
   `make check-e2e-subtree`, which fetches the fork. A ticket touching `plugins/e2e-skills/` must run
   `make check-e2e-subtree` and `make test-e2e-subtree-check` itself.
 - **Commit policy**: scoped subject lines matching the existing log — `sss: …`, `sss(<skill>): …`,
