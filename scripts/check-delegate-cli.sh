@@ -13,10 +13,22 @@
 # check-e2e-subtree.sh is not: that suite is static and offline, and this one
 # only means anything when it can talk to a running binary.
 #
+# Commands resolve in two tiers, because the CLI has two shapes. Most are
+# `orca <group> <verb>` -- `orchestration run-create`, `terminal read`. Some are
+# top-level and have no group at all: `orca status`, `orca open`. A lookup that
+# knows only the first shape does not report the second as broken; it does not
+# see it, and reports a clean run over a doc whose load-bearing preflight was
+# never asked about. So a command is resolved as a top-level verb first, then as
+# a group and verb. Which tier a command is in is not its word count: `skills
+# get` is two words and a group verb, `agent-context` is one word with a hyphen
+# in it, and the binary itself is asked which is which. Paths deeper than a group
+# and its verb (`vm recipe doctor`) are out of both tiers and out of this
+# script's scope; the skill names none.
+#
 # Exit codes:
 #   0  every command the skill names exists in the live CLI (or no binary: skip)
-#   1  findings -- a missing group, verb or flag, a bare-`orca` invocation that
-#      this host answers with exit 0, or a path the live CLI has superseded
+#   1  findings -- a missing command, group, verb or flag, a bare-`orca`
+#      invocation this host answers with exit 0, or a path the CLI superseded
 #   2  setup error -- skill directory missing, a binary that answers nothing, or
 #      a skill directory in which no orca command was found to check
 #
@@ -38,7 +50,8 @@ usage() {
 Usage: $(basename "$0") [--help]
 
 Ask the live Orca CLI whether every command the delegate-tickets skill names
-actually exists: the group, the verb, and each flag the skill passes to it.
+actually exists: the top-level verb, or the group and its verb, and each flag
+the skill passes to it.
 
 Scans every *.md under:
   ${SKILL_DIR}
@@ -139,15 +152,35 @@ load_group() {
     ' <<<"$help" | tr '\n' ' ')"
 }
 
-declare -A VERB_HELP=()
+# Tier 1: a word is a top-level command when the binary answers its `--help` with
+# a usage line naming it and lists nothing beneath it. That is one question asked
+# of the CLI, and it is the same evidence tier 2 already collects -- a group is a
+# word with a `Commands:` list, a top-level verb is a word without one. Reading
+# the root help's own listing instead would mean parsing 350 lines of sectioned,
+# multi-word entries and then trusting the parse: a group listed there in one
+# word would be taken for a top-level verb, and a verb whose description happens
+# to start lowercase would vanish. This asks about the handful of words the docs
+# actually name, and each answer is the binary's own.
+is_top_level_command() {
+    local word="$1"
+    load_group "$word"
+    [ "${GROUP_OK[$word]}" -eq 1 ] || return 1
+    [ -z "${GROUP_VERBS[$word]// /}" ]
+}
 
-load_verb_help() {
-    local grp="$1" verb="$2" key="$1 $2"
-    [ -z "${VERB_HELP[$key]+set}" ] || return 0
+declare -A CMD_HELP=()
+
+# One loader for both tiers: the key is the whole command path, so `status` and
+# `orchestration check` are asked the same way and their flags judged by the same
+# rule.
+load_cmd_help() {
+    local key="$1"
+    [ -z "${CMD_HELP[$key]+set}" ] || return 0
     # Truncate at Notes/Examples: those sections quote *other* commands' flags
     # (`worktree create`'s notes recommend `terminal create --command`), so a
-    # flag found there is not evidence that this verb takes it.
-    VERB_HELP["$key"]="$("$BIN" "$grp" "$verb" --help 2>/dev/null \
+    # flag found there is not evidence that this command takes it.
+    # shellcheck disable=SC2086  # the key is a command path, split on purpose
+    CMD_HELP["$key"]="$("$BIN" $key --help 2>/dev/null \
         | awk '/^(Notes|Examples):/ { exit } { print }' || true)"
 }
 
@@ -205,42 +238,33 @@ done < <(find "$SKILL_DIR" -type f -name '*.md' | LC_ALL=C sort)
 
 [ "${#CAND_TEXT[@]}" -gt 0 ] || setup_error "no code spans or code blocks found under ${SKILL_DIR}"
 
-# Pass 1: the command groups are whatever the docs put directly after the binary
-# name. Deriving them rather than hardcoding them is what lets pass 2 catch a
-# command written without its `orca ` prefix -- `terminal send --text "a"` is an
-# instruction to run a command whether or not the sentence spelled the binary.
-declare -A GROUP_SEEN=()
-for text in "${CAND_TEXT[@]}"; do
-    while read -r _ grp; do
-        [ -n "${grp:-}" ] || continue
-        case "$grp" in -*) continue ;; esac
-        GROUP_SEEN["$grp"]=1
-    done < <(grep -oE '(^|[[:space:]])(orca|orca-ide)[[:space:]]+[a-z][a-z0-9-]*' <<<"$text" || true)
-done
-
-[ "${#GROUP_SEEN[@]}" -gt 0 ] || setup_error "no 'orca <group> <verb>' invocation found under ${SKILL_DIR}"
-
-DOC_GROUPS=()
-while IFS= read -r g; do DOC_GROUPS+=("$g"); done < <(printf '%s\n' "${!GROUP_SEEN[@]}" | LC_ALL=C sort)
-
-# Pass 2: every `<group> <verb>` occurrence, with the flags that follow it.
 declare -A CMD_FLAGS=()
 declare -A CMD_SRC=()
 declare -A CMD_BARE=()
 CMDS=()
 
+# The three spellings a binary name gets in these docs. `<orca>` is the
+# placeholder the skill writes every command with -- it says so itself -- so a
+# scan that reads it as prose sees no commands at all in the file that has them.
+# It is a placeholder and not an invocation, though, so unlike a literal `orca`
+# it is not evidence for the bare-binary trap below.
+BIN_ALT='(<orca>|orca-ide|orca)'
+
 # The flags of one invocation are the `--x` tokens that follow it, up to
 # whatever starts the next one.
 flags_after() {
     local seg="$1" sep
-    for sep in ' orca ' ' orca-ide ' ' && ' ' ; ' ' | '; do
+    for sep in ' <orca> ' ' orca ' ' orca-ide ' ' && ' ' ; ' ' | '; do
         seg="${seg%%"$sep"*}"
     done
     grep -oE -e '--[a-z][a-z0-9-]*' <<<"$seg" | LC_ALL=C sort -u | tr '\n' ' ' || true
 }
 
+# `bare` is the binary name the doc actually spelled, and only a literal `orca`
+# is evidence for the trap at the end: `<orca>` is a placeholder the skill
+# resolves before running anything, and an unprefixed command spelled neither.
 record() {
-    local key="$1" flags="$2" src="$3" bare="$4"
+    local key="$1" flags="$2" src="$3" spelled="$4"
     if [ -z "${CMD_FLAGS[$key]+set}" ]; then
         CMDS+=("$key")
         CMD_FLAGS["$key"]=" "
@@ -252,27 +276,76 @@ record() {
         case "${CMD_FLAGS[$key]}" in *" ${flag} "*) ;; *) CMD_FLAGS["$key"]+="${flag} " ;; esac
     done
     case " ${CMD_SRC[$key]} " in *" ${src} "*) ;; *) CMD_SRC["$key"]+="${src} " ;; esac
-    [ "$bare" = "bare" ] && CMD_BARE["$key"]=1
+    [ "$spelled" = "orca" ] && CMD_BARE["$key"]=1
     return 0
 }
 
+# Pass 1: the word directly after a binary name, resolved in two tiers. Tier 1
+# is a top-level command -- `<orca> status --json`, `<orca> open` -- which is
+# recorded here, since it is the whole command and there is no verb after it for
+# pass 2 to find. Anything else is a group name, and the set of them is what lets
+# pass 2 catch a command written without its `orca ` prefix: `terminal send
+# --text "a"` is an instruction to run a command whether or not the sentence
+# spelled the binary.
+#
+# A word that is neither is a command this binary does not have, and it is
+# recorded too, because nothing else would see it -- a misspelled `<orca> stats
+# --json` names no group and no verb, and would otherwise read as a clean run.
+# Two things are left alone. A word with a verb after it belongs to pass 2
+# whatever the group turns out to be, so recording it here as well would report
+# one defect twice. And a live group with no verb after it names no command:
+# `<orca> orchestration --help` is a sentence telling you to read the help, and a
+# finding about it would be a finding about correct text.
+declare -A GROUP_SEEN=()
+for i in "${!CAND_TEXT[@]}"; do
+    text="${CAND_TEXT[$i]}"
+    src="${CAND_FILE[$i]}"
+    rest="$text"
+    while [[ "$rest" =~ (^|[[:space:]])${BIN_ALT}[[:space:]]+([a-z][a-z0-9-]*) ]]; do
+        prefix="${BASH_REMATCH[2]}"
+        word="${BASH_REMATCH[3]}"
+        tail="${rest#*"${BASH_REMATCH[0]}"}"
+        rest="$tail"
+
+        if is_top_level_command "$word"; then
+            record "$word" "$(flags_after "$tail")" "$src" "$prefix"
+            continue
+        fi
+
+        GROUP_SEEN["$word"]=1
+        [ "${GROUP_OK[$word]}" -eq 0 ] || continue
+        [[ ! "$tail" =~ ^[[:space:]]+[a-z] ]] || continue
+        record "$word" "$(flags_after "$tail")" "$src" "$prefix"
+    done
+done
+
+if [ "${#GROUP_SEEN[@]}" -eq 0 ] && [ "${#CMDS[@]}" -eq 0 ]; then
+    setup_error "no 'orca <verb>' or 'orca <group> <verb>' invocation found under ${SKILL_DIR}"
+fi
+
+# A doc can name top-level commands and no group at all, and an unguarded
+# `printf` over an empty set yields one empty group name -- which every later
+# lookup then asks the binary about.
+DOC_GROUPS=()
+if [ "${#GROUP_SEEN[@]}" -gt 0 ]; then
+    while IFS= read -r g; do DOC_GROUPS+=("$g"); done < <(printf '%s\n' "${!GROUP_SEEN[@]}" | LC_ALL=C sort)
+fi
+
+# Pass 2 (tier 2): every `<group> <verb>` occurrence, with the flags that follow
+# it.
 for i in "${!CAND_TEXT[@]}"; do
     text="${CAND_TEXT[$i]}"
     src="${CAND_FILE[$i]}"
     for grp in "${DOC_GROUPS[@]}"; do
         rest="$text"
-        while [[ "$rest" =~ (^|[[:space:]])((orca|orca-ide)[[:space:]]+)?"${grp}"[[:space:]]+([a-z][a-z0-9-]*) ]]; do
+        while [[ "$rest" =~ (^|[[:space:]])(${BIN_ALT}[[:space:]]+)?"${grp}"[[:space:]]+([a-z][a-z0-9-]*) ]]; do
             prefix="${BASH_REMATCH[3]:-}"
             verb="${BASH_REMATCH[4]}"
             tail="${rest#*"${BASH_REMATCH[0]}"}"
             # Flags belong to the invocation they follow, so stop at anything
             # that starts a new one.
             flags="$(flags_after "$tail")"
-            if [ "$prefix" = "orca" ]; then
-                record "${grp} ${verb}" "$flags" "$src" bare
-            else
-                record "${grp} ${verb}" "$flags" "$src" ""
-            fi
+            record "${grp} ${verb}" "$flags" "$src" "$prefix"
             rest="$tail"
         done
     done
@@ -318,7 +391,7 @@ done
 # check -- `orca orchestration --help` is a doc telling you to read the help, not
 # an invocation. Nothing was scanned, so this is the same setup error as finding
 # no command at all rather than a clean run.
-[ "${#CMDS[@]}" -gt 0 ] || setup_error "found no 'orca <group> <verb>' invocation under ${SKILL_DIR} -- only bare groups (${DOC_GROUPS[*]}), which name no command to check"
+[ "${#CMDS[@]}" -gt 0 ] || setup_error "found no 'orca <verb>' or 'orca <group> <verb>' invocation under ${SKILL_DIR} -- only bare groups (${DOC_GROUPS[*]:-none}), which name no command to check"
 
 # --- Verdict ------------------------------------------------------------------
 
@@ -326,35 +399,46 @@ FINDINGS=()
 VERIFIED=0
 
 while IFS= read -r key; do
-    grp="${key%% *}"
-    verb="${key##* }"
-    load_group "$grp"
     src="${CMD_SRC[$key]% }"
 
-    if [ "${GROUP_OK[$grp]}" -eq 0 ]; then
-        FINDINGS+=("MISSING GROUP|orca ${key}|${src}|\`${grp}\` is not a command group in ${BIN}.")
-        echo -e "  ${RED}✗${NC} ${key} — no such group"
-        continue
+    # The two tiers differ only in how the command path is proven to exist. Once
+    # it does, both are judged on their flags by the same rule.
+    if [[ "$key" != *" "* ]]; then
+        if ! is_top_level_command "$key"; then
+            FINDINGS+=("MISSING COMMAND|orca ${key}|${src}|\`${key}\` is neither a top-level command nor a command group in ${BIN}.")
+            echo -e "  ${RED}✗${NC} ${key} — no such command"
+            continue
+        fi
+    else
+        grp="${key%% *}"
+        verb="${key##* }"
+        load_group "$grp"
+
+        if [ "${GROUP_OK[$grp]}" -eq 0 ]; then
+            FINDINGS+=("MISSING GROUP|orca ${key}|${src}|\`${grp}\` is not a command group in ${BIN}.")
+            echo -e "  ${RED}✗${NC} ${key} — no such group"
+            continue
+        fi
+
+        case "${GROUP_VERBS[$grp]}" in
+            *" ${verb} "*) ;;
+            *)
+                FINDINGS+=("MISSING VERB|orca ${key}|${src}|\`${grp}\` has no verb \`${verb}\`. It has:${GROUP_VERBS[$grp]}")
+                echo -e "  ${RED}✗${NC} ${key} — no such verb"
+                continue
+                ;;
+        esac
     fi
 
-    case "${GROUP_VERBS[$grp]}" in
-        *" ${verb} "*) ;;
-        *)
-            FINDINGS+=("MISSING VERB|orca ${key}|${src}|\`${grp}\` has no verb \`${verb}\`. It has:${GROUP_VERBS[$grp]}")
-            echo -e "  ${RED}✗${NC} ${key} — no such verb"
-            continue
-            ;;
-    esac
-
-    load_verb_help "$grp" "$verb"
+    load_cmd_help "$key"
     bad=""
     # shellcheck disable=SC2086  # the flag list is space-separated, split on purpose
     for flag in ${CMD_FLAGS[$key]}; do
-        has_flag "${VERB_HELP[$key]}" "$flag" || bad+="${flag} "
+        has_flag "${CMD_HELP[$key]}" "$flag" || bad+="${flag} "
     done
 
     if [ -n "$bad" ]; then
-        FINDINGS+=("MISSING FLAG|orca ${key} ${bad% }|${src}|\`${grp} ${verb}\` exists, but takes no ${bad% }.")
+        FINDINGS+=("MISSING FLAG|orca ${key} ${bad% }|${src}|\`${key}\` exists, but takes no ${bad% }.")
         echo -e "  ${RED}✗${NC} ${key} — unknown flag(s): ${bad% }"
     else
         VERIFIED=$((VERIFIED + 1))

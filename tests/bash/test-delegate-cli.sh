@@ -49,11 +49,16 @@ nope() {
 
 # --- Stub binaries ------------------------------------------------------------
 #
-# The stub answers the same three questions the real CLI does -- does this group
-# exist, does this verb exist, does this verb take this flag -- from a tiny
-# table, and in the same shape: a `Commands:` list for a group, a `Usage:` line
-# and an `Options:` list for a verb. Anything not in the table is unknown, which
-# is how a planted defect is planted.
+# The stub answers the same three questions the real CLI does -- does this word
+# name anything, does it have commands beneath it, does it take this flag -- from
+# a tiny table, and in the same shape: a `Usage:` line, a `Commands:` list for a
+# group and an `Options:` list for a command. Anything not in the table is
+# unknown, which is how a planted defect is planted.
+#
+# The table carries both tiers, which is what makes the two-tier lookup testable:
+# `orchestration` answers with commands beneath it and `status` answers with
+# none, so `status` has to resolve as a command in its own right rather than as a
+# group whose verb went missing.
 
 # $1 = directory to write into, $2 = binary name.
 write_stub_cli() {
@@ -80,7 +85,19 @@ emit_verb() {
     exit 0
 }
 
+# A top-level command: no `Commands:` list, so nothing below it to descend into.
+emit_top() {
+    printf 'orca %s\n\nUsage: orca %s [options]\n\nOptions:\n  --help  Show this help message\n' \
+        "$group" "$group"
+    [ -z "$1" ] || printf '  %s\n' $1
+    printf '\nExamples:\n  $ orca %s --examples-only-flag\n' "$group"
+    exit 0
+}
+
 case "${group}:${verb}" in
+    status:--help)         emit_top "--json" ;;
+    open:--help)           emit_top "" ;;
+    agent-context:--help)  emit_top "--json" ;;
     orchestration:--help)  emit_group "run-create check send task-create task-update worker-start worker-read worker-release" ;;
     orchestration:check)   emit_verb "--ack --wait --types --timeout-ms --json" ;;
     orchestration:task-create) emit_verb "--spec --json" ;;
@@ -247,6 +264,96 @@ else
     nope "a flag that appears only in the help's Notes is not accepted" "rc=$rc: $out"
 fi
 
+# --- Top-level verbs, which have no group --------------------------------------
+
+echo -e "${YELLOW}A top-level verb with no group is resolved on its own${NC}"
+
+# `orca status` and `orca open` are whole commands, not a group missing a verb.
+# The second one is spelled with the `<orca>` placeholder the skill actually
+# uses, so the scan has to read that as a binary name rather than as prose.
+SKILL_TOP_OK="${TMPROOT}/skill-top-ok"
+write_skill "$SKILL_TOP_OK" 'Preflight the runtime with `orca status --json`.
+Where it is closed, `<orca> open` waits for the runtime to become reachable.'
+
+out="$(run_check "$CLI_BIN" "$SKILL_TOP_OK")" && rc=0 || rc=$?
+if [ "$rc" -eq 0 ] && grep -q -- "status --json" <<<"$out" && grep -q "open" <<<"$out"; then
+    ok "a live top-level verb and its flag exit 0 and are named in the report"
+else
+    nope "a live top-level verb and its flag exit 0 and are named in the report" "rc=$rc: $out"
+fi
+
+# A skill that names only top-level verbs has still been scanned. Before the
+# two-tier lookup this was the "no orca <group> <verb> invocation" setup error,
+# which reads as "nothing here to check" about a doc full of commands.
+if ! grep -qi "setup error" <<<"$out"; then
+    ok "a skill naming only top-level verbs is scanned, not called unscannable"
+else
+    nope "a skill naming only top-level verbs is scanned, not called unscannable" "$out"
+fi
+
+echo -e "${YELLOW}A top-level verb the binary does not have is caught${NC}"
+
+SKILL_TOP_BAD="${TMPROOT}/skill-top-bad"
+write_skill "$SKILL_TOP_BAD" 'Preflight the runtime with `orca stats --json`.'
+
+out="$(run_check "$CLI_BIN" "$SKILL_TOP_BAD")" && rc=0 || rc=$?
+if [ "$rc" -eq 1 ] \
+    && grep -qi "MISSING COMMAND" <<<"$out" \
+    && grep -q "stats" <<<"$out"; then
+    ok "a top-level verb the CLI does not have exits 1 and is named"
+else
+    nope "a top-level verb the CLI does not have exits 1 and is named" "rc=$rc: $out"
+fi
+
+# A word with a verb after it is a group, however badly spelled, and the group
+# tier already reports it. Reporting it in both tiers would make one typo look
+# like two defects that need two repairs.
+SKILL_BAD_GROUP="${TMPROOT}/skill-bad-group"
+write_skill "$SKILL_BAD_GROUP" 'Read the mailbox with `orca orchestrate check --wait`.'
+
+out="$(run_check "$CLI_BIN" "$SKILL_BAD_GROUP")" && rc=0 || rc=$?
+if [ "$rc" -eq 1 ] \
+    && grep -qi "MISSING GROUP" <<<"$out" \
+    && ! grep -qi "MISSING COMMAND" <<<"$out"; then
+    ok "a misspelled group with a verb after it is reported once, as a group"
+else
+    nope "a misspelled group with a verb after it is reported once, as a group" "rc=$rc: $out"
+fi
+
+echo -e "${YELLOW}A flag a top-level verb does not take is caught${NC}"
+
+SKILL_TOP_FLAG="${TMPROOT}/skill-top-flag"
+write_skill "$SKILL_TOP_FLAG" 'Preflight the runtime with `orca status --deep --json`.'
+
+out="$(run_check "$CLI_BIN" "$SKILL_TOP_FLAG")" && rc=0 || rc=$?
+if [ "$rc" -eq 1 ] \
+    && grep -qi "MISSING FLAG" <<<"$out" \
+    && grep -q -- "--deep" <<<"$out"; then
+    ok "a flag on a live top-level verb exits 1 and is reported as a missing flag"
+else
+    nope "a flag on a live top-level verb exits 1 and is reported as a missing flag" "rc=$rc: $out"
+fi
+
+# The command exists; only the flag does not. Reporting it as an unknown command
+# would send the operator looking for a verb that is right there.
+if ! grep -qi "MISSING COMMAND" <<<"$out"; then
+    ok "a top-level verb with a bad flag is not also reported as a missing command"
+else
+    nope "a top-level verb with a bad flag is not also reported as a missing command" "$out"
+fi
+
+# The Notes/Examples truncation is the same one group verbs get: a flag quoted
+# in a top-level help's Examples is not evidence the command takes it.
+SKILL_TOP_EXAMPLE="${TMPROOT}/skill-top-example"
+write_skill "$SKILL_TOP_EXAMPLE" 'Preflight with `orca status --examples-only-flag`.'
+
+out="$(run_check "$CLI_BIN" "$SKILL_TOP_EXAMPLE")" && rc=0 || rc=$?
+if [ "$rc" -eq 1 ] && grep -q -- "--examples-only-flag" <<<"$out"; then
+    ok "a flag that appears only in a top-level help's Examples is not accepted"
+else
+    nope "a flag that appears only in a top-level help's Examples is not accepted" "rc=$rc: $out"
+fi
+
 # --- The bare-`orca`-exits-0 host ----------------------------------------------
 
 echo -e "${YELLOW}Bare \`orca\` that exits 0 without orchestrating is caught${NC}"
@@ -330,7 +437,7 @@ SKILL_GROUP_ONLY="${TMPROOT}/skill-group-only"
 write_skill "$SKILL_GROUP_ONLY" 'Read `orca orchestration --help` and use what it prints.'
 
 out="$(run_check "$CLI_BIN" "$SKILL_GROUP_ONLY")" && rc=0 || rc=$?
-if [ "$rc" -eq 2 ] && grep -qi "no .orca <group> <verb>. invocation" <<<"$out"; then
+if [ "$rc" -eq 2 ] && grep -qi "only bare groups (orchestration)" <<<"$out"; then
     ok "a skill naming a group but no verb exits 2 and says so"
 else
     nope "a skill naming a group but no verb exits 2 and says so" "rc=$rc: $out"
