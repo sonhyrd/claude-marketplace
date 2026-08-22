@@ -49,18 +49,16 @@ nope() {
 
 # --- Stub binaries ------------------------------------------------------------
 #
-# The stub answers the same four questions the real CLI does -- what top-level
-# commands are there, does this group exist, does this verb exist, does this
-# command take this flag -- from a tiny table, and in the same shape: a sectioned
-# listing for the root help, a `Commands:` list for a group, a `Usage:` line and
-# an `Options:` list for a command. Anything not in the table is unknown, which
-# is how a planted defect is planted.
+# The stub answers the same three questions the real CLI does -- does this word
+# name anything, does it have commands beneath it, does it take this flag -- from
+# a tiny table, and in the same shape: a `Usage:` line, a `Commands:` list for a
+# group and an `Options:` list for a command. Anything not in the table is
+# unknown, which is how a planted defect is planted.
 #
-# The root listing mixes both tiers the way the real one does: top-level verbs
-# that stand alone (`status`, `open`) beside group commands written as two words
-# (`orchestration check`). That is what makes the two-tier lookup testable --
-# `status` has to resolve as a command in its own right, not as a group whose
-# verb went missing.
+# The table carries both tiers, which is what makes the two-tier lookup testable:
+# `orchestration` answers with commands beneath it and `status` answers with
+# none, so `status` has to resolve as a command in its own right rather than as a
+# group whose verb went missing.
 
 # $1 = directory to write into, $2 = binary name.
 write_stub_cli() {
@@ -87,26 +85,6 @@ emit_verb() {
     exit 0
 }
 
-emit_root() {
-    cat <<'ROOT'
-orca
-
-Usage: orca <command> [options]
-
-Startup:
-  open                      Launch Orca and wait for the runtime to be reachable
-  status                    Show app/runtime/graph readiness
-
-Agent Discovery:
-  agent-context             Print the machine-readable command schema for agents
-
-Orchestration:
-  orchestration check       Check the bound Run mailbox
-  orchestration task-create Create an orchestration task
-ROOT
-    exit 0
-}
-
 # A top-level command: no `Commands:` list, so nothing below it to descend into.
 emit_top() {
     printf 'orca %s\n\nUsage: orca %s [options]\n\nOptions:\n  --help  Show this help message\n' \
@@ -117,7 +95,6 @@ emit_top() {
 }
 
 case "${group}:${verb}" in
-    --help:)               emit_root ;;
     status:--help)         emit_top "--json" ;;
     open:--help)           emit_top "" ;;
     agent-context:--help)  emit_top "--json" ;;
@@ -460,7 +437,7 @@ SKILL_GROUP_ONLY="${TMPROOT}/skill-group-only"
 write_skill "$SKILL_GROUP_ONLY" 'Read `orca orchestration --help` and use what it prints.'
 
 out="$(run_check "$CLI_BIN" "$SKILL_GROUP_ONLY")" && rc=0 || rc=$?
-if [ "$rc" -eq 2 ] && grep -qi "no .orca <group> <verb>. invocation" <<<"$out"; then
+if [ "$rc" -eq 2 ] && grep -qi "only bare groups (orchestration)" <<<"$out"; then
     ok "a skill naming a group but no verb exits 2 and says so"
 else
     nope "a skill naming a group but no verb exits 2 and says so" "rc=$rc: $out"
