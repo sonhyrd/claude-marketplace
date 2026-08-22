@@ -8,7 +8,9 @@ here, and every downstream step reads this index rather than re-deriving which s
 
 For each session in the window it emits the repository and worktree, the transcript path, the skill
 versions seen, the ledger record and non-zero-exit counts, the first and last ledger timestamp, and
-the transcript line/byte range those timestamps bracket. Sessions are classified `corpus` (the two
+the transcript line/byte range those timestamps bracket, plus the bounded **reaction tail** that
+follows it — the turns after the last script exited, where a failure is actually handled and the
+final report is written. Sessions are classified `corpus` (the two
 repositories under audit), `control` (this repository's own dev and CI sessions, whose failures are
 deliberate) or `excluded` with a stated reason.
 
@@ -24,7 +26,8 @@ scripts/ci/derive-stamp.py is — it parses JSON and walks a directory tree.
 
 Usage:
     python3 scripts/forensics/span-index.py [--ledger P] [--transcripts D]
-                                            [--since ISO] [--until ISO] [--out P]
+                                            [--since ISO] [--until ISO]
+                                            [--tail-lines N] [--tail-minutes N] [--out P]
 
 Exit codes:
     0  index emitted
@@ -56,6 +59,16 @@ LEDGER_PREFIX = "PWPROVE_RUN "
 DEFAULT_LEDGER = os.path.join(os.path.expanduser("~"), ".ptg", "ledger.jsonl")
 DEFAULT_TRANSCRIPTS = os.path.join(os.path.expanduser("~"), ".claude", "projects")
 DEFAULT_SINCE = "2026-08-15"
+
+# The reaction tail. The span ends when the last shipped script EXITS, but what the agent then did
+# about that result — the turns where a failure is actually handled, or the final report is written
+# — lands after it. So the index emits a bounded tail as well, and the two caps below are measured
+# rather than guessed: across the 26 corpus sessions the reaction ran 15 to 85 lines and, in 25 of
+# 26, under six minutes. Neither cap binds on a reaction; they exist because 14 of those sessions
+# never hand control back, and two of those transcripts carry on into unrelated work for another
+# 1,145 and 2,617 lines. See docs/studies/session-distillation.md.
+DEFAULT_TAIL_LINES = 150
+DEFAULT_TAIL_MINUTES = 30
 
 
 def end_of(ts, duration_ms):
@@ -229,6 +242,80 @@ def scan_transcript(path, window):
     }, None
 
 
+def is_human_turn(rec):
+    """True for a turn the operator typed, false for the tool-result stream that looks like one.
+
+    Both arrive as `type: "user"`. The overwhelming majority are tool results the harness posts on
+    the agent's behalf, and reading one as a human turn would end almost every tail on its first
+    line. The two marks that separate them: a tool result carries `toolUseResult`, and its content
+    blocks are `tool_result` rather than `text`.
+    """
+    if rec.get("type") != "user" or rec.get("toolUseResult"):
+        return False
+    content = (rec.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return bool(content.strip())
+    if isinstance(content, list):
+        return any(isinstance(b, dict) and b.get("type") == "text" for b in content)
+    return False
+
+
+def scan_tail(path, span, span_until, tail_lines, tail_minutes):
+    """The reaction tail: what follows the span, bounded so it cannot swallow the working day.
+
+    Reads forward from the span's last byte and stops at whichever comes first — the operator's
+    next turn (included, because a correction typed the moment a script fails IS the friction the
+    exercise is looking for), the line cap, the time cap, or the end of the transcript. Always
+    returns a dict naming which of the four stopped it: a tail that was cut and a tail that ran out
+    are different evidence, and a reader who cannot tell them apart will read a cap as an ending.
+    """
+    deadline = end_of(span_until, tail_minutes * 60 * 1000)
+    tail = {
+        "line_start": span["line_end"] + 1,
+        "line_end": span["line_end"],
+        "byte_start": span["byte_end"],
+        "byte_end": span["byte_end"],
+        "lines": 0,
+        "human_turn_line": None,
+        "stop": "end-of-transcript",
+    }
+    try:
+        fh = open(path, "rb")
+    except OSError:
+        return tail
+
+    with fh:
+        fh.seek(span["byte_end"])
+        lineno = span["line_end"]
+        offset = span["byte_end"]
+        for raw in fh:
+            lineno += 1
+            if tail["lines"] >= tail_lines:
+                tail["stop"] = "line-cap"
+                break
+            rec = None
+            try:
+                parsed = json.loads(raw.decode("utf-8", "replace"))
+                if isinstance(parsed, dict):
+                    rec = parsed
+            except ValueError:
+                pass
+            ts = (rec or {}).get("timestamp")
+            if isinstance(ts, str) and ts > deadline:
+                tail["stop"] = "time-cap"
+                break
+            offset += len(raw)
+            tail["line_end"] = lineno
+            tail["byte_end"] = offset
+            tail["lines"] += 1
+            if rec is not None and is_human_turn(rec):
+                tail["human_turn_line"] = lineno
+                tail["stop"] = "human-turn"
+                break
+
+    return tail
+
+
 # --- classification ----------------------------------------------------------------------------
 
 
@@ -326,14 +413,17 @@ def unplaced():
                    "determined and its span cannot be located"),
         "span": None,
         "span_note": "no transcript",
+        "tail": None,
     }
 
 
-def placed(path, tally):
+def placed(path, tally, tail_lines, tail_minutes):
     """The half of a session entry that comes from the transcript: where it ran, and where to look."""
     cwd = read_cwd(path)
     repository, worktree = split_cwd(cwd) if cwd else (None, None)
     span, note = scan_transcript(path, (tally["first_ts"], tally["span_until"]))
+    tail = (scan_tail(path, span, tally["span_until"], tail_lines, tail_minutes)
+            if span else None)
     class_, reason = classify(repository)
     return {
         "transcript": path,
@@ -345,6 +435,7 @@ def placed(path, tally):
         "reason": reason,
         "span": span,
         "span_note": note,
+        "tail": tail,
     }
 
 
@@ -372,7 +463,8 @@ def build(args):
         if len(paths) > 1:
             ambiguous.append({"session": sid, "paths": paths})
         entry = dict(tally_fields(sid, tally))
-        entry.update(placed(paths[0], tally) if paths else unplaced())
+        entry.update(placed(paths[0], tally, args.tail_lines, args.tail_minutes)
+                     if paths else unplaced())
         entry["transcript_also_at"] = paths[1:]
         sessions.append(entry)
 
@@ -398,6 +490,7 @@ def build(args):
             "ledger": os.path.abspath(args.ledger),
             "transcripts": os.path.abspath(args.transcripts),
             "window": {"since": args.since, "until": args.until},
+            "tail": {"lines": args.tail_lines, "minutes": args.tail_minutes},
         },
         "totals": totals,
         "refusals": refusals,
@@ -420,6 +513,12 @@ def main(argv):
                              % DEFAULT_SINCE)
     parser.add_argument("--until", default=None,
                         help="window upper bound, exclusive, ISO-8601 prefix (default: none)")
+    parser.add_argument("--tail-lines", type=int, default=DEFAULT_TAIL_LINES,
+                        help="most transcript lines the reaction tail may take (default: %d)"
+                             % DEFAULT_TAIL_LINES)
+    parser.add_argument("--tail-minutes", type=int, default=DEFAULT_TAIL_MINUTES,
+                        help="minutes past the last script exit the reaction tail may reach "
+                             "(default: %d)" % DEFAULT_TAIL_MINUTES)
     parser.add_argument("--out", default=None, help="write the index here (default: stdout)")
     args = parser.parse_args(argv)
 

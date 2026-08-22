@@ -94,7 +94,7 @@ script first.
 │   └── playwright-debugger/
 ├── scripts/                # NOT shipped — repo tooling: shell, plus python3 where it parses JSON
 │   ├── ci/                 # parity, security, corpus golden, per-script process-boundary suites
-│   ├── forensics/          # run-forensics tooling: span-index.py (ledger + transcripts -> inventory)
+│   ├── forensics/          # run-forensics tooling: span-index.py (ledger + transcripts -> inventory + spans)
 │   ├── run-evals-isolated.sh # eval runs: isolated $HOME + the per-case skill-loaded sweep
 │   └── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
 ├── tests/pattern-corpus/   # one hit + one JUSTIFIED twin per check, and the golden
@@ -162,7 +162,7 @@ bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context cl
 bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
-bash scripts/ci/test-span-index.sh  # span-index.py: bracketed span, no-transcript marker, classification, schema refusal
+bash scripts/ci/test-span-index.sh  # span-index.py: bracketed span, reaction tail and its caps, no-transcript marker, classification, schema refusal
 bash scripts/run-evals-isolated.sh --self-test # the eval runtime's own seam (no API calls)
 bash scripts/ci/pre-push-security.sh
 node skills/e2e-reviewer/scripts/scan.mjs path/to/tests   # standalone scanner

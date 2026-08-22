@@ -68,6 +68,40 @@ with open(path, "w", encoding="utf-8") as fh:
 ' "$W/projects/$slug/$uuid.jsonl" "$uuid" "$cwd" "$@"
 }
 
+# turns <slug> <uuid> <cwd> <spec...>  — a transcript with turn KINDS, for the reaction tail.
+# Each spec is `<kind>@<ts>`: `a` an assistant turn, `t` a tool result (a `user` record carrying
+# toolUseResult — the bulk of any real transcript and never a human turn), `h` a human turn (a
+# `user` record with prose and no toolUseResult), `x` a record with no timestamp at all.
+turns() {
+  local slug="$1" uuid="$2" cwd="$3"; shift 3
+  mkdir -p "$W/projects/$slug"
+  python3 -c '
+import json, sys
+path, uuid, cwd = sys.argv[1:4]
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"type": "mode", "mode": "normal", "sessionId": uuid}) + "\n")
+    for i, spec in enumerate(sys.argv[4:]):
+        kind, _, ts = spec.partition("@")
+        rec = {"cwd": cwd, "uuid": "u%d" % i}
+        if ts:
+            rec["timestamp"] = ts
+        if kind == "a":
+            rec["type"] = "assistant"
+            rec["message"] = {"role": "assistant", "content": [{"type": "text", "text": "..."}]}
+        elif kind == "t":
+            rec["type"] = "user"
+            rec["toolUseResult"] = {"stdout": "..."}
+            rec["message"] = {"role": "user",
+                              "content": [{"type": "tool_result", "tool_use_id": "t%d" % i}]}
+        elif kind == "h":
+            rec["type"] = "user"
+            rec["message"] = {"role": "user", "content": [{"type": "text", "text": "no, redo it"}]}
+        else:
+            rec["type"] = "attachment"
+        fh.write(json.dumps(rec) + "\n")
+' "$W/projects/$slug/$uuid.jsonl" "$uuid" "$cwd" "$@"
+}
+
 # run_index <outfile> <errfile> <ledger> [extra args...] -> exit code in $rc
 run_index() {
   local out="$1" err="$2" ledger="$3"; shift 3
@@ -403,6 +437,124 @@ if [ "$rc" = "1" ] && grep -qi 'transcript' "$W/e9"; then
 else
   bad "missing transcript tree — exit $rc, stderr: $(head -1 "$W/e9")"
 fi
+
+# --- case 13: the reaction tail ------------------------------------------------------------------
+# The span ends when the last script EXITS. What the agent then did about that result — the turns
+# where a failure is actually handled — falls outside it, so the index also emits a bounded tail.
+echo ""
+echo "-- the reaction tail runs past the last script exit to the moment control returns --"
+ST=77777777-7777-7777-7777-777777777777
+L="$W/l13.jsonl"
+ledger_line "$ST" 2026-08-16T10:00:00.000Z 1 > "$L"
+# line 1 header; 2 pre-span; 3 the spanned entry; 4-6 the reaction; 7 the human turn; 8 beyond.
+turns proj-widget-tail "$ST" "$WS/hyrd-widget/krill" \
+  a@2026-08-16T09:59:00.000Z a@2026-08-16T10:00:00.000Z \
+  t@2026-08-16T10:00:10.000Z a@2026-08-16T10:00:20.000Z t@2026-08-16T10:00:30.000Z \
+  h@2026-08-16T10:01:00.000Z a@2026-08-16T10:02:00.000Z
+run_index "$W/o15" "$W/e15" "$L"
+if [ "$rc" != "0" ]; then
+  bad "tail run exited $rc, wanted 0"; sed 's/^/         /' "$W/e15" | head -3
+else
+  expect "the span itself still ends at the last script exit" \
+    "$(field "$W/o15" 'session("'"$ST"'")["span"]["line_end"]')" 3
+  expect "the tail starts on the line after the span" \
+    "$(field "$W/o15" 'session("'"$ST"'")["tail"]["line_start"]')" 4
+  expect "a tool result is not a human turn, so the tail reads past three of them" \
+    "$(field "$W/o15" 'session("'"$ST"'")["tail"]["line_end"]')" 7
+  expect "the human turn that ends the tail is included, not cut before" \
+    "$(field "$W/o15" 'session("'"$ST"'")["tail"]["human_turn_line"]')" 7
+  expect "the tail says why it stopped" \
+    "$(field "$W/o15" 'session("'"$ST"'")["tail"]["stop"]')" human-turn
+  expect "the tail counts its lines" \
+    "$(field "$W/o15" 'session("'"$ST"'")["tail"]["lines"]')" 4
+  sliced=$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1])); s = d["sessions"][0]; t = s["tail"]
+with open(s["transcript"], "rb") as fh:
+    fh.seek(t["byte_start"]); buf = fh.read(t["byte_end"] - t["byte_start"])
+print(len([l for l in buf.decode().splitlines() if l]))
+' "$W/o15")
+  expect "the tail's byte range is seekable and holds exactly its lines" "$sliced" 4
+fi
+
+# --- case 14: a tail nobody closed ----------------------------------------------------------------
+echo ""
+echo "-- a run that ends without the human saying anything tails to the end of the transcript --"
+L="$W/l14.jsonl"
+ledger_line "$ST" 2026-08-16T10:00:00.000Z 0 > "$L"
+turns proj-widget-tail "$ST" "$WS/hyrd-widget/krill" \
+  a@2026-08-16T10:00:00.000Z a@2026-08-16T10:00:10.000Z a@2026-08-16T10:00:20.000Z
+run_index "$W/o16" "$W/e16" "$L"
+if [ "$rc" != "0" ]; then
+  bad "open-tail run exited $rc, wanted 0"; sed 's/^/         /' "$W/e16" | head -3
+else
+  expect "it reads to the last line" "$(field "$W/o16" 'session("'"$ST"'")["tail"]["line_end"]')" 4
+  expect "and says so"  "$(field "$W/o16" 'session("'"$ST"'")["tail"]["stop"]')" end-of-transcript
+  expect "no human turn is claimed" \
+    "$(field "$W/o16" 'session("'"$ST"'")["tail"]["human_turn_line"] is None')" True
+fi
+
+# --- case 15: the two caps ------------------------------------------------------------------------
+# 14 of the 26 corpus sessions have no human turn after their last script exit, and two of those
+# transcripts continue into unrelated work for another 1,145 and 2,617 lines. Without a cap the
+# tail swallows the rest of the working day.
+echo ""
+echo "-- a transcript that runs on into unrelated work is cut by the line cap, and says so --"
+L="$W/l15.jsonl"
+ledger_line "$ST" 2026-08-16T10:00:00.000Z 0 > "$L"
+turns proj-widget-tail "$ST" "$WS/hyrd-widget/krill" \
+  a@2026-08-16T10:00:00.000Z a@2026-08-16T10:00:10.000Z a@2026-08-16T10:00:20.000Z \
+  a@2026-08-16T10:00:30.000Z a@2026-08-16T10:00:40.000Z
+run_index "$W/o17" "$W/e17" "$L" --tail-lines 2
+if [ "$rc" != "0" ]; then
+  bad "line-cap run exited $rc, wanted 0"; sed 's/^/         /' "$W/e17" | head -3
+else
+  expect "the tail stops at the cap" "$(field "$W/o17" 'session("'"$ST"'")["tail"]["lines"]')" 2
+  expect "and names the cap as the reason" \
+    "$(field "$W/o17" 'session("'"$ST"'")["tail"]["stop"]')" line-cap
+  expect "the caps in force are recorded with the index" \
+    "$(field "$W/o17" 'd["source"]["tail"]["lines"]')" 2
+fi
+
+echo ""
+echo "-- a human turn hours later is a new task, not a reaction: the time cap cuts it off --"
+L="$W/l16.jsonl"
+ledger_line "$ST" 2026-08-16T10:00:00.000Z 0 > "$L"
+turns proj-widget-tail "$ST" "$WS/hyrd-widget/krill" \
+  a@2026-08-16T10:00:00.000Z a@2026-08-16T10:00:30.000Z h@2026-08-16T13:00:00.000Z
+run_index "$W/o18" "$W/e18" "$L" --tail-minutes 30
+if [ "$rc" != "0" ]; then
+  bad "time-cap run exited $rc, wanted 0"; sed 's/^/         /' "$W/e18" | head -3
+else
+  expect "the late turn is left out of the tail" \
+    "$(field "$W/o18" 'session("'"$ST"'")["tail"]["lines"]')" 1
+  expect "the reason is the time cap, not the human turn" \
+    "$(field "$W/o18" 'session("'"$ST"'")["tail"]["stop"]')" time-cap
+  expect "no human turn is claimed for a turn outside the window" \
+    "$(field "$W/o18" 'session("'"$ST"'")["tail"]["human_turn_line"] is None')" True
+fi
+
+# --- case 16: nothing to tail ---------------------------------------------------------------------
+echo ""
+echo "-- a session with no transcript, and a span at the very end of one, get no invented tail --"
+L="$W/l17.jsonl"
+{
+  ledger_line "$ST" 2026-08-16T10:00:00.000Z 0
+  ledger_line "$S2" 2026-08-16T11:00:00.000Z 0
+} > "$L"
+turns proj-widget-tail "$ST" "$WS/hyrd-widget/krill" a@2026-08-16T10:00:00.000Z
+run_index "$W/o19" "$W/e19" "$L"
+if [ "$rc" != "0" ]; then
+  bad "empty-tail run exited $rc, wanted 0"; sed 's/^/         /' "$W/e19" | head -3
+else
+  expect "a span ending on the last line tails nothing and says so" \
+    "$(field "$W/o19" 'session("'"$ST"'")["tail"]["lines"]')" 0
+  expect "and still names its stop reason" \
+    "$(field "$W/o19" 'session("'"$ST"'")["tail"]["stop"]')" end-of-transcript
+  expect "a session with no transcript has no tail, not an empty one" \
+    "$(field "$W/o19" 'session("'"$S2"'")["tail"] is None')" True
+fi
+
 
 echo ""
 echo "  span index: $pass passed, $fail failed"

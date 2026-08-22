@@ -416,11 +416,22 @@ session — up to 25 MB of it — and pw-prove is a region inside, bracketed by 
 ledger record the session left behind. The word matters because the alternative reading, "the
 transcript is the run", is what makes an exercise read 226 MB to answer a question about 9% of it.
 
+## Reaction tail
+The bounded stretch of transcript **after** the [span](#span): the turns between the last shipped
+script exiting and control returning to the operator, where a failing script is actually handled and
+the final report is written. It exists because the span's upper bound is a script's exit, which is
+the right bound for *when pw-prove ran* and the wrong one for *what it cost*. Emitted by the [span
+index](#span-index) rather than derived per session, and always carrying the reason it stopped — the
+operator's next turn, the end of the transcript, or one of the two caps — because a tail that was cut
+and a tail that ran out are different evidence. The caps are measured, not assumed; the measurement
+is in `docs/studies/session-distillation.md`.
+
 ## Span index
 The one computed artifact of [run forensics](#run-forensics): `scripts/forensics/span-index.py`
 takes the run ledger and the local transcript tree and emits one entry per session — repository,
 worktree, transcript path, skill versions, ledger record and non-zero-exit counts, first and last
-ledger timestamp, and the transcript line and byte range those timestamps bracket. It is computed
+ledger timestamp, and the transcript line and byte range those timestamps bracket.
+It also emits the [reaction tail](#reaction-tail) past that range. It is computed
 once and read by everything downstream, so no later step re-derives which sessions matter or where
 inside a transcript to look. It is the exercise's only tested seam because it is the only component
 whose failure is silent: a mis-sliced [span](#span) yields a confident distillation of the wrong
