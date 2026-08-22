@@ -20,7 +20,10 @@ where this exercise is held apart from the two per-run gates whose names sound l
 ## What the exercise covers
 
 The corpus is 26 pw-prove sessions run against real work over five days, across two repositories
-(`nuxt-hyrd-chrysus` and `hyrd-widget`), spanning eleven skill versions.
+(`nuxt-hyrd-chrysus` and `hyrd-widget`). The span index sees **ten** pw-prove versions in the ledger
+window and **eight** of them inside the corpus, 0.20.0 through 0.27.1. This supersedes the "eleven
+versions" this charter was written with, which counted the five days rather than the window; the
+figure a finding is stamped with is the one the ledger recorded for the session that produced it.
 
 The run ledger (`~/.ptg/ledger.jsonl`) is the spine. It already carries `session`, `script`, `phase`,
 `version`, `commit`, `duration_ms`, `exit` and `ts` for every shipped-script invocation, so the run
@@ -70,11 +73,15 @@ Filed here as it is produced:
   never written and then trimmed. The schema, the prompt that produces it and the reach of the read
   are fixed in [session distillation](session-distillation.md), which also records the one session
   the instrument was proven on before the rest were run.
-- The **ranked friction findings**. Frequency orders the list, severity overrides it, and measured
-  time cost is reported as a third column rather than folded into a composite score, so the ranking
-  can be argued with. Every finding above the cut is re-checked against HEAD, and that re-check
-  doubles as an adversarial verification: a sub-agent that read a normal step as thrashing is caught
-  before the finding reaches a spec.
+- The **ranked friction findings** — **filed, at [friction findings](friction-findings.md)**, which
+  states its own ranking rule, its identifiers and its scope. Two things about it belong here rather
+  than there, because they are properties of the exercise and not of the list. First, the ranking
+  contract this charter set is the one that file implements: frequency orders it, severity overrides
+  it, and measured time is reported alongside rather than folded into a composite score. Second, the
+  list does **not** yet carry the HEAD re-check — every finding above the cut is still to be
+  re-checked against the current `SKILL.md` and shipped scripts, and that re-check doubles as an
+  adversarial verification, so a sub-agent that read a normal step as thrashing is caught before the
+  finding reaches a spec.
 - A **profile audit** of the two target repositories' `.pw-prove/profile.md` files, judged entry by
   entry: whether any run applied the entry, whether any run contradicted it, and whether a
   contradicting run declared the contradiction. The live profile files are read and never written —

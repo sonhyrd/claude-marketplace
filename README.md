@@ -173,7 +173,12 @@ running it over all 26 sessions said about the instrument itself ·
 [profile audit](docs/studies/profile-audit.md) — whether 538 lines of `.pw-prove/profile.md` across
 the two target repositories earn their keep, judged entry by entry on applied / contradicted /
 declared, plus the two findings that outrank every entry: the file a run reads is not the file the
-last run wrote, and the contradiction line the skill requires appears in none of the 26 sessions.
+last run wrote, and the contradiction line the skill requires appears in none of the 26 sessions. ·
+[friction findings](docs/studies/friction-findings.md) — the ranked list those 26 records produce:
+thirty-two stable `FR` categories assigned from the evidence, ordered frequency-first with every
+severity lift stated, time reported alongside rather than folded in, each one attributed to a
+`SKILL.md` section or a named script and stamped with the version it was observed on, repository
+faults kept separate and boundary cases kept as boundary cases.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
