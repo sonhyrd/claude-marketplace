@@ -183,11 +183,36 @@ evidence a throwaway probe task bought, with no artifact left behind. That task 
 (there is no delete verb, so retiring it left the row), and it ran *before* any Run was bound, so on
 a clean machine its likeliest answer was `run_required` — a setup step read as a failure.
 
-Any answer other than `"ok": true` is decisive, and the four causes look alike at the CLI. Read
-[references/orchestration-probe.md](references/orchestration-probe.md) before acting on any of them.
+Any answer other than `"ok": true` is decisive. This step is cheap and it is the whole point of
+doing it first: a run that discovers the fence at dispatch time has already spent its setup budget.
 
-This step is cheap and it is the whole point of doing it first: a run that discovers the fence at
-dispatch time has already spent its setup budget.
+### Reading a preflight failure
+
+Most often the sequence stops on its last item, `<orca> orchestration run-create --objective
+"<…>" --json`, answering anything other than `"ok": true`. Four causes look alike at the CLI and
+take four different actions. Act on the **first item in the sequence that fails**; a later item's
+answer is not evidence while an earlier one is unmet.
+
+**`code: legacy_read_only` — the fence.** Message: *"this retained legacy coordinator could not
+prove its original process identity"*. The whole lifecycle is fenced and no supervised dispatch is
+possible. Stop and ask the user to quit and reopen the Orca app: restarting this session or spawning
+a fresh terminal does not clear it. `<orca> orchestration reset --all` wipes task history for
+*every* run, so leave it alone while other worktrees hold live agents.
+
+**A runtime that is not running — the app is closed.** `<orca> status --json` answers with
+`runtime.reachable: false`, or every lifecycle verb fails on transport rather than on a `code`. The
+CLI resolves and prints help either way: help is local, and the verbs are RPC calls. Ask the user to
+open Orca (`<orca> open` waits for the runtime to become reachable), then rerun the sequence from
+item 3. This is not a fence and does not call for a quit-and-reopen.
+
+**Missing lifecycle verbs — the experimental feature is off.** `<orca> orchestration --help`
+answers, but the verbs the run needs are absent from what it prints; with the feature off they were
+never registered. Ask the user to enable it in Settings → Experimental, then rerun the sequence from
+item 2.
+
+**An empty or non-yolo `agentDefaultArgs` — a manual-mode host.** Item 5's read answers with
+nothing, or with arguments that do not carry that engine's bypass flag. Stop before any worktree;
+the read, the refusal and the fix are stated above and are not restated here.
 
 ## 5. Dispatch the frontier
 
@@ -195,23 +220,51 @@ Coordinate through the orchestration lifecycle whose guide step 0 loaded — rea
 
 Some rules below are Orca's rather than this skill's. They live here because `orca-cli` and `orchestration` are outside this repo's write access, and a trap belongs beside the step that trips it.
 
-- One Orca **child worktree** per ticket, cut from the integration branch as
-  `<branch-prefix><ticket-slug>`. **Pass `--base-branch <integration-branch>`** — `<orca> worktree
-  create` defaults to the repo's default base, so an omitted flag cuts every worker from `main`.
-  Then **verify it took**: `git merge-base <integration-branch> HEAD` in the new worktree must equal
-  the integration branch head. An ignored flag and an absent flag fail identically, and both stay
-  invisible until merge-back hands you a branch carrying commits its worker never wrote.
-- Dispatch the unblocked frontier in parallel, but **cap concurrency at 2 workers** unless the user raises it. Each worktree creation fires the repo's setup hook (`pnpm install` and friends); a wider fan-out puts those in contention and `<orca> terminal create` blocks past the Bash timeout, leaving half-built workers. It also keeps the merge-back review surface small enough to actually check. A blocked ticket dispatches only after ALL its blockers have merged back.
-- Each worker gets a fresh session in its worktree. Its prompt must tell it to **read and follow `implement`'s `SKILL.md` by absolute path**, then name its ticket ref, then carry the profile's **Prohibitions** verbatim.
+- **One supervised `worker-start` per ticket.** It composes the child worktree, the terminal, the
+  readiness check and the dispatch into one call, and it is the only path on which the terminal
+  accounting step 7 asks for exists at all:
+
+  ```bash
+  <orca> orchestration task-create --spec "$(cat /tmp/<ticket-slug>/brief.md)" --json
+  <orca> orchestration worker-start --task <task_id> --worktree new-child \
+    --name <branch-prefix><ticket-slug> --base-branch <integration-branch> \
+    --agent claude --setup run --json
+  ```
+
+  `--agent` carries the engine choice, and `--model` / `--effort` carry the user's model choice
+  where they named one — [references/worker-launch.md](references/worker-launch.md) holds the
+  mapping, the constraints on those two flags, and the one thing a `ready` receipt does not cover.
+- **`--base-branch <integration-branch>` is not optional, and it is not self-verifying.** Omitted,
+  the worktree is cut from the repo's default base, so every worker branches from `main`. Passed,
+  it still has to be checked: `git merge-base <integration-branch> HEAD` in the new worktree must
+  equal the integration branch head. An ignored flag and an absent flag fail identically, and both
+  stay invisible until merge-back hands you a branch carrying commits its worker never wrote.
+- **A nonzero exit is what means the worker did not start.** `worker-start` exits 0 **only** for
+  `ready`, which is the readiness proof, and readiness is decided on process identity rather than on
+  a rendered frame. Read the receipt: `ready` alongside setup `running` is normal, and a
+  `wait-for-setup` repo instead returns setup `succeeded` before it accepts task input. A failed or
+  unknown start exits nonzero and names its own wreckage — read `stage`, `effects` and
+  `residualResources` from the JSON and act on those. **Do not guess, and do not automatically
+  retry**: a retry that repeats the placement on top of a live residual builds the second
+  half-worker. A deliberate replacement is `--retry-of <dispatch_id>`, which links the attempt but
+  inherits no placement, so repeat the `--worktree` and `--agent` choices explicitly.
+- Dispatch the unblocked frontier in parallel, but **cap concurrency at 2 workers** unless the user raises it. Each worktree creation fires the repo's setup hook (`pnpm install` and friends); a wider fan-out puts those in contention and `worker-start` blocks past the Bash timeout — which is a timed-out start, not a failed one, and leaves a residual to read rather than a verdict. It also keeps the merge-back review surface small enough to actually check. A blocked ticket dispatches only after ALL its blockers have merged back.
+- Each worker gets a fresh session in its worktree, and its brief is the task's `--spec`, which Orca injects as the worker's prompt. The brief must tell it to **read and follow `implement`'s `SKILL.md` by absolute path**, then name its ticket ref, then carry the profile's **Prohibitions** verbatim.
   - **Resolve that path on THIS machine every run; never copy the last one you saw.** `implement` ships in the `matt` plugin, so it lives at `<marketplace-checkout>/plugins/mattpocock-skills/skills/engineering/implement/SKILL.md` — and the checkout root differs per host. `~/.claude/skills/` is the wrong place to send a worker: that directory holds a handful of symlinks, so a worker pointed there finds nothing, and **a worker that cannot find the skill invents a process and still passes the gates** — the omission is silent unless the worker happens to escalate. Locate it (`ls` the candidate, or search the marketplace checkout) and confirm the file exists **before** it goes in a brief. Prefer the marketplace checkout over any `~/.claude/plugins/cache/…` copy, which is version-pinned.
   - The brief must also spell out the absolute paths of the skills `implement` delegates to — `.../skills/engineering/tdd/SKILL.md` and `.../skills/engineering/code-review/SKILL.md` — under the same resolved root. A dispatched worker of any engine cannot invoke a slash command, so an unresolved name is a dead end for it. Leave its **Conventions** field where it is — a pointer to the repo's agent guide, which the worker loads on its own; injecting those too buries the ten rules that cost a rerun under thirty that don't. Path-reading rather than `/implement` is deliberate: `implement` is user-only (`disable-model-invocation: true`), so no dispatched worker of any engine can Skill-invoke it. `implement` drives TDD and `code-review` itself — don't re-specify them, and never hand-write a substitute process into the brief.
   - Name `code-review`'s **resolved absolute path** wherever the brief refers to it. `implement`'s own text says "use `/code-review`", and that bare name resolves to a **built-in skill of the same name**: 7 of 82 dispatched workers ran that one instead of the two-axis pair, one of them spending 35 agents on it before its findings landed. Naming the two axes in the definition of done below is the second half of the same guard — a worker that runs the built-in has no Standards/Spec receipt to write.
   - **The review leaves a receipt.** Definition of done: `implement` closes clean, the profile's post-merge check passes, and `/tmp/<ticket-slug>/review.md` exists **before `worker_done` goes out**, listing every **Standards** and **Spec** finding with the fix that answers it, passed back as `--report-path`. Every finding is the worker's to fix; one the profile's **Prohibitions** put outside its reach goes under a `HANDOFF` heading and belongs to the coordinator at merge-back — which keeps *fix all* true of the run rather than of one worker, and stops an unsatisfiable rule from being resolved with a dishonest receipt. Ordering is load-bearing: a review that lands after the report has a worker amending a commit you already merged. Of 82 dispatched workers, **22 ran no review at all** and none of them said so — absence and a clean verdict read identically until a file has to exist. Step 6 reads this file.
-- Where a brief is too long to inject as one message, write it to a file (`/tmp/<slug>/<ticket>.md`) and send a one-liner pointing at the file — but the brief still *points at* `implement`'s SKILL.md rather than restating it.
+- Write the brief to a file (`/tmp/<ticket-slug>/brief.md`) and pass it as `--spec "$(cat …)"`, as above: a brief long enough to matter is long enough to lose to shell quoting on one line. Where even that is too long for one argument, make the `--spec` a one-liner pointing at the file — but the brief still *points at* `implement`'s SKILL.md rather than restating it.
 - **Acknowledge every orchestration batch you act on**, with the `deliveryId` from the same response. `orchestration check` returns the oldest **unacknowledged** batch, so handling a message is not the same as acking it: one unacked `worker_done` makes `check` replay that same text while every later message queues behind it, and the "you have N messages" counter climbs against a queue holding one stale item — which reads exactly like new mail arriving and being lost. **Acking is not waiting**: the ack closes a batch, and step 7's loop is what you return to.
 - **Write every message body to a file and pass it as `"$(cat <file>)"`**, whose output is not re-parsed — never backticks inside a double-quoted shell string. The shell runs them as command substitution: a reply quoting a command name executes it, mangles the body, and exits non-zero, so the reply never lands, leaving a blocked worker to re-ask the identical question.
-- Launch every worker with the run's engine argv via orca-cli's custom-argv path — `terminal create --command '<engine argv>'` — not the bare default launcher. Workers run on `claude` by default (`claude --effort medium --dangerously-skip-permissions`); `--engine cursor` and its startup traps are in [references/worker-engines.md](references/worker-engines.md).
-- **Confirm each worker actually started before dispatching.** `terminal wait --for tui-idle` is satisfied by the bare shell that exists before a TUI mounts, and by the shell an agent leaves behind when it dies on startup — so follow it with `terminal read` and require a rendered agent frame, re-reading up to 5 times. A pane showing only a shell prompt is a dead worker: close it, create a fresh terminal, never dispatch into it. On `--engine cursor` a rendered frame can be the Workspace Trust box rather than the agent — read `references/worker-engines.md` before deciding a pane is healthy or hung.
+- **The low-level path is the escape hatch, not the default.** `worktree create` plus a `terminal
+  create` carrying custom argv (`--command`) is what the loaded guide keeps for topology or argv
+  that `worker-start` cannot express. A worker built that way and dispatched into with `dispatch
+  --inject` is **unsupervised**: Orca writes no `worker_dispatches` row, `worker-show` /
+  `worker-read` / `worker-list` report it as `unsupervised`, and `worker-stop` / `worker-release`
+  report `no_owned_resource` and take no process action — so step 7 has nothing to reuse and nothing
+  to release. Take that path only for a stated reason, and say which. [ADR-0011](../../../../docs/adr/0011-delegate-tickets-dispatches-through-worker-start.md)
+  records the trade.
 
 ## 6. Merge back in DAG order
 
@@ -252,7 +305,9 @@ Return to the wait after every local action — a merge-back, a profile amend, a
 
 **Always pass `--timeout-ms`.** The loaded guide documents no default, so an omitted flag leaves the window to the runtime, which can close it inside a minute — and an empty 40-second wait is the same JSON as an empty 15-minute one. The flag is what keeps a bug in your own command line from reading as a checkpoint.
 
-A timeout or `{count:0}` **is** that checkpoint: the run is live, not finished. Read liveness (`task-list`, `terminal read` on the worker), then wait again — workers routinely run 15–60 minutes, and one window is not the run. Account for every settled worker terminal before the next wait: reuse it for the next Dispatch, or release it. The loaded guide owns those verbs.
+A timeout or `{count:0}` **is** that checkpoint: the run is live, not finished. Read liveness (`task-list`, `<orca> orchestration worker-read --dispatch <dispatch_id> --limit 50 --json`), then wait again — workers routinely run 15–60 minutes, and one window is not the run.
+
+**Account for every settled worker terminal before the next wait**, and because step 5 started it with `worker-start`, both options are real work rather than a no-op on an unsupervised pane. Either hand the exact terminal to the next Dispatch — `<orca> orchestration worker-show --dispatch <dispatch_id> --json` for its `worker.agent_terminal_handle`, then `<orca> orchestration worker-start --task <next_task_id> --terminal <handle> --json`, which transfers cleanup ownership — or `<orca> orchestration worker-release --dispatch <dispatch_id> --json`. Release is post-completion cleanup, not cancellation: a released worker stays readable through `worker-read`. Never release on a timeout, an idle TUI, a heartbeat, a question, an escalation, or a rejected `worker_done`.
 
 Keep rolling until every expected Dispatch has a processed `worker_done` or `escalation`.
 

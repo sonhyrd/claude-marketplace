@@ -2,7 +2,8 @@
 
 One file for one skill. It consolidates `test_delegate_tickets_review_gate.py`
 and `test_delegate_tickets_wait_loop.py`, which it replaces, and adds the
-step-0 clauses from #71 and the step-4 clauses from #72. Grouping them is deliberate: the guarded failure mode
+step-0 clauses from #71, the step-4 clauses from #72 and the step-5 clauses
+from #73. Grouping them is deliberate: the guarded failure mode
 in every case is a maintainer trimming a clause for length, which takes several
 clauses at once, so this fails loudly in one place rather than quietly in
 three. Assertions match on the load-bearing tokens only, never on phrasing a
@@ -68,8 +69,36 @@ set. A host left on manual produces workers that stop at an approval prompt
 nobody is watching — which never reports as a failure.
 
 The dropped claim was "`run-create` succeeding proves nothing — the runtime can
-be fenced per-command". It could not be reproduced, and
-`references/orchestration-probe.md` says the *whole lifecycle* is fenced.
+be fenced per-command". It could not be reproduced, and the fence case itself
+says the *whole lifecycle* is fenced.
+
+## Step 5 — one supervised `worker-start` (#73)
+
+Step 5 built each worker in four calls: `worktree create`, a `terminal create`
+carrying the run's engine argv, `terminal wait --for tui-idle`, and a five-retry
+`terminal read` loop. Measured against `orca-ide` (Orca 1.4.188, Linux) and the
+guide step 0 loads from it, each of the four is now wrong for a different
+reason:
+
+1. **The composed call exists and the guide prefers it.** `worker-start` covers
+   worktree, terminal, readiness and dispatch, and takes `--base-branch`.
+2. **The hand-built worker is unsupervised.** `dispatch --inject` on an
+   operator-started terminal writes no `worker_dispatches` row, so
+   `worker-release` took no action — and step 7 has asked coordinators to reuse
+   or release every settled terminal since it was written.
+3. **The retry loop was approximating an exit code.** `worker-start` exits 0
+   only for `ready`, decided on process identity: a bare shell is the negative
+   signal for "is an agent running".
+4. **The argv table's one load-bearing column was never argv.** The
+   permissionless flag is app config keyed by engine id, which #72's preflight
+   already reads.
+
+Two gates survive, for opposite reasons, and each has a test below.
+`--base-branch` verification stays because an ignored flag and an absent flag
+still fail identically. The cursor Workspace Trust gate stays because process
+identity is blind to what a TUI renders: a `cursor-agent` parked at its trust
+box *is* the foreground process and *is* a recognised agent, so `ready` comes
+back for a worker that will never move. [ADR-0011] records the trade.
 
 ## The review receipt (ADR-0010)
 
@@ -139,7 +168,7 @@ BARE_BINARY = re.compile(
     r"(?<![\w-])orca\s+(?:orchestration|terminal|worktree|skills)\s+[a-z][a-z0-9-]*"
 )
 
-# `/orchestration` as a slash command — not the `references/orchestration-probe.md`
+# `/orchestration` as a slash command — not a `references/orchestration-*.md`
 # path, and not the `orchestration` command group.
 INVOCABLE_GUIDE = re.compile(r"(?<![\w/-])/orchestration\b(?!-)")
 
@@ -199,8 +228,16 @@ def preflight(skill_text: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def probe_ref() -> str:
-    return (SKILL_DIR / "references" / "orchestration-probe.md").read_text(encoding="utf-8")
+def preflight_failures(preflight: str) -> str:
+    """The merged `orchestration-probe.md` — now a subsection of step 4."""
+    heading = "### Reading a preflight failure"
+    assert heading in preflight, preflight
+    return preflight.split(heading)[-1]
+
+
+@pytest.fixture(scope="module")
+def launch_ref() -> str:
+    return (SKILL_DIR / "references" / "worker-launch.md").read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="module")
@@ -379,12 +416,37 @@ def test_a_disabled_feature_is_told_apart_from_a_fence(preflight: str) -> None:
     assert re.search(r"experimental[^.]*not a fenced runtime", clause), clause
 
 
-def test_every_preflight_failure_has_one_next_step(probe_ref: str) -> None:
+def test_every_preflight_failure_has_one_next_step(preflight_failures: str) -> None:
     """Four failures look alike at the CLI and take four different actions."""
     for cause in ("fenced", "not running", "experimental", "manual"):
-        assert cause in probe_ref, cause
-    assert "run-create" in probe_ref
-    assert "task-create" not in probe_ref
+        assert cause in preflight_failures, cause
+    assert "run-create" in preflight_failures
+    assert "task-create" not in preflight_failures
+
+
+def test_the_probe_reference_is_merged_in_and_gone(
+    skill_text: str, preflight_failures: str
+) -> None:
+    """A one-symptom reference the step already reaches on every failure path.
+
+    Its `run_required` and bare-usage-error cases went with the probe: nothing
+    below step 4 makes a lifecycle call before `run-create` binds the Run, and a
+    guessed verb is what step 0's loaded guide exists to prevent. `run_required`
+    survives only where #72 cites it — as the answer the *retired* probe task
+    drew on a clean machine — never as a failure a coordinator has to act on.
+    """
+    assert not (SKILL_DIR / "references" / "orchestration-probe.md").exists()
+    assert "orchestration-probe" not in skill_text
+    assert "run_required" not in preflight_failures
+    assert "usage error" not in preflight_failures
+
+
+def test_exactly_two_references_remain() -> None:
+    """`worker-launch.md` and `profile-template.md`, and nothing else."""
+    assert {doc.name for doc in (SKILL_DIR / "references").glob("*.md")} == {
+        "worker-launch.md",
+        "profile-template.md",
+    }
 
 
 # --- The review receipt (ADR-0010) ------------------------------------------
@@ -484,5 +546,117 @@ def test_local_work_returns_to_the_wait(skill_text: str) -> None:
 
 
 def test_settled_terminals_are_accounted_for(completion: str) -> None:
-    """The guide's own rule, one clause, its verbs left upstream."""
-    assert "release" in completion
+    """The guide's own rule, one clause — and now a reachable one.
+
+    Reuse and release are both operations on a supervised Dispatch. On the
+    `terminal create` path step 5 used to build, Orca wrote no
+    `worker_dispatches` row at all, so `worker-release` took no action and this
+    clause named nothing a coordinator could do.
+    """
+    assert "worker-release" in completion
+    assert "--dispatch" in completion
+    assert "--terminal" in completion
+
+
+# --- Step 5: one supervised `worker-start` (#73) ------------------------------
+
+
+def test_dispatch_goes_through_worker_start(dispatch: str) -> None:
+    """One supervised call replaces worktree + terminal + wait + read."""
+    flat_dispatch = flat(dispatch)
+    assert "worker-start" in flat_dispatch
+    for flag in ("--task", "--worktree new-child", "--name", "--agent", "--setup run"):
+        assert flag in flat_dispatch, flag
+
+
+def test_the_base_branch_flag_and_its_verification_both_survive(dispatch: str) -> None:
+    """An ignored flag and an absent flag fail identically until merge-back."""
+    flat_dispatch = flat(dispatch)
+    assert "--base-branch" in flat_dispatch
+    assert "git merge-base" in flat_dispatch
+
+
+def test_a_nonzero_exit_is_what_means_the_worker_did_not_start(dispatch: str) -> None:
+    """`worker-start` exits 0 only for ready — that is the readiness proof."""
+    flat_dispatch = flat(dispatch)
+    assert re.search(r"exits 0 \*\*only\*\* for", flat_dispatch), flat_dispatch
+    assert re.search(r"[Nn]onzero exit", flat_dispatch)
+
+
+def test_the_five_retry_readiness_loop_is_gone() -> None:
+    """Readiness is decided on process identity, not on a rendered frame.
+
+    A bare shell is the negative signal for "is an agent running", so the
+    `tui-idle` wait and the re-read loop that approximated it are both
+    redundant against a call that exits 0 only for ready.
+    """
+    for doc in sorted(SKILL_DIR.rglob("*.md")):
+        text = doc.read_text(encoding="utf-8")
+        assert "tui-idle" not in text, doc
+        assert not re.search(r"re-read(ing)? up to", text), doc
+
+
+def test_a_failed_start_is_read_not_guessed_at(dispatch: str) -> None:
+    """It names its own wreckage, so a half-built worker is a named residual."""
+    flat_dispatch = flat(dispatch)
+    for field in ("stage", "effects", "residualResources"):
+        assert field in flat_dispatch, field
+    assert re.search(r"[Dd]o not guess", flat_dispatch)
+    assert re.search(r"automatically retry", flat_dispatch)
+    assert "--retry-of" in flat_dispatch
+
+
+def test_custom_argv_is_only_the_escape_hatch(dispatch: str) -> None:
+    """The path the live CLI supersedes, kept for what `worker-start` cannot express.
+
+    `scripts/check-delegate-cli.sh` reports the default spelling as SUPERSEDED
+    PATH against the live binary; here the whole plugin is asserted free of it.
+    """
+    assert "escape hatch" in dispatch
+    assert "unsupervised" in dispatch
+    for doc in sorted(SKILL_DIR.rglob("*.md")):
+        text = doc.read_text(encoding="utf-8")
+        assert "terminal create --command" not in text, doc
+
+
+def test_the_engine_argv_table_is_gone(launch_ref: str) -> None:
+    """`--agent` / `--model` / `--effort` carry the engine choice now.
+
+    The table's one load-bearing column was the permissionless flag, and Orca
+    supplies that from app config keyed by engine id — so the column could only
+    ever restate, or contradict, a setting no argument here can set.
+    """
+    assert "cursor-agent --force" not in launch_ref
+    assert "--effort medium --dangerously-skip-permissions" not in launch_ref
+    for flag in ("--agent", "--model", "--effort"):
+        assert flag in launch_ref, flag
+
+
+def test_the_launch_option_constraints_are_stated_where_they_trip(launch_ref: str) -> None:
+    """`--effort` requires `--model`; neither combines with `--terminal`.
+
+    Step 7's terminal reuse is the trip: it hands a settled `--terminal
+    <handle>` to the next Dispatch, where a leftover `--model` rejects the call.
+    """
+    flat_ref = flat(launch_ref)
+    assert re.search(r"`--effort` requires `--model`", flat_ref), flat_ref
+    assert re.search(r"[Nn]either combines with `--terminal`", flat_ref), flat_ref
+
+
+def test_the_trust_box_gate_is_restated_against_worker_start(launch_ref: str) -> None:
+    """`ready` is a process fact, and a TUI gate is not visible to it."""
+    flat_ref = flat(launch_ref)
+    assert "Workspace Trust" in flat_ref
+    assert "worker-start" in flat_ref
+    assert re.search(r"process identity", flat_ref)
+    assert re.search(r"no `--enter`", flat_ref)
+    assert re.search(r"status line, never the absence", flat_ref), flat_ref
+    assert "tail" in flat_ref
+
+
+def test_the_launch_reference_carries_the_yolo_preflight(launch_ref: str) -> None:
+    """The flag is app config keyed by engine, so the read follows `--agent`."""
+    flat_ref = flat(launch_ref)
+    assert "agentDefaultArgs" in flat_ref
+    assert "--yolo" in flat_ref
+    assert re.search(r"app config", flat_ref)
