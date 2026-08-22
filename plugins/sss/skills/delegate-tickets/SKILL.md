@@ -125,17 +125,69 @@ Read every ticket file/issue. Print the DAG: which tickets are unblocked now, wh
 
 ## 4. Preflight the orchestration runtime
 
-Before building any briefs, worktrees, or terminals, prove the orchestration lifecycle actually writes. `run-create` succeeding proves nothing — the runtime can be fenced per-command:
+Before building any briefs, worktrees, or terminals, prove the orchestration lifecycle actually
+writes. **One ordered sequence**, and each check is a precondition of the next — so the first thing
+that fails is the thing to act on, and nothing below it is evidence of anything:
+
+1. **The binary resolves** — step 0, above.
+2. **It answers `orchestration --help`** — step 0. Lifecycle verbs *missing* from that help is
+   Orca's experimental orchestration feature being off, not a fenced runtime: the verbs were never
+   registered. Same symptom, different fix.
+3. **The runtime is running**: `<orca> status --json` reports `runtime.reachable: true` and
+   `runtime.state: "ready"`. A CLI that resolves and answers `--help` still reaches nothing when the
+   app is closed — the help text is local, and every `orchestration` verb is an RPC to the runtime.
+4. **The guide is loaded** — step 0, and before the `run-create` below, which is itself a lifecycle
+   call.
+5. **The host's agent permission mode is yolo** — the read is below.
+6. **The Run exists**: `<orca> orchestration run-create --objective "<what this run delegates>" --json`
+
+### The permission mode is app config, not an argument
+
+Orca supplies the unattended-agent flag from **app config** — `--dangerously-skip-permissions` for
+`claude`, `--yolo` for `cursor` — so no argument this skill passes can set it. A host left on manual
+launches workers that stop at an approval prompt with nobody watching: not a failure, never reported
+as one, and indistinguishable from a slow worker until the dispatch times out.
+
+Read what this host will actually launch with, for the run's engine:
 
 ```bash
-<orca> orchestration task-create --spec "PROBE" --json
+ORCA_ROOT="${XDG_CONFIG_HOME:-$HOME/.config}/orca"                # Linux
+[ -f "$ORCA_ROOT/orca-profile-index.json" ] \
+  || ORCA_ROOT="$HOME/Library/Application Support/orca"           # macOS
+
+ENGINE=claude   # the run's engine id, per step 5: claude | cursor | …
+
+python3 - "$ORCA_ROOT" "$ENGINE" <<'READ_DEFAULT_ARGS'
+import json, pathlib, sys
+root, engine = pathlib.Path(sys.argv[1]), sys.argv[2]
+index = json.loads((root / "orca-profile-index.json").read_text())
+data = json.loads((root / "profiles" / index["activeProfileId"] / "orca-data.json").read_text())
+print(data["settings"].get("agentDefaultArgs", {}).get(engine, ""))
+READ_DEFAULT_ARGS
 ```
 
-**Retire the probe by completing it, not by deleting it** — there is no `task-delete` verb. Set its status instead (`task-update --status completed`), taking the id from the `task-create` response.
+`settings.agentDefaultArgs` is the map the app launches from, keyed by engine id. An empty answer, or
+one without that engine's bypass flag, is a manual-mode host: **stop**, and name the fix — Settings →
+Agents, set that engine's default arguments back to the yolo flag. Do not work around it by spelling
+the flag into a launch command; the flag belongs to the launch the app owns.
 
-Any answer other than `"ok": true` is decisive, and three of them look alike: a fenced runtime that means stop, a missing Run binding that means bind and retry, and a plain usage error. Read [references/orchestration-probe.md](references/orchestration-probe.md) before acting on any of them.
+Where neither root holds an `orca-profile-index.json`, the read has **failed rather than answered**.
+Say which paths were tried and have the user confirm the setting before continuing — an unreadable
+setting is not evidence of a good one. Measured on Orca 1.4.188, Linux; the macOS root is the
+standard Electron `userData` path and was not measured here.
 
-This step is cheap and it is the whole point of doing it first: a run that discovers the fence at dispatch time has already spent its setup budget.
+### The fence probe is the `run-create`
+
+Item 6 is the run's **first mutating lifecycle call**, so a fenced runtime is caught there — the same
+evidence a throwaway probe task bought, with no artifact left behind. That task was permanent litter
+(there is no delete verb, so retiring it left the row), and it ran *before* any Run was bound, so on
+a clean machine its likeliest answer was `run_required` — a setup step read as a failure.
+
+Any answer other than `"ok": true` is decisive, and the four causes look alike at the CLI. Read
+[references/orchestration-probe.md](references/orchestration-probe.md) before acting on any of them.
+
+This step is cheap and it is the whole point of doing it first: a run that discovers the fence at
+dispatch time has already spent its setup budget.
 
 ## 5. Dispatch the frontier
 
