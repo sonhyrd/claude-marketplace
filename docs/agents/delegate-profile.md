@@ -6,10 +6,31 @@ baseline, known-noise test, or environment trap.
 - **Remote**: `sonhyrd/claude-marketplace` — the origin this profile describes. Step 1 compares it
   against `git remote get-url origin` and warns on mismatch. This is a self-check, not a key: the
   profile is found by being in this repo, not by matching a list.
-- **Branch prefix**: `ticket/` — per-ticket branches are `ticket/<ticket-slug>`.
-- **Post-merge check**: `make validate`. Baseline **3/3 passing, 0 failures** as of `fa20228`
+- **Branch prefix**: `ticket/` — per-ticket branches are `ticket/<ticket-slug>`. Dispatching through
+  `orca orchestration worker-start --name ticket/<slug>` does **not** produce that branch: Orca
+  prefixes its own user segment and flattens the slash, yielding `sonhyrd/ticket-<slug>`. Merge-back
+  is unaffected, but address a worker's branch by what `git branch --show-current` reports in its
+  worktree, never by the name you passed.
+- **Post-merge check**: `make ci`, **not** `make validate`. CI runs
+  `validate-strict test lint type-check format-check`, and `validate` is a strict subset of it —
+  seven merge-backs passed `validate` while `format-check` drifted, and the PR went red on
+  `ruff format --check scripts/ tests/` after every ticket had merged. Where `make` is absent, run
+  the bodies: `uv run scripts/validators/validate_all.py --strict`, `uv run pytest tests/ -q`,
+  `uv run ruff check scripts/ tests/`, `uv run ruff format --check scripts/ tests/`,
+  `uv run ty check scripts/ tests/`. **`ruff format --check` over the whole repo is not the gate** —
+  ten files outside `scripts/`/`tests/` are unformatted and pre-existing; CI scopes to those two
+  directories and so must you. Baseline **3/3 passing, 0 failures** as of `fa20228`
   (2026-08-07): File Structure, JSON Manifest, YAML Frontmatter. No known-noise failures — any
-  failure is a regression. `make validate` is static and offline; it deliberately excludes
+  failure is a regression. **Neither `make` nor `shellcheck` is installed on this host** — run the
+  target's recipe body instead: `uv run scripts/validators/validate_all.py`. Bare `python3` fails on
+  a missing `rich`; the dependencies live in the uv environment, so the `uv run` prefix is
+  load-bearing, not optional. `make lint-shellcheck` cannot be verified here at all, so a shell
+  script's lint status is unknown until it reaches a host that has it.
+  `make check-delegate-cli` is **green** as of #73: exit 0, **13 commands verified against
+  `orca-ide`, zero findings**. It was expected-red through #71 and #73 while it named the defects
+  those tickets removed; that period is over, so any finding now is a regression. It stays outside
+  `make validate` because it needs a live Orca, and it is skipped rather than failed on a host with
+  no Orca binary — a skip is not a pass. `make validate` is static and offline; it deliberately excludes
   `make check-e2e-subtree`, which fetches the fork. A ticket touching `plugins/e2e-skills/` must run
   `make check-e2e-subtree` and `make test-e2e-subtree-check` itself.
 - **Commit policy**: scoped subject lines matching the existing log — `sss: …`, `sss(<skill>): …`,

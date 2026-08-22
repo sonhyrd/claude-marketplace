@@ -3,16 +3,19 @@
 **`/delegate-tickets` does not read this file.** It is a parking bay, not a source of truth.
 
 Repo profiles now live in the repo they describe, as `docs/agents/delegate-profile.md` — see
-[profile-template.md](profile-template.md). The entries below came from the central profile list
-this skill used to carry, and belong to repos that were not checked out on the machine where the
-move was made, so they could not be written into their repos at the time.
+[profile-template.md](../../plugins/sss/skills/delegate-tickets/references/profile-template.md).
+The entries below came from the central profile list this skill used to carry, and belong to repos
+that were not checked out on the machine where the move was made, so they could not be written into
+their repos at the time.
 
 **Each entry is to be moved into its own repo as `docs/agents/delegate-profile.md` — with the
 `CLAUDE.md` pointer line and any ticket-location rule lifted into that repo's
 `docs/agents/issue-tracker.md` — and then deleted from here.** When the last entry goes, delete
 this file. If it is still here with entries in it, that is a to-do, not a design.
 
-Entries are verbatim as of the move; treat every measured baseline in them as dated.
+Entries are verbatim as of the move, with one correction: the `e2e-skills` skill list dropped
+`playwright-test-generator` and `cypress-debugger`, which the fork itself retired (`652c696`).
+Treat every measured baseline in them as dated.
 
 ## paul-career-builder (burbot)
 
@@ -101,7 +104,7 @@ Entries are verbatim as of the move; treat every measured baseline in them as da
 
 ## e2e-skills
 
-- **Remote**: `sonhyrd/e2e-skills` — private fork of the e2e-skills Agent Skill bundle (playwright-test-generator, pw-prove, e2e-reviewer, the two debuggers). Personal tool, not a public release surface.
+- **Remote**: `sonhyrd/e2e-skills` — private fork of the e2e-skills Agent Skill bundle (pw-prove, e2e-reviewer, playwright-debugger). Personal tool, not a public release surface.
 - **Branch prefix**: `sss/`
 - **Post-merge check**: `bash scripts/ci/ci-local.sh` — the single source of truth for CI (shell + Node syntax, parity, security, evals, public skill surface, framework scope, links, docs orphans, language, scanner corpus, probe HAR contract, run-ledger smoke, e2e smell scan). Must be green on a clean tree; any failure is a real regression. Follow with `bash scripts/ci/pre-push-security.sh` before pushing.
 - **Commit policy**: conventional commit scoped to the skill — `feat(pw-prove): <what the slice delivers>`, `fix(pw-prove): <what broke>`. Describe the behaviour, not the files. No issue-closing trailers.

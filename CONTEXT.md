@@ -18,16 +18,47 @@ _Avoid_: subagent, child agent
 The tickets whose blockers have all merged back, and which can therefore dispatch now.
 _Avoid_: ready queue, next batch
 
-**Open dispatch**:
-A ticket handed to a worker whose `worker_done` or escalation the **Coordinator** has not yet
-processed. Open is about the coordinator's knowledge, not the worker's state: a worker that finished
-minutes ago is still an open dispatch until its message is read.
-_Avoid_: running worker, in-flight ticket, pending task
+**Run**:
+The namespace one delegation's **Dispatch**es and messages belong to, and the **Coordinator**'s
+inbox for them. A durable address, never a scheduler: it places no **Worker** and decides no order —
+the **Frontier** does that.
+_Avoid_: session, batch, job, orchestration
+
+**Dispatch**:
+One attempt at a ticket, assigned to one terminal and carrying its own identity and lifecycle. The
+ticket names the work and is attemptable more than once; a Dispatch names one of those attempts, and
+it ends by **settling**.
+_Avoid_: task (Orca's name for the work item, never for the attempt), assignment, handoff, run
+
+**Unsettled dispatch**:
+A **Dispatch** whose `worker_done` or escalation the **Coordinator** has not yet processed.
+Unsettled is about the coordinator's knowledge, not the worker's state: a worker that finished
+minutes ago is still unsettled until its message is read.
+_Avoid_: open dispatch, running worker, in-flight ticket, pending task
+
+**Supervised worker**:
+A **Worker** Orca started as a **Dispatch** of its own, so that worker's lifecycle state is Orca's to
+report and its terminal Orca's to account for once the Dispatch settles. A terminal an operator
+started and was handed a dispatch afterwards is not one, however faithfully it reports.
+_Avoid_: managed worker, tracked worker, live worker
 
 **Checkpoint**:
 An elapsed wait window that returned nothing. Evidence the run is still live, never evidence it is
 finished — the opposite of a **worker_done**, and not a failure of any kind.
 _Avoid_: timeout, empty poll, no-op wait
+
+**Refusal-to-start**:
+A turn that ends before any work begins — a declined confirmation gate, or any preflight stop. One
+of the three permitted ways a **Coordinator**'s turn ends, and the only one that leaves nothing
+behind: no **Run**, no worktree, no **Dispatch**. Distinct from an escalation, which interrupts a
+run already under way.
+_Avoid_: abort, bail, early exit, hard stop
+
+**Receipt**:
+The review file a **Worker** writes before it reports, naming every finding and the fix that answers
+it. Evidence that the review happened, which a report cannot carry on its own: absence and a clean
+verdict read alike in prose.
+_Avoid_: review, report, summary, sign-off
 
 **Integration branch**:
 The branch a run merges every worker's slice back into, and the base its worktrees are cut from.
