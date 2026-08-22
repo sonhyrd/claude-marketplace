@@ -9,6 +9,10 @@ Delegate a ticket tree produced by `/to-tickets` to parallel workers, coordinate
 
 The tickets' **blocking edges ARE the dependency DAG** — use them as-is, never re-derive dependencies. Wide refactors already serialize through their edges by construction.
 
+**A coordinator's resting state is `orca orchestration check --wait`**, and it returns there after every action, because the mailbox does not wake an idle TUI: a `worker_done` sits unread until that command runs in this terminal, or until a human pokes the pane. So a turn ends in exactly three places — the final report in step 7, an escalation raised to the user, a decline at step 1's gate. A recap naming the next merge or the next dispatch is not one of them; it ends the turn while reading like progress, which is how a finished worker goes unnoticed for an hour. Steps 5, 6 and 7 each hand back to the wait.
+
+On Linux outside an Orca-managed pane the binary is `orca-ide`; step 4's probe resolves it once for every command below.
+
 > **Plugin prerequisites.** Requires the `matt` plugin from this marketplace (for
 > `/to-tickets` and `/implement`) and an Orca install (for `/orchestration`). See
 > [references/quickstart.md](references/quickstart.md).
@@ -92,14 +96,14 @@ Some rules below are Orca's rather than this skill's. They live here because `or
   - Name `code-review`'s **resolved absolute path** wherever the brief refers to it. `implement`'s own text says "use `/code-review`", and that bare name resolves to a **built-in skill of the same name**: 7 of 82 dispatched workers ran that one instead of the two-axis pair, one of them spending 35 agents on it before its findings landed. Naming the two axes in the definition of done below is the second half of the same guard — a worker that runs the built-in has no Standards/Spec receipt to write.
   - **The review leaves a receipt.** Definition of done: `implement` closes clean, the profile's post-merge check passes, and `/tmp/<ticket-slug>/review.md` exists **before `worker_done` goes out**, listing every **Standards** and **Spec** finding with the fix that answers it, passed back as `--report-path`. Every finding is the worker's to fix; one the profile's **Prohibitions** put outside its reach goes under a `HANDOFF` heading and belongs to the coordinator at merge-back — which keeps *fix all* true of the run rather than of one worker, and stops an unsatisfiable rule from being resolved with a dishonest receipt. Ordering is load-bearing: a review that lands after the report has a worker amending a commit you already merged. Of 82 dispatched workers, **22 ran no review at all** and none of them said so — absence and a clean verdict read identically until a file has to exist. Step 6 reads this file.
 - Where a brief is too long to inject as one message, write it to a file (`/tmp/<slug>/<ticket>.md`) and send a one-liner pointing at the file — but the brief still *points at* `implement`'s SKILL.md rather than restating it.
-- **Acknowledge every orchestration batch you act on**, with the `deliveryId` from the same response. `orchestration check` returns the oldest **unacknowledged** batch, so handling a message is not the same as acking it: one unacked `worker_done` makes `check` replay that same text while every later message queues behind it, and the "you have N messages" counter climbs against a queue holding one stale item — which reads exactly like new mail arriving and being lost.
+- **Acknowledge every orchestration batch you act on**, with the `deliveryId` from the same response. `orchestration check` returns the oldest **unacknowledged** batch, so handling a message is not the same as acking it: one unacked `worker_done` makes `check` replay that same text while every later message queues behind it, and the "you have N messages" counter climbs against a queue holding one stale item — which reads exactly like new mail arriving and being lost. **Acking is not waiting**: the ack closes a batch, and step 7's loop is what you return to.
 - **Write every message body to a file and pass it as `"$(cat <file>)"`**, whose output is not re-parsed — never backticks inside a double-quoted shell string. The shell runs them as command substitution: a reply quoting a command name executes it, mangles the body, and exits non-zero, so the reply never lands, leaving a blocked worker to re-ask the identical question.
 - Launch every worker with the run's engine argv via orca-cli's custom-argv path — `terminal create --command '<engine argv>'` — not the bare default launcher. Workers run on `claude` by default (`claude --effort medium --dangerously-skip-permissions`); `--engine cursor` and its startup traps are in [references/worker-engines.md](references/worker-engines.md).
 - **Confirm each worker actually started before dispatching.** `terminal wait --for tui-idle` is satisfied by the bare shell that exists before a TUI mounts, and by the shell an agent leaves behind when it dies on startup — so follow it with `terminal read` and require a rendered agent frame, re-reading up to 5 times. A pane showing only a shell prompt is a dead worker: close it, create a fresh terminal, never dispatch into it. On `--engine cursor` a rendered frame can be the Workspace Trust box rather than the agent — read `references/worker-engines.md` before deciding a pane is healthy or hung.
 
 ## 6. Merge back in DAG order
 
-As each worktree finishes: merge it into the current branch, resolve conflicts, rerun the profile's post-merge check on the merged result, mark the ticket done (edit the ticket file's Status locally; close the issue on GitHub), then dispatch any tickets it just unblocked — the frontier advances.
+As each worktree finishes: merge it into the current branch, resolve conflicts, rerun the profile's post-merge check on the merged result, mark the ticket done (edit the ticket file's Status locally; close the issue on GitHub), then dispatch any tickets it just unblocked — the frontier advances. Every action here is local work with workers still live; each one ends back in step 7's wait.
 
 **No receipt, no merge.** Open `/tmp/<ticket-slug>/review.md` before the merge — the `worker_done` body paraphrases the review, and a paraphrase of a review that never ran reads exactly like a paraphrase of a clean one. Where it is missing, run `code-review`'s **Standards axis** on that branch first, then merge the result. Standards is the axis your own merge-back read leaves uncovered: that read is a diff read, and it earns its place on cross-branch damage — silent same-name-different-signature merges, colliding ADR numbers, gates green on a worker tree and red on the merged one. Three of the four findings measured shipping in silence were standards findings. `HANDOFF` entries in a receipt are yours to fix in the merge commit. Re-tasking the worker is not on the table for either case — its dispatch capability is revoked the moment it reports, per **Send corrections before a worker reports** below.
 
@@ -126,5 +130,18 @@ edit `AGENTS.md` — same tree, same commit — and leave the profile alone. Kee
 correction here only while that file is outside your write access.
 
 ## 7. Run to completion
+
+Return to the wait after every local action — a merge-back, a profile amend, a conflict resolution, a filed issue, a measurement:
+
+```bash
+orca orchestration check --ack <delivery_id> --wait \
+  --types worker_done,escalation,question --timeout-ms 900000 --json
+```
+
+**Always pass `--timeout-ms`.** `/orchestration` documents no default, so an omitted flag leaves the window to the runtime, which can close it inside a minute — and an empty 40-second wait is the same JSON as an empty 15-minute one. The flag is what keeps a bug in your own command line from reading as a checkpoint.
+
+A timeout or `{count:0}` **is** that checkpoint: the run is live, not finished. Read liveness (`task-list`, `terminal read` on the worker), then wait again — workers routinely run 15–60 minutes, and one window is not the run. Account for every settled worker terminal before the next wait: reuse it for the next Dispatch, or release it. `/orchestration` owns those verbs.
+
+Keep rolling until every expected Dispatch has a processed `worker_done` or `escalation`.
 
 Escalate only on an unresolvable merge conflict or a ticket whose acceptance criteria contradict the spec. Done when every ticket is merged and marked, closed out by a final report — per ticket: status, branch, files changed, checks run, blockers hit.
