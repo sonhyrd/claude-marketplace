@@ -27,6 +27,7 @@ scripts/ci/derive-stamp.py is — it parses JSON and walks a directory tree.
 Usage:
     python3 scripts/forensics/span-index.py [--ledger P] [--transcripts D]
                                             [--since ISO] [--until ISO]
+                                            [--lead-lines N]
                                             [--tail-lines N] [--tail-minutes N] [--out P]
 
 Exit codes:
@@ -69,6 +70,14 @@ DEFAULT_SINCE = "2026-08-15"
 # 1,145 and 2,617 lines. See docs/studies/session-distillation.md.
 DEFAULT_TAIL_LINES = 150
 DEFAULT_TAIL_MINUTES = 30
+
+# The lead. The span's LOWER bound is the first ledger record, so everything before the first script
+# ran — Step 1's environment work and Step 2's derivation, the part of a run that reads the target
+# repository's profile — falls outside it. Across the corpus that is 49 to 398 lines, median 117,
+# and it is missing from 25 of the 26 sessions unless the span reaches back to the turn that loaded
+# pw-prove. The cap is a backstop against a resumed session whose load turn is hours behind, and at
+# 500 it clears the widest lead observed by a quarter.
+DEFAULT_LEAD_LINES = 500
 
 
 def end_of(ts, duration_ms):
@@ -242,6 +251,112 @@ def scan_transcript(path, window):
     }, None
 
 
+SKILL_NAME = "pw-prove"
+
+
+def load_marker(rec):
+    """The mark a record carries if it is the turn that loaded pw-prove, else None.
+
+    Three shapes appear across the corpus and all three are honoured, because which one a session
+    left behind is an accident of how the operator started it: the slash command they typed, the
+    `Skill` tool the agent called, and the skill body the harness then injects.
+    """
+    message = rec.get("message") or {}
+    content = message.get("content")
+    blocks = content if isinstance(content, list) else []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "tool_use" and block.get("name") == "Skill":
+            if SKILL_NAME in json.dumps(block.get("input") or {}):
+                return "skill-tool"
+    text = content if isinstance(content, str) else "".join(
+        b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text")
+    if not text:
+        return None
+    # The injected body is the WHOLE skill, so only its first line is a usable mark.
+    first = text.split("\n", 1)[0].strip()
+    if first.startswith("Base directory for this skill:") and first.endswith(SKILL_NAME):
+        return "skill-body"
+    if "<command-name>" in text and SKILL_NAME in text:
+        return "slash-command"
+    return None
+
+
+def scan_lead(path, span, first_ts, lead_lines):
+    """The lead: from the turn that loaded pw-prove down to where the span begins.
+
+    Anchored on a MARK rather than on a distance, so a session that spent forty minutes in Step 2
+    keeps all of it and a session that spent one keeps one. The cap only guards the pathological
+    case — a resumed session whose load turn is hours and thousands of lines behind — and when it
+    binds it still names the turn it could not reach back to, because a reader who can see what was
+    cut can widen it deliberately.
+    """
+    lead = {
+        "line_start": span["line_start"],
+        "line_end": span["line_start"] - 1,
+        "byte_start": span["byte_start"],
+        "byte_end": span["byte_start"],
+        "lines": 0,
+        "marker": None,
+        "marker_line": None,
+        "marker_byte": None,
+        "stop": "not-found",
+    }
+    try:
+        fh = open(path, "rb")
+    except OSError:
+        return lead
+
+    offset = 0
+    with fh:
+        for lineno, raw in enumerate(fh, start=1):
+            start = offset
+            offset += len(raw)
+            if lineno >= span["line_start"]:
+                break
+            try:
+                rec = json.loads(raw.decode("utf-8", "replace"))
+            except ValueError:
+                continue
+            if not isinstance(rec, dict):
+                continue
+            ts = rec.get("timestamp")
+            if isinstance(ts, str) and ts > first_ts:
+                break
+            mark = load_marker(rec)
+            if mark:
+                # The LAST load before the span wins: an earlier one belongs to an earlier attempt.
+                lead["marker"] = mark
+                lead["marker_line"] = lineno
+                lead["marker_byte"] = start
+
+    if lead["marker_line"] is None:
+        return lead
+
+    lines = span["line_start"] - lead["marker_line"]
+    if lines <= lead_lines:
+        lead["line_start"] = lead["marker_line"]
+        lead["byte_start"] = lead["marker_byte"]
+        lead["lines"] = lines
+        lead["stop"] = "skill-load"
+        return lead
+
+    # Capped: walk forward to the first line the cap allows and start there.
+    lead["stop"] = "line-cap"
+    wanted = span["line_start"] - lead_lines
+    offset = 0
+    with open(path, "rb") as fh:
+        for lineno, raw in enumerate(fh, start=1):
+            if lineno == wanted:
+                lead["line_start"] = lineno
+                lead["byte_start"] = offset
+                lead["lines"] = lead_lines
+                break
+            offset += len(raw)
+    return lead
+
+
 def is_human_turn(rec):
     """True for a turn the operator typed, false for the tool-result stream that looks like one.
 
@@ -251,6 +366,11 @@ def is_human_turn(rec):
     blocks are `tool_result` rather than `text`.
     """
     if rec.get("type") != "user" or rec.get("toolUseResult"):
+        return False
+    # A loaded skill's body is `type: "user"` with text content and nobody typed it. It carries
+    # `isMeta`, and `sourceToolUseID` when a Skill call produced it. The n=1 distillation ended its
+    # tail on one of these and reported it as the operator speaking.
+    if rec.get("isMeta") or rec.get("sourceToolUseID"):
         return False
     content = (rec.get("message") or {}).get("content")
     if isinstance(content, str):
@@ -411,19 +531,21 @@ def unplaced():
         "class": "excluded",
         "reason": ("no transcript on disk for this session, so its repository cannot be "
                    "determined and its span cannot be located"),
+        "lead": None,
         "span": None,
         "span_note": "no transcript",
         "tail": None,
     }
 
 
-def placed(path, tally, tail_lines, tail_minutes):
+def placed(path, tally, tail_lines, tail_minutes, lead_lines):
     """The half of a session entry that comes from the transcript: where it ran, and where to look."""
     cwd = read_cwd(path)
     repository, worktree = split_cwd(cwd) if cwd else (None, None)
     span, note = scan_transcript(path, (tally["first_ts"], tally["span_until"]))
     tail = (scan_tail(path, span, tally["span_until"], tail_lines, tail_minutes)
             if span else None)
+    lead = scan_lead(path, span, tally["first_ts"], lead_lines) if span else None
     class_, reason = classify(repository)
     return {
         "transcript": path,
@@ -433,6 +555,7 @@ def placed(path, tally, tail_lines, tail_minutes):
         "worktree": worktree,
         "class": class_,
         "reason": reason,
+        "lead": lead,
         "span": span,
         "span_note": note,
         "tail": tail,
@@ -463,8 +586,8 @@ def build(args):
         if len(paths) > 1:
             ambiguous.append({"session": sid, "paths": paths})
         entry = dict(tally_fields(sid, tally))
-        entry.update(placed(paths[0], tally, args.tail_lines, args.tail_minutes)
-                     if paths else unplaced())
+        entry.update(placed(paths[0], tally, args.tail_lines, args.tail_minutes,
+                            args.lead_lines) if paths else unplaced())
         entry["transcript_also_at"] = paths[1:]
         sessions.append(entry)
 
@@ -490,6 +613,7 @@ def build(args):
             "ledger": os.path.abspath(args.ledger),
             "transcripts": os.path.abspath(args.transcripts),
             "window": {"since": args.since, "until": args.until},
+            "lead": {"lines": args.lead_lines},
             "tail": {"lines": args.tail_lines, "minutes": args.tail_minutes},
         },
         "totals": totals,
@@ -513,6 +637,9 @@ def main(argv):
                              % DEFAULT_SINCE)
     parser.add_argument("--until", default=None,
                         help="window upper bound, exclusive, ISO-8601 prefix (default: none)")
+    parser.add_argument("--lead-lines", type=int, default=DEFAULT_LEAD_LINES,
+                        help="most transcript lines the lead may reach back for the turn that "
+                             "loaded pw-prove (default: %d)" % DEFAULT_LEAD_LINES)
     parser.add_argument("--tail-lines", type=int, default=DEFAULT_TAIL_LINES,
                         help="most transcript lines the reaction tail may take (default: %d)"
                              % DEFAULT_TAIL_LINES)

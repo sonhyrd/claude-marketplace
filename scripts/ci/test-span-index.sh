@@ -96,6 +96,22 @@ with open(path, "w", encoding="utf-8") as fh:
         elif kind == "h":
             rec["type"] = "user"
             rec["message"] = {"role": "user", "content": [{"type": "text", "text": "no, redo it"}]}
+        elif kind == "m":
+            # A loaded skill body: type "user", text content, and nobody typed it.
+            rec["type"] = "user"
+            rec["isMeta"] = True
+            rec["sourceToolUseID"] = "toolu_x%d" % i
+            rec["message"] = {"role": "user", "content": [
+                {"type": "text", "text": "Base directory for this skill: /plugins/e2e/skills/pw-prove"}]}
+        elif kind.startswith("s:"):
+            rec["type"] = "assistant"
+            rec["message"] = {"role": "assistant", "content": [
+                {"type": "tool_use", "name": "Skill", "input": {"skill": kind[2:]}}]}
+        elif kind.startswith("c:"):
+            rec["type"] = "user"
+            rec["message"] = {"role": "user", "content":
+                "<command-message>%s</command-message>\n<command-name>/%s</command-name>"
+                % (kind[2:], kind[2:])}
         else:
             rec["type"] = "attachment"
         fh.write(json.dumps(rec) + "\n")
@@ -443,7 +459,7 @@ fi
 # where a failure is actually handled — falls outside it, so the index also emits a bounded tail.
 echo ""
 echo "-- the reaction tail runs past the last script exit to the moment control returns --"
-ST=77777777-7777-7777-7777-777777777777
+ST=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
 L="$W/l13.jsonl"
 ledger_line "$ST" 2026-08-16T10:00:00.000Z 1 > "$L"
 # line 1 header; 2 pre-span; 3 the spanned entry; 4-6 the reaction; 7 the human turn; 8 beyond.
@@ -554,6 +570,122 @@ else
   expect "a session with no transcript has no tail, not an empty one" \
     "$(field "$W/o19" 'session("'"$S2"'")["tail"] is None')" True
 fi
+
+
+# --- case 17: what looks like the operator and is not ---------------------------------------------
+# A loaded skill's body arrives as `type: "user"` with text content, exactly like a typed turn. The
+# n=1 distillation ended its tail on one of these and reported it as the operator speaking.
+echo ""
+echo "-- a harness-injected skill body is not the operator, however much it looks like one --"
+SM=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+SL=cccccccc-cccc-cccc-cccc-cccccccccccc
+L="$W/l18.jsonl"
+ledger_line "$SM" 2026-08-16T10:00:00.000Z 0 > "$L"
+turns proj-widget-meta "$SM" "$WS/hyrd-widget/krill" \
+  a@2026-08-16T10:00:00.000Z s:other@2026-08-16T10:00:10.000Z m@2026-08-16T10:00:20.000Z \
+  a@2026-08-16T10:00:30.000Z h@2026-08-16T10:00:40.000Z
+run_index "$W/o20" "$W/e20" "$L"
+if [ "$rc" != "0" ]; then
+  bad "meta-turn run exited $rc, wanted 0"; sed 's/^/         /' "$W/e20" | head -3
+else
+  expect "the tail reads past the injected body to the turn a human typed" \
+    "$(field "$W/o20" 'session("'"$SM"'")["tail"]["human_turn_line"]')" 6
+  expect "and stops there" "$(field "$W/o20" 'session("'"$SM"'")["tail"]["stop"]')" human-turn
+fi
+
+# --- case 18: the lead --------------------------------------------------------------------------
+# The span's lower bound is the first ledger record, so Step 1 and Step 2 — everything before the
+# first script ran — fall outside it. Across the corpus that is 49 to 398 lines of the run.
+echo ""
+echo "-- the span reaches back to the turn that loaded pw-prove, so Steps 1-2 are inside it --"
+L="$W/l19.jsonl"
+ledger_line "$SL" 2026-08-16T10:00:30.000Z 0 > "$L"
+turns proj-widget-lead "$SL" "$WS/hyrd-widget/krill" \
+  a@2026-08-16T09:50:00.000Z c:e2e:pw-prove@2026-08-16T09:55:00.000Z \
+  a@2026-08-16T09:56:00.000Z a@2026-08-16T10:00:30.000Z
+run_index "$W/o21" "$W/e21" "$L"
+if [ "$rc" != "0" ]; then
+  bad "lead run exited $rc, wanted 0"; sed 's/^/         /' "$W/e21" | head -3
+else
+  expect "the span itself still starts at the first ledger record" \
+    "$(field "$W/o21" 'session("'"$SL"'")["span"]["line_start"]')" 5
+  expect "the lead starts on the turn that loaded the skill" \
+    "$(field "$W/o21" 'session("'"$SL"'")["lead"]["line_start"]')" 3
+  expect "the lead ends where the span begins" \
+    "$(field "$W/o21" 'session("'"$SL"'")["lead"]["line_end"]')" 4
+  expect "the lead says how it was anchored" \
+    "$(field "$W/o21" 'session("'"$SL"'")["lead"]["stop"]')" skill-load
+  expect "and by which mark" \
+    "$(field "$W/o21" 'session("'"$SL"'")["lead"]["marker"]')" slash-command
+  sliced=$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1])); s = d["sessions"][0]; t = s["lead"]
+with open(s["transcript"], "rb") as fh:
+    fh.seek(t["byte_start"]); buf = fh.read(t["byte_end"] - t["byte_start"])
+print(len([l for l in buf.decode().splitlines() if l]))
+' "$W/o21")
+  expect "the lead's byte range is seekable and holds exactly its lines" "$sliced" 2
+fi
+
+echo ""
+echo "-- the Skill tool and an injected skill body anchor a lead just as a slash command does --"
+L="$W/l20.jsonl"
+ledger_line "$SL" 2026-08-16T10:00:30.000Z 0 > "$L"
+turns proj-widget-lead "$SL" "$WS/hyrd-widget/krill" \
+  s:e2e-reviewer@2026-08-16T09:50:00.000Z s:pw-prove@2026-08-16T09:55:00.000Z \
+  a@2026-08-16T10:00:30.000Z
+run_index "$W/o22" "$W/e22" "$L"
+expect "a Skill invocation naming another skill does not anchor it" \
+  "$(field "$W/o22" 'session("'"$SL"'")["lead"]["line_start"]')" 3
+expect "the Skill tool is named as the mark" \
+  "$(field "$W/o22" 'session("'"$SL"'")["lead"]["marker"]')" skill-tool
+
+# The injected body is the whole SKILL.md, so only its first line can carry the mark.
+L="$W/l20b.jsonl"
+ledger_line "$SL" 2026-08-16T10:00:30.000Z 0 > "$L"
+turns proj-widget-lead "$SL" "$WS/hyrd-widget/krill" \
+  m@2026-08-16T09:55:00.000Z a@2026-08-16T10:00:30.000Z
+run_index "$W/o22b" "$W/e22b" "$L"
+expect "the injected body anchors on its first line, not on the megabyte after it" \
+  "$(field "$W/o22b" 'session("'"$SL"'")["lead"]["marker"]')" skill-body
+
+# Two marks for one load — the Skill call and the body it injects — must not be read as two loads.
+L="$W/l20c.jsonl"
+ledger_line "$SL" 2026-08-16T10:00:30.000Z 0 > "$L"
+turns proj-widget-lead "$SL" "$WS/hyrd-widget/krill" \
+  s:pw-prove@2026-08-16T09:55:00.000Z m@2026-08-16T09:55:01.000Z a@2026-08-16T10:00:30.000Z
+run_index "$W/o22c" "$W/e22c" "$L"
+expect "the later of the pair wins, and the lead is one line shorter, not a load out of place" \
+  "$(field "$W/o22c" 'session("'"$SL"'")["lead"]["line_start"]')" 3
+
+echo ""
+echo "-- a session whose load turn cannot be found gets a stated gap, not an invented lead --"
+L="$W/l21.jsonl"
+ledger_line "$SL" 2026-08-16T10:00:30.000Z 0 > "$L"
+turns proj-widget-lead "$SL" "$WS/hyrd-widget/krill" \
+  a@2026-08-16T09:50:00.000Z a@2026-08-16T10:00:30.000Z
+run_index "$W/o23" "$W/e23" "$L"
+expect "nothing is read before the span" "$(field "$W/o23" 'session("'"$SL"'")["lead"]["lines"]')" 0
+expect "and the gap is named"            "$(field "$W/o23" 'session("'"$SL"'")["lead"]["stop"]')" not-found
+expect "no mark is claimed" \
+  "$(field "$W/o23" 'session("'"$SL"'")["lead"]["marker"] is None')" True
+
+echo ""
+echo "-- a load turn further back than the cap truncates the lead and still names the turn --"
+L="$W/l22.jsonl"
+ledger_line "$SL" 2026-08-16T10:00:30.000Z 0 > "$L"
+turns proj-widget-lead "$SL" "$WS/hyrd-widget/krill" \
+  c:e2e:pw-prove@2026-08-16T09:50:00.000Z a@2026-08-16T09:51:00.000Z a@2026-08-16T09:52:00.000Z \
+  a@2026-08-16T09:53:00.000Z a@2026-08-16T10:00:30.000Z
+run_index "$W/o24" "$W/e24" "$L" --lead-lines 2
+expect "the lead takes only what the cap allows" \
+  "$(field "$W/o24" 'session("'"$SL"'")["lead"]["lines"]')" 2
+expect "the truncation is named, not silent" \
+  "$(field "$W/o24" 'session("'"$SL"'")["lead"]["stop"]')" line-cap
+expect "the load turn is still reported, so a reader can widen the cap deliberately" \
+  "$(field "$W/o24" 'session("'"$SL"'")["lead"]["marker_line"]')" 2
+expect "the cap in force is recorded with the index" \
+  "$(field "$W/o24" 'd["source"]["lead"]["lines"]')" 2
 
 
 echo ""
