@@ -34,6 +34,13 @@ skill body the harness then injects. The injected body is the whole of `SKILL.md
 line can carry the mark. The **last** mark before the span wins; an earlier one belongs to an
 earlier attempt.
 
+The mark is matched on the skill's **name**, not by looking for `pw-prove` anywhere in the record.
+Both forms were tried: the substring version anchored a control session's lead on a
+`/matt:grill-with-docs` invocation whose *arguments* happened to mention a profile path, 500 lines
+from where the run began. A neighbour whose name merely starts with the same word — `pw-prove-lite`,
+a future `pw-prove-forensics` — is a different skill, and the suite carries that near twin next to
+the real hit.
+
 25 of the 26 corpus sessions anchor. The one that does not (`7cc7e6bc`) reports `not-found` and its
 lead is empty — a stated gap, not an invented range. `--lead-lines`, default 500, is a backstop
 against a resumed session whose load turn is hours behind; at 500 it clears the widest lead observed
@@ -49,7 +56,9 @@ sessions:
 |---|---|
 | Sessions where the operator's next turn follows the last script exit | 10 of 26 |
 | Sessions where nobody says anything after it | 13 of 26 |
-| Lines from the last script exit to that next turn | 15–128, median 45 |
+| Sessions where the next turn is hours later, past the time cap | 3 of 26 |
+| Lines of reaction, all 26 sessions | 10–128, median 45 |
+| Lines to the operator's next turn, the 10 sessions that have one | 19–128, median 46 |
 | Sessions whose reaction finished within six minutes | 25 of 26 |
 | Longest transcript continuing into unrelated work past the span | 2,617 lines |
 
@@ -112,6 +121,14 @@ silences are ambiguous is worth less than one that reports them.
 - **Verbatim** — three to five redacted lines that let a reader confirm the worst item without
   reopening the transcript.
 
+**`unattributed` is an outcome, not a blank.** The rule is that an item without an attribution is
+incomplete rather than a finding — not that the sub-agent must produce one. Where no instruction
+covers the behaviour at all, the honest answer is the word `unattributed` plus what was searched
+for, and that answer is itself evidence: it says the fix is a gap in the instructions rather than a
+departure from them, which is a different ticket. A record that instead invented a plausible section
+heading would be worse than one that says it looked and found nothing. Three of the n=1 record's
+items came back this way.
+
 ## Redaction, and why it is in the prompt
 
 The input is 226 MB of the operator's real work and plausibly holds credentials, tokens, HAR
@@ -125,8 +142,28 @@ the write is a leak that has already happened.
 
 ## The prompt
 
-Instantiated once per session from the span index. `{{...}}` are the only substitutions; everything
-else is fixed, because a prompt that is edited per session is twenty-six instruments rather than one.
+`{{...}}` are the only substitutions; everything else is fixed, because a prompt edited per session
+is twenty-six instruments rather than one. Where each substitution comes from — the index entry is
+the session's object in `span-index.py`'s output:
+
+| Substitution | Source |
+|---|---|
+| `transcript_path`, `transcript_size` | index entry's `transcript`; size from the file |
+| `lead_line_start`, `lead_line_end`, `lead_marker` | `lead.line_start`, `lead.line_end`, `lead.marker` |
+| `lead_note` | `lead.stop` in words — anchored on the load turn, capped, or not found at all |
+| `span_line_start`, `span_line_end` | `span.line_start`, `span.line_end` |
+| `tail_line_start`, `tail_line_end`, `tail_stop` | `tail.line_start`, `tail.line_end`, and `tail.stop` in words |
+| `session_short` | first eight characters of `session` |
+| `session_version` | `versions["pw-prove"]` from the index entry |
+| `head_version` | `metadata.version` in the working tree's `skills/pw-prove/SKILL.md` |
+| `ledger_summary` | `records`, `nonzero_exits`, `first_ts`, `span_until`, `repository`, `worktree`, `commit` from the entry, plus the per-script exit tally |
+| `ledger_path` | a per-session file the caller writes from the ledger: one line per invocation, with timestamp, script, phase, version, exit and duration |
+| `skill_path` | the working tree's `skills/pw-prove/SKILL.md` |
+| `out_path`, `scratchpad_dir` | the caller's scratchpad — never a path inside any repository |
+
+A session with no lead (`lead.stop` is `not-found`) is instantiated with the span's own start as
+`lead_line_start` and a `lead_note` saying the load turn could not be located, so the sub-agent knows
+Steps 1 and 2 are missing rather than assuming they were empty.
 
 ```text
 You are distilling ONE pw-prove session for the run-forensics exercise (issue #130). You produce

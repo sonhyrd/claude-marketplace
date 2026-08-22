@@ -416,6 +416,16 @@ session — up to 25 MB of it — and pw-prove is a region inside, bracketed by 
 ledger record the session left behind. The word matters because the alternative reading, "the
 transcript is the run", is what makes an exercise read 226 MB to answer a question about 9% of it.
 
+## Lead
+The stretch of transcript **before** the [span](#span): from the turn that loaded pw-prove to the
+first shipped script running. Step 1 and Step 2 run no script, so they leave no ledger record and a
+ledger-bracketed span cannot see them — which is 47 to 396 lines of every corpus session, the
+environment work and the whole derivation of the AC table among them. Anchored on a **mark** rather
+than a distance: the slash command, the `Skill` invocation, or the first line of the skill body the
+harness injects, whichever the session happens to have left, and the last one before the span wins.
+Its counterpart at the other end is the [reaction tail](#reaction-tail); together with the span they
+are the whole of what a [session distillation](#session-distillation) reads.
+
 ## Reaction tail
 The bounded stretch of transcript **after** the [span](#span): the turns between the last shipped
 script exiting and control returning to the operator, where a failing script is actually handled and
@@ -431,7 +441,8 @@ The one computed artifact of [run forensics](#run-forensics): `scripts/forensics
 takes the run ledger and the local transcript tree and emits one entry per session — repository,
 worktree, transcript path, skill versions, ledger record and non-zero-exit counts, first and last
 ledger timestamp, and the transcript line and byte range those timestamps bracket.
-It also emits the [reaction tail](#reaction-tail) past that range. It is computed
+It emits the [lead](#lead) and the [reaction tail](#reaction-tail) either side of that range too,
+because the ledger's own bounds miss both ends of a run. It is computed
 once and read by everything downstream, so no later step re-derives which sessions matter or where
 inside a transcript to look. It is the exercise's only tested seam because it is the only component
 whose failure is silent: a mis-sliced [span](#span) yields a confident distillation of the wrong

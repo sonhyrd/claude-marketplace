@@ -8,9 +8,10 @@ here, and every downstream step reads this index rather than re-deriving which s
 
 For each session in the window it emits the repository and worktree, the transcript path, the skill
 versions seen, the ledger record and non-zero-exit counts, the first and last ledger timestamp, and
-the transcript line/byte range those timestamps bracket, plus the bounded **reaction tail** that
-follows it — the turns after the last script exited, where a failure is actually handled and the
-final report is written. Sessions are classified `corpus` (the two
+the transcript line/byte range those timestamps bracket, and the two ranges either side of it that
+the ledger cannot see: the **lead** back to the turn that loaded pw-prove, which is where Steps 1 and
+2 live, and the bounded **reaction tail** after the last script exited, where a failure is actually
+handled and the final report is written. Sessions are classified `corpus` (the two
 repositories under audit), `control` (this repository's own dev and CI sessions, whose failures are
 deliberate) or `excluded` with a stated reason.
 
@@ -64,8 +65,8 @@ DEFAULT_SINCE = "2026-08-15"
 # The reaction tail. The span ends when the last shipped script EXITS, but what the agent then did
 # about that result — the turns where a failure is actually handled, or the final report is written
 # — lands after it. So the index emits a bounded tail as well, and the two caps below are measured
-# rather than guessed: across the 26 corpus sessions the reaction ran 15 to 85 lines and, in 25 of
-# 26, under six minutes. Neither cap binds on a reaction; they exist because 14 of those sessions
+# rather than guessed: across the 26 corpus sessions the reaction ran 10 to 128 lines and, in 25 of
+# 26, under six minutes. Neither cap binds on a reaction; they exist because 13 of those sessions
 # never hand control back, and two of those transcripts carry on into unrelated work for another
 # 1,145 and 2,617 lines. See docs/studies/session-distillation.md.
 DEFAULT_TAIL_LINES = 150
@@ -94,6 +95,11 @@ def end_of(ts, duration_ms):
         return ts
     ended = started + datetime.timedelta(milliseconds=duration_ms)
     return ended.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (ended.microsecond // 1000)
+
+
+def plus_minutes(ts, minutes):
+    """`ts` moved forward by `minutes`. A deadline, which is not what end_of() names."""
+    return end_of(ts, minutes * 60 * 1000)
 
 
 def die(message, code=1):
@@ -211,24 +217,11 @@ def scan_transcript(path, window):
     byte_start = byte_end = None
     entries = 0
     total_lines = 0
-    offset = 0
 
     try:
-        fh = open(path, "rb")
-    except OSError as exc:
-        return None, "transcript unreadable: %s" % exc
-
-    with fh:
-        for lineno, raw in enumerate(fh, start=1):
+        for lineno, start, end, rec in iter_records(path):
             total_lines = lineno
-            length = len(raw)
-            start = offset
-            offset += length
-            try:
-                rec = json.loads(raw.decode("utf-8", "replace"))
-            except ValueError:
-                continue
-            if not isinstance(rec, dict):
+            if rec is None:
                 continue
             ts = rec.get("timestamp")
             if not isinstance(ts, str) or ts < first_ts or ts > last_ts:
@@ -236,7 +229,9 @@ def scan_transcript(path, window):
             entries += 1
             if line_start is None:
                 line_start, byte_start = lineno, start
-            line_end, byte_end = lineno, start + length
+            line_end, byte_end = lineno, end
+    except OSError as exc:
+        return None, "transcript unreadable: %s" % exc
 
     if line_start is None:
         return None, ("no timestamped transcript entry falls between %s and %s"
@@ -254,6 +249,39 @@ def scan_transcript(path, window):
 SKILL_NAME = "pw-prove"
 
 
+def iter_records(path, start_line=1, start_byte=0):
+    """(lineno, byte_start, byte_end, record) for every line from `start_byte` on.
+
+    `record` is None for a line that is not a JSON object, so a caller can still place the line and
+    count its bytes. One walk with three callers, because the offset arithmetic is the part that
+    mis-slices a range silently when it is written out three times. Raises OSError like open() does.
+    """
+    with open(path, "rb") as fh:
+        fh.seek(start_byte)
+        offset = start_byte
+        lineno = start_line - 1
+        for raw in fh:
+            lineno += 1
+            start = offset
+            offset += len(raw)
+            try:
+                parsed = json.loads(raw.decode("utf-8", "replace"))
+            except ValueError:
+                parsed = None
+            yield lineno, start, offset, parsed if isinstance(parsed, dict) else None
+
+
+def names_skill(value):
+    """True when `value` addresses pw-prove itself, in any of the forms a caller writes it.
+
+    A skill is addressed bare (`pw-prove`), namespaced (`e2e:pw-prove`) or as a slash command
+    (`/e2e:pw-prove`), and any of those may be the whole argument or the head of one. A NEIGHBOUR
+    whose name merely starts with it (`pw-prove-lite`, `pw-prove-forensics`) is a different skill.
+    """
+    head = value.strip().split()[0] if value.strip() else ""
+    return head.lstrip("/").rsplit(":", 1)[-1] == SKILL_NAME
+
+
 def load_marker(rec):
     """The mark a record carries if it is the turn that loaded pw-prove, else None.
 
@@ -268,8 +296,13 @@ def load_marker(rec):
         if not isinstance(block, dict):
             continue
         if block.get("type") == "tool_use" and block.get("name") == "Skill":
-            if SKILL_NAME in json.dumps(block.get("input") or {}):
-                return "skill-tool"
+            # Matched on the NAME, not on a substring of the whole input. `SKILL_NAME in
+            # json.dumps(input)` would anchor on a call to `pw-prove-lite`, or on one whose
+            # arguments merely mention pw-prove — the bare-substring defect this repo already
+            # names once, in the eval judges.
+            for value in (block.get("input") or {}).values():
+                if isinstance(value, str) and names_skill(value):
+                    return "skill-tool"
     text = content if isinstance(content, str) else "".join(
         b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text")
     if not text:
@@ -278,8 +311,13 @@ def load_marker(rec):
     first = text.split("\n", 1)[0].strip()
     if first.startswith("Base directory for this skill:") and first.endswith(SKILL_NAME):
         return "skill-body"
-    if "<command-name>" in text and SKILL_NAME in text:
-        return "slash-command"
+    if "<command-name>" in text:
+        for line in text.split("\n"):
+            if "<command-name>" not in line:
+                continue
+            named = line.split("<command-name>", 1)[1].split("<", 1)[0]
+            if names_skill(named):
+                return "slash-command"
     return None
 
 
@@ -304,22 +342,10 @@ def scan_lead(path, span, first_ts, lead_lines):
         "stop": "not-found",
     }
     try:
-        fh = open(path, "rb")
-    except OSError:
-        return lead
-
-    offset = 0
-    with fh:
-        for lineno, raw in enumerate(fh, start=1):
-            start = offset
-            offset += len(raw)
+        for lineno, start, _end, rec in iter_records(path):
             if lineno >= span["line_start"]:
                 break
-            try:
-                rec = json.loads(raw.decode("utf-8", "replace"))
-            except ValueError:
-                continue
-            if not isinstance(rec, dict):
+            if rec is None:
                 continue
             ts = rec.get("timestamp")
             if isinstance(ts, str) and ts > first_ts:
@@ -330,6 +356,8 @@ def scan_lead(path, span, first_ts, lead_lines):
                 lead["marker"] = mark
                 lead["marker_line"] = lineno
                 lead["marker_byte"] = start
+    except OSError:
+        return lead
 
     if lead["marker_line"] is None:
         return lead
@@ -345,15 +373,15 @@ def scan_lead(path, span, first_ts, lead_lines):
     # Capped: walk forward to the first line the cap allows and start there.
     lead["stop"] = "line-cap"
     wanted = span["line_start"] - lead_lines
-    offset = 0
-    with open(path, "rb") as fh:
-        for lineno, raw in enumerate(fh, start=1):
+    try:
+        for lineno, start, _end, _rec in iter_records(path):
             if lineno == wanted:
                 lead["line_start"] = lineno
-                lead["byte_start"] = offset
+                lead["byte_start"] = start
                 lead["lines"] = lead_lines
                 break
-            offset += len(raw)
+    except OSError:
+        pass
     return lead
 
 
@@ -389,7 +417,7 @@ def scan_tail(path, span, span_until, tail_lines, tail_minutes):
     returns a dict naming which of the four stopped it: a tail that was cut and a tail that ran out
     are different evidence, and a reader who cannot tell them apart will read a cap as an ending.
     """
-    deadline = end_of(span_until, tail_minutes * 60 * 1000)
+    deadline = plus_minutes(span_until, tail_minutes)
     tail = {
         "line_start": span["line_end"] + 1,
         "line_end": span["line_end"],
@@ -400,38 +428,25 @@ def scan_tail(path, span, span_until, tail_lines, tail_minutes):
         "stop": "end-of-transcript",
     }
     try:
-        fh = open(path, "rb")
+        records = iter_records(path, span["line_end"] + 1, span["byte_end"])
     except OSError:
         return tail
 
-    with fh:
-        fh.seek(span["byte_end"])
-        lineno = span["line_end"]
-        offset = span["byte_end"]
-        for raw in fh:
-            lineno += 1
-            if tail["lines"] >= tail_lines:
-                tail["stop"] = "line-cap"
-                break
-            rec = None
-            try:
-                parsed = json.loads(raw.decode("utf-8", "replace"))
-                if isinstance(parsed, dict):
-                    rec = parsed
-            except ValueError:
-                pass
-            ts = (rec or {}).get("timestamp")
-            if isinstance(ts, str) and ts > deadline:
-                tail["stop"] = "time-cap"
-                break
-            offset += len(raw)
-            tail["line_end"] = lineno
-            tail["byte_end"] = offset
-            tail["lines"] += 1
-            if rec is not None and is_human_turn(rec):
-                tail["human_turn_line"] = lineno
-                tail["stop"] = "human-turn"
-                break
+    for lineno, _start, end, rec in records:
+        if tail["lines"] >= tail_lines:
+            tail["stop"] = "line-cap"
+            break
+        ts = (rec or {}).get("timestamp")
+        if isinstance(ts, str) and ts > deadline:
+            tail["stop"] = "time-cap"
+            break
+        tail["line_end"] = lineno
+        tail["byte_end"] = end
+        tail["lines"] += 1
+        if rec is not None and is_human_turn(rec):
+            tail["human_turn_line"] = lineno
+            tail["stop"] = "human-turn"
+            break
 
     return tail
 

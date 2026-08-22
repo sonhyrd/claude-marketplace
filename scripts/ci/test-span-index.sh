@@ -68,7 +68,10 @@ with open(path, "w", encoding="utf-8") as fh:
 ' "$W/projects/$slug/$uuid.jsonl" "$uuid" "$cwd" "$@"
 }
 
-# turns <slug> <uuid> <cwd> <spec...>  — a transcript with turn KINDS, for the reaction tail.
+# turns <slug> <uuid> <cwd> <spec...>  — a transcript with turn KINDS, for the lead and the tail.
+# NOTE it writes ONE untimestamped header line where transcript() above writes two, so its entries
+# start at line 2 and not line 3. The assertions below are line numbers; check which builder made
+# the fixture before reading one.
 # Each spec is `<kind>@<ts>`: `a` an assistant turn, `t` a tool result (a `user` record carrying
 # toolUseResult — the bulk of any real transcript and never a human turn), `h` a human turn (a
 # `user` record with prose and no toolUseResult), `x` a record with no timestamp at all.
@@ -139,6 +142,17 @@ def session(sid):
 print(eval(sys.argv[2]))
 ' "$1" "$2"; }
 
+# slice_lines <index-file> <range-key> — read the named range back out of the transcript through
+# its own byte offsets and count the lines it holds. A range whose bytes do not seek to its lines
+# is the silent failure this whole index exists to prevent, so all three are checked the same way.
+slice_lines() { python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1])); s = d["sessions"][0]; r = s[sys.argv[2]]
+with open(s["transcript"], "rb") as fh:
+    fh.seek(r["byte_start"]); buf = fh.read(r["byte_end"] - r["byte_start"])
+print(len([l for l in buf.decode().splitlines() if l]))
+' "$1" "$2"; }
+
 expect() {
   local name="$1" got="$2" want="$3"
   if [ "$got" = "$want" ]; then ok "$name"; else bad "$name — got '$got', wanted '$want'"; fi
@@ -173,13 +187,7 @@ else
   expect "span counts only the entries inside the window" \
     "$(field "$W/o1" 'session("'"$S1"'")["span"]["entries"]')" 3
   # The byte range must be seekable: reading [byte_start, byte_end) yields exactly those lines.
-  sliced=$(python3 -c '
-import json, sys
-d = json.load(open(sys.argv[1])); s = d["sessions"][0]["span"]
-with open(d["sessions"][0]["transcript"], "rb") as fh:
-    fh.seek(s["byte_start"]); buf = fh.read(s["byte_end"] - s["byte_start"])
-print(len([l for l in buf.decode().splitlines() if l]))
-' "$W/o1")
+  sliced=$(slice_lines "$W/o1" span)
   expect "byte range is seekable and holds exactly the spanned lines" "$sliced" 3
   expect "record count is the ledger's" "$(field "$W/o1" 'session("'"$S1"'")["records"]')" 2
   expect "non-zero exits are counted" "$(field "$W/o1" 'session("'"$S1"'")["nonzero_exits"]')" 1
@@ -483,13 +491,7 @@ else
     "$(field "$W/o15" 'session("'"$ST"'")["tail"]["stop"]')" human-turn
   expect "the tail counts its lines" \
     "$(field "$W/o15" 'session("'"$ST"'")["tail"]["lines"]')" 4
-  sliced=$(python3 -c '
-import json, sys
-d = json.load(open(sys.argv[1])); s = d["sessions"][0]; t = s["tail"]
-with open(s["transcript"], "rb") as fh:
-    fh.seek(t["byte_start"]); buf = fh.read(t["byte_end"] - t["byte_start"])
-print(len([l for l in buf.decode().splitlines() if l]))
-' "$W/o15")
+  sliced=$(slice_lines "$W/o15" tail)
   expect "the tail's byte range is seekable and holds exactly its lines" "$sliced" 4
 fi
 
@@ -511,7 +513,7 @@ else
 fi
 
 # --- case 15: the two caps ------------------------------------------------------------------------
-# 14 of the 26 corpus sessions have no human turn after their last script exit, and two of those
+# 13 of the 26 corpus sessions have no human turn after their last script exit, and two of those
 # transcripts continue into unrelated work for another 1,145 and 2,617 lines. Without a cap the
 # tail swallows the rest of the working day.
 echo ""
@@ -617,13 +619,7 @@ else
     "$(field "$W/o21" 'session("'"$SL"'")["lead"]["stop"]')" skill-load
   expect "and by which mark" \
     "$(field "$W/o21" 'session("'"$SL"'")["lead"]["marker"]')" slash-command
-  sliced=$(python3 -c '
-import json, sys
-d = json.load(open(sys.argv[1])); s = d["sessions"][0]; t = s["lead"]
-with open(s["transcript"], "rb") as fh:
-    fh.seek(t["byte_start"]); buf = fh.read(t["byte_end"] - t["byte_start"])
-print(len([l for l in buf.decode().splitlines() if l]))
-' "$W/o21")
+  sliced=$(slice_lines "$W/o21" lead)
   expect "the lead's byte range is seekable and holds exactly its lines" "$sliced" 2
 fi
 
@@ -639,6 +635,19 @@ expect "a Skill invocation naming another skill does not anchor it" \
   "$(field "$W/o22" 'session("'"$SL"'")["lead"]["line_start"]')" 3
 expect "the Skill tool is named as the mark" \
   "$(field "$W/o22" 'session("'"$SL"'")["lead"]["marker"]')" skill-tool
+
+# The near twin: a NEIGHBOUR skill whose name starts with pw-prove is a different skill, and a
+# substring match would anchor on it. This is the one-hit-one-twin rule from tests/pattern-corpus/.
+L="$W/l20t.jsonl"
+ledger_line "$SL" 2026-08-16T10:00:30.000Z 0 > "$L"
+turns proj-widget-lead "$SL" "$WS/hyrd-widget/krill" \
+  s:pw-prove-lite@2026-08-16T09:54:00.000Z c:e2e:pw-prove-forensics@2026-08-16T09:54:30.000Z \
+  s:e2e:pw-prove@2026-08-16T09:55:00.000Z a@2026-08-16T10:00:30.000Z
+run_index "$W/o22t" "$W/e22t" "$L"
+expect "a neighbour skill whose name merely starts with pw-prove does not anchor the lead" \
+  "$(field "$W/o22t" 'session("'"$SL"'")["lead"]["line_start"]')" 4
+expect "and the namespaced form of the real skill still does" \
+  "$(field "$W/o22t" 'session("'"$SL"'")["lead"]["marker"]')" skill-tool
 
 # The injected body is the whole SKILL.md, so only its first line can carry the mark.
 L="$W/l20b.jsonl"

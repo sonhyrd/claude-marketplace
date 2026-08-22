@@ -124,7 +124,7 @@ with its own fixtures.
 
 Everything under `scripts/` is repo-only tooling. Shell is the default; python3 is used where a
 script parses JSON or walks a tree rather than orchestrating subprocesses — `scripts/ci/derive-stamp.py`,
-the docs orphan check, and `scripts/forensics/span-index.py`. Neither takes an npm dependency.
+the docs orphan check, and `scripts/forensics/span-index.py`. None of them takes an npm dependency.
 
 ## Conventions
 
