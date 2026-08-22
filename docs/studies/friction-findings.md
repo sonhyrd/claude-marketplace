@@ -22,6 +22,13 @@ every other row is an open question for that pass, not a conclusion.
 **Frequency first.** The primary order is how many of the 26 corpus sessions hit the finding. A thing
 that cost ten sessions a minute each outranks a thing that cost one session an hour.
 
+**Ties are broken by severity, then by time, then by identifier**, and the rule is stated because
+half the list is a tie: four findings hit 8 sessions each, four hit 6, and four hit 3. Within one
+frequency, the more severe finding ranks higher; where severity also ties, the finding with the
+larger single measured time instance ranks higher; where both tie, the lower `FR` number wins, which
+is arbitrary and is meant to be — an arbitrary tie-break that is stated can be argued with, and one
+that is not stated cannot.
+
 **Severity overrides frequency, and every lift is stated.** Four findings sit above the frequency
 order. Each one names the frequency rank it was lifted from, so the ranking can be argued with rather
 than taken on trust. Severity is one of four values:
@@ -43,7 +50,11 @@ form `session:line` that a reader can open a month from now (the transcript path
 is in the [citation index](#citation-index) at the foot of this document); and the pw-prove
 **version(s)** it was observed on. Eight versions ran inside this corpus — 0.20.0, 0.21.0, 0.22.0,
 0.23.1, 0.24.0, 0.26.0, 0.27.0 and 0.27.1 — so a defect seen at 0.20.0 is not argued as if it
-described 0.27.1.
+described 0.27.1. The Versions cell is always the deduped set of versions the ledger recorded for the
+sessions the Frequency cell names, so a reader can check the two against each other.
+
+A fourth field, **Status**, appears only where there is something to say: `confirmed-fixed`, on a
+finding whose cause the corpus itself shows to be gone. Its absence means open, not unexamined.
 
 **Fault side is a field, not a separate list.** Each finding is marked pw-prove's fault, the target
 repository's, or a **boundary case**. A boundary case is kept as a boundary case: it is never forced
@@ -68,13 +79,12 @@ to.
 
 ## The corpus, in one paragraph
 
-26 pw-prove sessions run against real work over five days, 14 against `nuxt-hyrd-chrysus` and 12
-against `hyrd-widget`, carrying **632 shipped-script records and 57 non-zero exits**. That figure
-supersedes the 656/60 quoted while the exercise was designed; the earlier number was taken one
-repository too wide, before `hyrd-ui-library` was excluded. The five `e2e-skills` dev sessions
-(`d411a27c`, `4bcf393a`, `7c1f2e12`, `bb119765`, `8ab5f720`) carry a further 488 records and 268
-non-zero exits — four fifths of the window's raw failure count — and are a control list, not corpus.
-No finding below is drawn from them.
+The corpus, the control list and the exclusion are defined once, in
+[run forensics](run-forensics.md#what-the-exercise-covers), and are not restated here. Only the two
+figures every count below is a fraction of are repeated: **26 sessions**, 14 against
+`nuxt-hyrd-chrysus` and 12 against `hyrd-widget`, carrying **632 shipped-script records and 57
+non-zero exits**. Every `n of 26` in this document is a count of those sessions. No finding is drawn
+from the five control sessions.
 
 ---
 
@@ -86,13 +96,13 @@ No finding below is drawn from them.
 
 | | |
 |---|---|
-| **Rank** | 1 — **lifted from frequency rank 17** (n=3) |
+| **Rank** | 1 — **lifted from frequency rank 19** (n=3) |
 | **Frequency** | 3 of 26 — `0259fd57`, `3072aa9b`, `c871a4f2` |
 | **Severity** | **S1** |
 | **Time** | ~2m40s of redone mutation work (`3072aa9b`); one killed listener and a re-staged restart (`c871a4f2`); three preview-server starts for one mutation check (`0259fd57`) |
 | **Attribution** | `### Bring the environment up (autonomous — don't stop to ask)` (Step 3) and `### Mutation check (PR-mode: REQUIRED — hard-bounded)` (Step 7); shipped script `skills/pw-prove/scripts/preflight.mjs`, restart mode |
 | **Citations** | `0259fd57:492` reported, `:511` refuted · `3072aa9b:1037` reported, `:1052` refuted · `c871a4f2:523` reported, `:531`/`:537` refuted |
-| **Versions** | 0.24.0, 0.24.0, 0.26.0 |
+| **Versions** | 0.24.0, 0.26.0 |
 | **Fault** | **pw-prove** |
 
 The restarted preview server prints its `serving …` banner **before** it binds. When the bind then
@@ -116,13 +126,13 @@ sessions at risk: every PR-mode run against a built target executes this restart
 
 | | |
 |---|---|
-| **Rank** | 2 — **lifted from frequency rank 6** (n=8) |
+| **Rank** | 2 — **lifted from frequency rank 5** (n=8) |
 | **Frequency** | 8 of 26 — `0259fd57`, `240d63c1`, `3072aa9b`, `7cc7e6bc`, `a7cdcd1c`, `bbae9aa2`, `c871a4f2`, `cbe2813b` |
 | **Severity** | **S1** — carries the corpus's one **landed** false proof |
 | **Time** | ~24 min of superseded work plus two published recordings (`0259fd57`); ~11 min and 21 frame reads (`240d63c1`); ~9 min and two extra films (`3072aa9b`) |
 | **Attribution** | `### Clip-fidelity audit` (Step 6) and `### Clip inspection — look at the frame before anyone else does` (Step 7); shipped script `skills/pw-prove/scripts/clip-fidelity.mjs` |
 | **Citations** | `0259fd57:334` (the claim), `:342` (the operator's rejection), `:347` (the concession) · `7cc7e6bc:340` gate green, `:592` three off-frame defects · `bbae9aa2:355` `verdict: clip fidelity contract satisfied`, `:406` three clips for four tests · `3072aa9b:541` audit 14/14, `:993`/`:1003` three payoffs missing · `a7cdcd1c:964` vacuous scenario caught only by the frame read · `cbe2813b:503` two chapters published off-payoff |
-| **Versions** | 0.24.0, 0.26.0/0.27.0, 0.24.0, 0.24.0, 0.23.1, 0.23.1, 0.26.0, 0.27.0 |
+| **Versions** | 0.23.1, 0.24.0, 0.26.0, 0.27.0 |
 | **Fault** | **pw-prove** |
 
 `clip-fidelity.mjs spec` proves a `PW_PROVE_CLIP`-gated, `JUSTIFIED` dwell exists inline and that the
@@ -151,13 +161,13 @@ acceptance criterion, and no rule for a frame that is legible but off-payoff —
 
 | | |
 |---|---|
-| **Rank** | 3 — **lifted from frequency rank 13** (n=4) |
+| **Rank** | 3 — **lifted from frequency rank 16** (n=4) |
 | **Frequency** | 4 of 26 — `18697484`, `998dd2c1`, `a273eefa`, `af23ab55` |
 | **Severity** | **S1** — three of the four published a proof page of a base that would not ship |
 | **Time** | ~14 min and 36 turns (`18697484`) · ~9 min and 23 turns (`998dd2c1`) · ~10m21s and 24 turns (`a273eefa`) · ~5m30s plus one orphaned public recording (`af23ab55`) |
 | **Attribution** | `### Bring the environment up (autonomous — don't stop to ask)` (Step 3), the base-sync paragraph |
 | **Citations** | `18697484:733` · `998dd2c1:544` · `a273eefa:780`, `:793` · `af23ab55:65` (the fetch without the merge), `:778` `BASE AHEAD — merge needed`, 41 minutes and one published page later |
-| **Versions** | 0.24.0, 0.26.0, 0.27.0, 0.27.0 |
+| **Versions** | 0.24.0, 0.26.0, 0.27.0 |
 | **Fault** | **pw-prove** — the instruction is explicit and unconditional in the body each run was handed |
 
 The paragraph's own stated reason is the failure: *a PR proven against a stale base can go green on
@@ -210,13 +220,16 @@ transcript, and because the failure mode is worst exactly when the run has least
 | | |
 |---|---|
 | **Rank** | 5 — frequency rank 1 |
-| **Frequency** | 18 of 26 (every session that proved a built target and reached Step 7's mutation check) |
+| **Frequency** | 22 of 26 — every session whose distillation records a forced `BUILD_REUSE=never` mutation rebuild: `0259fd57`, `10748ea5`, `18697484`, `1927b90c`, `240d63c1`, `3072aa9b`, `67b624f4`, `6f307a2f`, `8eb0585c`, `9899ba51`, `998dd2c1`, `a273eefa`, `a7cdcd1c`, `af23ab55`, `bbae9aa2`, `befb0456`, `c871a4f2`, `cbe2813b`, `d32c2495`, `d3c037d9`, `f28c3493`, `fa0cc83b` |
 | **Severity** | **S3** — by design, priced by the skill itself; recorded as cost, not as a defect |
 | **Time** | 20m50s of a 71-minute run, 29% (`a7cdcd1c`) · 12m41s of 85 min (`3072aa9b`) · 8m24s of 66 min (`0259fd57`) · 7m36s of 51 min (`1927b90c`) · 343s of 27 min, 21% (`f28c3493`) |
 | **Attribution** | `### Mutation check (PR-mode: REQUIRED — hard-bounded)` — `BUILD_REUSE=never` is stated as not optional; and `### Bring the environment up (autonomous — don't stop to ask)` for the bring-up build |
 | **Citations** | `a7cdcd1c:1086` (`BUILD=failed BUILD_EXIT=143` after 396s, then 405s again at `:1111`) · `3072aa9b:133`/`:691`/`:1008` (242s + 246s + 273s) · `1927b90c:665` (the run's own report: *"the proof run cost two full builds (241s + 215s for the mutation rebuild)"*) |
-| **Versions** | all eight versions in the corpus |
+| **Versions** | 0.20.0, 0.21.0, 0.22.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 — every version in the corpus |
 | **Fault** | **pw-prove**, by design |
+
+The four sessions that do not appear above are the two whose range holds no `preflight.mjs` build
+at all, and the two whose mutation verdict was reported `carried` so nothing was rebuilt.
 
 Two to four full production builds per run, at 100–450 seconds each. Two of them are mandated: the
 Step-3 bring-up and the Step-7 `BUILD_REUSE=never` mutation rebuild. Runs that skipped the base merge
@@ -238,7 +251,7 @@ that puts FR1 first.
 | **Time** | 7–25 seconds and one turn per instance; `18697484` ran `scan.mjs` three times in 49s and `hermetic.mjs` three times back to back; `b6dbd8be` ran `hermetic.mjs` six times, three of them for the filter alone |
 | **Attribution** | `### e2e-reviewer skill` (Step 6) and `### Hermetic audit (on the audit run, before anything is filmed)` (Step 7); shipped scripts `skills/e2e-reviewer/scripts/scan.mjs` and `skills/pw-prove/scripts/hermetic.mjs` |
 | **Citations** | `1927b90c:235`/`:240` (`tail -60`, then the same scan grepped) · `18697484:365`/`:372`/`:376` (`tail -30` → `grep -nE` → `sed -n '3,7p'`) · `67b624f4:381` (*"Need the LIVE section — it scrolled off."*) · `998dd2c1:303`/`:308` · `c871a4f2` two scans |
-| **Versions** | 0.20.0 through 0.27.1 — every version in the corpus |
+| **Versions** | 0.20.0, 0.21.0, 0.22.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
 | **Fault** | **boundary case** — the invocations are pw-prove's, the output shapes are the two scripts', and the filters are the agent's |
 
 The most frequent finding in the corpus, and the cheapest per instance. Both scripts emit more output
@@ -264,7 +277,7 @@ passing without ever having seen a zero exit code for it.
 | **Time** | ~0 — this costs the reader, not the run |
 | **Attribution** | `### e2e-reviewer skill` (Step 6), whose rule is *"P1/P2 found: output in the final report"*; and `## pw-prove — Complete`, whose template line is `e2e-reviewer: N P0 (fixed), N P1 (listed below)` |
 | **Citations** | `bbae9aa2:369` (`4 total hit(s), 0 P0, 4 P1/P2`) vs `:551` (`0 P0, 1 P1`) · `998dd2c1:304` (nine unsuppressed hits) vs `:719` (`0 P0, 0 P1`) · `cbe2813b:307` (the grep that stripped the severity banner), `:317` (`0 P0` asserted), ledger `scan.mjs exit=1` · `9899ba51:971` (a `[P0?]` row naming the run's own spec) vs `:1271` (`0 P0, 0 P1`) · `a7cdcd1c:900` (output with no tally at all) vs `:1193` (`0 P0, 1 P1`) · `18697484:927` (the required line simply absent) |
-| **Versions** | 0.21.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0 |
+| **Versions** | 0.21.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
 | **Fault** | **pw-prove** for the report line; **boundary** where the tally was unreadable because of FR25 |
 
 Twelve of 26 completion reports state a P0/P1 count the transcript cannot support. The mechanism is
@@ -278,7 +291,7 @@ P1 where the scanner printed five; `8eb0585c` describes three hits as "both" ove
 four; `10748ea5` presents an internal YAGNI judgement as a second reviewer finding). Two ran the gate
 with a tier switched off and did not say so in the report (`3072aa9b`, `af23ab55` — Tier 1 ESLint
 skipped by an env flag the run set itself); `fa0cc83b` did the same thing and **did** disclose it
-(`Tier coverage: 3 only`), which is the shape the other two should have used.
+(`Tier coverage: 3 only`), so the corpus carries both shapes and a reader can compare them.
 
 #### FR6 — pw-prove mandates a dwell shape that e2e-reviewer's suppression cannot see
 
@@ -290,7 +303,7 @@ skipped by an env flag the run set itself); `fa0cc83b` did the same thing and **
 | **Time** | seconds per run; its real cost is the unreadable gate verdict |
 | **Attribution** | `## Step 5: Generate` (the dwell template) and `### Clip-fidelity audit` (which requires it) against `### e2e-reviewer skill`; shipped scripts `skills/pw-prove/scripts/clip-fidelity.mjs` and `skills/e2e-reviewer/scripts/scan.mjs` (`lineIsJustified`) |
 | **Citations** | `998dd2c1:258` (`payoff dwell: 9/9 … carry a JUSTIFIED, PW_PROVE_CLIP-gated wait`, exit 0) against `:304` (the same nine lines listed as unsuppressed `#9` hits) · `af23ab55:410` vs `:440` (six lines, both ways) · `10748ea5:378` vs `:268` |
-| **Versions** | 0.21.0 through 0.27.1; `scan.mjs` 1.10.0 throughout |
+| **Versions** | 0.21.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1; `scan.mjs` 1.10.0 throughout |
 | **Fault** | **boundary case** — the construct is pw-prove's, the suppression gap is e2e-reviewer's, and neither skill is wrong on its own terms |
 
 Two shipped scripts read the same code and disagree about it. Step 5's template writes the guard and
@@ -305,17 +318,46 @@ write, in eleven of 26 sessions. `998dd2c1` is the clearest single pair of citat
 one script printing `9/9 … carry a JUSTIFIED … wait` and the other printing the same nine lines as
 findings, three minutes apart.
 
+#### FR9 — no way to watch a long-running script, so the run circles on "is it done yet"
+
+| | |
+|---|---|
+| **Rank** | 9 — frequency rank 6 |
+| **Frequency** | 8 of 26 — `10748ea5`, `3072aa9b`, `3deeddd7`, `6f307a2f`, `8eb0585c`, `d3c037d9`, `fa0cc83b`, `fe171475` |
+| **Severity** | **S3** |
+| **Time** | **46m11s** of dead session, the largest single loss in the corpus (`3deeddd7`) · ~11 min over eight tool calls reading a truncated failure log (`3072aa9b`) · 3m00s on a foreground probe daemon (`fa0cc83b`) · 2m33s and eight calls (`8eb0585c`) · 2m20s (`6f307a2f`) · 2m08s (`d3c037d9`) |
+| **Attribution** | `### Bring the environment up (autonomous — don't stop to ask)` (Step 3), item 3 — the harness-tracked background task with a readable log; `### Recon — the probe is the question channel, the test run is the validator` for the probe daemon; `### Failure handling (max 3 auto-fix attempts, fewer if the failure stops changing)` and its **Token diet** paragraph |
+| **Citations** | `3deeddd7:106` (the plan posted, the turn ended, both background tasks killed), `:113`/`:115` (the kill notifications, 46 minutes later) · `fa0cc83b:824` (`Exit code 143 / Command timed out after 3m 0s`), `:828` (*"The probe `start` is a daemon — I ran it in the foreground"*) · `3072aa9b:666` (*"The log got truncated to its tail"*) · `8eb0585c:156` (a `ToolSearch` for `Monitor` mid-loop) · `6f307a2f:188` (the agent's own diagnosis: `| tail -25` buffers until exit) |
+| **Versions** | 0.20.0, 0.21.0, 0.22.0, 0.23.1, 0.24.0, 0.27.0, 0.27.1 |
+| **Fault** | **boundary case** — the harness owns the turn boundary and the shell timeout; pw-prove owns the instruction to background the work and gives no way to observe it |
+
+The section tells the run to put the build and the proof run in a harness-tracked background task with
+a readable log. It says nothing about how to *wait* on one, so the corpus contains six different
+improvisations for the same question: `tail` polls, `sleep` chains that the host refuses, an `until
+grep` watcher that exits with nothing, a `ToolSearch` for a `Monitor` tool that is then not used, and
+a `TaskOutput` poll that finally works.
+
+`3deeddd7` is the extreme and the most instructive: the run started the build in the background,
+posted its Step-4 plan, and **ended its turn** — which the harness treats as the end of the
+background tasks. Step 4's own instruction is to post the plan and continue *immediately*, so the
+body is implicated in the turn-end even though the kill is the host's. The session woke 46 minutes
+later on the kill notifications and redid the bring-up.
+
+Two failures in this group are self-inflicted and worth separating: `fa0cc83b` and `d3c037d9` both ran
+`probe.mjs start` in the foreground against an explicit bolded instruction to background it, and paid
+the shell timeout — 3m00s and 2m08s respectively.
+
 #### FR7 — Step 8 says "no questions" and eight runs asked one at the push
 
 | | |
 |---|---|
-| **Rank** | 9 — frequency rank 5 (tied with FR8, FR9 and FR2's frequency; ordered by measured idle time) |
+| **Rank** | 10 — frequency rank 7 |
 | **Frequency** | 8 of 26 — `0259fd57`, `10748ea5`, `240d63c1`, `3deeddd7`, `6f307a2f`, `8eb0585c`, `befb0456`, `f28c3493` |
 | **Severity** | **S3** |
 | **Time** | **26m35s** (`10748ea5`) · **8m38s** (`0259fd57`) · 3m16s (`f28c3493`) · 1m47s (`8eb0585c`) · 39s (`3deeddd7`); `befb0456` never resumed inside its range, and `6f307a2f` ended on the question |
 | **Attribution** | `## Step 8: Deliver (PR-mode tail — deterministic, no questions)`, item 4 (`Push`) and its `Before pushing, read what the push will carry` bullet |
 | **Citations** | `10748ea5:525` (question 12:35:33Z, answer 13:02:08Z), `:63` records that the bullet's pointer to *"the no-skip-form stop below"* names a subsection absent from the 0.27.0 body · `0259fd57:319`–`:321` · `befb0456:540` (the range ends on the question) · `8eb0585c:561` · `f28c3493:486` |
-| **Versions** | 0.22.0, 0.24.0, 0.26.0/0.27.0, 0.27.0/0.27.1 |
+| **Versions** | 0.22.0, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
 | **Fault** | **boundary case** — see FR27 |
 
 The two largest idle blocks measured anywhere in this corpus are both this finding. Step 8 declares
@@ -335,13 +377,13 @@ side as FR27.
 
 | | |
 |---|---|
-| **Rank** | 10 — frequency rank 5 |
+| **Rank** | 11 — frequency rank 8 |
 | **Frequency** | 8 of 26 — `0259fd57`, `10748ea5`, `1927b90c`, `3deeddd7`, `9899ba51`, `a7cdcd1c`, `af23ab55`, `d32c2495` |
 | **Severity** | **S3** |
 | **Time** | ~25m24s to a from-scratch rewrite (`1927b90c`) · ~13 min circling on a tab parameter and a panel marker (`a7cdcd1c`) · ~10 min diagnosing a 114.5s `page.goto` (`3deeddd7`) · ~7m30s across three red runs (`d32c2495`) |
 | **Attribution** | `### Recon — the probe is the question channel, the test run is the validator` (Step 3) |
 | **Citations** | `3deeddd7:362` (*"Trace network data is too sparse. Using the probe — the sanctioned recon channel — to see what hangs"*, reached only in Step 7) · `1927b90c:203` (the wrong host chosen), `:434` (the right one, found after two 3-minute failing runs) · `a7cdcd1c:758` (`tab=application`, singular, read off the live DOM after the spec asserted the plural) · `10748ea5:268` (spec written 12:22:50Z), `:298` (probe started 12:23:26Z), `:324` (the patch) · `d32c2495:390` (*"I'll stop guessing and read the aria snapshot Playwright already captured"*) |
-| **Versions** | 0.21.0, 0.22.0, 0.23.1, 0.24.0, 0.27.0, 0.27.0/0.27.1 |
+| **Versions** | 0.21.0, 0.22.0, 0.23.1, 0.24.0, 0.27.0, 0.27.1 |
 | **Fault** | **pw-prove** — the section names the inversion it suffers from; **boundary** where the underlying fact is the application's |
 
 The section's own heading states the rule the corpus keeps inverting: the probe is the question
@@ -365,46 +407,17 @@ long-lived context whose translation catalog has resolved, while every Playwrigh
 one. The recon returned German control labels; the spec asserted them; the first audit run got
 English.
 
-#### FR9 — no way to watch a long-running script, so the run circles on "is it done yet"
-
-| | |
-|---|---|
-| **Rank** | 11 — frequency rank 5 |
-| **Frequency** | 8 of 26 — `10748ea5`, `3072aa9b`, `3deeddd7`, `6f307a2f`, `8eb0585c`, `d3c037d9`, `fa0cc83b`, `fe171475` |
-| **Severity** | **S3** |
-| **Time** | **46m11s** of dead session, the largest single loss in the corpus (`3deeddd7`) · ~11 min over eight tool calls reading a truncated failure log (`3072aa9b`) · 3m00s on a foreground probe daemon (`fa0cc83b`) · 2m33s and eight calls (`8eb0585c`) · 2m20s (`6f307a2f`) · 2m08s (`d3c037d9`) |
-| **Attribution** | `### Bring the environment up (autonomous — don't stop to ask)` (Step 3), item 3 — the harness-tracked background task with a readable log; `### Recon — the probe is the question channel, the test run is the validator` for the probe daemon; `### Failure handling (max 3 auto-fix attempts, fewer if the failure stops changing)` and its **Token diet** paragraph |
-| **Citations** | `3deeddd7:106` (the plan posted, the turn ended, both background tasks killed), `:113`/`:115` (the kill notifications, 46 minutes later) · `fa0cc83b:824` (`Exit code 143 / Command timed out after 3m 0s`), `:828` (*"The probe `start` is a daemon — I ran it in the foreground"*) · `3072aa9b:666` (*"The log got truncated to its tail"*) · `8eb0585c:156` (a `ToolSearch` for `Monitor` mid-loop) · `6f307a2f:188` (the agent's own diagnosis: `| tail -25` buffers until exit) |
-| **Versions** | 0.20.0, 0.21.0, 0.22.0, 0.24.0, 0.27.0/0.27.1, 0.23.1 |
-| **Fault** | **boundary case** — the harness owns the turn boundary and the shell timeout; pw-prove owns the instruction to background the work and gives no way to observe it |
-
-The section tells the run to put the build and the proof run in a harness-tracked background task with
-a readable log. It says nothing about how to *wait* on one, so the corpus contains six different
-improvisations for the same question: `tail` polls, `sleep` chains that the host refuses, an `until
-grep` watcher that exits with nothing, a `ToolSearch` for a `Monitor` tool that is then not used, and
-a `TaskOutput` poll that finally works.
-
-`3deeddd7` is the extreme and the most instructive: the run started the build in the background,
-posted its Step-4 plan, and **ended its turn** — which the harness treats as the end of the
-background tasks. Step 4's own instruction is to post the plan and continue *immediately*, so the
-body is implicated in the turn-end even though the kill is the host's. The session woke 46 minutes
-later on the kill notifications and redid the bring-up.
-
-Two failures in this group are self-inflicted and worth separating: `fa0cc83b` and `d3c037d9` both ran
-`probe.mjs start` in the foreground against an explicit bolded instruction to background it, and paid
-the shell timeout — 3m00s and 2m08s respectively.
-
 #### FR10 — `Clips: N inspected` counts frames from a film that was thrown away
 
 | | |
 |---|---|
-| **Rank** | 12 — frequency rank 8 |
+| **Rank** | 12 — frequency rank 9 |
 | **Frequency** | 7 of 26 — `240d63c1`, `3072aa9b`, `3deeddd7`, `9899ba51`, `a7cdcd1c`, `af23ab55`, `c871a4f2` |
 | **Severity** | **S2** |
 | **Time** | ~0 to the run |
 | **Attribution** | `### Clip inspection — look at the frame before anyone else does` — *"A clip you did not look at is reported as **uninspected**, which is the honest verdict"* and *"A clip that was re-filmed says so"*; `## pw-prove — Complete`, the `Clips:` line |
 | **Citations** | `3072aa9b:1149` (`Clips: 14 inspected`) against `:982`/`:983`/`:994` — the only three frame reads after the final film at `:964`, the other eleven being of a film deleted before it · `c871a4f2:696` (`Clips: 9 inspected`) against four post-re-film reads at `:462`–`:479` · `240d63c1:756` (`21 inspected, all legible after one re-film`) against four image reads at `:671`–`:676` · `3deeddd7:751` (`6 of 11 frames inspected`) against five `Read` calls |
-| **Versions** | 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
+| **Versions** | 0.21.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
 | **Fault** | **pw-prove** |
 
 Every one of these reports gives a per-clip description for clips whose delivered frame was never
@@ -417,41 +430,17 @@ The rule that would have caught it is in the same section the runs were followin
 Two sessions also dropped the required re-film marker entirely (`9899ba51`, `a7cdcd1c`), so a reader
 cannot tell the delivered film from the first one.
 
-#### FR11 — the failure-handling bound is announced and then walked past, and `playwright-debugger` is invoked in **zero** of 26 sessions
-
-| | |
-|---|---|
-| **Rank** | 13 — frequency rank 9 |
-| **Frequency** | 6 of 26 for the bound — `1927b90c`, `240d63c1`, `9899ba51`, `a7cdcd1c`, `af23ab55`, `fe171475`. **0 of 26** for the prescribed handover |
-| **Severity** | **S3** |
-| **Time** | 9m47s of operator idle after the checkpoint was escalated instead of taken (`1927b90c`) · ~53 min across five concurrent regression batches against a bound of three (`240d63c1`) · 16 Playwright runs over 72 minutes with the bound never applied (`fe171475`) |
-| **Attribution** | `### Failure handling (max 3 auto-fix attempts, fewer if the failure stops changing)` — its **No-progress checkpoint** table and its *"Do not attempt a 4th fix"* / *"invoke `playwright-debugger` (Skill tool)"* close; and `### The handover stop — PR-mode's exit when the loop is exhausted` |
-| **Citations** | `1927b90c:308` (*"the no-progress checkpoint trips"*), `:349`/`:350` (the checkpoint put to the operator as a three-option form instead), `:351` (answered 9m47s later) · `a7cdcd1c:845` (*"the no-progress checkpoint trips, so the heal loop stops here"*), then `:852`/`:858`/`:866` continue to green · `af23ab55:587` (*"Final fix"*, the fourth) · `9899ba51:1011`/`:1026`/`:1039`/`:1049` (four edits against three) |
-| **Versions** | 0.21.0, 0.23.1, 0.24.0, 0.26.0/0.27.0, 0.27.0 |
-| **Fault** | **pw-prove** — the rule is unambiguous and was in the body every one of these runs was handed |
-
-The strongest single number in this corpus: `playwright-debugger` is the prescribed next move when
-the loop is exhausted, and it is invoked **nowhere in 26 sessions**. In five of the six, the
-checkpoint was recognised by name — quoted back from the body in the run's own words — and then not
-executed. Two runs continued to green and delivered; the operator sanctioned one of them explicitly.
-A rule whose breach reliably produces a good outcome is the hardest kind to keep, and that is exactly
-what the corpus records.
-
-`fe171475` is the counter-shape: 16 Playwright runs, a pass count that went 6 → 6 → 5 → 6 and stopped,
-and the bound never applied at all — the run was circling on which HAR entries to add, converged on
-the network and never on the pass count, and ended by publishing a diagnostic film of a 6/13 suite.
-
 #### FR12 — one bounded mutation leaves shipped scenarios with no guard, and the report does not always say so
 
 | | |
 |---|---|
-| **Rank** | 14 — frequency rank 9 |
+| **Rank** | 13 — frequency rank 10 |
 | **Frequency** | 6 of 26 — `18697484`, `3deeddd7`, `67b624f4`, `6f307a2f`, `8eb0585c`, `d3c037d9` |
 | **Severity** | **S1** in `6f307a2f` (a non-guarding test shipped inside a green 13/13 count); **S2** elsewhere |
 | **Time** | ~7 min redoing a mutate–rebuild–run cycle against the wrong component (`8eb0585c`); ~8 min and three forced rebuilds on an undetectable target (`d3c037d9`) |
 | **Attribution** | `### Mutation check (PR-mode: REQUIRED — hard-bounded)` — its scope line (*"the scenarios this run wrote"*, plural) against its budget (*"ONE bounded source mutation"*), and its verdict ladder |
 | **Citations** | `6f307a2f:396` (test 2 passes under mutation), `:402` (declared `unguardable at that layer` on the first green, skipping the ladder's mandated strengthen-and-repeat), `:489` (shipped in the 13/13 count) · `8eb0585c:426` (`1 failed … 2 passed` — two scenarios with no mutation evidence) · `67b624f4:543` (`-g` scoped to one of two new scenarios; the report's flat `Mutation: RED` is unqualified) · `18697484:922`/`:927` (`Mutation: RED` reported for a spec materially rewritten after the check ran) · `3deeddd7:485` (a mutation that moved the built artifact by 3 bytes and proved nothing — caught by the run at `:493`) |
-| **Versions** | 0.22.0, 0.24.0, 0.26.0, 0.27.0/0.27.1, 0.20.0 |
+| **Versions** | 0.20.0, 0.22.0, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
 | **Fault** | **pw-prove** |
 
 The section's headline scopes the check to the scenarios the run wrote, plural; its budget is one
@@ -471,17 +460,60 @@ materially rewritten after a base merge, and no second check ran. The verdict is
 true, and the report does not say it was not re-derived. The plain reason it was not repeated is
 FR24 — a forced rebuild the section itself prices at ~635s.
 
+#### FR14 — the report's AC arithmetic does not reconcile with its own tables
+
+| | |
+|---|---|
+| **Rank** | 14 — frequency rank 11 |
+| **Frequency** | 6 of 26 — `1927b90c`, `3deeddd7`, `a7cdcd1c`, `af23ab55`, `cbe2813b`, `f28c3493` |
+| **Severity** | **S2** |
+| **Time** | ~0 |
+| **Attribution** | `## pw-prove — Complete`, the `ACs:` line and its invariant (*M = the Step-2 AC table's row count*); `## Step 4: Plan — notify-and-continue (PR-mode) / approval gate (coverage-gap)` |
+| **Citations** | `cbe2813b:669` (`8 proven of 9 total`, with a parenthetical that sums to 10, against ten-row tables at `:259` and `:653`) · `f28c3493:513` (`8 proven of 8 total`, against `:283` where a spec carrying three of those ACs failed and `:323` where that file is absent from the verified set) · `3deeddd7:615` (`22 proven of 22`, against `:605`'s `2 failed … 20 passed`) · `1927b90c:665` (`8 proven of 9`, contradicted by the same report naming a second unproven item) · `a7cdcd1c:1193` (the third number counts the scenarios the run wrote, because no Step-2 AC table exists in range) |
+| **Versions** | 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
+| **Fault** | **pw-prove** |
+
+The invariant exists precisely so a reader can check the report against something. In five of the six
+the arithmetic is visibly wrong inside the report itself, and in three the same report discloses the
+shortfall in prose two paragraphs later — so the number is misleading while the message is not. In
+`a7cdcd1c` the invariant is unenforceable rather than broken: no Step-2 AC table was ever produced
+(FR15), so the third number is self-referential and cannot be checked at all.
+
+#### FR11 — the failure-handling bound is announced and then walked past, and `playwright-debugger` is invoked in **zero** of 26 sessions
+
+| | |
+|---|---|
+| **Rank** | 15 — frequency rank 12 |
+| **Frequency** | 6 of 26 for the bound — `1927b90c`, `240d63c1`, `9899ba51`, `a7cdcd1c`, `af23ab55`, `fe171475`. **0 of 26** for the prescribed handover |
+| **Severity** | **S3** |
+| **Time** | 9m47s of operator idle after the checkpoint was escalated instead of taken (`1927b90c`) · ~53 min across five concurrent regression batches against a bound of three (`240d63c1`) · 16 Playwright runs over 72 minutes with the bound never applied (`fe171475`) |
+| **Attribution** | `### Failure handling (max 3 auto-fix attempts, fewer if the failure stops changing)` — its **No-progress checkpoint** table and its *"Do not attempt a 4th fix"* / *"invoke `playwright-debugger` (Skill tool)"* close; and `### The handover stop — PR-mode's exit when the loop is exhausted` |
+| **Citations** | `1927b90c:308` (*"the no-progress checkpoint trips"*), `:349`/`:350` (the checkpoint put to the operator as a three-option form instead), `:351` (answered 9m47s later) · `a7cdcd1c:845` (*"the no-progress checkpoint trips, so the heal loop stops here"*), then `:852`/`:858`/`:866` continue to green · `af23ab55:587` (*"Final fix"*, the fourth) · `9899ba51:1011`/`:1026`/`:1039`/`:1049` (four edits against three) |
+| **Versions** | 0.21.0, 0.23.1, 0.24.0, 0.26.0, 0.27.0 |
+| **Fault** | **pw-prove** — the rule is unambiguous and was in the body every one of these runs was handed |
+
+The strongest single number in this corpus: `playwright-debugger` is the prescribed next move when
+the loop is exhausted, and it is invoked **nowhere in 26 sessions**. In five of the six, the
+checkpoint was recognised by name — quoted back from the body in the run's own words — and then not
+executed. Two runs continued to green and delivered; the operator sanctioned one of them explicitly.
+A rule whose breach reliably produces a good outcome is the hardest kind to keep, and that is exactly
+what the corpus records.
+
+`fe171475` is the counter-shape: 16 Playwright runs, a pass count that went 6 → 6 → 5 → 6 and stopped,
+and the bound never applied at all — the run was circling on which HAR entries to add, converged on
+the network and never on the pass count, and ended by publishing a diagnostic film of a 6/13 suite.
+
 #### FR13 — Step 6's quality gate runs after Step 7, and in one session after the publish
 
 | | |
 |---|---|
-| **Rank** | 15 — frequency rank 9 |
+| **Rank** | 16 — frequency rank 13 |
 | **Frequency** | 6 of 26 — `10748ea5`, `18697484`, `240d63c1`, `8eb0585c`, `b6dbd8be`, `befb0456` |
 | **Severity** | **S3** — nothing false shipped, but three sessions were one P0 away from an invalidated proof page |
 | **Time** | ~6m08s of full-suite runs executed against specs the audit would have blocked (`b6dbd8be`) · ~11 min and 21 frame reads spent before the gate that would have prevented them (`240d63c1`) · one extra audit run plus one extra hermetic audit (`10748ea5`) |
 | **Attribution** | `## Step 6: e2e-reviewer (quality gate)`, `### YAGNI audit (immediately after writing code)`, and the `## Pipeline Overview`'s ordering; `### Clip-fidelity audit`'s *"Exit 0 is the only way to Step 7"* |
 | **Citations** | `8eb0585c` — `publish-proof.mjs` at 17:03:06, `scan.mjs` at 17:04:18 (ledger); the gate ran after the recording was published · `befb0456:446`–`:470` (the gate at 18:12:41, the film at 18:04:44, the mutation at 18:09:18) · `b6dbd8be:468` (first Playwright run 17:52:31) vs `:534` (first clip-fidelity audit 18:00:04) · `240d63c1:312` (audit scoped to the new spec) vs `:584` (the same audit over the carried specs, exit 2, nine scenarios with no dwell at all) |
-| **Versions** | 0.23.1, 0.24.0, 0.26.0/0.27.0, 0.27.0 |
+| **Versions** | 0.23.1, 0.24.0, 0.26.0, 0.27.0 |
 | **Fault** | **pw-prove** — the ordering is stated in the Pipeline Overview and nothing in Step 7 refuses to film before Step 6 has passed |
 
 Six sessions ran the gate late. Nothing in Step 7 checks that Step 6 passed, so the ordering is
@@ -495,30 +527,11 @@ spec's attention: Step 6's clip-fidelity audit says *"Run it on every **generate
 set and outside the gate — so nine of seventeen carried scenarios had been filmed with
 `PW_PROVE_CLIP` inert, and the run learned it only after a full filming pass and 21 frame reads.
 
-#### FR14 — the report's AC arithmetic does not reconcile with its own tables
-
-| | |
-|---|---|
-| **Rank** | 16 — frequency rank 9 |
-| **Frequency** | 6 of 26 — `1927b90c`, `3deeddd7`, `a7cdcd1c`, `af23ab55`, `cbe2813b`, `f28c3493` |
-| **Severity** | **S2** |
-| **Time** | ~0 |
-| **Attribution** | `## pw-prove — Complete`, the `ACs:` line and its invariant (*M = the Step-2 AC table's row count*); `## Step 4: Plan — notify-and-continue (PR-mode) / approval gate (coverage-gap)` |
-| **Citations** | `cbe2813b:669` (`8 proven of 9 total`, with a parenthetical that sums to 10, against ten-row tables at `:259` and `:653`) · `f28c3493:513` (`8 proven of 8 total`, against `:283` where a spec carrying three of those ACs failed and `:323` where that file is absent from the verified set) · `3deeddd7:615` (`22 proven of 22`, against `:605`'s `2 failed … 20 passed`) · `1927b90c:665` (`8 proven of 9`, contradicted by the same report naming a second unproven item) · `a7cdcd1c:1193` (the third number counts the scenarios the run wrote, because no Step-2 AC table exists in range) |
-| **Versions** | 0.23.1, 0.24.0, 0.27.0, 0.27.0/0.27.1 |
-| **Fault** | **pw-prove** |
-
-The invariant exists precisely so a reader can check the report against something. In five of the six
-the arithmetic is visibly wrong inside the report itself, and in three the same report discloses the
-shortfall in prose two paragraphs later — so the number is misleading while the message is not. In
-`a7cdcd1c` the invariant is unenforceable rather than broken: no Step-2 AC table was ever produced
-(FR15), so the third number is self-referential and cannot be checked at all.
-
 #### FR15 — Step 4's plan is skipped, or posted without the blocks that make it checkable
 
 | | |
 |---|---|
-| **Rank** | 17 — frequency rank 12 |
+| **Rank** | 17 — frequency rank 14 |
 | **Frequency** | 5 of 26 — `0259fd57`, `18697484`, `67b624f4`, `a7cdcd1c`, `befb0456` |
 | **Severity** | **S3** |
 | **Time** | indirect — `befb0456` then spent 6m00s on an operator question the plan exists to make unnecessary |
@@ -544,7 +557,7 @@ input the run may correct on the way in cannot catch the plan that was wrong.
 
 | | |
 |---|---|
-| **Rank** | 18 — frequency rank 12 |
+| **Rank** | 18 — frequency rank 15 |
 | **Frequency** | 5 of 26 — `240d63c1`, `998dd2c1`, `af23ab55`, `c871a4f2`, `fa0cc83b` |
 | **Severity** | **S4** |
 | **Time** | one to two turns each, ~35s |
@@ -559,36 +572,11 @@ same snippet still present in the 0.28.0 body. Every session recovered unaided w
 the exclude into the **main** checkout rather than the worktree's, which is a different and quieter
 wrong answer.
 
-#### FR17 — `ENV_CONTRACT=none` is documented as a sentinel and the shipped script reads it as a path
-
-| | |
-|---|---|
-| **Rank** | 19 — frequency rank 15 |
-| **Frequency** | 4 of 26 — `6f307a2f`, `a7cdcd1c`, `bbae9aa2`, `d32c2495` |
-| **Severity** | **S4** |
-| **Time** | 6–29 seconds and one turn each |
-| **Attribution** | `#### The run writes the profile back` — its profile-header template contains the literal `ENV_CONTRACT=none` and its key table documents `none` as legal; invoked from `### Bring the environment up (autonomous — don't stop to ask)`; shipped script `skills/pw-prove/scripts/preflight.mjs` |
-| **Citations** | `6f307a2f:103` (`preflight.mjs: ENV_CONTRACT names a file that does not exist: …/none`) · `a7cdcd1c:438` · `bbae9aa2:282` · `d32c2495:122` |
-| **Versions** | 0.22.0 (×2), 0.23.1 (×2) |
-| **Fault** | **pw-prove** — a body-versus-script disagreement inside one install |
-| **Status** | **Confirmed-fixed** |
-
-Recorded rather than deleted, because the week's churn is part of what this study measures. The
-distillations for `6f307a2f`, `a7cdcd1c` and `d32c2495` each independently establish that
-`ENV_CONTRACT` is absent from **both** the 0.28.0 `SKILL.md` and the 0.28.0 `preflight.mjs`; `d32c2495`
-records the knob as having been renamed to `ENV_FILES`. The defect is gone and so is the documented
-feature.
-
-`6f307a2f:233` is worth keeping for a different reason: the run then wrote `ENV_CONTRACT=none` — the
-value that had just failed — into the target repository's `.pw-prove/profile.md`, caught it one turn
-later and called it *"a self-inflicted trap"*. That is the profile write-back admitting a value no run
-can use, which is a question for the profile audit rather than for this list.
-
 #### FR18 — the runtime profile is written back with values that are wrong, unusable, or in the wrong place
 
 | | |
 |---|---|
-| **Rank** | 20 — frequency rank 15 |
+| **Rank** | 19 — frequency rank 17 |
 | **Frequency** | 4 of 26 — `0259fd57`, `6f307a2f`, `b6dbd8be`, `d3c037d9` |
 | **Severity** | **S3** |
 | **Time** | one to two turns each; `0259fd57`'s contradiction was found by a live probe mid-run |
@@ -604,16 +592,61 @@ run will not look. `#### The run writes the profile back` exists only from a lat
 `### Environment profile` has since been renamed `### Environment facts`. That half is closed.
 
 The other three are open, and they all show the same thing from different angles: the profile is
-trusted at Step 1 and contradicted later in the same run. **This overlaps the profile audit running in
-parallel** (#135, judging both live `.pw-prove/profile.md` files entry by entry against these same
-distillations). Where its evidence and this row's disagree, that audit is the instrument with the
-better view — it reads the profiles themselves, which this study deliberately does not.
+trusted at Step 1 and contradicted later in the same run. **This row's evidence overlaps the profile
+audit** running in parallel, which judges both live `.pw-prove/profile.md` files entry by entry
+against these same distillations. The two read different sources: that audit reads the profile files,
+this study reads only what the sessions said about them. Where the two disagree, the disagreement is
+stated here and adjudicated nowhere in this document.
+
+#### FR17 — `ENV_CONTRACT=none` is documented as a sentinel and the shipped script reads it as a path
+
+| | |
+|---|---|
+| **Rank** | 20 — frequency rank 18 |
+| **Frequency** | 4 of 26 — `6f307a2f`, `a7cdcd1c`, `bbae9aa2`, `d32c2495` |
+| **Severity** | **S4** |
+| **Time** | 6–29 seconds and one turn each |
+| **Attribution** | `#### The run writes the profile back` — its profile-header template contains the literal `ENV_CONTRACT=none` and its key table documents `none` as legal; invoked from `### Bring the environment up (autonomous — don't stop to ask)`; shipped script `skills/pw-prove/scripts/preflight.mjs` |
+| **Citations** | `6f307a2f:103` (`preflight.mjs: ENV_CONTRACT names a file that does not exist: …/none`) · `a7cdcd1c:438` · `bbae9aa2:282` · `d32c2495:122` |
+| **Versions** | 0.22.0, 0.23.1 |
+| **Fault** | **pw-prove** — a body-versus-script disagreement inside one install |
+| **Status** | **Confirmed-fixed** |
+
+Recorded rather than deleted, because the week's churn is part of what this study measures. The
+distillations for `6f307a2f`, `a7cdcd1c` and `d32c2495` each independently establish that
+`ENV_CONTRACT` is absent from **both** the 0.28.0 `SKILL.md` and the 0.28.0 `preflight.mjs`; `d32c2495`
+records the knob as having been renamed to `ENV_FILES`. The defect is gone and so is the documented
+feature.
+
+`6f307a2f:233` is worth keeping for a different reason: the run then wrote `ENV_CONTRACT=none` — the
+value that had just failed — into the target repository's `.pw-prove/profile.md`, caught it one turn
+later and called it *"a self-inflicted trap"*. That is the profile write-back admitting a value no run
+can use, which is a question for the profile audit rather than for this list.
+
+#### FR21 — the one-re-film budget is exceeded, and the run says so
+
+| | |
+|---|---|
+| **Rank** | 21 — frequency rank 21 |
+| **Frequency** | 3 of 26 — `18697484`, `3072aa9b`, `3deeddd7` |
+| **Severity** | **S3** |
+| **Time** | ~40 min across four filming runs (`18697484`) · ~9 min and two extra films (`3072aa9b`) |
+| **Attribution** | `### Clip inspection — look at the frame before anyone else does` — *"Exactly one re-film."* |
+| **Citations** | `18697484:518` (*"Re-filming once (the single sanctioned re-film)"*), `:568` (a second), `:606` (*"I've spent both re-films"* — a budget of two the body does not grant) · `3072aa9b:993` (*"I'm past the one-re-film budget, so these publish with an explicit warning"*) · `3deeddd7:433`/`:443` |
+| **Versions** | 0.24.0, 0.27.0, 0.27.1 |
+| **Fault** | **pw-prove**; **boundary** in `3deeddd7`, where the re-films were for *failing carried specs*, which the same step routes to `### Failure handling` rather than to the re-film budget |
+
+In all three the overrun is stated plainly in the run's own text, and in two the report discloses it.
+What the corpus shows is that the budget does not converge: `18697484` spent four films and ended with
+the same four toast chapters sampling after dismissal, and `3072aa9b` spent three and ended with three
+payoffs missing. The budget is a spend cap on a loop that had not found its diagnosis, which is the
+same shape as FR11.
 
 #### FR19 — the whole spec is re-run during the heal loop where the body says to rerun only what failed
 
 | | |
 |---|---|
-| **Rank** | 21 — frequency rank 18 |
+| **Rank** | 22 — frequency rank 22 |
 | **Frequency** | 3 of 26 — `1927b90c`, `af23ab55`, `fe171475` |
 | **Severity** | **S3** |
 | **Time** | ~6.3 min for two identical full runs (`1927b90c`) · ~10m34s across five full-spec runs against a live staging tenant (`af23ab55`) · 16 runs (`fe171475`) |
@@ -629,30 +662,11 @@ Note the counter-examples, because they say the rule is keepable: `d3c037d9`, `f
 `f28c3493` all ran `-g`-scoped reruns during the loop and one full-spec gate after the last fix,
 exactly as written.
 
-#### FR21 — the one-re-film budget is exceeded, and the run says so
-
-| | |
-|---|---|
-| **Rank** | 22 — frequency rank 18 |
-| **Frequency** | 3 of 26 — `18697484`, `3072aa9b`, `3deeddd7` |
-| **Severity** | **S3** |
-| **Time** | ~40 min across four filming runs (`18697484`) · ~9 min and two extra films (`3072aa9b`) |
-| **Attribution** | `### Clip inspection — look at the frame before anyone else does` — *"Exactly one re-film."* |
-| **Citations** | `18697484:518` (*"Re-filming once (the single sanctioned re-film)"*), `:568` (a second), `:606` (*"I've spent both re-films"* — a budget of two the body does not grant) · `3072aa9b:993` (*"I'm past the one-re-film budget, so these publish with an explicit warning"*) · `3deeddd7:433`/`:443` |
-| **Versions** | 0.24.0, 0.27.0/0.27.1 |
-| **Fault** | **pw-prove**; **boundary** in `3deeddd7`, where the re-films were for *failing carried specs*, which the same step routes to `### Failure handling` rather than to the re-film budget |
-
-In all three the overrun is stated plainly in the run's own text, and in two the report discloses it.
-What the corpus shows is that the budget does not converge: `18697484` spent four films and ended with
-the same four toast chapters sampling after dismissal, and `3072aa9b` spent three and ended with three
-payoffs missing. The budget is a spend cap on a loop that had not found its diagnosis, which is the
-same shape as FR11.
-
 #### FR22 — Step 8's hygiene `git checkout -- '**/…'` silently matches nothing
 
 | | |
 |---|---|
-| **Rank** | 23 — frequency rank 21 |
+| **Rank** | 23 — frequency rank 23 |
 | **Frequency** | 2 of 26 — `3072aa9b`, `67b624f4` |
 | **Severity** | **S4** |
 | **Time** | ~0 |
@@ -667,29 +681,11 @@ silently fail to revert codegen churn on the run where it matters. `3072aa9b`'s 
 irony: it is the same `**/` trap the body warns about at length in Step 7's spec-set derivation. The
 bullet is unchanged at 0.28.0.
 
-#### FR23 — `publish-proof.mjs` printed `publish failed` over a successful HTTP 200
-
-| | |
-|---|---|
-| **Rank** | 24 — frequency rank 23 |
-| **Frequency** | 1 of 26 — `3deeddd7` |
-| **Severity** | **S3** |
-| **Time** | one turn; the run verified the response by hand and continued |
-| **Attribution** | shipped script `skills/pw-prove/scripts/publish-proof.mjs` |
-| **Citations** | `3deeddd7:560` — the script printed `publish failed — … rejected the publish — HTTP 200:` and told the run to attach the video by hand, while the response it was quoting carried a live share link; verified at `:568` |
-| **Versions** | 0.27.0 |
-| **Fault** | **pw-prove** — a response-parsing defect |
-
-Recorded at n=1 because it is a shipped script telling a run its work failed when it succeeded, which
-is the same class of instrument defect as FR1 with the sign reversed. It did not recur on the three
-later publishes in the same session (0.27.1), but those differ in response size and clip count too, so
-the range does not isolate the variable and this is **not** recorded as confirmed-fixed.
-
 #### FR32 — the hermetic audit ran after filming and after clip inspection
 
 | | |
 |---|---|
-| **Rank** | 25 — frequency rank 23 |
+| **Rank** | 24 — frequency rank 24 |
 | **Frequency** | 1 of 26 — `fa0cc83b` |
 | **Severity** | **S3** |
 | **Time** | ~3 minutes and two extra filming runs, one of which introduced a regression |
@@ -705,12 +701,32 @@ payoff frame the first film had held, which cost the run its one sanctioned re-f
 renamed and moved in the current body to `### Hermetic audit (on the audit run, before anything is
 filmed)`, ahead of clip inspection. The defect this session paid two extra films for is repaired.
 
+#### FR23 — `publish-proof.mjs` printed `publish failed` over a successful HTTP 200
+
+| | |
+|---|---|
+| **Rank** | 25 — frequency rank 25 |
+| **Frequency** | 1 of 26 — `3deeddd7` |
+| **Severity** | **S3** |
+| **Time** | one turn; the run verified the response by hand and continued |
+| **Attribution** | shipped script `skills/pw-prove/scripts/publish-proof.mjs` |
+| **Citations** | `3deeddd7:560` — the script printed `publish failed — … rejected the publish — HTTP 200:` and told the run to attach the video by hand, while the response it was quoting carried a live share link; verified at `:568` |
+| **Versions** | 0.27.0, 0.27.1 |
+| **Fault** | **pw-prove** — a response-parsing defect |
+
+Recorded at n=1 because it is a shipped script telling a run its work failed when it succeeded, which
+is the same class of instrument defect as FR1 with the sign reversed. It did not recur on the three
+later publishes in the same session (0.27.1), but those differ in response size and clip count too, so
+the range does not isolate the variable and this is **not** recorded as confirmed-fixed.
+
 ---
 
 ## Repository-fault and boundary findings
 
-These belong to the per-repository setup studies rather than to a pw-prove fix spec. They share the
-`FR` namespace so a later re-classification renumbers nothing.
+These belong to the per-repository setup studies rather than to a pw-prove fix spec. They are
+**recorded, not ranked** — the Rank column above applies to the pw-prove-fault list, and putting a
+repository fault into that order would compare two things a reader acts on in different places. They
+share the `FR` namespace so a later re-classification renumbers nothing.
 
 #### FR25 — a large pre-existing scanner backlog makes the Step-6 gate unreadable
 
@@ -718,9 +734,10 @@ These belong to the per-repository setup studies rather than to a pw-prove fix s
 |---|---|
 | **Frequency** | 7 of 26 — `1927b90c`, `998dd2c1`, `a273eefa`, `af23ab55`, `befb0456`, `cbe2813b`, `d32c2495` |
 | **Severity** | **S3** — it is the direct cause of half of FR4 and much of FR5 |
+| **Time** | ~8s and one turn per extra scan; its real cost is that the gate's own verdict is unreadable, which is what FR4 and FR5 then pay for |
 | **Attribution** | `### e2e-reviewer skill` (Step 6), which invokes a whole-directory scan with no per-run view; shipped script `skills/e2e-reviewer/scripts/scan.mjs` |
 | **Citations** | `998dd2c1:304` (`223 total hit(s), 30 P0, 176 P1/P2 heuristic, 17 LLM-triage`) · `a273eefa:454` (`290 total hit(s), 13 P0`) · `af23ab55:440` (`267 total hit(s), 30 P0`) · `befb0456:460` (224 hits, 30 P0 repo-wide) · `1927b90c:235` (233 hits) |
-| **Versions** | `scan.mjs` 1.10.0 throughout |
+| **Versions** | 0.22.0, 0.24.0, 0.26.0, 0.27.0; `scan.mjs` 1.10.0 throughout |
 | **Fault** | **target repository** for the backlog; **boundary** for the gate's inability to scope its verdict to the files a run just wrote |
 
 `scan.mjs` exits non-zero whenever the tree has findings, and both target repositories carry hundreds.
@@ -734,6 +751,7 @@ and FR5's most frequent excuse.
 |---|---|
 | **Frequency** | 6 of 26 — `18697484`, `3072aa9b`, `67b624f4`, `c871a4f2`, `cbe2813b`, `fa0cc83b` |
 | **Severity** | **S2** — it is what most published degraded chapters actually show |
+| **Time** | ~40 min across four films (`18697484`) · ~9 min across three (`3072aa9b`) · ~2m10s for a re-film that bought nothing (`67b624f4`) |
 | **Attribution** | `### Clip inspection — look at the frame before anyone else does` (the frame-sampling rule and the diagnosis table) against the applications' own toast lifetimes |
 | **Citations** | `18697484:508`/`:847` (a `vue-sonner` default auto-dismiss against a sampler that takes `duration − 0.5s`) · `3072aa9b:993` · `c871a4f2:435` · `fa0cc83b:1234` (*"racing sonner's ~4s timer"*) · `67b624f4:510` |
 | **Versions** | 0.21.0, 0.24.0, 0.26.0, 0.27.0 |
@@ -749,9 +767,10 @@ degraded chapters this week published, and that the re-film budget is the wrong 
 |---|---|
 | **Frequency** | 4 of 26 — `0259fd57`, `8eb0585c`, `befb0456`, `f28c3493` |
 | **Severity** | **S3** |
+| **Time** | **26m35s** (`10748ea5`, via FR7) · **8m38s** (`0259fd57`) · 3m16s (`f28c3493`) · 1m47s (`8eb0585c`) — the same idle blocks FR7 reports, counted once |
 | **Attribution** | the target repositories' `CONTRIBUTING.md` / `AGENTS.md`, against `## Step 8: Deliver (PR-mode tail — deterministic, no questions)` item 4 |
 | **Citations** | `8eb0585c:561` (the run names `CONTRIBUTING.md`'s push rule) · `befb0456:529` (*"This repo requires operator confirmation before pushing"*) · `f28c3493:478` (the run cites the target repo's AGENTS.md) · `0259fd57:319` (*"this worktree's rules require it"*) |
-| **Versions** | 0.24.0, 0.26.0, 0.27.0 |
+| **Versions** | 0.24.0, 0.26.0 |
 | **Fault** | **target repository** — the twin of FR7, recorded from the repository side so the setup studies see it |
 
 The same four events as FR7, split so neither deliverable has to re-derive the other's half. The
@@ -764,9 +783,10 @@ run; the fix spec owns the question of what Step 8 should do when it does.
 |---|---|
 | **Frequency** | 5 of 26 — `1927b90c`, `3deeddd7`, `b6dbd8be`, `f28c3493`, `fe171475` |
 | **Severity** | **S2** — one plan counted never-run specs as proven coverage |
+| **Time** | ~25m24s to a from-scratch rewrite (`1927b90c`) · ~52 min of operator-directed fixture repair that never reached green (`fe171475`) · one audit rerun after the `socket.io` finding (`b6dbd8be`) |
 | **Attribution** | the target repositories' suites; surfaced against `### Assumptions (required block in the PR-mode plan)` and `## Step 7: Verify`'s carried-spec paragraph |
 | **Citations** | `1927b90c:189` (the plan marks ACs `carried:` by specs never run this session), `:665` (*"Two of the three carried wizard scenarios had never passed"*) · `fe171475:824`/`:1078` (stale English copy in spec locators against an app rendering translated and German content; 7 of 13 carried scenarios failing) · `b6dbd8be:500` (`socket.io` reaching the live network in 71 requests across all 13 carried tests, undeclared) · `f28c3493:302` (a carried failure byte-identical at the merge base) · `3deeddd7:443` (two flaky carried specs) |
-| **Versions** | 0.23.1, 0.24.0, 0.26.0, 0.27.0/0.27.1 |
+| **Versions** | 0.23.1, 0.24.0, 0.26.0, 0.27.0, 0.27.1 |
 | **Fault** | **target repository**; **boundary** for the plan-time assumption that a carried spec passes |
 
 The pw-prove half is small and real: Step 4 lets a plan mark an acceptance criterion "carried" on the
@@ -779,6 +799,7 @@ two of three carried scenarios failing — repaired before delivery, so nothing 
 |---|---|
 | **Frequency** | 2 of 26 — `d3c037d9`, `fa0cc83b` |
 | **Severity** | **S4** |
+| **Time** | ~16–20s per instance — the gate refused in 10–16ms and the run declared the real contract in one turn |
 | **Attribution** | the target repository's `.env.example`; surfaced by `### Bring the environment up (autonomous — don't stop to ask)` via `preflight.mjs config` |
 | **Citations** | `d3c037d9:194` (`preflight: STOP - configuration incomplete: 11 required key(s) not set`, recovered in ~20s by declaring the real four) · `fa0cc83b:734` (same shape, same repository) |
 | **Versions** | 0.20.0, 0.21.0 |
