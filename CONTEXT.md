@@ -18,6 +18,17 @@ _Avoid_: subagent, child agent
 The tickets whose blockers have all merged back, and which can therefore dispatch now.
 _Avoid_: ready queue, next batch
 
+**Open dispatch**:
+A ticket handed to a worker whose `worker_done` or escalation the **Coordinator** has not yet
+processed. Open is about the coordinator's knowledge, not the worker's state: a worker that finished
+minutes ago is still an open dispatch until its message is read.
+_Avoid_: running worker, in-flight ticket, pending task
+
+**Checkpoint**:
+An elapsed wait window that returned nothing. Evidence the run is still live, never evidence it is
+finished — the opposite of a **worker_done**, and not a failure of any kind.
+_Avoid_: timeout, empty poll, no-op wait
+
 **Integration branch**:
 The branch a run merges every worker's slice back into, and the base its worktrees are cut from.
 Distinct from the repo's default base, which is what a worktree gets when nobody names one.
