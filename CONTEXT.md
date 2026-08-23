@@ -165,16 +165,10 @@ project's own `playwright.config` is never edited. Drops the inherited `webServe
 The first of Step 7's two runs of the spec set: un-clipped and un-dwelled, and the run the heal loop
 works against. It produces the traces the [hermetic audit](#hermetic-audit) classifies, which is why
 it comes first — a hermetic finding is a spec edit, and a spec edit invalidates footage, so auditing
-before filming makes the cheap run the one that protects the expensive one. Since #142 it is an
+before the filming run makes the cheap run the one that protects the expensive one. Since #142 it is an
 interface rather than a description: `proof-run.mjs audit` resolves the spec set, clears the results
 directory, runs it with no worker override, and bounds the heal loop through the
 [no-progress checkpoint](#no-progress-checkpoint).
-
-## Filming run
-Step 7's second run of the same spec set, distinguished from the [audit run](#audit-run) only by the
-environment it carries — `PW_PROVE_CLIP` plus the [effective viewport](#effective-viewport) — and
-therefore by paying for the dwells and the video encoding. It produces the [proof clips](#proof-clip)
-that get delivered, and it is licensed by a clean audit run rather than run alongside one.
 
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the

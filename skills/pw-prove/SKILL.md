@@ -883,6 +883,7 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 | Exit | Meaning | What to do |
 |---|---|---|
 | `0` | The spec set went green | Proceed to the hermetic audit |
+| `1` | Usage — a flag is missing or unknown | Fix the invocation; nothing was run |
 | `2` | Unreadable input, or `npx` is not on PATH | Fix the flag it names; nothing was run |
 | `3` | The spec set resolved **empty** | The resolution is wrong — a wrong `--base`, or a `--test-dir` that is not where the specs landed. Fix it; never proceed on an empty set |
 | `6` | Tests red | Diagnose and heal, below. Rerun through this same verb with `--grep "<title>"` |
@@ -920,7 +921,7 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 
 **Token diet.** Inside the fix loop, run tool calls back-to-back — no prose narration between them; the diagnosis lands in the fix. Write the spec **once** from the `pomInventory` + Locator Mapping Table — never scaffold a throwaway skeleton and rewrite it. **Non-deliverable spec probes are forbidden** — no `_recon.spec.ts`, no `zz-debug.spec.ts`: the probe is the recon channel, the test runner is not a REPL.
 
-**No-progress checkpoint — the bound is three attempts, but not three retries.** The verb owns this: it records each attempt's **failure signature** (the error class plus the failing locator), persists it under the run's dot-directory, and refuses — **exit 7** — a run that repeats an unchanged one or that sits past the bound. A raw count cannot tell those apart; three attempts at one unchanging timeout is one retry paid three times. Exit 7 is not a failure to diagnose harder: it is the loop ending, and the remaining attempt is deliberately unspent.
+**No-progress checkpoint — the bound is three attempts, but not three retries.** The verb owns this: it records each attempt's **failure signature** (the error class plus the failing locator), persists it under the run's dot-directory, and exits **7** on the attempt that repeats an unchanged one, and refuses every invocation after that — and every invocation past the bound — without paying for a run at all. A raw count cannot tell those apart; three attempts at one unchanging timeout is one retry paid three times. Exit 7 is not a failure to diagnose harder: it is the loop ending, and the remaining attempt is deliberately unspent.
 
 When the loop ends without a green run — three attempts spent, or the checkpoint tripped at two — **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces) for the diagnosis. Do not attempt a 4th fix. Then stop: PR-mode takes the handover stop below; target and coverage-gap modes emit the stop report from the Pipeline Overview.
 

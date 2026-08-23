@@ -3,7 +3,6 @@
 //
 //   node proof-run.mjs audit --config <proof config> --test-dir <testDir> --base <ref>
 //                           [--written <spec>]... [--project <name>] [--grep <title>]
-//                           [--attempt-bound <n>] [--results-dir <dir>] [--state-dir <dir>]
 //
 // Step 7 was the largest section of pw-prove's body and the only large one with no module behind
 // it: bring-up has preflight.mjs, recon has probe.mjs, the recording has har-scrub.mjs, the
@@ -52,8 +51,8 @@
 //   THE FAILURE SIGNATURE BOUNDS THE HEAL LOOP, AND A RAW COUNT CANNOT. The bound is three
 //   attempts, but not three retries: three attempts at one unmoving timeout is one retry paid three
 //   times. So each attempt's signature — the error class plus the failing locator — is persisted,
-//   and a run that repeats an unchanged one is refused with its own exit code (7) rather than
-//   reported as merely red (6). The heal loop's targeted reruns go through this same verb with
+//   the attempt that repeats an unchanged one exits 7 rather than merely red (6) and records the
+//   loop as stalled, so every invocation after it is refused without paying for a run at all. The heal loop's targeted reruns go through this same verb with
 //   `--grep`, so every attempt the agent makes is an attempt the bound sees; a raw runner call
 //   would leave the bound blind to exactly the attempts it exists to count.
 //
@@ -70,8 +69,8 @@
 // Exit codes are the contract both the agent and the ledger read. They are one table across the
 // three verbs, so a code never means two things:
 //   0   success (for `audit`: the run went green)
-//   1   usage
-//   2   unreadable input, or no resolvable runner
+//   1   usage                                  } no summary line: these exit before the spec set
+//   2   unreadable input, or no resolvable runner }   exists, so there is nothing to summarize
 //   3   spec set resolved empty
 //   4   type check failed                    } reserved — the audit verb's first phase
 //   5   HAR bind refused                     } reserved — the audit verb's bind phase
@@ -98,7 +97,13 @@ const EXIT = {
 const VERBS = new Set(['audit']);
 const SUMMARY_SCHEMA = 1;
 const STATE_SCHEMA = 1;
-const DEFAULT_ATTEMPT_BOUND = 3;
+// Fixed, not a flag. The bound is the body's bound, and a knob whose only caller would be a test is
+// a test-only injection point — the one thing this module is not allowed to grow.
+const ATTEMPT_BOUND = 3;
+// Fixed for the same reason the runner's shape is fixed: these are the paths the body names, and a
+// flag for either would let a caller point a recursive delete somewhere it does not belong.
+const RESULTS_DIR = 'test-results';
+const STATE_DIR = '.pw-prove';
 // The extension filter that runs AFTER the directory pathspec. Deliberately the same set the body
 // documented: .spec/.test, any of js/jsx/ts/tsx, with the cjs/mjs prefixes projects do use.
 const SPEC_RE = /\.(spec|test)\.[cm]?[jt]sx?$/;
@@ -108,8 +113,7 @@ const err = (s) => process.stderr.write(s);
 
 const USAGE =
   'usage: proof-run.mjs audit --config <proof config> --test-dir <testDir> --base <ref>\n' +
-  '                          [--written <spec>]... [--project <name>] [--grep <title>]\n' +
-  '                          [--attempt-bound <n>] [--results-dir <dir>] [--state-dir <dir>]\n';
+  '                          [--written <spec>]... [--project <name>] [--grep <title>]\n';
 
 const verb = process.argv[2];
 // Read before validation so even a usage-error exit leaves a ledger record; the phase is the verb.
@@ -130,9 +134,6 @@ const opts = {
   written: [],
   project: 'chromium',
   grep: null,
-  attemptBound: DEFAULT_ATTEMPT_BOUND,
-  resultsDir: 'test-results',
-  stateDir: '.pw-prove',
 };
 
 const argv = process.argv.slice(3);
@@ -148,9 +149,6 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--written') opts.written.push(need(++i, a));
   else if (a === '--project') opts.project = need(++i, a);
   else if (a === '--grep' || a === '-g') opts.grep = need(++i, a);
-  else if (a === '--attempt-bound') opts.attemptBound = Number(need(++i, a));
-  else if (a === '--results-dir') opts.resultsDir = need(++i, a);
-  else if (a === '--state-dir') opts.stateDir = need(++i, a);
   else usage(`unknown flag '${a}'`);
 }
 
@@ -161,10 +159,6 @@ for (const [flag, value] of [
 ]) {
   if (!value) usage(`${flag} is required`);
 }
-if (!Number.isInteger(opts.attemptBound) || opts.attemptBound < 1) {
-  usage('--attempt-bound needs a positive integer');
-}
-
 function stop(code, message) {
   err(`proof-run ${verb}: ${message}\n`);
   process.exit(code);
@@ -186,11 +180,18 @@ const top = git('rev-parse', '--show-toplevel');
 if (top.status !== 0) stop(EXIT.INPUT, 'not inside a git repository — the spec set is resolved from a merge base');
 const repoTop = top.stdout.trim();
 
-fs.mkdirSync(opts.stateDir, { recursive: true });
+fs.mkdirSync(STATE_DIR, { recursive: true });
 // `.git/info/exclude`, never the project's `.gitignore`: this is the run's private working state.
+// The path comes from `--git-common-dir` and NOT from `<toplevel>/.git`, because in a worktree or a
+// submodule `.git` is a FILE pointing elsewhere: joining onto it yields ENOTDIR and stops the run
+// before it resolves anything. Worktrees share one exclude file, which is the right scope here —
+// the entry is about this repository, not about one checkout of it.
 try {
-  const excludeFile = path.join(repoTop, '.git', 'info', 'exclude');
-  const entry = `${opts.stateDir.replace(/\/+$/, '')}/`;
+  const common = git('rev-parse', '--git-common-dir');
+  if (common.status !== 0) throw new Error('cannot resolve the git common directory');
+  const gitDir = path.resolve(repoTop, common.stdout.trim());
+  const excludeFile = path.join(gitDir, 'info', 'exclude');
+  const entry = `${STATE_DIR.replace(/\/+$/, '')}/`;
   fs.mkdirSync(path.dirname(excludeFile), { recursive: true });
   const current = fs.existsSync(excludeFile) ? fs.readFileSync(excludeFile, 'utf8') : '';
   if (!current.split('\n').includes(entry)) {
@@ -200,14 +201,18 @@ try {
   stop(EXIT.INPUT, `cannot write the repo-local exclude entry (${e.message})`);
 }
 
-const statePath = path.join(opts.stateDir, 'audit-state.json');
+const statePath = path.join(STATE_DIR, 'audit-state.json');
 function readState() {
   try {
     const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-    if (parsed?.schema !== STATE_SCHEMA) return { attempts: 0, signature: null };
-    return { attempts: Number(parsed.attempts) || 0, signature: parsed.signature ?? null };
+    if (parsed?.schema !== STATE_SCHEMA) return { attempts: 0, signature: null, stalled: false };
+    return {
+      attempts: Number(parsed.attempts) || 0,
+      signature: parsed.signature ?? null,
+      stalled: parsed.stalled === true,
+    };
   } catch {
-    return { attempts: 0, signature: null };
+    return { attempts: 0, signature: null, stalled: false };
   }
 }
 function writeState(state) {
@@ -220,8 +225,25 @@ function writeState(state) {
 // ---- the summary ----------------------------------------------------------------------------
 // ONE JSON line on stdout, so the agent reads a machine-readable account instead of re-deriving one
 // from the runner's console output.
-function summarize(fields) {
-  out(`PWPROVE_SUMMARY ${JSON.stringify({ schema: SUMMARY_SCHEMA, verb, ...fields })}\n`);
+// Bound once the spec set is known, so the invariant half of the record is spelled in exactly one
+// place and only the varying half travels to a call site.
+let summarize = () => {};
+function bindSummary(specs) {
+  summarize = (result, exit, signature, attempt) => {
+    out(
+      `PWPROVE_SUMMARY ${JSON.stringify({
+        schema: SUMMARY_SCHEMA,
+        verb,
+        specs,
+        grep: opts.grep,
+        attempt,
+        attempt_bound: ATTEMPT_BOUND,
+        result,
+        signature,
+        exit,
+      })}\n`,
+    );
+  };
 }
 
 // ---- spec-set resolution ---------------------------------------------------------------------
@@ -248,8 +270,10 @@ const specs = [
   ...written.map((p) => ({ path: p, tag: 'written' })),
 ];
 
+bindSummary(specs);
+
 if (specs.length === 0) {
-  summarize({ specs: [], result: 'empty', signature: null, attempt: 0, attempt_bound: opts.attemptBound, grep: opts.grep, exit: EXIT.EMPTY_SET });
+  summarize('empty', EXIT.EMPTY_SET, null, 0);
   stop(
     EXIT.EMPTY_SET,
     `no spec resolved from '${opts.testDir}' against --base '${opts.base}'. PR-mode reaches ` +
@@ -260,18 +284,30 @@ if (specs.length === 0) {
 
 // ---- the no-progress checkpoint, before a run is spent ----------------------------------------
 const state = readState();
-if (state.attempts >= opts.attemptBound) {
-  summarize({ specs, result: 'refused', signature: state.signature, attempt: state.attempts, attempt_bound: opts.attemptBound, grep: opts.grep, exit: EXIT.CHECKPOINT });
+// Both halves refuse BEFORE a run is spent. The stalled flag is what makes that possible for the
+// signature half: an unchanged signature can only be recognised on the attempt that repeats it, so
+// that attempt records the stall and every invocation after it is refused without paying for a run.
+if (state.stalled) {
+  summarize('refused', EXIT.CHECKPOINT, state.signature, state.attempts);
   stop(
     EXIT.CHECKPOINT,
-    `${state.attempts} attempt(s) already spent against a bound of ${opts.attemptBound} — no run ` +
+    `the loop already stalled on an unchanged failure signature (${state.signature?.error_class} ` +
+      `at ${state.signature?.locator}) — no run was made. Invoke playwright-debugger on ` +
+      'playwright-report/ and take the handover stop.',
+  );
+}
+if (state.attempts >= ATTEMPT_BOUND) {
+  summarize('refused', EXIT.CHECKPOINT, state.signature, state.attempts);
+  stop(
+    EXIT.CHECKPOINT,
+    `${state.attempts} attempt(s) already spent against a bound of ${ATTEMPT_BOUND} — no run ` +
       'was made. Invoke playwright-debugger on playwright-report/ and take the handover stop.',
   );
 }
 
 // ---- the run ----------------------------------------------------------------------------------
 // Cleared BEFORE the runner starts: whatever stands here at publish time becomes the evidence.
-fs.rmSync(opts.resultsDir, { recursive: true, force: true });
+fs.rmSync(RESULTS_DIR, { recursive: true, force: true });
 
 const runnerArgs = [
   '--no-install',
@@ -288,7 +324,7 @@ const run = spawnSync('npx', runnerArgs, { encoding: 'utf8', maxBuffer: 256 * 10
 if (run.error) {
   stop(EXIT.INPUT, `cannot run the test runner (${run.error.message}). 'npx' must be on PATH.`);
 }
-const console_ = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
+const runnerOutput = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
 out(run.stdout ?? '');
 err(run.stderr ?? '');
 
@@ -316,24 +352,21 @@ const same = (a, b) => a && b && a.error_class === b.error_class && a.locator ==
 
 if (run.status === 0) {
   // A green run ends the heal loop, so the budget it was spending goes with it.
-  writeState({ attempts: 0, signature: null });
-  summarize({ specs, result: 'green', signature: null, attempt: state.attempts, attempt_bound: opts.attemptBound, grep: opts.grep, exit: EXIT.OK });
+  writeState({ attempts: 0, signature: null, stalled: false });
+  summarize('green', EXIT.OK, null, state.attempts);
   process.exit(EXIT.OK);
 }
 
-const signature = signatureOf(console_);
+const signature = signatureOf(runnerOutput);
 const attempt = state.attempts + 1;
 const unchanged = same(signature, state.signature);
-writeState({ attempts: attempt, signature });
-summarize({
-  specs,
-  result: unchanged ? 'refused' : 'red',
+writeState({ attempts: attempt, signature, stalled: unchanged });
+summarize(
+  unchanged ? 'refused' : 'red',
+  unchanged ? EXIT.CHECKPOINT : EXIT.TESTS_RED,
   signature,
   attempt,
-  attempt_bound: opts.attemptBound,
-  grep: opts.grep,
-  exit: unchanged ? EXIT.CHECKPOINT : EXIT.TESTS_RED,
-});
+);
 
 if (unchanged) {
   stop(
@@ -345,7 +378,7 @@ if (unchanged) {
 }
 stop(
   EXIT.TESTS_RED,
-  `tests red on attempt ${attempt}/${opts.attemptBound} — ${signature.error_class} at ` +
+  `tests red on attempt ${attempt}/${ATTEMPT_BOUND} — ${signature.error_class} at ` +
     `${signature.locator}. Diagnose the failure and rerun through this verb with --grep so the ` +
     'bound sees the attempt.',
 );

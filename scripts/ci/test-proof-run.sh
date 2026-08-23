@@ -165,6 +165,25 @@ grep -qxF '.pw-prove/' "$R/.git/info/exclude" \
   && ok "the module's state leaves no stray diff for Step 8 to explain" || bad ".pw-prove shows in git status"
 
 echo ""
+echo "-- a git WORKTREE, where .git is a file and not a directory --"
+new_repo worktree
+printf 'test\n' > "$R/e2e/a.spec.ts"
+git -C "$R" add -A && git -C "$R" commit -qm spec
+WT="$W/wt-checkout"
+git -C "$R" worktree add -q -b wt "$WT" 2>/dev/null
+if [ -f "$WT/.git" ]; then
+  ( cd "$WT" && PATH="$BIN:$PATH" PWPROVE_LEDGER="$W/ledger.jsonl" NPX_EXIT=0 \
+    node "$S" audit --config playwright.proof.config.ts --test-dir e2e --base main \
+      --written e2e/a.spec.ts >"$W/out" 2>"$W/err" )
+  [ "$?" = 0 ] && ok "the verb runs in a worktree (exclude resolved via --git-common-dir)" \
+    || { bad "worktree run failed"; head -2 "$W/err"; }
+  grep -qxF '.pw-prove/' "$R/.git/info/exclude" \
+    && ok "the entry lands in the shared common exclude file" || bad "no exclude entry from the worktree"
+else
+  echo "  [SKIP] worktree: git worktree add unavailable"
+fi
+
+echo ""
 echo "-- tests red, and the failure signature --"
 new_repo red
 printf 'test\n' > "$R/e2e/a.spec.ts"
@@ -194,6 +213,18 @@ grep -q "signature" "$W/err" && ok "the refusal names the signature" || bad "ref
 
 echo ""
 echo "-- a CHANGED signature continues the loop --"
+# Its own fixture: a stalled loop stays stalled by design, so convergence must be measured from a
+# loop that never stalled rather than from the one the previous case just ended.
+new_repo converging
+printf 'test\n' > "$R/e2e/a.spec.ts"
+cat > "$W/runner-out" <<'OUT'
+  1) [chromium] › e2e/a.spec.ts:12:5 › saves the profile
+    TimeoutError: locator.click: Timeout 30000ms exceeded.
+    Call log:
+      - waiting for locator('[data-testid="save"]')
+OUT
+NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
 cat > "$W/runner-out" <<'OUT'
   1) [chromium] › e2e/a.spec.ts:14:5 › saves the profile
     Error: expect(locator).toBeVisible() failed
@@ -205,17 +236,42 @@ NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base m
   || bad "a changed signature was refused"
 
 echo ""
-echo "-- the attempt bound --"
-NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
-  --written e2e/a.spec.ts --attempt-bound 2
-[ "$?" = 7 ] && ok "an attempt past the bound is refused with exit 7" \
-  || bad "expected exit 7 past the attempt bound"
-[ "$(cat "$NPX_PRESTATE")" = absent ] || true
+echo "-- a stalled loop is refused BEFORE the next run is spent --"
+R="$W/repo-red"   # the fixture whose loop stalled two cases above
 prev=$(wc -l < "$NPX_ARGV")
 NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
-  --written e2e/a.spec.ts --attempt-bound 2
+  --written e2e/a.spec.ts
+[ "$?" = 7 ] && ok "the invocation after a stall is exit 7" || bad "a stalled loop was re-entered"
 [ "$(wc -l < "$NPX_ARGV")" = "$prev" ] \
-  && ok "a refused attempt spends no run" || bad "the runner was invoked past the bound"
+  && ok "a stalled loop spends no run at all" || bad "the runner ran after the loop stalled"
+
+echo ""
+echo "-- the attempt bound: three converging attempts, then no fourth --"
+new_repo bound
+printf 'test\n' > "$R/e2e/a.spec.ts"
+for n in 1 2 3; do
+  cat > "$W/runner-out" <<OUT
+  1) [chromium] › e2e/a.spec.ts:1$n:5 › saves the profile
+    Error: expect(locator).toBeVisible() failed
+    Locator: locator('#attempt-$n')
+OUT
+  NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  rc=$?
+  [ "$rc" = 6 ] || bad "attempt $n: exit $rc, wanted 6 (each signature differs, so the loop converges)"
+done
+ok "three attempts with moving signatures each spend a run and report red"
+prev=$(wc -l < "$NPX_ARGV")
+cat > "$W/runner-out" <<'OUT'
+  1) [chromium] › e2e/a.spec.ts:14:5 › saves the profile
+    Error: expect(locator).toBeVisible() failed
+    Locator: locator('#attempt-4')
+OUT
+NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ "$?" = 7 ] && ok "a fourth attempt is refused with exit 7" || bad "the bound of 3 did not hold"
+[ "$(wc -l < "$NPX_ARGV")" = "$prev" ] \
+  && ok "the refused attempt spends no run" || bad "the runner was invoked past the bound"
 
 echo ""
 echo "-- a green run ends the loop and clears the budget --"
