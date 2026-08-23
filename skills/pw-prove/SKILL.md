@@ -759,7 +759,9 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 **1. Two preconditions, and both are phases of the audit verb.** The type check and the HAR bind run inside `proof-run.mjs audit`, before it spends a browser run — you do not run either by hand, and there is no documented raw fallback for either.
 
 - **The type check** takes the e2e tsconfig when the project has one and the root one otherwise; that branch is the verb's, not yours, and a project with neither is skipped rather than failed. Exit **4** is a spec set that does not compile.
-- **The HAR bind** is delegated to `har-scrub.mjs bind`, which the verb invokes with the recording you pass as `--har` and a destination fixed under `.pw-prove/` — the committed recording stays canonical, and the bound copy carrying this run's live credential never reaches a path git tracks. The verb then puts `PW_PROVE_HAR` on the runner's own environment, so every invocation it makes has the bound recording; you never export it. **Pass `--har` only when the project has a recording**; omitted, the phase is skipped.
+- **The HAR bind** is delegated to `har-scrub.mjs bind`, which the verb invokes with the recording you pass as `--har` and a destination fixed under `.pw-prove/` — the committed recording stays canonical, and the bound copy carrying this run's live credential never reaches a path git tracks. The verb then puts `PW_PROVE_HAR` on the runner's own environment, so every invocation **it** makes has the bound recording. **Pass `--har` only when the project has a recording**; omitted, the phase is skipped.
+
+**The two runs the verb does not own still have to carry it themselves.** The filming run and the mutation run below are raw runner invocations, and each is a fresh environment: unset there, the spec falls back to the committed placeheld recording and *every* read aborts under `notFound: 'abort'` — on the run whose footage gets published. So both carry `PW_PROVE_HAR=$PWD/.pw-prove/<feature>.api.har` explicitly, exactly as written in their command blocks. The path is the one the audit summary's `phases.har_bind.out` names; read it there rather than reconstructing it.
 
 **Exit 5 is a bind that cannot be made safe, in either of its two forms**, and the summary's `phases.har_bind.reason` says which:
 
@@ -863,7 +865,10 @@ rm -rf test-results
 
 # FILMING RUN — the clips that get delivered. video records ONE webm per test (per AC);
 # PW_PROVE_W/H carry the run's EFFECTIVE viewport — always pass them, never a fixed literal.
+# PW_PROVE_HAR is the audit summary's phases.har_bind.out, made absolute — this is a fresh
+# environment, and unset here every recorded read aborts on the run that gets published.
 PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
+  PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har" \
   npx --no-install playwright test <spec set> --project=chromium \
   --config <configDir>/playwright.proof.config.ts --reporter=html
 # webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
@@ -881,6 +886,8 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 | `5` | **The HAR bind refused** | Read `phases.har_bind.reason` and take the row above. Nothing was run — never run the proof past this and let it surface as an aborted call |
 | `6` | Tests red | Diagnose and heal, below. Rerun through this same verb with `--grep "<title>"` |
 | `7` | **Checkpoint refusal** — the failure signature did not move, or the attempt bound is spent | Stop the loop. Do not attempt another fix: invoke `playwright-debugger` and take the handover stop |
+
+Every summary carries both phases whatever they did — `ok`, `skipped` (the project has no tsconfig, or no `--har` was passed), `failed`, `refused`, or **`not-reached`** on an exit that stopped before the phases ran at all (`3` and `7`). `not-reached` is not `skipped`: the first says the question was never asked, the second says it was asked and had no answer to give.
 
 **The proof run is concurrent — the worker count is Playwright's.** The verb expresses no worker override by construction (ADR-0017), so the run takes Playwright's default of `cores/2` and the scenarios go together. Do not pin one in the committed proof config or in the project's `playwright.config` either.
 
@@ -1007,7 +1014,8 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 ```bash
 # --output moves ALL of this run's artifacts; no PW_PROVE_CLIP, so no dwell is paid either.
 # No concurrency override here either: -g scopes this to ONE test, so it is serial by arithmetic.
-npx --no-install playwright test <spec> --project=chromium \
+PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har" \
+  npx --no-install playwright test <spec> --project=chromium \
   --config <configDir>/playwright.proof.config.ts -g "<the guarding test>" \
   --output=/tmp/pw-prove-mutation --reporter=line
 ```
@@ -1209,7 +1217,7 @@ All paths are in this directory.
 - Code generation rules (POM, selectors, HAR-first Network Determinism): `code-rules.md`
 - Step-3 bring-up gate — the four phases that fail apart (`config` exit 4, `browser` exit 6, `build` exit 5, `serve` exit 3), the build-reuse check, and `PROBE_HOSTING=1`. Contracts are in Step 3: `scripts/preflight.mjs`
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
-- HAR scrubber and replay binding — **`probe.mjs` already runs the scrub at capture**, so a manual pass is a re-scrub, never the first one. `--verify` is Step 8's read-only check (exit 3 residue, exit 6 over-scrub) and `bind` is Step 7's run-local copy (exit 4, exit 5); both contracts are at those steps. One behavior stated nowhere else: a learned value too short to tell apart from ordinary content is placeheld **only where it was found**, never swept across the recording, and is reported by learn site and length: `scripts/har-scrub.mjs`
+- HAR scrubber and replay binding — **`probe.mjs` already runs the scrub at capture**, so a manual pass is a re-scrub, never the first one. `--verify` is Step 8's read-only check (exit 3 residue, exit 6 over-scrub) and `bind` is the audit verb's second phase, which invokes it rather than you (its own exit 4 and exit 5 reach you as the verb's exit 5, with `phases.har_bind.reason` saying which); both contracts are at those steps. One behavior stated nowhere else: a learned value too short to tell apart from ordinary content is placeheld **only where it was found**, never swept across the recording, and is reported by learn site and length: `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`

@@ -168,7 +168,11 @@ it comes first — a hermetic finding is a spec edit, and a spec edit invalidate
 before the filming run makes the cheap run the one that protects the expensive one. Since #142 it is an
 interface rather than a description: `proof-run.mjs audit` resolves the spec set, clears the results
 directory, runs it with no worker override, and bounds the heal loop through the
-[no-progress checkpoint](#no-progress-checkpoint).
+[no-progress checkpoint](#no-progress-checkpoint). Since #143 it also owns the run's two
+preconditions, each refusing under its own exit code before a browser run is spent: a type check
+against the e2e tsconfig when the project has one and the root one otherwise, and the HAR bind that
+points the canonical recording at this run's origin — delegated to `har-scrub.mjs bind`, reaching
+the run through `PW_PROVE_HAR`, and stopping outright when the bind cannot be made safe.
 
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the

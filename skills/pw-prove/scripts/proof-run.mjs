@@ -105,8 +105,8 @@
 // Exit codes are the contract both the agent and the ledger read. They are one table across the
 // three verbs, so a code never means two things:
 //   0   success (for `audit`: the run went green)
-//   1   usage                                  } no summary line: these exit before the spec set
-//   2   unreadable input, or no resolvable runner }   exists, so there is nothing to summarize
+//   1   usage                                  } no summary line while they exit before the spec
+//   2   unreadable input, or no resolvable runner }   set is resolved — nothing to summarize yet
 //   3   spec set resolved empty
 //   4   type check failed
 //   5   HAR bind refused — a placeholder in the replay match key, or a committable bind output
@@ -151,6 +151,17 @@ const SPEC_RE = /\.(spec|test)\.[cm]?[jt]sx?$/;
 // mean different things here: 4 an unbindable match key, 5 a destination git would commit, and
 // 1/2 an input this module handed it wrong — which is this module's bug, not a bind refusal.
 const SCRUB = { UNBOUND: 4, COMMITTABLE: 5 };
+// The phase vocabulary, named for the same reason the exit table is: an agent branches on these.
+// NOT_REACHED is distinct from SKIPPED on purpose — an exit that stops before the phases run (an
+// empty spec set, a checkpoint refusal) never asked the question, and reporting that as `skipped`
+// would say the project has no tsconfig and no recording when nothing of the sort was established.
+const PHASE = {
+  NOT_REACHED: 'not-reached',
+  SKIPPED: 'skipped',
+  OK: 'ok',
+  FAILED: 'failed',
+  REFUSED: 'refused',
+};
 
 const out = (s) => process.stdout.write(s);
 const err = (s) => process.stderr.write(s);
@@ -296,8 +307,8 @@ function writeState(state) {
 // The two preconditions report themselves whatever they did — ok, skipped, or the refusal and its
 // reason — so "was the bind done?" is read out of one line rather than inferred from its absence.
 const phases = {
-  typecheck: { status: 'pending', tsconfig: null },
-  har_bind: { status: 'pending', har: null, out: null, reason: null },
+  typecheck: { status: PHASE.NOT_REACHED, tsconfig: null },
+  har_bind: { status: PHASE.NOT_REACHED, har: null, out: null, reason: null, argv: null },
 };
 let summarize = () => {};
 function bindSummary(specs) {
@@ -389,7 +400,7 @@ const tsconfig = fs.existsSync(e2eTsconfig)
     : null;
 
 if (!tsconfig) {
-  phases.typecheck = { status: 'skipped', tsconfig: null };
+  phases.typecheck = { status: PHASE.SKIPPED, tsconfig: null };
 } else {
   const tsc = spawnSync('npx', ['--no-install', 'tsc', '--noEmit', '-p', tsconfig], {
     encoding: 'utf8',
@@ -402,7 +413,7 @@ if (!tsconfig) {
   // and a compiler's diagnosis belongs beside the refusal it caused. tsc prints errors to stdout.
   err(`${tsc.stdout ?? ''}${tsc.stderr ?? ''}`);
   if (tsc.status !== 0) {
-    phases.typecheck = { status: 'failed', tsconfig };
+    phases.typecheck = { status: PHASE.FAILED, tsconfig };
     summarize('typecheck-failed', EXIT.TYPECHECK, null, state.attempts);
     stop(
       EXIT.TYPECHECK,
@@ -411,7 +422,7 @@ if (!tsconfig) {
         'into the next behavioural rerun rather than paying a browser run for it.',
     );
   }
-  phases.typecheck = { status: 'ok', tsconfig };
+  phases.typecheck = { status: PHASE.OK, tsconfig };
 }
 
 // ---- phase 2: the HAR bind, delegated to the scrubber -------------------------------------------
@@ -419,7 +430,7 @@ if (!tsconfig) {
 // credential, and the one already-excluded directory is the only place it belongs.
 let boundHar = null;
 if (!opts.har) {
-  phases.har_bind = { status: 'skipped', har: null, out: null, reason: null };
+  phases.har_bind = { status: PHASE.SKIPPED, har: null, out: null, reason: null, argv: null };
 } else {
   const outPath = path.join(STATE_DIR, path.basename(opts.har));
   const scrubber = fileURLToPath(new URL('./har-scrub.mjs', import.meta.url));
@@ -434,6 +445,13 @@ if (!opts.har) {
     ...(opts.origin ? ['--origin', opts.origin] : []),
     ...(opts.bindings ? ['--bindings', opts.bindings] : []),
   ];
+  // The argv the module BUILT travels in the summary. The scrubber is a sibling module invoked by
+  // absolute path, so it cannot be observed by putting a recording shim on PATH the way the runner
+  // is — and the argv is the contract here just as much as it is there: both defects this module
+  // exists to prevent were wrong arguments. Carrying it is also what makes the two documented
+  // branches — a dropped `--origin` when the project owns rebinding, and a `--bindings` file —
+  // readable after the fact instead of inferred from what landed on disk.
+  const bindReport = bindArgv.slice(1);
   const bind = spawnSync(process.execPath, bindArgv, { encoding: 'utf8' });
   if (bind.error) {
     stop(EXIT.INPUT, `cannot run the scrubber (${bind.error.message})`);
@@ -450,10 +468,11 @@ if (!opts.har) {
           : 'scrubber-input';
     const refused = reason !== 'scrubber-input';
     phases.har_bind = {
-      status: refused ? 'refused' : 'failed',
+      status: refused ? PHASE.REFUSED : PHASE.FAILED,
       har: opts.har,
       out: outPath,
       reason,
+      argv: bindReport,
     };
     const code = refused ? EXIT.HAR_BIND : EXIT.INPUT;
     summarize('har-bind-refused', code, null, state.attempts);
@@ -473,7 +492,7 @@ if (!opts.har) {
     );
   }
   boundHar = path.resolve(outPath);
-  phases.har_bind = { status: 'ok', har: opts.har, out: outPath, reason: null };
+  phases.har_bind = { status: PHASE.OK, har: opts.har, out: outPath, reason: null, argv: bindReport };
 }
 
 // ---- the run ----------------------------------------------------------------------------------

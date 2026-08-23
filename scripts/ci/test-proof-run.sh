@@ -80,6 +80,18 @@ jq_field() { summary | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("en
 argv_has() {
   if grep -qxF -- "$2" "$NPX_ARGV"; then ok "$1"; else bad "$1 — argv lacks '$2': $(tr '\n' ' ' < "$NPX_ARGV")"; fi
 }
+# The scrubber is a sibling module invoked by absolute path, so it cannot be observed with a PATH
+# shim the way the runner is. The argv the module built travels in the summary instead, and that is
+# what is asserted here — the same contract, read at the same process boundary.
+bind_argv() { jq_field 'phases.har_bind.argv.join("\u0001")'; }
+bind_argv_has() {
+  if bind_argv | tr '\001' '\n' | grep -qxF -- "$2"; then ok "$1"
+  else bad "$1 — bind argv lacks '$2': $(bind_argv | tr '\001' ' ')"; fi
+}
+bind_argv_lacks() {
+  if bind_argv | tr '\001' '\n' | grep -qxF -- "$2"; then bad "$1 — bind argv carries '$2'"
+  else ok "$1"; fi
+}
 tsc_argv_has() {
   if grep -qxF -- "$2" "$NPX_TSC_ARGV"; then ok "$1"; else bad "$1 — tsc argv lacks '$2': $(tr '\n' ' ' < "$NPX_TSC_ARGV")"; fi
 }
@@ -424,6 +436,75 @@ NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base m
 [ "$(jq_field 'phases.har_bind.reason')" = committable-output ] \
   && ok "the summary names the committable output" || bad "bind reason wrong: $(summary)"
 [ -s "$NPX_ARGV" ] && bad "the run was paid for after a refused bind" || ok "nothing was run"
+
+echo ""
+echo "-- the argv handed to the scrubber, which is this phase's contract --"
+R="$W/repo-har-ok"   # the bindable fixture from above; its summary is the one on disk
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har --origin http://127.0.0.1:4173
+bind_argv_has "the scrubber's bind mode" "bind"
+bind_argv_has "the recording it was pointed at" "e2e/feature.api.har"
+bind_argv_has "the destination is fixed under the run's own directory" ".pw-prove/feature.api.har"
+bind_argv_has "the origin flag" "--origin"
+bind_argv_has "this run's origin travels as ONE argument" "http://127.0.0.1:4173"
+bind_argv_lacks "no bindings file is invented when none was given" "--bindings"
+
+echo ""
+echo "-- the documented branch where the project owns rebinding: --origin is dropped --"
+new_repo har-no-origin
+printf 'test\n' > "$R/e2e/a.spec.ts"
+write_har "$R/e2e/feature.api.har" "http://localhost/api/items"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har
+[ "$?" = 0 ] && ok "a bind with no --origin still runs" || { bad "the no-origin branch failed"; head -3 "$W/err"; }
+bind_argv_lacks "an origin the caller did not give is never substituted" "--origin"
+bind_argv_has "the recording is still bound" "e2e/feature.api.har"
+grep -q 'localhost/api' "$R/.pw-prove/feature.api.har" \
+  && ok "the recorded origin is left for the project's own rebinder" || bad "the origin was re-pointed anyway"
+
+echo ""
+echo "-- --bindings resolves a placeholder that sits in the match key --"
+new_repo har-bindings
+printf 'test\n' > "$R/e2e/a.spec.ts"
+write_har "$R/e2e/feature.api.har" "http://localhost/api/items?token=__PWPROVE_SCRUBBED__"
+mkdir -p "$R/.pw-prove"
+printf '{"__PWPROVE_SCRUBBED__":"value-this-run-supplied"}\n' > "$R/.pw-prove/bindings.json"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har --origin http://127.0.0.1:4173 \
+  --bindings .pw-prove/bindings.json
+[ "$?" = 0 ] && ok "a bindings file turns exit 5 back into a run" || { bad "the bindings branch failed"; head -5 "$W/err"; }
+bind_argv_has "the bindings flag reaches the scrubber" "--bindings"
+bind_argv_has "the bindings path travels as ONE argument" ".pw-prove/bindings.json"
+grep -q 'value-this-run-supplied' "$R/.pw-prove/feature.api.har" \
+  && ok "the match key now carries this run's own value" || bad "the placeholder survived into the bound copy"
+run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har --bindings .pw-prove/ghost.json
+[ "$?" = 2 ] && ok "a --bindings file that is not on disk is exit 2" || bad "a missing bindings file was ignored"
+
+echo ""
+echo "-- exits that stop before the phases report not-reached, never skipped --"
+# `skipped` would claim the project has no tsconfig and no recording; nothing of the sort was asked.
+new_repo not-reached
+: > "$NPX_TSC_ARGV"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main
+[ "$?" = 3 ] && ok "an empty spec set still stops first" || bad "expected exit 3"
+[ "$(jq_field 'phases.typecheck.status')" = not-reached ] \
+  && ok "an empty spec set reports the type check as not-reached" || bad "status wrong: $(summary)"
+[ "$(jq_field 'phases.har_bind.status')" = not-reached ] \
+  && ok "an empty spec set reports the bind as not-reached" || bad "status wrong: $(summary)"
+[ -s "$NPX_TSC_ARGV" ] && bad "the type checker ran over a spec set that resolved empty" \
+  || ok "an empty spec set buys no type check"
+
+R="$W/repo-red"   # the fixture whose loop stalled earlier
+: > "$NPX_TSC_ARGV"
+NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ "$?" = 7 ] && ok "a stalled loop still refuses first" || bad "expected exit 7"
+[ "$(jq_field 'phases.typecheck.status')" = not-reached ] \
+  && ok "a checkpoint refusal reports the phases as not-reached" || bad "status wrong: $(summary)"
+[ -s "$NPX_TSC_ARGV" ] && bad "a stalled loop paid for a type check" \
+  || ok "a stalled loop buys nothing at all — not even a type check"
+NPX_EXIT=0
 
 echo ""
 echo "-- the phases run in order: type check, then bind, then the run --"
