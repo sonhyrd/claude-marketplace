@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.29.0"
+  version: "0.30.0"
 ---
 
 # pw-prove
@@ -866,17 +866,24 @@ node <skill-base>/scripts/proof-run.mjs audit \
 
 # ...green, then the hermetic audit (it reads the traces under test-results/) and any fix it forces...
 
-# Clear again before filming: the audit run's traces have served their purpose, and only the
-# filming run's webms may be standing here at publish time.
-rm -rf test-results
-
-# FILMING RUN — the clips that get delivered. video records ONE webm per test (per AC);
-# PW_PROVE_W/H carry the run's EFFECTIVE viewport — always pass them, never a fixed literal.
-PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
-  npx --no-install playwright test <spec set> --project=chromium \
-  --config <configDir>/playwright.proof.config.ts --reporter=html
-# webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
+# FILMING RUN — one command. It runs the Step-6 clip-fidelity audit again as a PRECONDITION, clears
+# test-results/ (the audit run's traces have served their purpose, and only the filming run's webms
+# may be standing here at publish time), films the same spec set with PW_PROVE_CLIP=1 and the
+# effective viewport the verdict declares, then extracts one frame per clip for you to read.
+node <skill-base>/scripts/proof-run.mjs film \
+  --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base> \
+  --written <the spec this run wrote> \
+  --project-config <the project's own playwright.config.ts> \
+  --verdict <the Step-4 Assumptions block's Effective viewport line, verbatim>
+# video records ONE webm per test (per AC). webms + their frames land under test-results/<...>/ ;
+# the HTML report lands in playwright-report/. The JSON summary line carries every clip path with
+# its MEASURED duration and whether a frame was extracted — that is Step 8's manifest source.
 ```
+
+**`--verdict` does two jobs with one value, which is why there is no viewport flag.** It is what the
+fidelity audit compares against the config text, *and* its size is what travels to the recording as
+`PW_PROVE_W`/`PW_PROVE_H`. A second flag could disagree with the first, silently, and the clip would
+record at a size the app never rendered at.
 
 **Branch on the audit verb's exit code — each one is a different next move:**
 
@@ -888,6 +895,16 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 | `3` | The spec set resolved **empty** | The resolution is wrong — a wrong `--base`, or a `--test-dir` that is not where the specs landed. Fix it; never proceed on an empty set |
 | `6` | Tests red | Diagnose and heal, below. Rerun through this same verb with `--grep "<title>"` |
 | `7` | **Checkpoint refusal** — the failure signature did not move, or the attempt bound is spent | Stop the loop. Do not attempt another fix: invoke `playwright-debugger` and take the handover stop |
+
+**Branch on the film verb's exit code — `1`, `2` and `3` mean exactly what they mean above:**
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| `0` | The set was filmed | **Read every frame** (*Clip inspection* below), then the mutation check |
+| `6` | The filming run went red | A spec green in the audit run and red under `PW_PROVE_CLIP` is a **filming-law violation** — the variable may only add time. Fix the spec, re-run the audit verb, film again |
+| `12` | **Fidelity precondition refused** — the spec set does not carry the clip-fidelity contract | Nothing was filmed and `test-results/` is untouched. Fix the **committed spec** as the audit's own message says (its exit code is printed), then film again |
+
+**The precondition is not a duplicate of Step 6, and running it there does not license skipping it here.** A heal-loop edit between the two can have moved or dropped the dwell, and a precondition the verb enforces cannot be skipped by an agent that believes it already ran it. Filming a spec with no reader for `PW_PROVE_CLIP` is the originating regression: the flag is inert, the dwell never happens, and every gate stays green over a recording that shows nothing.
 
 **The proof run is concurrent — the worker count is Playwright's.** The verb expresses no worker override by construction (ADR-0017), so the run takes Playwright's default of `cores/2` and the scenarios go together. Do not pin one in the committed proof config or in the project's `playwright.config` either.
 
@@ -971,20 +988,12 @@ The verdict stays yours, matched against the spec's `// CARVE-OUT:` header:
 
 The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So after the filming run, extract one frame per clip at the moment of the hold and **read it**:
 
-```bash
-# One frame per clip, at duration − 0.5s — inside the payoff hold. Duration is probed with the
-# decode fallback: a live-recorded webm often declares none in its container. Frames land beside
-# their clip under test-results/, so Step 8's sweep removes them and no image reaches the repo.
-node <skill-base>/scripts/clip-fidelity.mjs frames test-results/*/video.webm
-```
+**The film verb already extracted them** — one frame per clip at duration − 0.5s, inside the payoff hold, landing beside its clip under `test-results/` so Step 8's sweep removes it and no image reaches the repo. You do not run a command for this; you read what the run handed you. Its summary line names every clip, its measured duration, its frame, and whether the frame exists:
 
-| Exit | Meaning | What to do |
-|---|---|---|
-| `0` | A frame per clip | **Read every frame** (image tool) and give each one a line in the report — `Clip 1 — the saved banner reads "Saved", centred, page settled`. |
-| `6` | `ffmpeg`/`ffprobe` absent | **Carry on** — this never fails the run. Every clip is reported `uninspected — no video tooling`. |
-| `7` | A clip yielded no frame | Carry on. The named clips are `uninspected`; the rest get their line. |
+- `"inspected": true` → **open the frame** (image tool) and give it a line in the report — `Clip 1 — the saved banner reads "Saved", centred, page settled`.
+- `"inspected": false` → that clip is reported `uninspected` and nothing else. It happens when `ffmpeg`/`ffprobe` are absent (every clip, `uninspected — no video tooling`) or when one recording yielded no frame while the rest got theirs.
 
-A clip you did not look at is reported as **uninspected**, which is the honest verdict — an unread clip is not a good one.
+**Neither case fails the run**, by design: a missing tool is not a failed test, and a gate that tripped here would abort a whole recording over an inspection. A clip you did not look at is reported as **uninspected**, which is the honest verdict — an unread clip is not a good one, and inventing a description of a frame you never opened is the failure this whole section exists to prevent.
 
 **An illegible frame is diagnosed, then fixed, then re-filmed — in that order.** A re-film with no preceding fix is deterministic and reproduces the same frame, so the diagnosis is the only thing that makes the retry worth having:
 
@@ -998,8 +1007,7 @@ A clip you did not look at is reported as **uninspected**, which is the honest v
 The fix goes into the **committed spec** — never into the proof config, and never into a filming-only branch (the filming law: `PW_PROVE_CLIP` may only add time).
 
 1. Apply the matching fix.
-2. **Re-run the Step-6 clip-fidelity audit on the edited spec** (`clip-fidelity.mjs spec … --config … --verdict …`) — exit 0 before filming, exactly as the first time. An edit that moved the dwell can have dropped its marker.
-3. **Re-film once** — the same filming-run command, `rm -rf test-results` first — and re-extract the frames.
+2. **Re-film once** — the same `proof-run.mjs film` command. It re-runs the clip-fidelity audit over the edited spec as its precondition (an edit that moved the dwell can have dropped its marker), clears `test-results/` itself, and re-extracts the frames. Exit 12 means the edit broke the contract rather than fixing the frame.
 
 **Exactly one re-film.** A second illegible frame **publishes anyway**, with an explicit warning: `Clip N — illegible (<diagnosis>), published with warning`, in both the completion report and the PR comment. A bad clip is not a failed test; the proof is the passing test plus the mutation verdict.
 
@@ -1218,6 +1226,7 @@ All paths are in this directory.
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
 - HAR scrubber and replay binding — **`probe.mjs` already runs the scrub at capture**, so a manual pass is a re-scrub, never the first one. `--verify` is Step 8's read-only check (exit 3 residue, exit 6 over-scrub) and `bind` is Step 7's run-local copy (exit 4, exit 5); both contracts are at those steps. One behavior stated nowhere else: a learned value too short to tell apart from ordinary content is placeheld **only where it was found**, never swept across the recording, and is reported by learn site and length: `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
+- Step-7 verify mechanics — `audit` (spec-set resolution, the clearing, the bounded heal loop) and `film` (the fidelity precondition, the clip flag and effective viewport, frame extraction, the clip manifest in its summary). Exit codes are one table across the verbs; the reasons behind each mechanic are in the module's header: `scripts/proof-run.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`
