@@ -30,6 +30,7 @@ each machine. Two directions: **apply** (baseline → machine) and **capture** (
 | `skillOverrides` | Yes | Pure preference, no paths. ~50 hand-tuned entries |
 | `permissions` | Yes | `defaultMode` and `deny` list are portable |
 | `attribution`, `includeCoAuthoredBy` | Yes | Plain booleans/strings |
+| `outputStyle` | Yes | A style name, no path — see below |
 | `env` | **One key** | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` only — see below. Everything else (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`) is machine-specific |
 | `hooks` | **No** | Contains absolute paths (`~/.orca/agent-hooks/`, `~/.claude/hooks/`) |
 | `enabledPlugins`, `extraKnownMarketplaces` | **Partly** | Non-directory sources sync via `baseline/plugins.json`; directory sources carry a per-machine path and do not |
@@ -58,6 +59,23 @@ Because apply is a **deep merge** (`jq -s '.[0] * .[1]'`), landing this key adds
 `env` the machine already has — `CLAUDE_HOST_LABEL` and friends survive untouched. That is the
 property that makes syncing a single `env` key safe, and it is why the merge must stay a deep
 merge and never become a whole-object replace.
+
+### `outputStyle`
+
+`/config`'s **Output style** row lands in `~/.claude/settings.json` as `outputStyle`, naming a style
+by its display name — `Concise` among them. It syncs for the reason `skillOverrides` does: it names
+a preference and nothing else, no path, no host, no version, so one value is correct on every
+machine, and a style chosen on the laptop and absent on the VPS is the incoherent state the baseline
+exists to end.
+
+The panel's other rows stay machine-local. `verbose` and `askUserQuestionTimeout` are real settings
+keys and would sync just as cleanly — they are left out because they were not asked for, not because
+they resist it, and adding one is a line in the capture list plus a line in the table.
+
+**`outputStyle` is absent from `settings.json` until it is changed from its default**, which is why
+capture filters nulls rather than writing the key with a null value. Deep-merging
+`"outputStyle": null` onto another machine would overwrite a real choice there with nothing — the
+one way a sync of optional keys can lose a setting rather than spread one.
 
 ## The plugin roster
 
@@ -311,12 +329,19 @@ attempts at one.
 Pull the synced regions out of the live settings and write them back to `baseline/`:
 
 ```bash
-jq '{statusLine, skillOverrides, permissions, attribution, includeCoAuthoredBy}
+jq '({statusLine, skillOverrides, permissions, attribution, includeCoAuthoredBy, outputStyle}
+     | with_entries(select(.value != null)))
     + (.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY
        | if . then {env: {CLAUDE_CODE_DISABLE_AUTO_MEMORY: .}} else {} end)
     | .statusLine.command = "~/.claude/statusline-native.sh"' \
   ~/.claude/settings.json > "$SKILL_DIR/baseline/settings.base.json"
 ```
+
+**`with_entries(select(.value != null))` is load-bearing.** `jq`'s object construction invents a key
+with a null value for every name the input does not have, so without the filter a capture on a
+machine that never touched `outputStyle` writes `"outputStyle": null` into the baseline — and apply's
+deep merge then lands that null on a machine where the user *had* chosen a style. Filtering keeps
+capture additive in the same way apply already is.
 
 The `.statusLine.command` rewrite is required — the live file holds an absolute path
 (`/Users/<you>/.claude/...`) that is wrong on every other machine.
