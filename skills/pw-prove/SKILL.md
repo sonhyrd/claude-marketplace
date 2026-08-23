@@ -964,6 +964,8 @@ The spec is hermetic by default, and **the audit verb already classified the run
 | `carve_outs` | Every carve-out line found in the spec set, with the spec and line it sits on |
 | `status: failed`, `reason: no-traces` | The run recorded no traces, so nothing was classified — the proof config must set `trace: 'on'`; re-run the audit run through it |
 
+**The presence test is deliberately generous, and its generosity is yours to check.** A carve-out declares the path it names *and the paths under it* (a `:param` segment stands for one segment, a `*` for any run of characters), and a line naming no method declares that path for every method — so `// CARVE-OUT: /api` would leave every live `/api/**` call out of `undeclared`. That is the safe direction to err in mechanically: a false *undeclared* would send you to declare what is already declared, while a false *declared* leaves you the judgement you already owe. Read `carve_outs` beside `live` — a carve-out broader than the call it was written for is a finding.
+
 **Presence is computed; legitimacy is yours.** An `undeclared` entry is a string comparison, so it needs no judgement from you — but the reverse is not true: a call that *is* declared is a call whose carve-out you still have to accept or reject, against the AC. A carve-out is legitimate only where the real round-trip **is** the acceptance criterion; one that exists to make a mock unnecessary is a live call wearing a comment.
 
 - Every live call (and every in-spec round-trip) named in a `// CARVE-OUT:` line **you accept** → pass; the report's `Tests` line carries `hermetic (carve-outs: <list>)`.

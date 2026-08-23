@@ -573,7 +573,10 @@ fs.writeFileSync(zipPath, Buffer.concat([local, nm, data, central, nm, eocd]));
 MKZIP
 
 if ! command -v unzip >/dev/null 2>&1; then
-  echo "  [SKIP] hermetic phase: unzip is not available (traces are zip archives)"
+  # Refused, not skipped. `unzip` is a hard dependency of the classification this phase delegates
+  # to, so a host without it cannot exercise a single assertion below — and a suite that goes green
+  # while the whole feature under test went unmeasured is the instrument lying about its own reach.
+  bad "hermetic phase: unzip is not installed, so the classification cannot be exercised at all"
 else
   # One entry per class, in the shape Playwright 1.61 writes.
   cat > "$W/0-trace.network" <<'NETWORK'
@@ -643,6 +646,22 @@ SPEC
   [ "$(jq_field 'phases.hermetic.undeclared.length')" = 1 ] \
     && ok "a carve-out naming another method does not declare this call" \
     || bad "the method was ignored: $(summary)"
+
+  echo ""
+  echo "  -- the restore clause is not a second declared method --"
+  # The documented carve-out form carries a `restore:` verb after the separator. Scanning the whole
+  # line for methods would read that verb as declared and turn this leading-path-only carve-out into
+  # a false `undeclared` — which would send the agent to declare what is already declared.
+  new_repo hermetic-restore
+  cat > "$R/e2e/a.spec.ts" <<'SPEC'
+// CARVE-OUT: /api/v1/exchange-rates — the live round-trip IS the AC — restore: DELETE /api/v1/rates/:id
+test('scenario', async ({ page }) => { await page.goto('/') })
+SPEC
+  NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  [ "$(jq_field 'phases.hermetic.undeclared.length')" = 0 ] \
+    && ok "a method named only in the restore clause does not narrow the declaration" \
+    || bad "the restore clause was read as the declared method: $(summary)"
 
   echo ""
   echo "  -- a carve-out anywhere in the spec SET declares the call --"

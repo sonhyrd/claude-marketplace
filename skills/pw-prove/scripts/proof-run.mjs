@@ -182,6 +182,12 @@ const HERMETIC = { NO_TRACES: 2 };
 // The methods a carve-out line can name. A line that names none declares the path for every method;
 // a line that names one declares only that one, so a `POST` carve-out cannot cover a live `GET`.
 const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g;
+// Only the HEAD of the line declares — the text before the first separator. The documented form is
+// `CARVE-OUT: POST /api/v2/drafts — why — restore: DELETE /api/v2/drafts/:id`, so a method scan over
+// the WHOLE line reads the restore clause's verb as a second declared method and turns a
+// leading-path-only carve-out into a false `undeclared` — the one direction this check must not err
+// in, since it would send the agent to declare something already declared.
+const DECLARATION_HEAD = /^([^\u2014\u2013]*)/;
 // The scrubber's own exit table, read rather than re-derived. Its bind mode answers three ways that
 // mean different things here: 4 an unbindable match key, 5 a destination git would commit, and
 // 1/2 an input this module handed it wrong — which is this module's bug, not a bind refusal.
@@ -679,7 +685,12 @@ function pathMatches(token, pathname) {
 }
 
 function declaredBy(carveOuts, call) {
-  const [method, url] = [call.slice(0, call.indexOf(' ')), call.slice(call.indexOf(' ') + 1)];
+  // `METHOD URL`, the shape the classifier renders. Split defensively rather than on an index that
+  // is -1 when it is not: that silently yields an empty method and a URL missing its first
+  // character, and both would then be compared against every carve-out line as if they were real.
+  const sep = call.indexOf(' ');
+  const method = sep === -1 ? '' : call.slice(0, sep);
+  const url = sep === -1 ? call : call.slice(sep + 1);
   let pathname = url;
   try {
     pathname = new URL(url).pathname;
@@ -689,8 +700,8 @@ function declaredBy(carveOuts, call) {
   return carveOuts.some((c) => {
     // A line naming no method declares the path for every method; one naming a method declares
     // only that method, so a `POST` carve-out never covers a live `GET`.
-    const methods = c.text.match(METHOD_RE);
-    if (methods && !methods.includes(method)) return false;
+    const methods = c.text.match(DECLARATION_HEAD)[1].match(METHOD_RE);
+    if (method && methods && !methods.includes(method)) return false;
     if (c.text.includes(url)) return true;
     return [...c.text.matchAll(PATH_TOKEN_RE)]
       .map((m) => m[1])
