@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.31.0"
+  version: "0.32.0"
 ---
 
 # pw-prove
@@ -761,7 +761,7 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 - **The type check** takes the e2e tsconfig when the project has one and the root one otherwise; that branch is the verb's, not yours, and a project with neither is skipped rather than failed. Exit **4** is a spec set that does not compile.
 - **The HAR bind** is delegated to `har-scrub.mjs bind`, which the verb invokes with the recording you pass as `--har` and a destination fixed under `.pw-prove/` — the committed recording stays canonical, and the bound copy carrying this run's live credential never reaches a path git tracks. The verb then puts `PW_PROVE_HAR` on the runner's own environment, so every invocation **it** makes has the bound recording. **Pass `--har` only when the project has a recording**; omitted, the phase is skipped.
 
-**The two runs the verb does not own still have to carry it themselves.** The filming run and the mutation run below are raw runner invocations, and each is a fresh environment: unset there, the spec falls back to the committed placeheld recording and *every* read aborts under `notFound: 'abort'` — on the run whose footage gets published. So both carry `PW_PROVE_HAR=$PWD/.pw-prove/<feature>.api.har` explicitly, exactly as written in their command blocks. The path is the one the audit summary's `phases.har_bind.out` names; read it there rather than reconstructing it.
+**The two verbs with no bind phase of their own still have to carry it.** `film` and `mutate` below run in a fresh environment each: unset there, the spec falls back to the committed placeheld recording and *every* read aborts under `notFound: 'abort'` — on the run whose footage gets published. So both carry `PW_PROVE_HAR=$PWD/.pw-prove/<feature>.api.har` as an inline assignment, exactly as written in their command blocks. The path is the one the audit summary's `phases.har_bind.out` names; read it there rather than reconstructing it.
 
 **Exit 5 is a bind that cannot be made safe, in either of its two forms**, and the summary's `phases.har_bind.reason` says which:
 
@@ -1018,18 +1018,7 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 
 **Scope: the scenarios this run wrote.** A carried scenario's mutation verdict was recorded by the run that wrote it, and re-deriving it costs one forced-no-reuse rebuild each (~635s, below). So the run carries two scopes and they are different on purpose: **filmed** is the PR spec set (Step 7), **mutation-verified** is this run's new scenarios. Widening one leaves the other where it is. A run that wrote no new scenario — a re-film of an unchanged branch — reports `Mutation: carried (no new scenario this run)` and mutates nothing.
 
-**The mutation run must not touch the clips.** `test-results/` holds the recorded evidence of the *passing* run; a mutation run writing there overwrites clips with footage of deliberately broken software, and publishing those is the worst artifact this pipeline could emit. Send it elsewhere and record nothing:
-
-```bash
-# --output moves ALL of this run's artifacts; no PW_PROVE_CLIP, so no dwell is paid either.
-# No concurrency override here either: -g scopes this to ONE test, so it is serial by arithmetic.
-PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har" \
-  npx --no-install playwright test <spec> --project=chromium \
-  --config <configDir>/playwright.proof.config.ts -g "<the guarding test>" \
-  --output=/tmp/pw-prove-mutation --reporter=line
-```
-
-Getting this wrong costs a full extra proof run to regenerate clips — and only if you notice.
+**The mutation run must not touch the clips**, and the verb is what makes that true by construction: it sends the run to an isolated output, leaves `test-results/` exactly as it stands — the one verb that does not clear it — and counts the clips afterwards against the PR spec set, carried scenarios included. Getting this wrong costs a full extra proof run to regenerate clips, and only if you notice.
 
 **The mutation must be in the artifact under test.** The proof target is a *build*, so a mutated source file changes nothing until it is rebuilt — a mutation check run against the standing artifact is green by construction and proves nothing. Rebuild after mutating and again after reverting, forcing the build both times, and restart the preview server on each so it serves the artifact you just made:
 
@@ -1047,28 +1036,40 @@ SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
 
 `BUILD_REUSE=never` is not optional here: the reuse check is what makes a batch cheap, and the mutation check is the one run that must never inherit an artifact. (The mutation moves the fingerprint too, so both belt and braces point the same way.) Budget for it — this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
 
-1. **Record pre-state:** `git status --porcelain > /tmp/pre.status && git diff > /tmp/pre.patch`.
-2. **Mutate** the changed behavior (one line is enough), then **rebuild and restart the preview** as above.
-3. **Run the spec** with the isolated output above — `-g` the one test that should guard it, not the whole spec. Only once the restart came back `RESTART=proven`; an unproven one has no verdict to read. Three verdicts, exactly one retry:
-   - **Red** → the spec guards the change. Done.
-   - **Green** → strengthen the terminal assertion and repeat **once**.
-   - **Green again, behavior not isolable at the browser layer** (another layer independently preserves the outcome — e.g. a read-modify-write that re-reads and merges) → **"unguardable at this layer"**. Never a third cycle. State it in the report and PR comment, naming the masking layer.
-4. **Revert exactly** (`git checkout -- <file>`), then **mark the built artifact stale** — do not rebuild here. The revert is unconditional and immediate; the rebuild is **lazy**, and the marker is what makes laziness safe:
+1. **Mutate the changed behavior** — one line is enough, in a file git already tracks, left **unstaged**. Choosing which line is yours: pick the one the AC is actually about, not a nearby constant a stronger layer would restore. Then **rebuild and restart the preview** as above.
+2. **Run the verb.** It captures the tree's pre-state, runs the guarding test into an isolated output with `test-results/` untouched, reverts the file you named, checks the tree came back, and counts the clips. Only once the restart came back `RESTART=proven`; an unproven one has no verdict to read.
 
    ```bash
-   git checkout -- <file>
+   PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har" \
+     node <skill-base>/scripts/proof-run.mjs mutate \
+     --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base ref> \
+     --written <this run's spec> --grep "<the guarding test>" --mutated <the file you mutated> \
+     --clips <the film summary's clips.length>
+   ```
+
+   `--written` is repeatable and is the mutation-verified scope; `--grep` scopes the run to ONE test, so **give the test's `test(...)` title verbatim** — a title that also matches a second written spec's test widens the scope silently. `--clips` is the filming summary's own `clips.length`: without it the verb can only hold the surviving clips to one per spec file, which a multi-scenario spec passes while two of its clips are missing. `PW_PROVE_HAR` travels inline for the same reason it does on the filming run: this verb has no bind phase, and unset there every read aborts under `notFound: 'abort'`. Read the exit code:
+
+   | Exit | Meaning | Do |
+   |---|---|---|
+   | `0` | **Red** — the spec guards the change | Read the summary's `signature` and confirm it is the assertion your mutation targeted. A red that names a navigation or connection failure is the application falling over, not a guard — fix that and run again |
+   | `8` | **Green** — the spec does not guard it. Not a failed run | Strengthen the terminal assertion and repeat **once**. Green a second time, with another layer independently preserving the outcome (e.g. a read-modify-write that re-reads and merges) → **"unguardable at this layer"**. Never a third cycle. State it in the report and PR comment, naming the masking layer |
+   | `9` | Tree residue after the revert | **HARD STOP.** Report immediately; never continue on a polluted tree |
+   | `10` | The clips no longer show the passing run | Delete `test-results/`, re-run the audit and filming verbs, then publish. Never publish a clip you cannot place after the last source revert |
+   | `2` | The file you named is untracked or carries no change; a `--written` spec is not on disk; or `--grep` matched **no test at all** | Nothing ran, so there is no verdict. Fix the input named and invoke again |
+   | `1` | Usage — a missing or malformed flag | Fix the invocation |
+   | `3` | The spec set resolved empty | The wrong base ref, or a test directory that is not where the specs landed. Fix the resolution |
+
+   The revert has already happened whatever the code says — it is unconditional, and runs before the verdict is read.
+
+3. **Mark the built artifact stale** — do not rebuild here. The revert the verb already did is unconditional and immediate; the rebuild is **lazy**, and the marker is what makes laziness safe:
+
+   ```bash
    printf 'mutation reverted, artifact still holds the mutation\n' > .pw-prove/artifact-stale
    ```
 
    **Any step that needs the server rebuilds first if the marker is set**, forcing the build and proving the restart exactly as above (a fresh `MARK`, `SERVE_RESTART=1`), then removes the marker. That closes the hazard the old unconditional rebuild guarded — a re-film, a heal run or an audit running against deliberately broken software — without asking this step to predict whether any of them is still coming. **Step 8 hygiene stops a stale server rather than rebuilding it**, which is the common case: a mutation check that is the run's last step now pays nothing. An observed run paid an 82-second rebuild at 13:24:33 for a server it stopped at 13:26:55.
 
    The marker exists because the *artifact* is out of step with a tree that looks unchanged — precisely the case the build-reuse check cannot see, since reuse is measured against HEAD plus the working-tree difference and the revert restored the tree. Build reuse is otherwise unaffected on this path.
-5. **Verify the tree is unchanged** — process substitution on **both** sides so a trailing-newline artifact isn't mistaken for residue:
-   ```bash
-   diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch
-   ```
-   Real residue = **HARD STOP**: report immediately; never continue on a polluted tree.
-6. **Confirm the clips survived:** `ls test-results/*/video.webm | wc -l` equals the **PR spec set's** scenario count, carried scenarios included. If the mutation run clobbered them (it wrote to `test-results/`), the clips no longer show passing software — delete them and re-run the proof before publishing. Never publish a clip you cannot place after the last source revert.
 
 **On full pass:** PR-mode → Step 8. Target/coverage-gap → the completion report directly (Step 8's proof page only when a clip was requested or the publish prerequisites are ready).
 
@@ -1154,7 +1155,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
 
    **The `spec` field is the description a reviewer reads**, so it carries the two facts the footage cannot show: that every scenario replays a recorded HAR fixture — so the film proves the frontend's read and write shapes, and a reviewer who concludes the backend is proven has been misled — plus each declared carve-out, plus any truncation above.
 2. **Hygiene sweep** before staging:
-   - Delete `test-results/`/`playwright-report/` litter (and `/tmp/pw-prove-mutation`), plus any legacy throwaway `.pw-prove.proof.config.*` left by an older run. **Keep `playwright.proof.config.ts`** — it is a deliverable, not litter; stage it when this run created it. Publish before deleting `test-results/`: the clips live there.
+   - Delete `test-results/`/`playwright-report/` litter (and the mutation run's isolated output, which the mutate summary names as `output` — read it there rather than reconstructing the path), plus any legacy throwaway `.pw-prove.proof.config.*` left by an older run. **Keep `playwright.proof.config.ts`** — it is a deliverable, not litter; stage it when this run created it. Publish before deleting `test-results/`: the clips live there.
    - **Never delete the kept proof file** (`$KEPT`, i.e. `$TMPDIR/pw-prove-proof.webm`) when the publish came back undelivered. It is the only remaining copy of the evidence and the operator has been told to attach it — sweeping it away deletes the fallback moments after it was created. It is litter only once the run has published (`$PAGE` set) or a gate withheld it, and the script already removes it in the gate case.
    - **Stop the preview server if this run started it** (Step 3) — `kill <the recorded PID>`, then `kill -0 <pid>` to observe it gone — and say so in the report: `Preview server: stopped (port <N>)` — or `left running (pre-existing)` when it was already up. Keep it running only if the user asked. A **stale** artifact needs no rebuild on the way out: stopping is the last thing that touches this server. Read `.pw-prove/artifact-stale` for the report's artifact state, then delete it — a marker outliving its run makes the next run's first build unconditional.
    - Revert codegen churn (`git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'` on Nuxt-style repos).

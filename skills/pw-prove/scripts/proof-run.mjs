@@ -7,6 +7,9 @@
 //   node proof-run.mjs film  --config <proof config> --test-dir <testDir> --base <ref>
 //                           --project-config <the project's own playwright.config>
 //                           --verdict <pinned:WxH|deliberate:WxH> [--written <spec>]... [--project <name>]
+//   node proof-run.mjs mutate --config <proof config> --test-dir <testDir> --base <ref>
+//                           --written <spec>... --grep <the guarding test> --mutated <file>...
+//                           [--project <name>]
 //
 // Step 7 was the largest section of pw-prove's body and the only large one with no module behind
 // it: bring-up has preflight.mjs, recon has probe.mjs, the recording has har-scrub.mjs, the
@@ -95,9 +98,52 @@
 //   through `video.mjs`, the one place a Proof clip is measured, because a live-recorded webm often
 //   declares no duration in its container and a second copy of that logic is the copy that trusts it.
 //
+//   THE MUTATION RUN'S OUTPUT IS ISOLATED BY CONSTRUCTION, AND IT IS THE REASON THE VERB EXISTS
+//   SEPARATELY. `test-results/` holds the recorded evidence of the run that PASSED — the clips
+//   Step 8 is about to publish. A mutation run writing there overwrites them with footage of
+//   deliberately broken software, which is the worst artifact this pipeline could emit; it costs a
+//   full extra proof run to regenerate, and only if anyone notices. So `--output` is fixed here
+//   rather than passed, the results directory is NOT cleared on this verb — the one place that rule
+//   is off, because here the standing contents are the thing being protected rather than stale
+//   litter — and the reporter is `line`: a mutation run records nothing and publishes nothing.
+//
+//   A RED MUTATION RUN IS SUCCESS (exit 0) AND A GREEN ONE IS A FINDING (exit 8). The verb inverts
+//   the usual reading on purpose: the question it asks is "does the spec guard this change?", so the
+//   test going red is the answer that passes. Collapsing green into `tests red` (6) would report
+//   "the spec does not guard the change" as "the tests failed", which is the opposite claim about
+//   the same run. The agent reads 8 and strengthens the terminal assertion, or names the behaviour
+//   unguardable at this layer; both of those are judgement and stay with it.
+//
+//   THE REVERT IS UNCONDITIONAL AND IMMEDIATE — it runs the moment the runner returns, before the
+//   verdict is read at all, so no branch of this verb can leave a deliberately broken tree behind.
+//   `--mutated` names the files the agent changed, because reverting anything it did not name would
+//   throw away work the run did not make. The files are checked BEFORE the run: one that is not
+//   tracked cannot be reverted, and one that carries no unstaged change means the mutation was
+//   never applied (or was staged) — either way a green run would prove nothing, so both stop here
+//   rather than being paid for.
+//
+//   RESIDUE AFTER THE REVERT IS A HARD STOP (exit 9), and it is measured against a pre-state taken
+//   before anything ran. The pre-state is the tree MINUS the mutated files' own changes — which is
+//   exactly what the tree must look like once they are reverted — so the comparison catches a revert
+//   that did not take and anything the run itself left lying in the tree, tracked or not. It cannot
+//   catch a mutation the agent applied to a file it did not declare: by the time this verb is
+//   invoked that edit is already in the tree and is indistinguishable from the run's own work.
+//   Declare every file you mutated. A proof never continues on a polluted working tree.
+//
+//   THE CLIPS ARE COUNTED AFTERWARDS, AGAINST THE SPEC SET (exit 10). Every clip standing before
+//   the mutation run must still be standing, byte-for-byte unmoved, afterwards — and there must be
+//   at least one per spec in the PR spec set, carried scenarios included, because that set is what
+//   the filming run filmed. Evidence that was clobbered is then caught here rather than noticed by
+//   a reviewer watching broken software. The mutation run is scoped to the scenarios THIS run wrote
+//   (`--written` plus `--grep`), while the count is against the whole set: the two scopes are
+//   different on purpose, and widening one leaves the other where it is. The floor this verb can
+//   compute alone is one clip per SPEC; `--clips` carries the filming run's own scenario count, so
+//   a multi-scenario spec's missing clips are caught rather than absorbed by the weaker floor.
+//
 // WHAT STAYS WITH THE AGENT, unchanged: diagnosing a red test and writing the fix, judging whether
 // a present carve-out is legitimate, READING EACH EXTRACTED FRAME and naming what is wrong with it,
-// and the handover stop when the loop is exhausted.
+// CHOOSING WHICH LINE TO MUTATE, strengthening the terminal assertion once and rendering the
+// unguardable-at-this-layer verdict, and the handover stop when the loop is exhausted.
 //
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention.
 //
@@ -111,13 +157,15 @@
 //   5   HAR bind refused                     } reserved — the audit verb's bind phase
 //   6   tests red
 //   7   checkpoint refusal — an unchanged failure signature, or an attempt past the bound
-//   8   mutation run green (the spec does not guard the change)   } reserved — `mutate`
-//   9   tree residue after the revert, a hard stop                } reserved — `mutate`
-//   10  clips clobbered or count mismatched                       } reserved — `film`/`mutate`
-//   11  restart unproven                                          } reserved — `mutate`
+//   8   mutation run green (the spec does not guard the change)   } `mutate` — 0 there means the
+//   9   tree residue after the revert, a hard stop                }   run went RED, which is what
+//   10  clips clobbered or count mismatched                       }   this verb is asking for
+//   11  restart unproven                                          } reserved — `mutate`, see #148
 //   12  filming precondition refused — the spec does not carry the clip-fidelity contract
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pwproveRun } from './pwprove-run.mjs';
@@ -132,13 +180,17 @@ const EXIT = {
   HAR_BIND: 5,
   TESTS_RED: 6,
   CHECKPOINT: 7,
+  MUTATION_GREEN: 8,
+  RESIDUE: 9,
+  CLIPS: 10,
   FIDELITY: 12,
 };
 
-const VERBS = new Set(['audit', 'film']);
-// Schema 2 added the film verb's fields: `clips`, `viewport` and `verdict`. Fields are added over
-// time, so a reader reads the schema before it reads anything else.
-const SUMMARY_SCHEMA = 2;
+const VERBS = new Set(['audit', 'film', 'mutate']);
+// Schema 2 added the film verb's fields: `clips`, `viewport` and `verdict`. Schema 3 added the
+// mutate verb's: `mutation_run`, `output`, `mutated`, `reverted`, `residue` and `clips` as a count
+// record. Fields are added over time, so a reader reads the schema before it reads anything else.
+const SUMMARY_SCHEMA = 3;
 const STATE_SCHEMA = 1;
 // Fixed, not a flag. The bound is the body's bound, and a knob whose only caller would be a test is
 // a test-only injection point — the one thing this module is not allowed to grow.
@@ -147,6 +199,15 @@ const ATTEMPT_BOUND = 3;
 // flag for either would let a caller point a recursive delete somewhere it does not belong.
 const RESULTS_DIR = 'test-results';
 const STATE_DIR = '.pw-prove';
+// The mutation run's isolated output lives under the system temp directory, so nothing about it can
+// land in the project's diff, and it is keyed by the repository it belongs to: proofs run in
+// parallel worktrees are this repo's normal shape, and one fixed machine-global directory that each
+// run deletes at start would have them deleting each other's. The name is still fixed by
+// CONSTRUCTION rather than passed — a flag here could be pointed back at `test-results/`, which is
+// the one thing this verb exists to keep it away from. It travels in the summary as `output`, which
+// is where a later step reads it rather than reconstructing it.
+const mutationOut = (repo) =>
+  path.join(os.tmpdir(), `pw-prove-mutation-${crypto.createHash('sha1').update(repo).digest('hex').slice(0, 12)}`);
 // The extension filter that runs AFTER the directory pathspec. Deliberately the same set the body
 // documented: .spec/.test, any of js/jsx/ts/tsx, with the cjs/mjs prefixes projects do use.
 const SPEC_RE = /\.(spec|test)\.[cm]?[jt]sx?$/;
@@ -181,7 +242,10 @@ const USAGE =
   '       proof-run.mjs film  --config <proof config> --test-dir <testDir> --base <ref>\n' +
   "                          --project-config <the project's own playwright.config>\n" +
   '                          --verdict <pinned:WxH|deliberate:WxH>\n' +
-  '                          [--written <spec>]... [--project <name>]\n';
+  '                          [--written <spec>]... [--project <name>]\n' +
+  '       proof-run.mjs mutate --config <proof config> --test-dir <testDir> --base <ref>\n' +
+  '                          --written <spec>... --grep <the guarding test> --mutated <file>...\n' +
+  '                          [--project <name>]\n';
 
 const verb = process.argv[2];
 // Read before validation so even a usage-error exit leaves a ledger record; the phase is the verb.
@@ -208,6 +272,8 @@ const opts = {
   grep: null,
   projectConfig: null,
   verdict: null,
+  mutated: [],
+  clips: null,
 };
 
 const argv = process.argv.slice(3);
@@ -228,15 +294,31 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--grep' || a === '-g') opts.grep = need(++i, a);
   else if (a === '--project-config') opts.projectConfig = need(++i, a);
   else if (a === '--verdict') opts.verdict = need(++i, a);
+  else if (a === '--mutated') opts.mutated.push(need(++i, a));
+  else if (a === '--clips') opts.clips = need(++i, a);
   else usage(`unknown flag '${a}'`);
 }
 
-// Per-verb, in both directions. A flag a verb does not use is a usage error rather than a silent
-// no-op: a flag that reads as accepted and does nothing is exactly the class of defect — a wrong
-// argument nothing notices — this module exists to make impossible.
-const REQUIRED = {
-  audit: ['--config', '--test-dir', '--base'],
-  film: ['--config', '--test-dir', '--base', '--project-config', '--verdict'],
+// One row per verb, so a fourth verb is one row rather than an edit in every table below.
+// `required` and `accepted` are read in both directions: a flag missing from `required` stops the
+// run, and a flag in neither list is a usage error rather than a silent no-op — a flag that reads as
+// accepted and does nothing is exactly the class of defect this module exists to make impossible.
+// `accepted` lists everything beyond the universal four (--config/--test-dir/--base/--project); two
+// verbs legitimately share one, since the heal loop's --grep on `audit` and the guarding test's
+// --grep on `mutate` are the same flag doing the same job.
+const VERB_SPEC = {
+  audit: {
+    required: ['--config', '--test-dir', '--base'],
+    accepted: ['--written', '--grep', '--har', '--origin', '--bindings'],
+  },
+  film: {
+    required: ['--config', '--test-dir', '--base', '--project-config', '--verdict'],
+    accepted: ['--written'],
+  },
+  mutate: {
+    required: ['--config', '--test-dir', '--base', '--written', '--grep', '--mutated'],
+    accepted: ['--clips'],
+  },
 };
 const FLAG_VALUES = {
   '--config': opts.config,
@@ -247,19 +329,19 @@ const FLAG_VALUES = {
   '--har': opts.har,
   '--origin': opts.origin,
   '--bindings': opts.bindings,
+  '--grep': opts.grep,
+  '--written': opts.written.length ? opts.written : null,
+  '--mutated': opts.mutated.length ? opts.mutated : null,
+  '--clips': opts.clips,
 };
-const OWNED = {
-  audit: ['--grep', '--har', '--origin', '--bindings'],
-  film: ['--project-config', '--verdict'],
-};
-for (const flag of REQUIRED[verb]) {
+const takes = (v, flag) => VERB_SPEC[v].required.includes(flag) || VERB_SPEC[v].accepted.includes(flag);
+for (const flag of VERB_SPEC[verb].required) {
   if (!FLAG_VALUES[flag]) usage(`${flag} is required for '${verb}'`);
 }
-for (const [owner, flags] of Object.entries(OWNED)) {
-  if (owner === verb) continue;
-  for (const flag of flags) {
-    if (FLAG_VALUES[flag]) usage(`${flag} belongs to '${owner}', not to '${verb}'`);
-  }
+for (const flag of Object.keys(FLAG_VALUES)) {
+  if (takes(verb, flag) || !FLAG_VALUES[flag]) continue;
+  const owners = Object.keys(VERB_SPEC).filter((v) => takes(v, flag));
+  usage(`${flag} belongs to '${owners.join("'/'")}', not to '${verb}'`);
 }
 
 // The Step-4 Assumptions block's Effective viewport line, verbatim — the same value the fidelity
@@ -276,6 +358,19 @@ const viewport = (() => {
     );
   }
   return { width: Number(m[2]), height: Number(m[3]) };
+})();
+
+// The filming run's own clip count, from its summary's `clips.length`. The spec SET is the floor
+// this verb can compute alone — one clip per spec — but a spec holding three scenarios filmed three
+// clips, and a floor of one would let two of them go missing unnoticed. So the real count is read
+// from the run that produced it rather than re-derived here, and the flag is optional because a
+// mutation check run without the filming summary to hand still gets the floor.
+const expectedClips = (() => {
+  if (opts.clips === null) return null;
+  if (!/^\d+$/.test(opts.clips)) {
+    usage(`--clips '${opts.clips}' is not a count — it is the film summary's \`clips.length\``);
+  }
+  return Number(opts.clips);
 })();
 function stop(code, message) {
   err(`proof-run ${verb}: ${message}\n`);
@@ -303,6 +398,11 @@ if (opts.har && !fs.existsSync(opts.har)) {
 if (opts.bindings && !fs.existsSync(opts.bindings)) {
   stop(EXIT.INPUT, `--bindings '${opts.bindings}' is not on disk`);
 }
+for (const file of opts.mutated) {
+  if (!fs.existsSync(file)) {
+    stop(EXIT.INPUT, `--mutated '${file}' is not on disk — it is the file you just mutated`);
+  }
+}
 if (opts.origin) {
   try {
     new URL(opts.origin);
@@ -315,6 +415,7 @@ if (opts.origin) {
 const top = git('rev-parse', '--show-toplevel');
 if (top.status !== 0) stop(EXIT.INPUT, 'not inside a git repository — the spec set is resolved from a merge base');
 const repoTop = top.stdout.trim();
+const MUTATION_OUT = mutationOut(repoTop);
 
 // Only where state is actually kept. `film` reads and writes none, and a verb that leaves an empty
 // directory behind is a side effect nobody asked for.
@@ -378,7 +479,11 @@ const phases = {
 let summarize = () => {};
 // The fields every record from THIS verb carries whatever happened — spelled once, so a stop that
 // exits early cannot report a smaller record than a stop that exits late.
-const VERB_FIELDS = verb === 'film' ? { viewport, verdict: opts.verdict } : {};
+const VERB_FIELDS = {
+  audit: {},
+  film: { viewport, verdict: opts.verdict },
+  mutate: { grep: opts.grep, mutated: opts.mutated, output: MUTATION_OUT },
+}[verb];
 function bindSummary(specs) {
   summarize = (result, exit, extra = {}) => {
     out(
@@ -434,13 +539,19 @@ if (specs.length === 0) {
   );
 }
 
-// ---- the run, shared by both verbs -------------------------------------------------------------
-// The results directory is cleared BEFORE the runner starts, on EVERY verb and without anyone
-// remembering to: whatever stands in test-results/ at publish time becomes the evidence, so a
-// leftover webm from an earlier — or mutated — run published as proof is a lie. The runner's shape
-// is fixed here rather than passed, so there is exactly one invocation to read and to assert.
-function runSpecSet(specs, extraEnv = {}) {
-  fs.rmSync(RESULTS_DIR, { recursive: true, force: true });
+// ---- the run, shared by all three verbs ---------------------------------------------------------
+// The results directory is cleared BEFORE the runner starts, without anyone remembering to:
+// whatever stands in test-results/ at publish time becomes the evidence, so a leftover webm from an
+// earlier — or mutated — run published as proof is a lie. The runner's shape is fixed here rather
+// than passed, so there is exactly one invocation to read and to assert.
+//
+// `mutate` is the ONE exception, and that exception is the point of the mutation verb: there the
+// contents of test-results/ are the delivered evidence rather than stale litter, so the run is sent
+// to an isolated `output`, records nothing, and leaves the directory exactly as it stood. Its three
+// options travel together as MUTATION_RUN, below, because they are one decision and not three.
+const MUTATION_RUN = { clear: false, reporter: 'line', output: MUTATION_OUT };
+function runSpecSet(specs, extraEnv = {}, { clear = true, reporter = 'html', output = null } = {}) {
+  if (clear) fs.rmSync(RESULTS_DIR, { recursive: true, force: true });
   const runnerArgs = [
     '--no-install',
     'playwright',
@@ -449,7 +560,8 @@ function runSpecSet(specs, extraEnv = {}) {
     `--project=${opts.project}`,
     '--config',
     opts.config,
-    '--reporter=html',
+    `--reporter=${reporter}`,
+    ...(output ? [`--output=${output}`] : []),
     ...(opts.grep ? ['-g', opts.grep] : []),
   ];
   const run = spawnSync('npx', runnerArgs, {
@@ -611,6 +723,155 @@ if (verb === 'film') {
   //    could not be inspected is reported uninspected rather than as good.
   const clips = collectClips(RESULTS_DIR);
   summarize('green', EXIT.OK, { clips: inspectClips(clips) });
+  process.exit(EXIT.OK);
+}
+
+// ================================================================================== mutate
+if (verb === 'mutate') {
+  // Repo-relative, because every git call below is anchored at the top level: a residue check that
+  // only looked under the cwd would miss a mutation that reached a sibling directory.
+  const mutatedRepoRel = opts.mutated.map((f) => path.relative(repoTop, path.resolve(cwd, f)));
+
+  // 1. THE PRE-STATE, captured before anything runs. Both halves are checked first because both
+  //    are cheap and both make a green run meaningless: a file git does not track cannot be
+  //    reverted at all, and a file carrying no unstaged change was never mutated (or was staged,
+  //    which `git checkout --` would not undo either). Paying for a run to learn that is the one
+  //    thing this verb is expensive enough to avoid.
+  for (const rel of mutatedRepoRel) {
+    if (git('-C', repoTop, 'ls-files', '--error-unmatch', '--', rel).status !== 0) {
+      summarize('input', EXIT.INPUT);
+      stop(
+        EXIT.INPUT,
+        `--mutated '${rel}' is not tracked by git, so the revert could not restore it. Mutate a ` +
+          'committed source file — an untracked one has no pre-state to come back to.',
+      );
+    }
+    if (git('-C', repoTop, 'diff', '--quiet', '--', rel).status === 0) {
+      summarize('input', EXIT.INPUT);
+      stop(
+        EXIT.INPUT,
+        `--mutated '${rel}' carries no unstaged change — nothing was mutated in it. This verb is ` +
+          'invoked AFTER the mutation is applied and BEFORE it is staged; a run over an unmutated ' +
+          'tree goes green by construction and proves nothing.',
+      );
+    }
+  }
+
+  const statusPathOf = (line) => {
+    const p = line.slice(3).replace(/^"|"$/g, '');
+    const arrow = p.indexOf(' -> ');
+    return arrow === -1 ? p : p.slice(arrow + 4);
+  };
+  const porcelain = () => {
+    const r = git('-C', repoTop, '-c', 'core.quotepath=false', 'status', '--porcelain');
+    if (r.status !== 0) stop(EXIT.INPUT, `git status failed: ${r.stderr.trim()}`);
+    return r.stdout.split('\n').filter(Boolean);
+  };
+  const worktreeDiff = (excluding = []) => {
+    const r = git('-C', repoTop, 'diff', '--', '.', ...excluding.map((f) => `:(exclude)${f}`));
+    if (r.status !== 0) stop(EXIT.INPUT, `git diff failed: ${r.stderr.trim()}`);
+    return r.stdout;
+  };
+  // The pre-state is the tree MINUS the mutated files' own changes — which is exactly what the tree
+  // must look like once they are reverted. Comparing against that catches a revert that did not
+  // take, a mutation that reached a file the agent did not declare, and anything the run itself
+  // left lying around, all with one comparison.
+  const mutatedSet = new Set(mutatedRepoRel);
+  const statusPre = porcelain().filter((l) => !mutatedSet.has(statusPathOf(l)));
+  const diffPre = worktreeDiff(mutatedRepoRel);
+
+  // The clips as they stand: path, size and mtime, so an overwrite is caught as surely as a delete.
+  const fingerprint = (clip) => {
+    const st = fs.statSync(clip);
+    return `${clip}\u0000${st.size}\u0000${st.mtimeMs}`;
+  };
+  const clipsPre = collectClips(RESULTS_DIR).map(fingerprint);
+
+  // 2. THE RUN. Scoped to the scenarios THIS run wrote and to the one test that should guard them,
+  //    into the isolated output. No PW_PROVE_CLIP: a mutation run records nothing.
+  fs.rmSync(MUTATION_OUT, { recursive: true, force: true });
+  const run = runSpecSet(
+    specs.filter((s) => s.tag === 'written'),
+    {},
+    MUTATION_RUN,
+  );
+
+  // 3. THE REVERT — unconditional and immediate, before the verdict is read at all, so no branch
+  //    below can leave a deliberately broken tree behind.
+  const revert = git('-C', repoTop, 'checkout', '--', ...mutatedRepoRel);
+  const reverted = revert.status === 0;
+  if (!reverted) err(`proof-run mutate: git checkout failed: ${revert.stderr.trim()}\n`);
+
+  // 4. THE TREE, compared against the pre-state. A hard stop: a proof never continues on a
+  //    polluted working tree, whatever the run just said.
+  const statusPost = porcelain();
+  const diffPost = worktreeDiff();
+  const statusResidue = statusPost.filter((l) => !statusPre.includes(l));
+  const residue = !reverted || diffPost !== diffPre || statusResidue.length > 0;
+
+  // 5. THE CLIPS. Every one that stood before must still stand, unmoved; and the set must cover the
+  //    PR spec set, carried scenarios included, because that set is what the filming run filmed.
+  const clipsPost = new Set(collectClips(RESULTS_DIR).map(fingerprint));
+  const survived = clipsPre.filter((c) => clipsPost.has(c)).length;
+  const clips = {
+    before: clipsPre.length,
+    after: clipsPost.size,
+    survived,
+    expected_at_least: Math.max(specs.length, expectedClips ?? 0),
+  };
+  const clipsClobbered = survived !== clipsPre.length || survived < clips.expected_at_least;
+
+  // A nonzero runner exit is only a RED TEST if a test actually ran. This is the one verb where
+  // nonzero means success, so a grep that matched nothing — or a runner that refused its own
+  // arguments — would otherwise be published as "the spec guards the change" on a run that executed
+  // no assertion at all. That case names itself in the runner's output, so it is caught rather than
+  // counted, and the signature of a genuine red travels in the summary so the agent can confirm the
+  // failure is the assertion its mutation targeted and not the application falling over.
+  const runnerOut = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
+  if (run.status !== 0 && /no tests (?:found|match)/i.test(runnerOut)) {
+    summarize('input', EXIT.INPUT);
+    stop(
+      EXIT.INPUT,
+      `the runner matched NO test against --grep '${opts.grep}' — nothing was executed, so there ` +
+        'is no verdict. A run that executes no assertion is not a red run. Name the guarding test ' +
+        'exactly as its `test(...)` title reads in the spec you passed as --written.',
+    );
+  }
+  const mutationRun = run.status === 0 ? 'green' : 'red';
+  const signature = mutationRun === 'red' ? signatureOf(runnerOut) : null;
+  const record = (result, exit) =>
+    summarize(result, exit, { mutation_run: mutationRun, signature, reverted, residue, clips });
+
+  if (residue) {
+    record('residue', EXIT.RESIDUE);
+    stop(
+      EXIT.RESIDUE,
+      `the working tree did not come back to its pre-state after the revert${
+        reverted ? '' : ' (git checkout itself failed)'
+      }. HARD STOP — never continue a proof on a polluted tree. Residue:\n` +
+        `${statusResidue.join('\n') || '(the tracked diff moved; run `git diff` to see it)'}`,
+    );
+  }
+  if (clipsClobbered) {
+    record('clips-clobbered', EXIT.CLIPS);
+    stop(
+      EXIT.CLIPS,
+      `${survived}/${clipsPre.length} clip(s) survived the mutation run and the spec set holds ` +
+        `${specs.length}. The delivered evidence no longer shows the passing run — do NOT publish ` +
+        'it. Delete test-results/ and re-run the audit and filming verbs before Step 8.',
+    );
+  }
+  if (mutationRun === 'green') {
+    record('unguarded', EXIT.MUTATION_GREEN);
+    stop(
+      EXIT.MUTATION_GREEN,
+      'the mutation run went GREEN — the spec does not guard the change. This is a finding about ' +
+        'the spec, NOT a failed run. Strengthen the terminal assertion and mutate once more; if it ' +
+        'goes green again because another layer independently preserves the outcome, report it as ' +
+        'unguardable at this layer and name the masking layer. Never a third cycle.',
+    );
+  }
+  record('guards', EXIT.OK);
   process.exit(EXIT.OK);
 }
 
