@@ -14,7 +14,7 @@ cases:
   files:
     - evals/cases/worktree-collision-stops-the-run.yaml
     - evals/cases/dirty-tree-keeps-user-work.yaml
-    - evals/cases/ocr-missing-degrades.yaml
+    - evals/cases/ocr-missing-stops-the-run.yaml
     - evals/cases/sync-stage-absent-silently.yaml
     - evals/cases/overlap-orders-does-not-filter.yaml
     - evals/cases/handoff-schema-is-pw-proves.yaml
@@ -25,7 +25,8 @@ cases:
     - evals/cases/fixes-accounts-for-every-id.yaml
     - evals/cases/bug-is-a-category-not-a-severity.yaml
     - evals/cases/proof-spawns-a-fresh-session.yaml
-    - evals/cases/orca-missing-prints-the-paste-line.yaml
+    - evals/cases/orca-missing-stops-at-preflight.yaml
+    - evals/cases/orca-resolves-to-the-app-launcher.yaml
   defaults:
     timeout_seconds: 300
     max_turns: 6

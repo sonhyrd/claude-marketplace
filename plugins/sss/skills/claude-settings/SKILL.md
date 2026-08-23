@@ -10,7 +10,10 @@ description: >-
   statusline, or when a new machine is missing plugins that another machine has, or when
   web-search fails with "No supported browser binary found" on a box with no browser. Also
   installs the tracked plugin roster (external marketplaces and their plugins) via the
-  claude plugin CLI. Never touches hooks, and touches exactly one `env` key — the auto-memory
+  claude plugin CLI, and the CLI roster the sss skills shell out to — `ocr` for pr-review's
+  third track, and the shim that makes `orca` resolve to Orca's CLI instead of its desktop
+  launcher, which is what to reach for when a skill reports Orca unavailable on a machine
+  where Orca is running. Never touches hooks, and touches exactly one `env` key — the auto-memory
   kill switch; the rest of `env` is machine-local.
 ---
 
@@ -27,8 +30,10 @@ each machine. Two directions: **apply** (baseline → machine) and **capture** (
 | `skillOverrides` | Yes | Pure preference, no paths. ~50 hand-tuned entries |
 | `permissions` | Yes | `defaultMode` and `deny` list are portable |
 | `attribution`, `includeCoAuthoredBy` | Yes | Plain booleans/strings |
+| `outputStyle` | Yes | A style name, no path — see below |
 | `env` | **One key** | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` only — see below. Everything else (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`) is machine-specific |
 | `hooks` | **No** | Contains absolute paths (`~/.orca/agent-hooks/`, `~/.claude/hooks/`) |
+| `~/.claude/CLAUDE.md` + its imports | Yes | Not a settings key — a file set, copied. See below |
 | `enabledPlugins`, `extraKnownMarketplaces` | **Partly** | Non-directory sources sync via `baseline/plugins.json`; directory sources carry a per-machine path and do not |
 
 Writing `hooks`, or the rest of `env`, from a shared baseline would break the machine it lands
@@ -55,6 +60,23 @@ Because apply is a **deep merge** (`jq -s '.[0] * .[1]'`), landing this key adds
 `env` the machine already has — `CLAUDE_HOST_LABEL` and friends survive untouched. That is the
 property that makes syncing a single `env` key safe, and it is why the merge must stay a deep
 merge and never become a whole-object replace.
+
+### `outputStyle`
+
+`/config`'s **Output style** row lands in `~/.claude/settings.json` as `outputStyle`, naming a style
+by its display name — `Concise` among them. It syncs for the reason `skillOverrides` does: it names
+a preference and nothing else, no path, no host, no version, so one value is correct on every
+machine, and a style chosen on the laptop and absent on the VPS is the incoherent state the baseline
+exists to end.
+
+The panel's other rows stay machine-local. `verbose` and `askUserQuestionTimeout` are real settings
+keys and would sync just as cleanly — they are left out because they were not asked for, not because
+they resist it, and adding one is a line in the capture list plus a line in the table.
+
+**`outputStyle` is absent from `settings.json` until it is changed from its default**, which is why
+capture filters nulls rather than writing the key with a null value. Deep-merging
+`"outputStyle": null` onto another machine would overwrite a real choice there with nothing — the
+one way a sync of optional keys can lose a setting rather than spread one.
 
 ## The plugin roster
 
@@ -92,6 +114,32 @@ re-run.
 
 `references/external-plugins.md` remains the human-readable roster — what each plugin is for,
 and the rationale for the ones whose packaging is a decision rather than an accident.
+
+## User-level memory travels as a set
+
+`~/.claude/CLAUDE.md` is the user-level memory every session on a machine reads. It is **not a
+settings key** — it is a file, and it may pull in others: a line beginning `@` imports a path
+resolved relative to the importing file's own directory, so `@RTK.md` means `~/.claude/RTK.md`.
+
+**The file and its imports are one unit, and syncing half of it is worse than syncing none.** The
+measured state: one machine held a `CLAUDE.md` of exactly one line, `@RTK.md`, and the guide it
+imports existed only there; a second machine had no `CLAUDE.md` at all. Copying the importer alone
+would have given the second machine an import pointing at nothing — a memory file that reads as
+configured and supplies no memory, which is strictly harder to notice than the absence it replaced.
+
+So `baseline/memory/` holds the **whole closure**: `CLAUDE.md` plus every file reachable from it by
+`@`, followed transitively. Apply copies the directory; capture walks the imports and rewrites it.
+
+**An import that names an absolute path is machine-local and stops the capture**, for the reason
+`hooks` does not sync at all: `@/Users/you/notes.md` resolves on exactly one box. The fix is to move
+that file next to `CLAUDE.md` and import it by name, which is a change to the user's memory rather
+than something a sync should make on their behalf.
+
+**A synced guide can describe machinery this skill does not sync.** `RTK.md` documents a CLI whose
+command rewriting is driven by a **hook**, and hooks are the one region deliberately left out of the
+baseline. The guide is accurate wherever `rtk` and its hook are installed and inert everywhere else;
+it is carried because a memory file that exists on one machine and not another is the incoherence
+being fixed, not because this skill provisions what it describes.
 
 ## Why the statusline script is copied, not referenced
 
@@ -131,6 +179,65 @@ The alternative — patching `lib/browser-bin.js` to read the Playwright cache �
 `WEB_SEARCH_BROWSER_BIN` in `settings.json` would also work but lands in `env`, which this
 skill does not sync, and would only apply inside Claude Code rather than to any shell.
 
+## The CLI roster
+
+Two command-line tools that are neither settings nor plugins, and that `sss` skills stop without.
+They stay out of `baseline/plugins.json` because they install through their own installers rather
+than through `claude plugin`, which is the same reason plugins stay out of `settings.base.json`.
+
+### `ocr` — the third review track
+
+`sss:pr-review` runs three review tracks over one diff, and the third is `sss:ocr-delegate` driving
+the `ocr` CLI. With `ocr` absent that track cannot run, and `pr-review` stops the run rather than
+reporting two tracks as though they were three.
+
+```bash
+ocr --version || npm install -g @alibaba-group/open-code-review@latest
+```
+
+Delegation mode needs **no LLM endpoint** — the host agent performs the review and `ocr` supplies
+only file selection and rule resolution — so that one command is the whole install. Every version
+works: below v1.9.3 `ocr-delegate` parses text where it would otherwise parse JSON, and the track
+still runs in full.
+
+`npm install -g` needs a writable prefix. Where `npm config get prefix` names a root-owned directory,
+the fix is a Node managed in userspace (`nvm`, `fnm`, a tarball under `~/.local`), not `sudo npm` —
+a root-owned global tree is a machine that needs `sudo` for every later install.
+
+### `orca` — the name the AppImage took
+
+Where Orca ships as an AppImage, the install puts its **desktop launcher** on `PATH` as `orca` and
+the **CLI** beside it as `orca-ide`:
+
+```
+~/.local/bin/orca     -> /opt/orca/squashfs-root/AppRun                   # Electron launcher
+~/.local/bin/orca-ide -> /opt/orca/squashfs-root/resources/bin/orca-ide   # the CLI
+```
+
+The launcher accepts every subcommand, prints Electron startup noise, and **exits 0**. So
+`orca worktree current --json` prints no JSON while reporting success, and anything that shells the
+bare name concludes Orca is unavailable on a machine where Orca is running fine. `orca-ide --help`
+prints its own usage as `orca <command>`: the CLI already believes it owns this name.
+
+`scripts/orca-shim.sh` gives it the name, deployed to `~/.local/bin/orca`. Three properties matter,
+and the first two are the browser shim's:
+
+- **Resolution is at run time, not install time.** An Orca upgrade that moves the AppImage cannot
+  leave a dangling exec behind, and the shim re-finds both binaries on every call.
+- **A bare `orca` still launches the desktop app**, as do the AppImage's own `--appimage-*` flags.
+  Everything else is the CLI's. Subcommands are deliberately not enumerated — a hardcoded list goes
+  stale on the first release that adds one.
+- **An Orca re-install overwrites it.** The shim occupies the exact path the installer symlinks, so
+  a machine that upgrades Orca needs this deployed again. That is the price of the name, and it is
+  why apply re-checks rather than assuming a shim it once deployed is still there.
+
+**The shim is for the callers this repo cannot edit.** Every `sss` skill that shells Orca resolves
+the binary itself — `delegate-tickets` step 0 owns that idiom and `scripts/check-delegate-cli.sh`
+asserts it — so those already work on a machine this skill has never touched. The bundled `orca-cli`
+and `orchestration` skills are not ours, and they keep calling `orca`; the shim is what makes those
+land. Deploying it and resolving in-skill answer two different callers rather than being two
+attempts at one.
+
 ## Apply — baseline to this machine
 
 1. **Check dependencies.** The statusline needs `jq`, `bash`, and `git`. Run
@@ -147,7 +254,23 @@ skill does not sync, and would only apply inside Claude Code rather than to any 
    chmod +x ~/.claude/statusline-native.sh
    ```
 
-4. **Merge the baseline** into `~/.claude/settings.json`, preserving everything else:
+4. **Deploy the memory set**, after reporting drift on any file that already differs — the same
+   rule as the statusline, and for the same reason: a local edit to `~/.claude/CLAUDE.md` is real
+   work.
+   ```bash
+   diff -rq "$SKILL_DIR/baseline/memory" ~/.claude 2>/dev/null | grep -v '^Only in'
+   cp "$SKILL_DIR"/baseline/memory/*.md ~/.claude/
+   ```
+   Then **verify every import resolves**, because a dangling one is the failure this set exists to
+   prevent and it is silent:
+   ```bash
+   grep -ho '^@[^ ]*' ~/.claude/*.md | sed 's/^@//' | while read -r f; do
+     [ -e "$HOME/.claude/$f" ] || echo "dangling import: $f"
+   done
+   ```
+   Any output and the copy was incomplete — say which import dangles rather than reporting success.
+
+5. **Merge the baseline** into `~/.claude/settings.json`, preserving everything else:
    ```bash
    jq -s '.[0] * .[1]' ~/.claude/settings.json "$SKILL_DIR/baseline/settings.base.json" \
      > /tmp/settings.merged.json
@@ -155,7 +278,7 @@ skill does not sync, and would only apply inside Claude Code rather than to any 
    Validate the result parses and still contains `env`, `hooks`, and `enabledPlugins` before
    moving it into place. `jq -s '.[0] * .[1]'` deep-merges, so unlisted regions survive.
 
-5. **Install the plugin roster.** Preview first — it clones third-party repos, and
+6. **Install the plugin roster.** Preview first — it clones third-party repos, and
    `i-have-adhd` ships a `SessionStart` hook:
    ```bash
    DRY_RUN=1 "$SKILL_DIR/scripts/apply-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
@@ -189,7 +312,7 @@ skill does not sync, and would only apply inside Claude Code rather than to any 
    lockfile, so without this it installs and then fails its first call on a missing
    `playwright`. Skills with no `package.json` are untouched, which is nearly all of them.
 
-6. **Deploy the browser shim, but only if nothing else answers.** `web-search` is the one
+7. **Deploy the browser shim, but only if nothing else answers.** `web-search` is the one
    skill in the roster that needs a browser. Check first — a machine with Chrome installed
    needs no shim:
    ```bash
@@ -213,10 +336,34 @@ skill does not sync, and would only apply inside Claude Code rather than to any 
    `--version` exits 127, the box has neither a browser nor a Playwright cache; the fix is
    `npx playwright install chromium`, and re-running the shim then needs no redeploy.
 
-7. **Report the baseline's commit** so the user knows what they deployed:
+8. **Install the CLI roster, and verify each one answers.** Both are cheap to check and
+   silent to be missing, which is why they are checked every apply rather than once:
+
+   ```bash
+   ocr --version || npm install -g @alibaba-group/open-code-review@latest
+   orca worktree current --json          # must print JSON, not Electron noise
+   ```
+
+   Deploy the Orca shim when that second line prints anything other than JSON **and**
+   `orca-ide` exists — that pair is the AppImage layout and nothing else is:
+
+   ```bash
+   mkdir -p ~/.local/bin
+   cp "$SKILL_DIR/scripts/orca-shim.sh" ~/.local/bin/orca
+   chmod +x ~/.local/bin/orca
+   orca worktree current --json          # verify: JSON now, or the shim changed nothing
+   ```
+
+   Two failures to report rather than paper over. JSON from a directory Orca does not manage
+   is still a pass — the CLI answered, which is what this checks. If the re-check still prints
+   no JSON, say so and stop rather than deploying more: a second shim over a first one buries
+   the cause. Where `orca-ide` is absent entirely, Orca's CLI is not installed on this machine
+   and the fix is Orca's installer, not a shim.
+
+9. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
 
-8. Tell the user the statusline refreshes on the next assistant message, and that **plugins
+10. Tell the user the statusline refreshes on the next assistant message, and that **plugins
    need a Claude Code restart** — a newly installed plugin's skills do not appear in the
    session that installed them.
 
@@ -225,12 +372,19 @@ skill does not sync, and would only apply inside Claude Code rather than to any 
 Pull the synced regions out of the live settings and write them back to `baseline/`:
 
 ```bash
-jq '{statusLine, skillOverrides, permissions, attribution, includeCoAuthoredBy}
+jq '({statusLine, skillOverrides, permissions, attribution, includeCoAuthoredBy, outputStyle}
+     | with_entries(select(.value != null)))
     + (.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY
        | if . then {env: {CLAUDE_CODE_DISABLE_AUTO_MEMORY: .}} else {} end)
     | .statusLine.command = "~/.claude/statusline-native.sh"' \
   ~/.claude/settings.json > "$SKILL_DIR/baseline/settings.base.json"
 ```
+
+**`with_entries(select(.value != null))` is load-bearing.** `jq`'s object construction invents a key
+with a null value for every name the input does not have, so without the filter a capture on a
+machine that never touched `outputStyle` writes `"outputStyle": null` into the baseline — and apply's
+deep merge then lands that null on a machine where the user *had* chosen a style. Filtering keeps
+capture additive in the same way apply already is.
 
 The `.statusLine.command` rewrite is required — the live file holds an absolute path
 (`/Users/<you>/.claude/...`) that is wrong on every other machine.
@@ -244,8 +398,38 @@ an `unset`/removal on each machine, not something a capture can do by accident.
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 `scripts/statusline.sh` too, so the repo is the source of truth again. Same for
-`~/.local/bin/chromium` and `scripts/browser-shim.sh` — the shim's whole job is to name paths
-that vary per machine, so a hand-added path on one box is one the next box probably wants.
+`~/.local/bin/chromium` and `scripts/browser-shim.sh`, and for `~/.local/bin/orca` and
+`scripts/orca-shim.sh` — a shim's whole job is to name paths that vary per machine, so a
+hand-added path on one box is one the next box probably wants. Copy `~/.local/bin/orca` back
+only when it is this shim: after an Orca re-install that path is the installer's symlink again,
+and capturing it would overwrite the shim with a link to one machine's AppImage.
+
+Then capture the memory set, following the imports rather than listing filenames:
+
+```bash
+rm -rf "$SKILL_DIR/baseline/memory" && mkdir -p "$SKILL_DIR/baseline/memory"
+queue=CLAUDE.md
+while [ -n "$queue" ]; do
+  next=""
+  for f in $queue; do
+    [ -e "$HOME/.claude/$f" ] || { echo "missing import: $f" >&2; exit 1; }
+    cp "$HOME/.claude/$f" "$SKILL_DIR/baseline/memory/$f"
+    for imp in $(grep -ho '^@[^ ]*' "$HOME/.claude/$f" | sed 's/^@//'); do
+      case "$imp" in /*|~*) echo "machine-local import: $imp" >&2; exit 1 ;; esac
+      [ -e "$SKILL_DIR/baseline/memory/$imp" ] || next="$next $imp"
+    done
+  done
+  queue="$next"
+done
+chmod 644 "$SKILL_DIR"/baseline/memory/*.md
+```
+
+**Walking the imports is the point.** A hand-kept list of filenames goes stale the first time
+someone adds an `@` line, and the way it goes stale is the dangling import this set exists to
+prevent. The loop also refuses on the two shapes that cannot travel: a missing import, and one
+naming an absolute or `~`-rooted path. `chmod 644` normalises the mode — `RTK.md` was `600` on the
+machine it came from, which is an accident of how it was written rather than a property worth
+carrying.
 
 Then capture the plugin roster, which computes the portable/local split itself:
 

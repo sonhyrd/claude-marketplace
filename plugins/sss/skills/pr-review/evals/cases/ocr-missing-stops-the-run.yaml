@@ -1,0 +1,46 @@
+id: ocr-missing-stops-the-run
+title: No `ocr` on PATH fails preflight and stops the run naming the install
+description: |
+  Step 1's preflight. A missing `ocr` used to send two tracks and open the report
+  with a skip note; it now stops the run before anything spawns and names the one
+  command that installs it. The replaced case was `ocr-missing-degrades`, and the
+  reason it was replaced is the whole point of this one: a two-track report reads
+  exactly like a three-track report, so a run that degraded quietly closed looking
+  complete. `docs/adr/` holds no entry — this is a correction, not a trade.
+
+  **A correct answer names two tracks in order to rule them out**, so the failure
+  rules carry their subject adjacent to the verb and an intervening `not` breaks
+  the match. `fix-stage-starts-unasked.yaml` and
+  `orca-missing-stops-at-preflight.yaml` are the other quote-aware cases, and
+  `tests/test_pr_review_eval_rules.py` checks both directions.
+
+  **Even `OCR` is matched case-insensitively, and that is not belt-and-braces.**
+  skill-up's matchers are case-sensitive, and 1 of 5 captured runs answered the
+  ancestor of this prompt writing `ocr` throughout — the CLI's own name, in
+  backticks, never the acronym — so a rule reading `OCR` failed a correct answer.
+
+input:
+  prompt: |
+    I'm about to run your PR review on PR #55 over on our CI box, and that box has
+    no ocr CLI on PATH — don't check this machine, I'm asking about that one.
+    Does the review still run there, and what do I lose?
+
+judge:
+  type: rule_based
+  success:
+    - output_matches:
+        all: ['(?i)\bocr\b']
+    - output_matches:
+        any: ['(?i)stops', '(?i)stop', '(?i)won''t run', '(?i)will not run', '(?i)does not run', '(?i)doesn''t run', '(?i)refuses']
+    - output_matches:
+        any: ['(?i)preflight', '(?i)before', '(?i)prerequisite', '(?i)up front']
+    - output_matches:
+        any: ['(?i)npm install', '(?i)open-code-review', '(?i)claude-settings']
+  failure:
+    - output_matches:
+        any:
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I|so I|it) (send|sends|run|runs|spawn|spawns) the two\b'
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|let me|I''d) install (it|ocr|the ocr)\b'
+          - '(?im)(^|[^"''“”`*_(])\bthe review still (runs|finishes|completes)\b'
+          - '(?im)(^|[^"''“”`*_(])\b(it|the run|the review) degrades to two tracks\b'
+          - '(?im)(^|[^"''“”`*_(])\bthis is a plain `?matt:code-review'

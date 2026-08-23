@@ -74,9 +74,35 @@ So trust the **worktree base directories** once and every future worktree under 
 
 Derive the bases rather than assuming them — they differ per repo, and some repos are registered such that their Orca workspaces sit on the repo path itself rather than under a shared root:
 
+Resolve the CLI first — **preference orders the candidates, evidence selects one** — using
+`sss:delegate-tickets` step 0's idiom, which `scripts/check-delegate-cli.sh` asserts:
+
 ```bash
-orca worktree list --limit 200 --json   # take dirname of every non-main worktree path; dedupe
+ORCA=""
+first=orca-ide; second=orca
+if [ -n "${ORCA_PANE_KEY:-}" ] || [ "${TERM_PROGRAM:-}" = "Orca" ]; then
+  first=orca; second=orca-ide
+fi
+for candidate in "$first" "$second"; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  # Materialize the help before matching it: under `pipefail`, a `grep -q` that
+  # exits on the first match can SIGPIPE the binary and turn a match into a
+  # non-zero pipeline -- which reads as "answers nothing" about the one that does.
+  help="$("$candidate" worktree --help 2>/dev/null || true)"
+  grep -q '^Usage: orca worktree' <<<"$help" || continue
+  ORCA="$candidate"; break
+done
 ```
+
+```bash
+"$ORCA" worktree list --limit 200 --json   # take dirname of every non-main worktree path; dedupe
+```
+
+**Use `$ORCA` for every Orca call below** — the smoke test's `terminal create`, `terminal read`,
+`orchestration task-create` and `dispatch` included. Where Orca ships as an AppImage, `orca` on
+`PATH` is the desktop launcher, which accepts every subcommand and answers nothing: a round-trip
+proof run against it proves a failure that is not there. `/sss:claude-settings` deploys the shim
+that gives the CLI the `orca` name for good.
 
 Group the results: the shared root (typically `~/orca/workspaces`) covers most repos in one marker; any outlier path needs its own. Discard candidates shallower than 3 segments — cursor will not inherit from them.
 
