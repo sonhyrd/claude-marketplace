@@ -10,7 +10,10 @@ description: >-
   statusline, or when a new machine is missing plugins that another machine has, or when
   web-search fails with "No supported browser binary found" on a box with no browser. Also
   installs the tracked plugin roster (external marketplaces and their plugins) via the
-  claude plugin CLI. Never touches hooks, and touches exactly one `env` key — the auto-memory
+  claude plugin CLI, and the CLI roster the sss skills shell out to — `ocr` for pr-review's
+  third track, and the shim that makes `orca` resolve to Orca's CLI instead of its desktop
+  launcher, which is what to reach for when a skill reports Orca unavailable on a machine
+  where Orca is running. Never touches hooks, and touches exactly one `env` key — the auto-memory
   kill switch; the rest of `env` is machine-local.
 ---
 
@@ -131,6 +134,65 @@ The alternative — patching `lib/browser-bin.js` to read the Playwright cache �
 `WEB_SEARCH_BROWSER_BIN` in `settings.json` would also work but lands in `env`, which this
 skill does not sync, and would only apply inside Claude Code rather than to any shell.
 
+## The CLI roster
+
+Two command-line tools that are neither settings nor plugins, and that `sss` skills stop without.
+They stay out of `baseline/plugins.json` because they install through their own installers rather
+than through `claude plugin`, which is the same reason plugins stay out of `settings.base.json`.
+
+### `ocr` — the third review track
+
+`sss:pr-review` runs three review tracks over one diff, and the third is `sss:ocr-delegate` driving
+the `ocr` CLI. With `ocr` absent that track cannot run, and `pr-review` stops the run rather than
+reporting two tracks as though they were three.
+
+```bash
+ocr --version || npm install -g @alibaba-group/open-code-review@latest
+```
+
+Delegation mode needs **no LLM endpoint** — the host agent performs the review and `ocr` supplies
+only file selection and rule resolution — so that one command is the whole install. Every version
+works: below v1.9.3 `ocr-delegate` parses text where it would otherwise parse JSON, and the track
+still runs in full.
+
+`npm install -g` needs a writable prefix. Where `npm config get prefix` names a root-owned directory,
+the fix is a Node managed in userspace (`nvm`, `fnm`, a tarball under `~/.local`), not `sudo npm` —
+a root-owned global tree is a machine that needs `sudo` for every later install.
+
+### `orca` — the name the AppImage took
+
+Where Orca ships as an AppImage, the install puts its **desktop launcher** on `PATH` as `orca` and
+the **CLI** beside it as `orca-ide`:
+
+```
+~/.local/bin/orca     -> /opt/orca/squashfs-root/AppRun                   # Electron launcher
+~/.local/bin/orca-ide -> /opt/orca/squashfs-root/resources/bin/orca-ide   # the CLI
+```
+
+The launcher accepts every subcommand, prints Electron startup noise, and **exits 0**. So
+`orca worktree current --json` prints no JSON while reporting success, and anything that shells the
+bare name concludes Orca is unavailable on a machine where Orca is running fine. `orca-ide --help`
+prints its own usage as `orca <command>`: the CLI already believes it owns this name.
+
+`scripts/orca-shim.sh` gives it the name, deployed to `~/.local/bin/orca`. Three properties matter,
+and the first two are the browser shim's:
+
+- **Resolution is at run time, not install time.** An Orca upgrade that moves the AppImage cannot
+  leave a dangling exec behind, and the shim re-finds both binaries on every call.
+- **A bare `orca` still launches the desktop app**, as do the AppImage's own `--appimage-*` flags.
+  Everything else is the CLI's. Subcommands are deliberately not enumerated — a hardcoded list goes
+  stale on the first release that adds one.
+- **An Orca re-install overwrites it.** The shim occupies the exact path the installer symlinks, so
+  a machine that upgrades Orca needs this deployed again. That is the price of the name, and it is
+  why apply re-checks rather than assuming a shim it once deployed is still there.
+
+**The shim is for the callers this repo cannot edit.** Every `sss` skill that shells Orca resolves
+the binary itself — `delegate-tickets` step 0 owns that idiom and `scripts/check-delegate-cli.sh`
+asserts it — so those already work on a machine this skill has never touched. The bundled `orca-cli`
+and `orchestration` skills are not ours, and they keep calling `orca`; the shim is what makes those
+land. Deploying it and resolving in-skill answer two different callers rather than being two
+attempts at one.
+
 ## Apply — baseline to this machine
 
 1. **Check dependencies.** The statusline needs `jq`, `bash`, and `git`. Run
@@ -213,10 +275,34 @@ skill does not sync, and would only apply inside Claude Code rather than to any 
    `--version` exits 127, the box has neither a browser nor a Playwright cache; the fix is
    `npx playwright install chromium`, and re-running the shim then needs no redeploy.
 
-7. **Report the baseline's commit** so the user knows what they deployed:
+7. **Install the CLI roster, and verify each one answers.** Both are cheap to check and
+   silent to be missing, which is why they are checked every apply rather than once:
+
+   ```bash
+   ocr --version || npm install -g @alibaba-group/open-code-review@latest
+   orca worktree current --json          # must print JSON, not Electron noise
+   ```
+
+   Deploy the Orca shim when that second line prints anything other than JSON **and**
+   `orca-ide` exists — that pair is the AppImage layout and nothing else is:
+
+   ```bash
+   mkdir -p ~/.local/bin
+   cp "$SKILL_DIR/scripts/orca-shim.sh" ~/.local/bin/orca
+   chmod +x ~/.local/bin/orca
+   orca worktree current --json          # verify: JSON now, or the shim changed nothing
+   ```
+
+   Two failures to report rather than paper over. JSON from a directory Orca does not manage
+   is still a pass — the CLI answered, which is what this checks. If the re-check still prints
+   no JSON, say so and stop rather than deploying more: a second shim over a first one buries
+   the cause. Where `orca-ide` is absent entirely, Orca's CLI is not installed on this machine
+   and the fix is Orca's installer, not a shim.
+
+8. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
 
-8. Tell the user the statusline refreshes on the next assistant message, and that **plugins
+9. Tell the user the statusline refreshes on the next assistant message, and that **plugins
    need a Claude Code restart** — a newly installed plugin's skills do not appear in the
    session that installed them.
 
@@ -244,8 +330,11 @@ an `unset`/removal on each machine, not something a capture can do by accident.
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 `scripts/statusline.sh` too, so the repo is the source of truth again. Same for
-`~/.local/bin/chromium` and `scripts/browser-shim.sh` — the shim's whole job is to name paths
-that vary per machine, so a hand-added path on one box is one the next box probably wants.
+`~/.local/bin/chromium` and `scripts/browser-shim.sh`, and for `~/.local/bin/orca` and
+`scripts/orca-shim.sh` — a shim's whole job is to name paths that vary per machine, so a
+hand-added path on one box is one the next box probably wants. Copy `~/.local/bin/orca` back
+only when it is this shim: after an Orca re-install that path is the installer's symlink again,
+and capturing it would overwrite the shim with a link to one machine's AppImage.
 
 Then capture the plugin roster, which computes the portable/local split itself:
 

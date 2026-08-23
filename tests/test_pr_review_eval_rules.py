@@ -193,17 +193,38 @@ CORRECT: dict[str, list[str]] = {
         "immediately, and I report the terminal handle rather than waiting on the "
         "result.",
     ],
-    "orca-missing-prints-the-paste-line": [
-        "It finishes, and the proof stage changes shape rather than failing. "
-        "With no Orca there is nothing to spawn, so Step 6 writes "
-        ".pw-prove/handoff.json as usual and then prints three things and stops: "
-        "the artifact path, the line `/e2e:pw-prove 204` to paste into a fresh "
-        "session yourself, and the working directory to run it from.",
-        "Yes. The handoff artifact is still written; the run cannot spawn a "
-        "terminal, so it stops there and hands you the paste line — "
-        "`/e2e:pw-prove <PR#>` in a fresh session, run from the repo root. It "
-        "does not fall back to invoking pw-prove inline, because that is the "
-        "refusal the spawn exists to route around.",
+    "orca-missing-stops-at-preflight": [
+        "No. Step 1 preflights the Orca CLI before any track spawns, so on that "
+        "box the run stops there and names the fix rather than reviewing three "
+        "tracks it cannot prove. Install Orca, or run /sss:claude-settings, and "
+        "re-run. It does not fall back to invoking pw-prove inline, because that "
+        "is the refusal the spawn exists to route around.",
+        "It stops at preflight. Orca is a prerequisite now, not a finding — a "
+        "review whose proof can never spawn closes looking finished, which is "
+        "the outcome the gate exists to prevent. You will get the tool name and "
+        "the one command that installs it, and nothing else runs.",
+    ],
+    "ocr-missing-stops-the-run": [
+        "It does not run there. Preflight checks ocr before anything spawns, and "
+        "a missing one stops the run naming the install: "
+        "npm install -g @alibaba-group/open-code-review@latest. It no longer "
+        "degrades to two tracks, because a two-track report reads exactly like a "
+        "three-track one.",
+        "The review stops at preflight. ocr is a prerequisite, so you lose "
+        "nothing silently — you get the name of the tool and the npm command, "
+        "and /sss:claude-settings installs it along with everything else.",
+    ],
+    "orca-resolves-to-the-app-launcher": [
+        "No — Orca is fine there. On an AppImage install `orca` on PATH is the "
+        "desktop launcher and `orca-ide` beside it is the CLI; the launcher "
+        "accepts every subcommand, prints Electron noise and answers nothing. "
+        "Preflight reads the JSON, not the exit code, so re-run it as "
+        "`orca-ide worktree current --json`. /sss:claude-settings deploys the "
+        "shim that fixes the name for every skill on that box.",
+        "That is the launcher answering, not Orca being absent. Resolve the CLI "
+        "as orca-ide first. The absence of JSON is the signal — an exit code "
+        "separates nothing here, since the AppRun exits non-zero for reasons of "
+        "its own. The shim from /sss:claude-settings makes it permanent.",
     ],
 }
 
@@ -244,10 +265,25 @@ WRONG: dict[str, list[str]] = {
         "Simplest is to run it inline from here — the artifact is already on "
         "disk, so pw-prove has everything it needs.",
     ],
-    "orca-missing-prints-the-paste-line": [
-        "No Orca means no proof stage, so I cannot run the review on that box.",
+    "orca-missing-stops-at-preflight": [
+        "The review still finishes — only the proof stage changes shape.",
         "I'd fall back to invoking pw-prove inline, since there is no terminal to spawn.",
         "First I'd run orca repo add on that checkout so the spawn works.",
+        "Step 6 prints three things and stops: the artifact path, the paste "
+        "line, and the working directory.",
+    ],
+    "ocr-missing-stops-the-run": [
+        "It still runs — I'll send the two matt:code-review tracks and note the "
+        "OCR track was skipped.",
+        "The review still runs, you just lose the third track.",
+        "I'll install ocr for you first, then start the review.",
+        "It degrades to two tracks and opens the report by saying so.",
+    ],
+    "orca-resolves-to-the-app-launcher": [
+        "Orca is unavailable on that box, so the proof stage is skipped.",
+        "A non-zero exit means orca is missing from PATH, so the finding is false.",
+        "First I'd run orca repo add on that checkout so the spawn works.",
+        "Exit 3 means it is missing, so preflight fails and the run stops.",
     ],
 }
 

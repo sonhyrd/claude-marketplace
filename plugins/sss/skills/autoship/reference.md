@@ -8,16 +8,41 @@ Run both. Either failing ends the run with a stop-and-report naming the missing 
 
 ### Orca orchestration
 
+Resolve the CLI first — **preference orders the candidates, evidence selects one** — using
+`sss:delegate-tickets` step 0's idiom, which `scripts/check-delegate-cli.sh` asserts:
+
 ```bash
-orca status --json                    # must succeed and show a running runtime
-orca orchestration task-list --json   # must succeed — proves orchestration RPC is enabled
+ORCA=""
+first=orca-ide; second=orca
+if [ -n "${ORCA_PANE_KEY:-}" ] || [ "${TERM_PROGRAM:-}" = "Orca" ]; then
+  first=orca; second=orca-ide
+fi
+for candidate in "$first" "$second"; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  # Materialize the help before matching it: under `pipefail`, a `grep -q` that
+  # exits on the first match can SIGPIPE the binary and turn a match into a
+  # non-zero pipeline -- which reads as "answers nothing" about the one that does.
+  help="$("$candidate" orchestration --help 2>/dev/null || true)"
+  grep -q '^Usage: orca orchestration' <<<"$help" || continue
+  ORCA="$candidate"; break
+done
 ```
+
+```bash
+"$ORCA" status --json                    # must succeed and show a running runtime
+"$ORCA" orchestration task-list --json   # must succeed — proves orchestration RPC is enabled
+```
+
+Where Orca ships as an AppImage, `orca` on `PATH` is the desktop launcher and `orca-ide` beside it
+is the CLI; the launcher accepts every subcommand, prints Electron noise, and answers nothing, so
+exit 0 from it proves nothing. Use `$ORCA` for every Orca call in the run.
 
 Failure shapes and what to report:
 
-- `orca` not found on PATH (`orca-ide` on Linux) → the Orca CLI is not installed or not on PATH.
-- `orca status --json` errors or shows no running runtime → start the Orca app.
-- `orca orchestration task-list --json` errors while `orca status` succeeds → enable the orchestration experimental feature in Orca's Settings > Experimental.
+- Neither name on PATH → the Orca CLI is not installed.
+- Either command prints Electron noise or no JSON → the name resolved to the launcher. `/sss:claude-settings` deploys the shim that fixes it for every skill on this machine.
+- `status --json` errors or shows no running runtime → start the Orca app.
+- `orchestration task-list --json` errors while `status` succeeds → enable the orchestration experimental feature in Orca's Settings > Experimental.
 
 ### Repo configuration
 

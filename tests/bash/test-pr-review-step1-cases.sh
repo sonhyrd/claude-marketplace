@@ -155,27 +155,41 @@ must_match "states the full-SHA rule" 'full 40 characters'
 must_match "and forbids abbreviating them" 'never abbreviated'
 must_match "the verdict comes from a read after the acquisition" 'after the acquisition'
 
-# --- the eighth finding: can Orca spawn the proof's session? ----------------
+# --- preflight: the prerequisites a full run needs --------------------------
 #
-# Step 6 spawns a fresh session because pw-prove's context gate refuses this one
-# (docs/adr/0009). Whether that spawn is possible is resolved HERE, before three
-# tracks are spent getting to a stage that cannot finish — the same reason the
-# `ocr` finding sits in Step 1. One call covers both halves, and the finding is
-# reported rather than repaired.
+# `ocr` and the Orca CLI were FINDINGS that shaped later stages, and one measured
+# run lost the OCR track and the proof spawn and closed looking complete. They
+# are gates now: preflight stops the run naming the install, ahead of the tree
+# acquisition so a stop leaves the checkout untouched.
+#
+# The Orca half is the one that produced the defect. On an AppImage install
+# `orca` on PATH is the desktop launcher and `orca-ide` beside it is the CLI; the
+# launcher accepts every subcommand, prints Electron noise and answers nothing.
+# The old prose read a non-zero exit as "missing from PATH", which is why the
+# verdict must now come off the OUTPUT and never off an exit status.
 
-must_match "resolves whether Orca can spawn a terminal here" 'orca worktree current'
-must_match "and asks it as one call covering both halves" '(not manage|does not manage|unmanaged)'
-must_match "a missing binary is the same finding" 'PATH'
+must_match "preflights the prerequisites before the fan-out" '[Pp]reflight'
+must_match "resolves the CLI ahead of the launcher" 'orca-ide'
+must_match "and keeps the resolved binary in a variable the later steps use" 'ORCA='
+must_match "still probes the worktree through it" 'worktree current'
+must_match "reads the verdict off parsed JSON" 'JSON'
+must_match "and rules the exit code out as the signal" '[Ee]xit code'
+must_match "a missing prerequisite stops the run" '[Ss]tops the run'
+must_match "naming the command that installs ocr" 'open-code-review'
+must_match "and routing the whole set to the provisioning skill" 'claude-settings'
 # Anchored at the start of a line, for the reason the `git pull` test above is:
 # the prose that rules the command out has to say its name.
 must_not_match "runs no repo registration" '^[[:space:]]*orca repo add'
 # shellcheck disable=SC2016  # a grep pattern: expansion is exactly what must not happen
-must_match "and says the finding is reported, never repaired" '`orca repo add`'
-must_match "names repair as the thing it is not doing" '[Rr]epair'
+must_match "and says provisioning is the other skill's job" '`orca repo add`'
+must_match "preflight sits ahead of the tree acquisition" 'ahead of the tree acquisition'
 
 # --- the finding count stayed in step with the findings ---------------------
+#
+# Two findings became gates, so the tally moved with them. A count that drifts
+# from its own enumeration is how a reader stops trusting either.
 
-must_match "the closing tally counts eight findings" 'eight findings'
+must_match "the closing tally counts seven findings" 'seven findings'
 
 echo
 if [ "$FAIL" -eq 0 ]; then

@@ -1,0 +1,43 @@
+id: orca-resolves-to-the-app-launcher
+title: Electron noise from `orca` is the launcher answering, not Orca being absent
+description: |
+  Step 1's preflight, and the failure that produced this whole set of cases. On an
+  AppImage install `orca` on PATH is the desktop launcher
+  (`.../squashfs-root/AppRun`) and `orca-ide` beside it is the CLI. The launcher
+  accepts every subcommand, prints Electron startup noise, and answers nothing —
+  so a run that calls it concludes Orca is unavailable on a machine where Orca is
+  running fine, loses the proof stage, and blames the box.
+
+  **The diagnosis is read off the output, never off the exit code.** A measured
+  run read exit 3 as "missing from PATH" — the sentence Step 1 used to carry —
+  and was wrong in a way no exit status could have corrected: the launcher exits
+  non-zero for reasons of its own, and a wrapper can exit zero having done
+  nothing. Absence of JSON is the signal, which is why the success rules require
+  the answer to reach `orca-ide` rather than merely to name a failure.
+
+input:
+  prompt: |
+    On our box `which orca` finds it at ~/.local/bin/orca, but `orca worktree
+    current --json` prints a dbus error and "[single-instance] Another Orca
+    instance is already running", exits 3, and outputs no JSON. Your review's
+    preflight — does that mean Orca is unavailable here?
+
+judge:
+  type: rule_based
+  success:
+    - output_matches:
+        all: ['(?i)orca-ide']
+    - output_matches:
+        any: ['(?i)launcher', '(?i)appimage', '(?i)apprun', '(?i)desktop app', '(?i)electron', '(?i)\bgui\b']
+    - output_matches:
+        any: ['(?i)json', '(?i)output', '(?i)not the exit', '(?i)exit code']
+    - output_matches:
+        any: ['(?i)claude-settings', '(?i)shim', '(?i)resolve', '(?i)re-run', '(?i)rerun', '(?i)try']
+  failure:
+    - output_matches:
+        any:
+          - '(?im)(^|[^"''“”`*_(])\borca is (unavailable|not available|missing|not installed)\b'
+          - '(?im)(^|[^"''“”`*_(])\b(exit 3|a non-zero exit) means (it is|it''s|orca is) missing\b'
+          - '(?im)(^|[^"''“”`*_(])\borca repo add\b'
+    - output_contains:
+        any: ["not on PATH, so the finding is false", "prints the paste line and stops"]

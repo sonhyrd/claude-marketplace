@@ -3,11 +3,13 @@ name: pr-review
 description: Carry a PR or branch from review to proof — three tracks at once (Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, and OCR's down to Medium — then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result, which e2e:pw-prove runs in a fresh session spawned into an Orca terminal rather than inline in this one. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
-  Requires the `matt` and `sss` plugins from this marketplace, the `gh` CLI for
-  PR mode, and the `ocr` CLI for the OCR track. A missing `ocr` degrades to two
-  tracks. The proof stage needs the `e2e` plugin for `e2e:pw-prove` and the
-  `orca` CLI to spawn the fresh session that runs it; without either, the run
-  writes the handoff artifact and prints the line to paste into a fresh session.
+  Requires the `matt`, `sss` and `e2e` plugins from this marketplace, and four
+  CLIs on PATH: `gh` for PR mode, `ocr` for the OCR track, the `orca`
+  CLI for the session that runs the proof, and `git`. No JSON parser: this
+  skill reads the handful of keys it needs rather than depending on one. Step 1 preflights all of
+  them and stops the run naming the one command that installs whichever is
+  missing, so a run that starts is a run that can finish at full strength.
+  `/sss:claude-settings` provisions the whole set in one pass.
 metadata:
   author: sonhyrd
   version: "1.0.0"
@@ -30,6 +32,64 @@ Tracks are concurrent and never merged; stages are serial and share one context 
 ## Step 1 — Prep
 
 Run this in the parent, before anything spawns. Its output is a set of **findings** the two skills verify on arrival rather than rediscover — one resolved `BASE` shared by all three tracks is what makes their reports comparable.
+
+### Preflight — what this run needs to finish
+
+**Every prerequisite is checked here, before the tree moves and before a track spawns, and a missing one stops the run.** Two of the four stages are only as strong as the tools underneath them: without `ocr` the review loses a third of its axes, and without a working `orca` CLI the proof never runs. A run that degrades around either still closes looking complete — a two-track report and an unspawned proof read exactly like a finished review — and that is the outcome this gate exists to prevent.
+
+```bash
+command -v gh git
+ocr --version          # OCR track — any version
+claude plugin list     # matt, sss and e2e, all enabled
+```
+
+Then resolve the Orca CLI. **Preference orders the candidates; evidence selects one.**
+`sss:delegate-tickets` step 0 owns this idiom and `scripts/check-delegate-cli.sh` in the marketplace
+repo asserts it — this is the same resolution against the command this skill actually calls:
+
+```bash
+ORCA=""
+first=orca-ide; second=orca
+if [ -n "${ORCA_PANE_KEY:-}" ] || [ "${TERM_PROGRAM:-}" = "Orca" ]; then
+  first=orca; second=orca-ide
+fi
+for candidate in "$first" "$second"; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  # Materialize the help before matching it: under `pipefail`, a `grep -q` that
+  # exits on the first match can SIGPIPE the binary and turn a match into a
+  # non-zero pipeline -- which reads as "answers nothing" about the one that does.
+  help="$("$candidate" worktree --help 2>/dev/null || true)"
+  grep -q '^Usage: orca worktree' <<<"$help" || continue
+  ORCA="$candidate"; break
+done
+```
+
+```bash
+"$ORCA" worktree current --json    # proof spawn — must print JSON
+```
+
+**`ocr` reports its version, and presence is the gate.** Below v1.9.3 `sss:ocr-delegate` parses text where it would otherwise parse JSON, and that still produces a full OCR track — a different path to the same three axes, not a degraded review. So an old `ocr` passes preflight and the report says which path ran; only an absent one stops the run.
+
+**An empty `$ORCA` stops the run**, naming which of the two were on `PATH`. Where Orca ships as an AppImage, `orca` on `PATH` is the desktop launcher (`.../squashfs-root/AppRun`) and `orca-ide` beside it is the CLI; the launcher accepts every subcommand, prints Electron startup noise, and answers nothing — so a run that calls it concludes Orca is unavailable on a machine where Orca is running fine, loses the proof stage, and blames the box. `orca-ide --help` prints its own usage as `orca <command>`: the two names are one tool.
+
+**A name that answers is the only evidence that counts.** Preference is a guess about which name is the CLI — inverted inside an Orca-managed pane, where `orca` is — and the launcher's exit 0 is exactly what makes a guess unfalsifiable. Requiring `worktree --help` to print its usage line is what settles it. Use `$ORCA` at every later Orca call in this skill, Step 6c's spawn included.
+
+**The Orca probe passes on parsed JSON, never on an exit code.** Read `ok` and `result.worktree` out of what it printed. Anything else — empty output, Electron noise, an HTML error page — is a failed preflight whatever the exit status was. Exit codes are what made this class of failure invisible: the launcher exits non-zero for reasons of its own, and a wrapper can exit zero having done nothing, so neither value separates a working CLI from a silent one. The JSON does.
+
+**A failed preflight names the tool and the one command that fixes it, then stops the run:**
+
+| Missing | Command |
+|---|---|
+| `ocr` | `npm install -g @alibaba-group/open-code-review@latest` |
+| the Orca CLI | `/sss:claude-settings` — it deploys the shim that makes `orca` resolve |
+| `gh` or `git` | this platform's package manager |
+| the `matt`, `sss` or `e2e` plugin | `claude plugin install <name>@sss-marketplace`, then restart Claude Code |
+
+`/sss:claude-settings` provisions the whole set in one pass, and is the answer to give when more than one line is missing.
+
+**Preflight reports, and provisioning is `/sss:claude-settings`'s job.** The stop names the fix and routes there; this skill runs no `npm install`, and no `orca repo add`. A review that reconfigures the machine on its way to reviewing a PR owns every side effect of that repair for the rest of the run — which is a larger promise than a review should make, and the reason repair lives in a skill the user invokes on purpose.
+
+**Preflight runs ahead of the tree acquisition** so a stop costs a message and leaves the checkout exactly where the user left it. Everything below needs `gh` and `git` in its first line anyway; a run that cannot finish should never have moved the tree to find out.
 
 **PR mode. Run this block top to bottom** — everything unconditional in the stage is in it, in the order it has to happen:
 
@@ -70,16 +130,6 @@ BASE=<40-char> (merge-base of origin/MAMAS-9316 ← stacked on open PR 3140) · 
 
 Four fields in PR mode, and **every SHA is the full 40 characters, never abbreviated** — a 40-character string gets copied where a 9-character one gets retyped, and one transposition survived into a track prompt and cost that track its base. `TREE` is whatever `git rev-parse HEAD` returned, so the verdict `tree at PR head` is a conclusion the reader draws from two printed SHAs rather than a claim to take on trust. The stack clause appears only where the probe found an open parent PR. Branch mode fills the same slots with what it has: `BASE=<40-char> (user-named fixed point 'main') · HEAD=<40-char> · branch mode`. One line, printed before the fan-out, is the point: three tracks reading a base nobody printed is how a wrong one survives to the end of a run.
 
-Then `ocr --version` — the version, not just the presence, because `sss:ocr-delegate` takes a different path below v1.9.3 and the report should say which one ran.
-
-**Then whether Orca can spawn a terminal in this checkout**, which is what Step 6 needs to run the proof at all:
-
-```bash
-orca worktree current --json
-```
-
-One call answers both halves: a non-zero exit is `orca` missing from PATH, and a clean exit naming no worktree is a checkout Orca does not manage. Either way the finding is false and Step 6 prints a paste line where it would have spawned. **Report it, never repair it** — `orca repo add` writes to the user's tool configuration, and a review does not reconfigure the machine as a side effect of proving a PR. Like the two sync findings it stops nothing; it decides the shape of a later stage. It sits here rather than in Step 6 for the reason the `ocr` finding does: a run should know what it can finish with before it spends three tracks getting there.
-
 **Then resolve the two sync findings** — both of them here, off the one `BASE` the tracks share, so Step 5 decides from settled facts rather than re-reading the tree after the fixes have moved it:
 
 ```bash
@@ -95,7 +145,9 @@ git diff --name-only "$BASE"..."$HEAD_SHA" -- "$DIR" | grep '\.json$'
 
 Any output at all and the second finding is true. Do not run it with `$DIR` unset: git rejects an empty pathspec outright, and this line failing would be indistinguishable from the failures that are meant to stop the run. A config present but naming no resolvable directory is simply the second finding false — the sync has nowhere to read from.
 
-Done when the tree is acquired, eight findings are in hand, and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and the `TREE_SHA` read against it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `ocr` is on PATH, whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to, and whether Orca can spawn a terminal in this checkout. A bad ref, an empty diff or a failed guard stops here, naming which one failed. Neither sync finding stops the run; the two of them decide whether Step 5 exists.
+Done when preflight has passed, the tree is acquired, seven findings are in hand, and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and the `TREE_SHA` read against it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A missing prerequisite, a bad ref, an empty diff or a failed guard stops here, naming which one failed. Neither sync finding stops the run; the two of them decide whether Step 5 exists.
+
+**Preflight is a gate and the sync checks are findings, and the difference is what each one decides.** A gate decides whether the run happens at all; a finding decides the shape of a later stage. `ocr` and the Orca CLI moved from the second kind to the first because a run without them cannot reach full strength — and the two of them used to be findings, which is exactly how a run once lost the OCR track and the proof and closed as though it had neither.
 
 ## Step 2 — Load `matt:code-review`, fan out three
 
@@ -110,11 +162,23 @@ Then send **one** message with **three** `general-purpose` `Agent` calls. The lo
 
 **Every track prompt names the tree it reads**, in one clause — *this tree is at the PR head; read files directly.* Left unsaid, a track invents the opposite and routes every read through `git show`.
 
-With no `ocr` on PATH, send the two and open the report with: *OCR track skipped, no `ocr` on PATH — this is a plain `matt:code-review` run.* An `ocr` that is present but whose `delegate` sub-commands reject the skill's invocation degrades the same way, with the failing command quoted instead of the PATH note — it is a broken tool, not a review with nothing to say, and the two must never read alike in the report. A rejected `--format json` is **not** that case: `sss:ocr-delegate` falls back to the text output on its own and the track runs in full, so degrading on it would throw away a working review.
+**Preflight proved `ocr` is installed, so the missing-tool branch is gone from this step.** What remains is the broken one: an `ocr` present enough to answer `--version` whose `delegate` sub-commands then reject the skill's invocation. Quote the failing command, send the other two, and open the report with the count Step 3 emits — a broken tool is a track that had something to say and could not, and the report says so in its first line. A rejected `--format json` is **not** that case: `sss:ocr-delegate` falls back to the text output on its own and the track runs in full, so degrading on it would throw away a working review.
 
-Done when every launched track has returned.
+### A track that stops without returning
+
+A spawned track can come back `<status>stopped</status>` carrying a summary that opens *No completion record was found for background agent "<name>" from the previous session* and closes by saying the transcript is on disk and its progress is not lost. Read that closing clause literally, because it is both the truth and the instruction: **the work exists, and only the write-up was lost.**
+
+**"From the previous session" describes the transcript, not the agent.** The phrase reads like a crashed process from some earlier run and sends the reader looking for wreckage; the agent is addressable right now, by id, and that is the whole recovery.
+
+**Resume it by id; a fresh launch pays for the same review twice.** Send the track's agent id a message restating its brief and closing with *if you already have findings, report those — do not restart*. The observed recovery came back complete at `tool_uses: 0`, which is what a resumed write-up of finished work looks like. `SendMessage` is a deferred tool in most sessions, so load it first with `ToolSearch("select:SendMessage")`.
+
+**A track that will not come back is counted, not absorbed.** Carry it into Step 3's count and name the axis that is missing. A review that quietly drops an axis is the same defect as a review that quietly drops a tool, and three unmerged tracks exist precisely so that no one of them can go missing unnoticed.
+
+Done when every launched track has returned, or the ones that did not are named for Step 3 to count.
 
 ## Step 3 — Aggregate
+
+**Open with the track count — `3 of 3 tracks reported`, or the shortfall and which axis it cost.** One line, first thing, before any section. Preflight makes the full count the ordinary case, so the line is usually a formality; it is written every time because the run where it is not a formality is the run that would otherwise read as complete while an axis is missing. A count is legible at a glance where a missing `## OCR` section is not.
 
 `## Standards`, `## Spec`, `## OCR` — each verbatim, in that order. **Number every finding as you emit it** — `S1, S2…` for Standards, `P1, P2…` for Spec, `O1, O2…` for OCR. The IDs are how Step 4 accounts for the whole set and how the user points at one in conversation; an unnumbered finding is one that can go missing between the report and the fixes. Then:
 
@@ -130,7 +194,7 @@ Close with one line per track — finding count, worst issue within that track. 
 
 Report in chat. Posting to GitHub is a separate ask.
 
-Done when all four sections are on screen, every finding carries an ID, and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of three unmerged tracks is output nobody got to soften.
+Done when the track count and all four sections are on screen, every finding carries an ID, and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of three unmerged tracks is output nobody got to soften.
 
 **This boundary orders the work and asks nothing.** Nothing is edited before the report prints, and no confirmation is asked once it has — Step 4 begins immediately, on the report's own terms. The user who invoked this skill asked for the fixes, so an offer to stop here spends their turn re-typing a policy this skill already holds. Nothing later asks either: Step 6 spawns the proof unprompted, so this run has no human checkpoint anywhere — deliberately, and `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md` is where the trade is recorded.
 
@@ -336,7 +400,7 @@ past it — three tracks, an aggregate report and a fix stage — so the proof r
 session**, in this same checkout:
 
 ```bash
-orca terminal create --worktree active --command "claude '/e2e:pw-prove <NUM>'" --json
+"$ORCA" terminal create --worktree active --command "claude '/e2e:pw-prove <NUM>'" --json
 ```
 
 - **`<NUM>` is the PR number, or the branch name in branch mode, and that is the whole prompt.**
@@ -361,21 +425,28 @@ orca terminal create --worktree active --command "claude '/e2e:pw-prove <NUM>'" 
   part of the close.
 
 **Close on four things**: the artifact path, the terminal handle `terminal create` returned, the
-`orca terminal read --terminal <handle>` line that shows the proof's output, and one sentence saying
+`$ORCA terminal read --terminal <handle>` line that shows the proof's output, and one sentence saying
 plainly that the proof is running there and is not verified here. A "Done" a reader takes for a
 passed proof is the silent always-pass that `pw-prove` exists to prevent.
 
-**Step 1's eighth finding false — Orca cannot spawn a terminal here — and the stage prints three
-things and stops**: `.pw-prove/handoff.json`'s path, the exact `/e2e:pw-prove <NUM>` line, and the
-working directory to run it from. The same three where the `e2e` plugin is not installed. The
-artifact is on disk and a fresh `/e2e:pw-prove <NUM>` picks up the same findings — that standalone
-path is why the file is written at all, and taking it is not a failure of this run. **Invoking
-`pw-prove` inline is never the answer here**, on any branch: this context is exactly the one its
-gate turns away, so an inline attempt spends a turn to arrive at the same paste line.
+**`$ORCA` is the CLI preflight resolved**, not the bare name. On an AppImage machine `orca` is the
+desktop launcher, which accepts this command, prints Electron noise and creates nothing — the one
+failure that looks from here exactly like a spawn.
+
+**A spawn is claimed on the handle it returned.** Read the terminal handle out of the `--json`;
+without one, no session is running whatever the command printed. Preflight proved the CLI answers,
+so a spawn that still fails here is a run-time failure rather than an unprovisioned machine, and the
+stage prints three things and stops: `.pw-prove/handoff.json`'s path, the exact `/e2e:pw-prove <NUM>`
+line, and the working directory to run it from. The artifact is on disk and a fresh
+`/e2e:pw-prove <NUM>` picks up the same findings — that standalone path is why the file is written at
+all, and taking it is not a failure of this run. **Invoking `pw-prove` inline is never the answer
+here**, on any branch: this context is exactly the one its gate turns away, so an inline attempt
+spends a turn to arrive at the same paste line.
 
 Done when `.pw-prove/handoff.json` is on disk with a `head_sha` equal to `HEAD`, the path is
-gitignored, and either a fresh session is running the proof with its handle on screen, or the paste
-line and its working directory are.
+gitignored, and either `terminal create` returned a handle that is on screen, or the paste line and
+its working directory are. A handle is the evidence a session exists; a command that printed
+something else is the paste-line branch.
 
 ## Why inline
 

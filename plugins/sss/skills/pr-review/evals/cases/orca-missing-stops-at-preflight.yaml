@@ -1,0 +1,44 @@
+id: orca-missing-stops-at-preflight
+title: No Orca CLI fails preflight and stops before any track spawns
+description: |
+  Step 1's preflight, and the case that replaced
+  `orca-missing-prints-the-paste-line`. The Orca CLI was a *finding* that shaped
+  Step 6; it is now a *gate* that decides whether the run happens, because a
+  review whose proof never spawns closes looking finished. The paste line still
+  exists in Step 6c — for a spawn that fails at run time on a machine preflight
+  passed — and it is no longer the answer to a machine with no Orca on it.
+
+  **There is no inline fallback, and that is still guarded here.** Invoking
+  pw-prove in a ~150k-token session is the refusal the spawn exists to route
+  around. The `failure` clause is quote-aware for the reason
+  `fix-stage-starts-unasked.yaml`'s is: a correct answer names inline invocation
+  in order to rule it out, so each regex carries its subject adjacent to the verb
+  and an intervening `not` breaks the match.
+
+input:
+  prompt: |
+    Setting up your PR review on a plain CI checkout — no Orca on that box at all,
+    so nothing there is an Orca-managed worktree. Don't check this machine, I'm
+    asking about that one. Does the review still finish, and what happens at the
+    proof stage?
+
+judge:
+  type: rule_based
+  success:
+    - output_matches:
+        all: ['(?i)orca']
+    - output_matches:
+        any: ['(?i)stops', '(?i)stop', '(?i)won''t run', '(?i)will not run', '(?i)does not run', '(?i)doesn''t run', '(?i)refuses']
+    - output_matches:
+        any: ['(?i)preflight', '(?i)before (any|a) track', '(?i)prerequisite', '(?i)up front']
+    - output_matches:
+        any: ['(?i)claude-settings', '(?i)install', '(?i)orca-ide', '(?i)shim']
+  failure:
+    - output_matches:
+        any:
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I|so I) invoke the Skill tool with `?e2e:pw-prove'
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|I''d|we''ll|then I|so I) fall back to (invoking|running) (it|pw-prove) inline'
+          - '(?im)(^|[^"''“”`*_(])\borca repo add\b'
+          - '(?im)(^|[^"''“”`*_(])\bthe review still (runs|finishes|completes)\b'
+    - output_contains:
+        any: ["prints three things and stops", "changes shape rather than failing"]
