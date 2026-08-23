@@ -41,6 +41,14 @@ capture treats its plugins as portable: a plugin whose marketplace has no
 `extraKnownMarketplaces` entry cannot be directory-sourced, so there is no per-machine path to
 strip.
 
+- `atlassian` — Jira and Confluence. The one entry here that ships an **MCP server** rather than
+  skills alone: a remote HTTP server at `mcp.atlassian.com`, so it authenticates per machine and an
+  install is not a working connection until that is done. Its tools are namespaced
+  `mcp__plugin_atlassian_atlassian__<tool>` — the plugin and the server share the name `atlassian` —
+  and they appear only after a Claude Code restart, so verify the real ids there rather than
+  assuming them. **Not the same thing as the claude.ai Atlassian connector**, which surfaces
+  `mcp__claude_ai_Atlassian_Rovo__*` from an account-level integration; a machine can have either,
+  both, or neither, and only this one is in the roster
 - `commit-commands` — `/commit`, `/commit-push-pr`, `/clean_gone`
 - `frontend-design`
 - `skill-creator`
