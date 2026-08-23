@@ -33,6 +33,7 @@ each machine. Two directions: **apply** (baseline → machine) and **capture** (
 | `outputStyle` | Yes | A style name, no path — see below |
 | `env` | **One key** | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` only — see below. Everything else (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`) is machine-specific |
 | `hooks` | **No** | Contains absolute paths (`~/.orca/agent-hooks/`, `~/.claude/hooks/`) |
+| `~/.claude/CLAUDE.md` + its imports | Yes | Not a settings key — a file set, copied. See below |
 | `enabledPlugins`, `extraKnownMarketplaces` | **Partly** | Non-directory sources sync via `baseline/plugins.json`; directory sources carry a per-machine path and do not |
 
 Writing `hooks`, or the rest of `env`, from a shared baseline would break the machine it lands
@@ -113,6 +114,32 @@ re-run.
 
 `references/external-plugins.md` remains the human-readable roster — what each plugin is for,
 and the rationale for the ones whose packaging is a decision rather than an accident.
+
+## User-level memory travels as a set
+
+`~/.claude/CLAUDE.md` is the user-level memory every session on a machine reads. It is **not a
+settings key** — it is a file, and it may pull in others: a line beginning `@` imports a path
+resolved relative to the importing file's own directory, so `@RTK.md` means `~/.claude/RTK.md`.
+
+**The file and its imports are one unit, and syncing half of it is worse than syncing none.** The
+measured state: one machine held a `CLAUDE.md` of exactly one line, `@RTK.md`, and the guide it
+imports existed only there; a second machine had no `CLAUDE.md` at all. Copying the importer alone
+would have given the second machine an import pointing at nothing — a memory file that reads as
+configured and supplies no memory, which is strictly harder to notice than the absence it replaced.
+
+So `baseline/memory/` holds the **whole closure**: `CLAUDE.md` plus every file reachable from it by
+`@`, followed transitively. Apply copies the directory; capture walks the imports and rewrites it.
+
+**An import that names an absolute path is machine-local and stops the capture**, for the reason
+`hooks` does not sync at all: `@/Users/you/notes.md` resolves on exactly one box. The fix is to move
+that file next to `CLAUDE.md` and import it by name, which is a change to the user's memory rather
+than something a sync should make on their behalf.
+
+**A synced guide can describe machinery this skill does not sync.** `RTK.md` documents a CLI whose
+command rewriting is driven by a **hook**, and hooks are the one region deliberately left out of the
+baseline. The guide is accurate wherever `rtk` and its hook are installed and inert everywhere else;
+it is carried because a memory file that exists on one machine and not another is the incoherence
+being fixed, not because this skill provisions what it describes.
 
 ## Why the statusline script is copied, not referenced
 
@@ -227,7 +254,23 @@ attempts at one.
    chmod +x ~/.claude/statusline-native.sh
    ```
 
-4. **Merge the baseline** into `~/.claude/settings.json`, preserving everything else:
+4. **Deploy the memory set**, after reporting drift on any file that already differs — the same
+   rule as the statusline, and for the same reason: a local edit to `~/.claude/CLAUDE.md` is real
+   work.
+   ```bash
+   diff -rq "$SKILL_DIR/baseline/memory" ~/.claude 2>/dev/null | grep -v '^Only in'
+   cp "$SKILL_DIR"/baseline/memory/*.md ~/.claude/
+   ```
+   Then **verify every import resolves**, because a dangling one is the failure this set exists to
+   prevent and it is silent:
+   ```bash
+   grep -ho '^@[^ ]*' ~/.claude/*.md | sed 's/^@//' | while read -r f; do
+     [ -e "$HOME/.claude/$f" ] || echo "dangling import: $f"
+   done
+   ```
+   Any output and the copy was incomplete — say which import dangles rather than reporting success.
+
+5. **Merge the baseline** into `~/.claude/settings.json`, preserving everything else:
    ```bash
    jq -s '.[0] * .[1]' ~/.claude/settings.json "$SKILL_DIR/baseline/settings.base.json" \
      > /tmp/settings.merged.json
@@ -235,7 +278,7 @@ attempts at one.
    Validate the result parses and still contains `env`, `hooks`, and `enabledPlugins` before
    moving it into place. `jq -s '.[0] * .[1]'` deep-merges, so unlisted regions survive.
 
-5. **Install the plugin roster.** Preview first — it clones third-party repos, and
+6. **Install the plugin roster.** Preview first — it clones third-party repos, and
    `i-have-adhd` ships a `SessionStart` hook:
    ```bash
    DRY_RUN=1 "$SKILL_DIR/scripts/apply-plugins.sh" "$SKILL_DIR/baseline/plugins.json"
@@ -269,7 +312,7 @@ attempts at one.
    lockfile, so without this it installs and then fails its first call on a missing
    `playwright`. Skills with no `package.json` are untouched, which is nearly all of them.
 
-6. **Deploy the browser shim, but only if nothing else answers.** `web-search` is the one
+7. **Deploy the browser shim, but only if nothing else answers.** `web-search` is the one
    skill in the roster that needs a browser. Check first — a machine with Chrome installed
    needs no shim:
    ```bash
@@ -293,7 +336,7 @@ attempts at one.
    `--version` exits 127, the box has neither a browser nor a Playwright cache; the fix is
    `npx playwright install chromium`, and re-running the shim then needs no redeploy.
 
-7. **Install the CLI roster, and verify each one answers.** Both are cheap to check and
+8. **Install the CLI roster, and verify each one answers.** Both are cheap to check and
    silent to be missing, which is why they are checked every apply rather than once:
 
    ```bash
@@ -317,10 +360,10 @@ attempts at one.
    the cause. Where `orca-ide` is absent entirely, Orca's CLI is not installed on this machine
    and the fix is Orca's installer, not a shim.
 
-8. **Report the baseline's commit** so the user knows what they deployed:
+9. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
 
-9. Tell the user the statusline refreshes on the next assistant message, and that **plugins
+10. Tell the user the statusline refreshes on the next assistant message, and that **plugins
    need a Claude Code restart** — a newly installed plugin's skills do not appear in the
    session that installed them.
 
@@ -360,6 +403,33 @@ If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 hand-added path on one box is one the next box probably wants. Copy `~/.local/bin/orca` back
 only when it is this shim: after an Orca re-install that path is the installer's symlink again,
 and capturing it would overwrite the shim with a link to one machine's AppImage.
+
+Then capture the memory set, following the imports rather than listing filenames:
+
+```bash
+rm -rf "$SKILL_DIR/baseline/memory" && mkdir -p "$SKILL_DIR/baseline/memory"
+queue=CLAUDE.md
+while [ -n "$queue" ]; do
+  next=""
+  for f in $queue; do
+    [ -e "$HOME/.claude/$f" ] || { echo "missing import: $f" >&2; exit 1; }
+    cp "$HOME/.claude/$f" "$SKILL_DIR/baseline/memory/$f"
+    for imp in $(grep -ho '^@[^ ]*' "$HOME/.claude/$f" | sed 's/^@//'); do
+      case "$imp" in /*|~*) echo "machine-local import: $imp" >&2; exit 1 ;; esac
+      [ -e "$SKILL_DIR/baseline/memory/$imp" ] || next="$next $imp"
+    done
+  done
+  queue="$next"
+done
+chmod 644 "$SKILL_DIR"/baseline/memory/*.md
+```
+
+**Walking the imports is the point.** A hand-kept list of filenames goes stale the first time
+someone adds an `@` line, and the way it goes stale is the dangling import this set exists to
+prevent. The loop also refuses on the two shapes that cannot travel: a missing import, and one
+naming an absolute or `~`-rooted path. `chmod 644` normalises the mode — `RTK.md` was `600` on the
+machine it came from, which is an accident of how it was written rather than a property worth
+carrying.
 
 Then capture the plugin roster, which computes the portable/local split itself:
 
