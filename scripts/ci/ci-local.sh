@@ -146,6 +146,19 @@ if [ "${E2E_SKILLS_SKIP_CLIP_FIDELITY:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_PROOF_RUN:-}" != "1" ]; then
+  step "Proof run (proof-run.mjs audit, process boundary)"
+  # Issue #142: Step 7's mechanics as code. The argv IS the contract here — both defects this
+  # module exists to prevent were wrong arguments — so a recording `npx` shim ahead of the real one
+  # on PATH lets the suite assert the exact invocation. No browser is launched; nothing hits the
+  # network.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-proof-run.sh >/dev/null 2>&1 || fail "test-proof-run.sh"
+  else
+    bash scripts/ci/test-proof-run.sh || fail "test-proof-run.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
   step "Run-ledger smoke (PWPROVE_RUN contract)"
   # Issue #5: every shipped-script invocation leaves one PWPROVE_RUN {json} record — stdout line plus

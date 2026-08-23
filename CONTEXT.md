@@ -161,6 +161,21 @@ value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a
 project's own `playwright.config` is never edited. Drops the inherited `webServer` **when nothing answers at that entry's url**, so the spread cannot boot a development server behind a run aimed at the [proof target](#proof-target); keeps it when the proof target answers there, because then that entry is what produces the origin. Either way a one-time committed migration, not a per-run edit. Superseded the throwaway
 `.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
+## Audit run
+The first of Step 7's two runs of the spec set: un-clipped and un-dwelled, and the run the heal loop
+works against. It produces the traces the [hermetic audit](#hermetic-audit) classifies, which is why
+it comes first — a hermetic finding is a spec edit, and a spec edit invalidates footage, so auditing
+before filming makes the cheap run the one that protects the expensive one. Since #142 it is an
+interface rather than a description: `proof-run.mjs audit` resolves the spec set, clears the results
+directory, runs it with no worker override, and bounds the heal loop through the
+[no-progress checkpoint](#no-progress-checkpoint).
+
+## Filming run
+Step 7's second run of the same spec set, distinguished from the [audit run](#audit-run) only by the
+environment it carries — `PW_PROVE_CLIP` plus the [effective viewport](#effective-viewport) — and
+therefore by paying for the dwells and the video encoding. It produces the [proof clips](#proof-clip)
+that get delivered, and it is licensed by a clean audit run rather than run alongside one.
+
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
 **audit run** — the un-clipped, un-dwelled proof run that precedes filming, so a finding costs a
@@ -255,9 +270,10 @@ defect this pipeline exists to prevent — and the stop never emits the [deliver
 so a reported non-delivery can never be mistaken for a proof.
 
 ## No-progress checkpoint
-The Step-7 test that tells a fix apart from a retry. Each failed attempt is reduced to a **failure
-signature** — error class plus failing locator — and two consecutive attempts carrying the same
-signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
+The Step-7 test that tells a fix apart from a retry, owned by `proof-run.mjs audit` and enforced
+across invocations through state it persists under the run's dot-directory. Each failed attempt is
+reduced to a **failure signature** — error class plus failing locator — and two consecutive attempts
+carrying the same signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
 application can see. Attempts whose signatures differ are converging and still consume the full
 budget of three. The bound was always three; a raw count could not distinguish three fixes from three
 retries, and one run spent an hour rewriting the same binding against one unchanging 30-second

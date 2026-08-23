@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.28.0"
+  version: "0.29.0"
 ---
 
 # pw-prove
@@ -783,26 +783,13 @@ Most recordings need nothing more: a credential that travelled only in headers a
 
 Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
 
-**2a. In PR-mode, both runs execute the PR spec set** — every spec that proves this PR, not only the one this run wrote. A run that films its own delta delivers a proof page holding two chapters of a thirteen-scenario PR, and nothing in the artifact says so. Resolve the set **mechanically**, because a judgement call here is where the drift comes back:
+**2a. In PR-mode, both runs execute the PR spec set** — every spec that proves this PR, not only the one this run wrote. A run that films its own delta delivers a proof page holding two chapters of a thirteen-scenario PR, and nothing in the artifact says so. **`proof-run.mjs audit` resolves that set** from the merge base, tags every spec `carried` or `written` in its summary, and stops on an empty one. You do not assemble it, and there is no documented raw-runner fallback: a fallback is a second copy, and the second copy is the one that drifts. The reasons behind each mechanic are in the module's header comment; read it when you need to check a claim.
 
-```bash
-# Every spec the PR's diff touches under the project's testDir. pw-prove commits its own specs to
-# the PR branch, so an earlier run's spec is in this list by construction — that is the whole trick.
-# Pathspec the DIRECTORY and filter by extension afterwards. A `<testDir>/**/*.spec.*` pathspec
-# returns NOTHING on a flat test dir — git's default pathspec is not glob mode, so `**/` demands a
-# subdirectory that most projects do not have — and a set that came back empty films an empty set
-# without saying so. Measured against a real 7-spec PR: the pathspec form returned 0, this one 7.
-git diff --name-only "$(git merge-base <base> HEAD)"...HEAD -- '<testDir>' \
-  | grep -E '\.(spec|test)\.[cm]?[jt]sx?$'
-```
+Target and coverage-gap mode prove one run's work by definition — pass the spec this run wrote as `--written` and the resolution comes back to that spec alone.
 
-**An empty set is a stop, not a filming instruction.** PR-mode reaches Step 7 with at least the spec this run wrote, so nothing back from that command means the resolution is wrong — the wrong `<base>`, or a `<testDir>` that is not where the specs landed. Fix the resolution; never film what the command returned.
+**A carried spec that goes red in the audit run is a finding, not a spec to heal** — the summary's `carried` tag is what tells you which one you are looking at. It passed on the run that wrote it, so a failure now says the PR moved the behaviour underneath it. Diagnose it like any other failure, and when the fix belongs in the *application* rather than the spec, report it with its evidence and leave the spec asserting what it always asserted. Loosening a carried assertion to get green deletes the only guard that caught the regression.
 
-That list plus the spec this run wrote is `<spec set>` below, and Step 4's Assumptions block already named it. Target and coverage-gap mode film one run's work by definition: there `<spec set>` is the spec this run wrote.
-
-**A carried spec that goes red in the audit run is a finding, not a spec to heal.** It passed on the run that wrote it, so a failure now says the PR moved the behaviour underneath it. Diagnose it like any other failure, and when the fix belongs in the *application* rather than the spec, report it with its evidence and leave the spec asserting what it always asserted. Loosening a carried assertion to get green deletes the only guard that caught the regression.
-
-The set widens what is **filmed**. It does not widen what is **mutation-verified** — that scope is stated at the mutation check and is deliberately narrower.
+That resolved set is `<spec set>` below. It widens what is **filmed**. It does not widen what is **mutation-verified** — that scope is stated at the mutation check and is deliberately narrower.
 
 **2b. Two runs of the same command: an audit run, then the filming run.** Both go through the committed proof config; the only difference is that the filming run sets `PW_PROVE_CLIP`/`PW_PROVE_W`/`PW_PROVE_H` and the audit run sets none of them.
 
@@ -868,15 +855,14 @@ The **only** legitimate reason to edit an existing proof config is a structural 
 | **Framing** | Ungated `scrollIntoView({ block: 'center' })` in the committed spec, at the moment of the hold | A held payoff jammed against the screen edge, or pushed off-frame by a later re-render, is an unwatchable clip that passes every gate. Centring is a scroll, not a wait, so it is unconditional and CI renders identically. |
 
 ```bash
-# Clear stale recordings FIRST: whatever sits in test-results/ at publish time becomes the
-# evidence. A leftover webm from an earlier (or mutated) run published as proof is a lie.
-rm -rf test-results
-
-# AUDIT RUN — no PW_PROVE_CLIP, so no dwell is paid. trace:'on' is in the config, so the traces the
-# hermetic audit reads arrive anyway. This is also the run the heal loop works against.
-# Concurrency is Playwright's to choose: override nothing and the scenarios run together — see below.
-npx --no-install playwright test <spec set> --project=chromium \
-  --config <configDir>/playwright.proof.config.ts --reporter=html
+# AUDIT RUN — one command. It resolves the spec set, clears test-results/, invokes the runner with
+# no PW_PROVE_CLIP (so no dwell is paid) and no worker override, and bounds the heal loop. trace:'on'
+# is in the config, so the traces the hermetic audit reads arrive anyway.
+node <skill-base>/scripts/proof-run.mjs audit \
+  --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base> \
+  --written <the spec this run wrote>
+# One JSON summary line on stdout carries the spec set with its carried/written tags, the attempt
+# count and the failure signature. Read it; do not re-derive any of it from the console output.
 
 # ...green, then the hermetic audit (it reads the traces under test-results/) and any fix it forces...
 
@@ -892,13 +878,23 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 # webms + traces land under test-results/<...>/ ; the HTML report lands in playwright-report/
 ```
 
-**The proof run is concurrent — leave the worker count to Playwright.** Scaffolded configs leave `workers` undefined off CI (`workers: process.env.CI ? 1 : undefined`), so the run takes Playwright's default of `cores/2` and the scenarios go together. Measured on a real pull request over 31 runs and 120 test instances: **1.76–1.89× less wall clock**, **zero failures and zero flaky verdicts at every concurrency from 1 to 6**, identical `hermetic.mjs` classification, every clip and trace intact, and a preview server that did not saturate even with the HAR replay removed and every API call live. So the run command carries no concurrency override, and none is pinned in the committed proof config or in the project's `playwright.config` either. Do **not** substitute a literal count: four was right on one 8-core machine and is wrong on the next, and Playwright already computes `cores/2`.
+**Branch on the audit verb's exit code — each one is a different next move:**
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| `0` | The spec set went green | Proceed to the hermetic audit |
+| `2` | Unreadable input, or `npx` is not on PATH | Fix the flag it names; nothing was run |
+| `3` | The spec set resolved **empty** | The resolution is wrong — a wrong `--base`, or a `--test-dir` that is not where the specs landed. Fix it; never proceed on an empty set |
+| `6` | Tests red | Diagnose and heal, below. Rerun through this same verb with `--grep "<title>"` |
+| `7` | **Checkpoint refusal** — the failure signature did not move, or the attempt bound is spent | Stop the loop. Do not attempt another fix: invoke `playwright-debugger` and take the handover stop |
+
+**The proof run is concurrent — the worker count is Playwright's.** The verb expresses no worker override by construction (ADR-0017), so the run takes Playwright's default of `cores/2` and the scenarios go together. Do not pin one in the committed proof config or in the project's `playwright.config` either.
 
 Two things this does not license:
 
 - **A spec whose scenarios contend over shared state still has to serialise, in the spec** — `test.describe.configure({ mode: 'serial' })`, with the reason in a comment beside it. Each test gets a fresh browser context, so nothing leaks that way; what interferes is scenarios racing for one record on a shared tenant. That is a property of the spec, and it belongs where the code is, never in a global flag that charges every other proof for it.
   **Ask the hermetic question first — mocking outranks serialising.** Hermetic-by-default (`code-rules.md` › Network Determinism) means a PR-mode spec should not be mutating a shared staging record at all: fixture both sides and the contention is gone, not scheduled around, and the scenarios keep full concurrency. Serialisation is for the residue that survives that question — a **declared carve-out**, where the live round-trip *is* the AC (cross-view persistence of a real write is the standard case) and a mock would be the thing making the assertion pass. Reach for `mode: 'serial'` only after naming why the mock is unavailable; reaching for it first fixes the schedule and leaves a spec that pollutes a shared tenant.
-- **Serialisation is now a diagnostic, not a fix.** If *every* scenario times out at its first navigation, re-run the same spec **unchanged** with `-j 1` appended — one command, one worker, that run only — and it separates a concurrency problem from a spec problem. This is the one place a concurrency override belongs; it never enters the proof run, a config, or the committed spec. But against the built target that signature has **no known cause** — a preview compiles nothing — so a spec that then passes serialised is a **finding to report with its evidence**, not a box ticked on the way to green.
+- **Serialisation is now a diagnostic, not a fix.** If *every* scenario times out at its first navigation, re-run the same spec **unchanged** with `npx --no-install playwright test <spec> --config … -j 1` — one command, one worker, that run only — and it separates a concurrency problem from a spec problem. That is a **diagnostic outside the proof run**, which is why the verb has no flag for it and why this raw invocation is not a fallback for one: it never enters the proof run, a config, or the committed spec. But against the built target that signature has **no known cause** — a preview compiles nothing — so a spec that then passes serialised is a **finding to report with its evidence**, not a box ticked on the way to green.
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
@@ -920,18 +916,11 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | **Zero** tests ran — `Timed out waiting <n>ms from config.webServer` | A live `webServer` entry existed and never became ready — that is all this message proves. Match on `from config.webServer`: the number is that entry's own `timeout`, not a constant, and the message names no url, so with an array it does not say which entry. Curl the entry's url: **nothing answers** → the proof config still inherits a development server, so add `webServer: undefined` (Step 7); **the proof target answers** → the entry is the right one and its own readiness check timed out, so re-read the url it declares against the proved origin. |
 | **Zero** tests ran — nothing listening at the origin, connection refused on the first navigation | The opposite mistake: a `webServer` that builds and boots the proof target was dropped, so nothing produces the origin. A live entry makes this impossible, which is what tells it apart from the row above. Restore the entry in the proof config (Step 7), or bring the origin up yourself through `preflight.mjs`. |
 
-**Rerun only what failed.** During the ≤3 attempts, run just the failing test(s) — `-g "<title>"`. The full spec runs **once** after the last fix, as the gate. A **type-only fix** is gated by `tsc` — batch it into the next behavioral rerun.
+**Rerun only what failed, and rerun through the same verb.** During the ≤3 attempts, run just the failing test(s) — the same `proof-run.mjs audit` invocation with `--grep "<title>"` added. Never reach for a raw runner call here: the attempt bound and the signature comparison only see the attempts that go through the verb, and an attempt they cannot see is an attempt that is not bounded. The full spec set runs **once** after the last fix, as the gate — the same command with `--grep` dropped. A **type-only fix** is gated by `tsc` — batch it into the next behavioral rerun.
 
 **Token diet.** Inside the fix loop, run tool calls back-to-back — no prose narration between them; the diagnosis lands in the fix. Write the spec **once** from the `pomInventory` + Locator Mapping Table — never scaffold a throwaway skeleton and rewrite it. **Non-deliverable spec probes are forbidden** — no `_recon.spec.ts`, no `zz-debug.spec.ts`: the probe is the recon channel, the test runner is not a REPL.
 
-**No-progress checkpoint — the bound is three attempts, but not three retries.** After every failed attempt, record that run's **failure signature**: the **error class** (`TimeoutError`, `expect(locator).toBeVisible` failed, `Route.abort` on an unrecorded call, a `tsc` error code) plus the **failing locator** (the selector Playwright names in the error, or the file:line when no locator is involved). Then:
-
-| Signature vs. the previous attempt | What it means | Do |
-|---|---|---|
-| **Same** error class *and* same failing locator | The fix changed nothing the app can see — a retry, not a fix | **STOP the loop immediately.** Do not spend the remaining attempt. |
-| Different error class **or** different failing locator | The spec is converging — each fix moved the failure | Continue; the budget is the full 3 attempts. |
-
-A raw count cannot tell those apart: three attempts at one unchanging timeout is one retry paid three times.
+**No-progress checkpoint — the bound is three attempts, but not three retries.** The verb owns this: it records each attempt's **failure signature** (the error class plus the failing locator), persists it under the run's dot-directory, and refuses — **exit 7** — a run that repeats an unchanged one or that sits past the bound. A raw count cannot tell those apart; three attempts at one unchanging timeout is one retry paid three times. Exit 7 is not a failure to diagnose harder: it is the loop ending, and the remaining attempt is deliberately unspent.
 
 When the loop ends without a green run — three attempts spent, or the checkpoint tripped at two — **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces) for the diagnosis. Do not attempt a 4th fix. Then stop: PR-mode takes the handover stop below; target and coverage-gap modes emit the stop report from the Pipeline Overview.
 
