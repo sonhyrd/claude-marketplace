@@ -67,7 +67,7 @@ brought with it afterwards.
 docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
 **the probe HAR contract**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
-**run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
+**the proof-run audit verb**, **run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
 
@@ -87,7 +87,7 @@ docs orphan check, language,
 │   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
 │   │   ├── evals/files/    # NOT shipped — repo fixtures the wet cases run pw-prove against
 │   │   ├── evals/prompt-shapes.md # NOT shipped — the trigger/behavior rule and the classification
-│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
+│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/proof-run/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   └── playwright-debugger/
@@ -157,6 +157,7 @@ bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clip
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so
 bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
+bash scripts/ci/test-proof-run.sh   # proof-run.mjs audit: exit codes, the JSON summary, the exact runner argv
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
 bash scripts/run-evals-isolated.sh --self-test # the eval runtime's own seam (no API calls)
 bash scripts/ci/pre-push-security.sh
