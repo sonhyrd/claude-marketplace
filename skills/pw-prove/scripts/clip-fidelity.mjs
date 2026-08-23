@@ -69,7 +69,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pwproveRun } from './pwprove-run.mjs';
-import { probeVideo, run, videoTooling } from './video.mjs';
+import { frameFor, probeVideo, run, videoTooling } from './video.mjs';
 
 // Run ledger — registered before validation, so even a usage-error exit leaves a record. The phase
 // follows the subcommand: `spec` is the Step-6 audit, `frames` is the Step-7 inspection, and a
@@ -564,9 +564,9 @@ function framesCommand(rest) {
     // Frames land beside their clip — i.e. UNDER test-results/ — so Step 8's hygiene sweep removes
     // them with the rest of the run's litter and no image is ever left in the user's repository to
     // be committed by accident. The warning below covers the one case that escapes it: a clip that
-    // was not under test-results/ to begin with.
-    const base = path.basename(clip).replace(/\.[^.]+$/, '');
-    const target = path.join(path.dirname(clip), `${base}.frame.png`);
+    // was not under test-results/ to begin with. The path itself comes from `video.mjs`, because
+    // `proof-run.mjs film` reads this file back to say whether the clip was inspected.
+    const target = frameFor(clip);
     const grab = (args) => run('ffmpeg', ['-y', '-nostdin', '-loglevel', 'error', ...args]);
     // Input seeking first (it jumps rather than decodes), then output seeking as the fallback: on a
     // live-muxed webm with no cues, a seek past the last keyframe can yield no frame at all, and

@@ -902,7 +902,7 @@ record at a size the app never rendered at.
 |---|---|---|
 | `0` | The set was filmed | **Read every frame** (*Clip inspection* below), then the mutation check |
 | `6` | The filming run went red | A spec green in the audit run and red under `PW_PROVE_CLIP` is a **filming-law violation** — the variable may only add time. Fix the spec, re-run the audit verb, film again |
-| `12` | **Fidelity precondition refused** — the spec set does not carry the clip-fidelity contract | Nothing was filmed and `test-results/` is untouched. Fix the **committed spec** as the audit's own message says (its exit code is printed), then film again |
+| `12` | **Fidelity precondition refused** — the spec set does not carry the clip-fidelity contract | Nothing was filmed and `test-results/` is untouched. The audit's own output names the offending spec and the fix; apply it to the **committed spec** and film again. This holds for a `carried` spec too: the dwell is proof machinery, not an assertion about the PR's behaviour, so repairing it is not the loosening a carried failure forbids |
 
 **The precondition is not a duplicate of Step 6, and running it there does not license skipping it here.** A heal-loop edit between the two can have moved or dropped the dwell, and a precondition the verb enforces cannot be skipped by an agent that believes it already ran it. Filming a spec with no reader for `PW_PROVE_CLIP` is the originating regression: the flag is inert, the dwell never happens, and every gate stays green over a recording that shows nothing.
 
@@ -986,7 +986,7 @@ The verdict stays yours, matched against the spec's `// CARVE-OUT:` header:
 
 ### Clip inspection — look at the frame before anyone else does
 
-The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So after the filming run, extract one frame per clip at the moment of the hold and **read it**:
+The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So one frame per clip is extracted at the moment of the hold, and you **read it**:
 
 **The film verb already extracted them** — one frame per clip at duration − 0.5s, inside the payoff hold, landing beside its clip under `test-results/` so Step 8's sweep removes it and no image reaches the repo. You do not run a command for this; you read what the run handed you. Its summary line names every clip, its measured duration, its frame, and whether the frame exists:
 

@@ -120,7 +120,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pwproveRun } from './pwprove-run.mjs';
-import { probeVideo, videoTooling } from './video.mjs';
+import { frameFor, probeVideo, videoTooling } from './video.mjs';
 
 const EXIT = {
   OK: 0,
@@ -270,6 +270,9 @@ const top = git('rev-parse', '--show-toplevel');
 if (top.status !== 0) stop(EXIT.INPUT, 'not inside a git repository — the spec set is resolved from a merge base');
 const repoTop = top.stdout.trim();
 
+// Only where state is actually kept. `film` reads and writes none, and a verb that leaves an empty
+// directory behind is a side effect nobody asked for.
+if (verb === 'audit') {
 fs.mkdirSync(STATE_DIR, { recursive: true });
 // `.git/info/exclude`, never the project's `.gitignore`: this is the run's private working state.
 // The path comes from `--git-common-dir` and NOT from `<toplevel>/.git`, because in a worktree or a
@@ -289,6 +292,7 @@ try {
   }
 } catch (e) {
   stop(EXIT.INPUT, `cannot write the repo-local exclude entry (${e.message})`);
+}
 }
 
 const statePath = path.join(STATE_DIR, 'audit-state.json');
@@ -320,6 +324,9 @@ function writeState(state) {
 // The core is the same for every verb — schema, verb, spec set, result, exit — and each verb adds
 // the fields only it has. Two records that agree on the core can be read by one reader.
 let summarize = () => {};
+// The fields every record from THIS verb carries whatever happened — spelled once, so a stop that
+// exits early cannot report a smaller record than a stop that exits late.
+const VERB_FIELDS = verb === 'film' ? { viewport, verdict: opts.verdict } : {};
 function bindSummary(specs) {
   summarize = (result, exit, extra = {}) => {
     out(
@@ -329,6 +336,7 @@ function bindSummary(specs) {
         specs,
         result,
         exit,
+        ...VERB_FIELDS,
         ...extra,
       })}\n`,
     );
@@ -447,7 +455,8 @@ function collectClips(dir) {
 }
 
 /**
- * Measure every clip, extract one frame from each, and say which ones were actually inspected.
+ * The filming run's closing phase: measure every clip, extract one frame from each, and say which
+ * ones were actually inspected.
  *
  * NOTHING HERE FAILS THE RUN. Absent video tooling, an unreadable recording and a frame ffmpeg
  * declined to write all land the same way: that clip is reported `inspected: false`, and the others
@@ -459,7 +468,7 @@ function collectClips(dir) {
  * output is forwarded verbatim; only the frame FILES it wrote are read back, beside their clips,
  * because a path read off disk cannot drift from a sentence the way a parsed line can.
  */
-function measureClips(clips) {
+function inspectClips(clips) {
   if (clips.length === 0) return [];
   const tooling = videoTooling();
   const measured = clips.map((clip) => ({
@@ -484,10 +493,7 @@ function measureClips(clips) {
     return measured;
   }
   for (const clip of measured) {
-    const beside = path.join(
-      path.dirname(clip.path),
-      `${path.basename(clip.path).replace(/\.[^.]+$/, '')}.frame.png`,
-    );
+    const beside = frameFor(clip.path);
     if (fs.existsSync(beside) && fs.statSync(beside).size > 0) {
       clip.frame = beside;
       clip.inspected = true;
@@ -519,7 +525,7 @@ if (verb === 'film') {
   out(pre.stdout ?? '');
   err(pre.stderr ?? '');
   if (pre.status !== 0) {
-    summarize('refused', EXIT.FIDELITY, { fidelity_exit: pre.status, viewport, verdict: opts.verdict });
+    summarize('refused', EXIT.FIDELITY, { fidelity_exit: pre.status });
     stop(
       EXIT.FIDELITY,
       `the clip-fidelity audit refused the spec set (its exit ${pre.status}, named above) — NOTHING ` +
@@ -539,7 +545,7 @@ if (verb === 'film') {
   });
   if (run.status !== 0) {
     const signature = signatureOf(`${run.stdout ?? ''}\n${run.stderr ?? ''}`);
-    summarize('red', EXIT.TESTS_RED, { clips: [], viewport, verdict: opts.verdict, signature });
+    summarize('red', EXIT.TESTS_RED, { clips: [], signature });
     stop(
       EXIT.TESTS_RED,
       `the filming run went red — ${signature.error_class} at ${signature.locator}. A spec that was ` +
@@ -551,8 +557,7 @@ if (verb === 'film') {
   // 3. THE CLOSING PHASE. Never a gate: every outcome below leaves the run passing, and a clip that
   //    could not be inspected is reported uninspected rather than as good.
   const clips = collectClips(RESULTS_DIR);
-  const measured = measureClips(clips);
-  summarize('green', EXIT.OK, { clips: measured, viewport, verdict: opts.verdict });
+  summarize('green', EXIT.OK, { clips: inspectClips(clips) });
   process.exit(EXIT.OK);
 }
 

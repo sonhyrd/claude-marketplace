@@ -379,6 +379,10 @@ run film "${FILM_FLAGS[@]}" --verdict sideways:1600x900 --written e2e/a.spec.ts
 run audit --config playwright.proof.config.ts --test-dir e2e --base main --verdict deliberate:1600x900
 [ "$?" = 1 ] && ok "a film-only flag on audit is a usage error, never silently ignored" \
   || bad "audit accepted --verdict"
+run film --config playwright.proof.config.ts --test-dir e2e --base main \
+  --project-config nope.config.ts --verdict deliberate:1600x900 --written e2e/a.spec.ts
+[ "$?" = 2 ] && ok "a --project-config that does not exist is exit 2" \
+  || bad "expected exit 2 for a missing project config"
 
 echo ""
 echo "-- the fidelity contract is a PRECONDITION of filming --"
@@ -390,6 +394,7 @@ NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/no-dwell.spec.ts
 [ -s "$NPX_ARGV" ] && bad "the runner filmed over a spec that carries no dwell" \
   || ok "nothing was filmed while the precondition stood"
 [ "$(jq_field 'result')" = refused ] && ok "the summary says refused" || bad "result wrong: $(summary)"
+[ "$(jq_field 'schema')" = 2 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
 
 echo ""
 echo "-- the precondition does not clear the results directory --"
@@ -440,14 +445,6 @@ env_has "the effective viewport travels as PW_PROVE_W, never a fixed literal" "P
 env_has "the effective viewport travels as PW_PROVE_H" "PW_PROVE_H=900"
 
 echo ""
-echo "-- a differently-sized viewport is carried, not substituted --"
-: > "$NPX_ENV"
-NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film --config playwright.proof.config.ts \
-  --test-dir e2e --base main --project-config playwright.config.ts \
-  --verdict deliberate:1600x900 --written e2e/a.spec.ts
-env_has "the second run carries the same declared size" "PW_PROVE_W=1600"
-
-echo ""
 echo "-- the clips and their measured durations are in the summary --"
 NPX_MAKE_CLIPS="good-one good-two" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
 [ "$(jq_field 'clips.length')" = 2 ] && ok "both clips are in the summary" || bad "clip count wrong: $(summary)"
@@ -493,6 +490,29 @@ CFG
 NPX_EXIT=0 run film "${FILM_FLAGS[@]}"
 [ "$?" = 3 ] && ok "an empty spec set stops film with the same exit 3" || bad "expected exit 3 on an empty set"
 [ -s "$NPX_ARGV" ] && bad "the runner filmed an empty set" || ok "nothing was filmed over an empty set"
+[ "$(jq_field 'viewport.width')" = 1600 ] \
+  && ok "even the earliest stop reports the viewport the verb was given" || bad "viewport missing: $(summary)"
+
+echo ""
+echo "-- a DIFFERENT viewport is carried, not substituted --"
+# Its own fixture, whose config pins a size nothing else in this suite uses. Re-running the case
+# above with the same 1600x900 would pass against a module that hardcoded 1600x900, which is exactly
+# the defect the "never a fixed literal" rule names — so the size has to MOVE, in the config text
+# (which the fidelity precondition re-derives the verdict from) and in the verdict together.
+film_repo film-viewport
+cat > "$R/playwright.config.ts" <<'CFG'
+import { defineConfig } from '@playwright/test';
+export default defineConfig({ use: { viewport: { width: 1280, height: 720 } } });
+CFG
+: > "$NPX_ENV"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film --config playwright.proof.config.ts \
+  --test-dir e2e --base main --project-config playwright.config.ts \
+  --verdict deliberate:1280x720 --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "a 1280x720 project viewport films" || { bad "exit $?"; head -5 "$W/err"; }
+env_has "the width the verdict declared is the width that travels" "PW_PROVE_W=1280"
+env_has "the height the verdict declared is the height that travels" "PW_PROVE_H=720"
+[ "$(jq_field 'viewport.width')" = 1280 ] \
+  && ok "the summary states the viewport the run filmed at" || bad "viewport wrong: $(summary)"
 
 echo ""
 echo "-- one ledger line, phase film --"

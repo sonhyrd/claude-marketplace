@@ -11,6 +11,21 @@
 //
 // Zero dependencies, Node stdlib only. `ffprobe`/`ffmpeg` stay subprocesses.
 import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+
+/**
+ * Where a clip's inspection frame lives: beside the clip, same stem, `.frame.png`.
+ *
+ * Here rather than at either caller because two callers already need it and they need the SAME
+ * answer — `clip-fidelity.mjs frames` WRITES the file and `proof-run.mjs film` reads it back to say
+ * whether the clip was inspected. Two copies of this rule means a rename in the writer reports every
+ * clip uninspected, silently, which is the honest-looking verdict that is hardest to notice is wrong.
+ * Beside the clip is deliberate: under `test-results/`, so Step 8's hygiene sweep removes it and no
+ * image is left in the user's repository to be committed by accident.
+ */
+export function frameFor(clip) {
+  return path.join(path.dirname(clip), `${path.basename(clip).replace(/\.[^.]+$/, '')}.frame.png`);
+}
 
 /** One subprocess convention for every video call: text out, and a buffer big enough for a probe. */
 export const run = (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
