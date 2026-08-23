@@ -66,6 +66,10 @@ if [ -n "${NPX_TRACE_SRC:-}" ]; then
   mkdir -p test-results/a-spec-ts-scenario-chromium
   cp "$NPX_TRACE_SRC" test-results/a-spec-ts-scenario-chromium/trace.zip
 fi
+# The failure the mutation verb exists to catch: a run that writes over the delivered evidence.
+[ -n "${NPX_CLOBBER-}" ] && rm -rf test-results
+# A run that leaves something behind in the tree — the residue the post-revert check is for.
+[ -n "${NPX_STRAY-}" ] && printf 'left behind\n' > "$NPX_STRAY"
 [ -f "$NPX_STDOUT" ] && cat "$NPX_STDOUT"
 exit "${NPX_EXIT:-0}"
 SHIM
@@ -116,7 +120,8 @@ new_repo() {
 }
 
 run() { ( cd "$R" && PATH="$BIN:$PATH" PWPROVE_LEDGER="$W/ledger.jsonl" \
-  FAKE_VIDEO="${FAKE_VIDEO-}" NPX_MAKE_CLIPS="${NPX_MAKE_CLIPS-}" \
+  FAKE_VIDEO="${FAKE_VIDEO-}" NPX_MAKE_CLIPS="${NPX_MAKE_CLIPS-}" NPX_CLOBBER="${NPX_CLOBBER-}" \
+  NPX_STRAY="${NPX_STRAY-}" \
   node "$S" "$@" >"$W/out" 2>"$W/err" ); }
 
 env_has() {
@@ -981,6 +986,278 @@ else
 fi
 [ "$(grep -c '^PWPROVE_SUMMARY ' "$W/out")" = 1 ] \
   && ok "exactly one JSON summary line from film" || bad "film summary line count wrong"
+
+echo ""
+echo "=============================== mutate ==============================="
+
+# The mutation fixture is the one shape the verb is actually invoked in: a branch carrying a
+# committed source file and a carried spec, this run's own written spec untracked beside them, and
+# the source file MUTATED in the working tree — which is the state the agent leaves before it calls
+# this verb. `test-results/` holds the clips the filming run just produced, and keeping them
+# standing is the whole reason the verb exists separately.
+# The isolated output is keyed by the repository it belongs to — proofs in parallel worktrees are
+# this repo's normal shape and one machine-global directory would have them deleting each other's —
+# so the test reads the path the run itself reports rather than reconstructing the key.
+mut_out() { jq_field 'output'; }
+
+mutate_repo() {
+  new_repo "$1"
+  git -C "$R" checkout -qb feature
+  mkdir -p "$R/src"
+  printf 'export const hint = "saved";\n' > "$R/src/app.ts"
+  printf 'test\n' > "$R/e2e/carried.spec.ts"
+  git -C "$R" add -A && git -C "$R" commit -qm "the change and its carried spec"
+  printf 'test\n' > "$R/e2e/written.spec.ts"          # this run's own spec: untracked by construction
+  printf 'export const hint = "";\n' > "$R/src/app.ts" # the mutation the agent chose
+  for c in one two; do mkdir -p "$R/test-results/clip-$c"; printf 'webm\n' > "$R/test-results/clip-$c/video.webm"; done
+}
+MUT_FLAGS=(--config playwright.proof.config.ts --test-dir e2e --base main
+  --written e2e/written.spec.ts --grep "saves the profile" --mutated src/app.ts)
+
+echo "-- usage: mutate's own required flags, in both directions --"
+mutate_repo mut-usage
+run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/written.spec.ts --grep "saves the profile"
+[ "$?" = 1 ] && ok "mutate without --mutated is a usage error (exit 1)" || bad "expected exit 1 without --mutated"
+run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/written.spec.ts --mutated src/app.ts
+[ "$?" = 1 ] && ok "mutate without --grep is a usage error (exit 1)" || bad "expected exit 1 without --grep"
+run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
+  --grep "saves the profile" --mutated src/app.ts
+[ "$?" = 1 ] && ok "mutate without --written is a usage error (exit 1)" \
+  || bad "expected exit 1 without --written — the mutation scope is the scenarios this run wrote"
+run audit --config playwright.proof.config.ts --test-dir e2e --base main --mutated src/app.ts
+[ "$?" = 1 ] && ok "a mutate-only flag on audit is a usage error, never silently ignored" \
+  || bad "audit accepted --mutated"
+run mutate "${MUT_FLAGS[@]}" --verdict deliberate:1600x900
+[ "$?" = 1 ] && ok "a film-only flag on mutate is a usage error" || bad "mutate accepted --verdict"
+
+echo ""
+echo "-- the mutation must be there, and revertible, BEFORE a run is paid for --"
+mutate_repo mut-untracked
+printf 'export const x = 1;\n' > "$R/src/untracked.ts"
+: > "$NPX_ARGV"
+run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/written.spec.ts --grep "saves the profile" --mutated src/untracked.ts
+[ "$?" = 2 ] && ok "an untracked --mutated file is exit 2 — it has no pre-state to revert to" \
+  || bad "expected exit 2 for an untracked mutated file"
+[ -s "$NPX_ARGV" ] && bad "a run was paid for over a file that could not be reverted" \
+  || ok "nothing was run"
+
+mutate_repo mut-unmutated
+git -C "$R" checkout -- src/app.ts   # the agent forgot to mutate
+: > "$NPX_ARGV"
+run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 2 ] && ok "a --mutated file carrying no change is exit 2" \
+  || bad "expected exit 2 when nothing was actually mutated"
+[ -s "$NPX_ARGV" ] && bad "a run went green by construction over an unmutated tree" \
+  || ok "no run is paid for over an unmutated tree"
+
+echo ""
+echo "-- the isolated output, as argv --"
+mutate_repo mut-argv
+: > "$NPX_ARGV"
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 0 ] && ok "a RED mutation run is SUCCESS — the spec guards the change (exit 0)" \
+  || { bad "expected exit 0 on a red mutation run"; head -5 "$W/err"; }
+argv_has "the run is sent to an isolated output directory" "--output=$(mut_out)"
+case "$(mut_out)" in
+  */pw-prove-mutation-*) ok "the isolated output is keyed per repository, not machine-global" ;;
+  *) bad "two parallel proofs would share one mutation output: $(mut_out)" ;;
+esac
+argv_has "and reports without recording anything" "--reporter=line"
+argv_has "the guarding test scopes it to ONE test" "-g"
+argv_has "the test title travels as ONE argument" "saves the profile"
+argv_has "the spec this run wrote is what is mutation-verified" "e2e/written.spec.ts"
+if grep -qxF -- "e2e/carried.spec.ts" "$NPX_ARGV"; then
+  bad "a carried spec was mutation-verified — that verdict belongs to the run that wrote it"
+else
+  ok "a carried spec is filmed but not mutation-verified: the two scopes stay different"
+fi
+if grep -qxF -- "--reporter=html" "$NPX_ARGV"; then
+  bad "the mutation run wrote an HTML report over the standing one"
+else
+  ok "no HTML reporter — the mutation run publishes nothing"
+fi
+if grep -qxF -- "PW_PROVE_CLIP=1" "$NPX_ENV"; then
+  bad "the mutation run paid for a dwell and recorded a clip"
+else
+  ok "no clip flag — a mutation run records nothing"
+fi
+if grep -qE '^(-j|--workers)' "$NPX_ARGV"; then
+  bad "a worker override reached the mutation run (ADR-0017 forbids one)"
+else
+  ok "no worker override on the mutation run either (ADR-0017)"
+fi
+
+echo ""
+echo "-- the isolated output, as clips still standing --"
+[ "$(cat "$NPX_PRESTATE")" = present ] \
+  && ok "test-results was NOT cleared before the mutation run" \
+  || bad "the mutation run cleared the delivered evidence — the one verb that must not"
+[ -f "$R/test-results/clip-one/video.webm" ] && [ -f "$R/test-results/clip-two/video.webm" ] \
+  && ok "the clips the filming run produced are still standing afterwards" \
+  || bad "a clip did not survive the mutation run"
+[ "$(jq_field 'clips.survived')" = 2 ] \
+  && ok "the summary counts the clips that survived" || bad "survived wrong: $(summary)"
+[ "$(jq_field 'clips.expected_at_least')" = 2 ] \
+  && ok "the count is checked against the spec set, carried scenarios included" \
+  || bad "expected_at_least wrong: $(summary)"
+case "$(jq_field 'output')" in
+  */pw-prove-mutation-*) ok "the summary names the isolated output, so no later step rebuilds it" ;;
+  *) bad "output wrong: $(summary)" ;;
+esac
+
+echo ""
+echo "-- the revert is unconditional and immediate --"
+git -C "$R" diff --quiet -- src/app.ts \
+  && ok "the mutated file is back at its pre-state after a red run" || bad "the mutation survived a red run"
+[ "$(jq_field 'reverted')" = true ] && ok "the summary says the revert took" || bad "reverted wrong: $(summary)"
+[ "$(jq_field 'result')" = guards ] \
+  && ok "the summary names the verdict: the spec guards the change" || bad "result wrong: $(summary)"
+[ "$(jq_field 'mutation_run')" = red ] \
+  && ok "the summary carries what the run itself did, distinct from the verdict" \
+  || bad "mutation_run wrong: $(summary)"
+
+echo ""
+echo "-- a GREEN mutation run is exit 8, its own code, NOT tests-red --"
+mutate_repo mut-green
+NPX_EXIT=0 run mutate "${MUT_FLAGS[@]}"
+rc=$?
+[ "$rc" = 8 ] && ok "a green mutation run is exit 8" || bad "expected exit 8 on a green mutation run, got $rc"
+[ "$rc" != 6 ] && ok "exit 8 is not exit 6 — 'the spec does not guard it' is not 'the tests failed'" \
+  || bad "a green mutation run collapsed into tests-red"
+[ "$(jq_field 'result')" = unguarded ] && ok "the summary says unguarded" || bad "result wrong: $(summary)"
+git -C "$R" diff --quiet -- src/app.ts \
+  && ok "the revert ran on the green branch too — it is unconditional" \
+  || bad "a green run left the mutation in the tree"
+grep -q 'unguardable' "$W/err" \
+  && ok "the refusal hands back the judgement the agent owes" || bad "exit 8 says nothing about what to do next"
+
+echo ""
+echo "-- residue after the revert is a HARD STOP under its own code --"
+# The run itself left something in the tree that the revert of the declared file cannot take back
+# out. The verdict is not read at all on this path: a proof never continues on a polluted tree, and
+# nothing in the runner's own exit code says the tree moved.
+mutate_repo mut-residue
+NPX_STRAY="$W/repo-mut-residue/src/left-behind.ts" NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 9 ] && ok "tree residue after the revert is exit 9" || bad "expected exit 9 for tree residue"
+[ "$(jq_field 'residue')" = true ] && ok "the summary says the tree is polluted" || bad "residue wrong: $(summary)"
+[ "$(jq_field 'result')" = residue ] && ok "residue outranks the verdict" || bad "result wrong: $(summary)"
+grep -q 'left-behind.ts' "$W/err" && ok "the hard stop names what is still dirty" \
+  || bad "the residue stop does not say what survived"
+git -C "$R" diff --quiet -- src/app.ts \
+  && ok "the revert still ran before the tree was judged" || bad "a residue stop left the mutation standing"
+
+# And a tracked file the run modified, which shows as a moved diff rather than a new status line.
+mutate_repo mut-residue-tracked
+NPX_STRAY="$W/repo-mut-residue-tracked/README.md" NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 9 ] && ok "a tracked file the run touched is residue too" \
+  || bad "expected exit 9 when the run modified a tracked file"
+
+echo ""
+echo "-- clobbered clips are exit 10, and outrank the verdict --"
+mutate_repo mut-clobber
+NPX_CLOBBER=1 NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 10 ] && ok "a mutation run that clobbered the clips is exit 10" \
+  || bad "expected exit 10 when the delivered evidence was overwritten"
+[ "$(jq_field 'clips.survived')" = 0 ] && ok "the summary counts nothing surviving" || bad "survived wrong: $(summary)"
+[ "$(jq_field 'result')" = clips-clobbered ] \
+  && ok "clobbered evidence outranks a red verdict" || bad "result wrong: $(summary)"
+git -C "$R" diff --quiet -- src/app.ts \
+  && ok "the revert still ran before the clip check" || bad "a clobbered run left the mutation standing"
+
+echo ""
+echo "-- fewer clips than the spec set is the same finding --"
+mutate_repo mut-short
+rm -rf "$R/test-results/clip-two"   # the set holds two specs; only one clip stands
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 10 ] && ok "one clip against a two-spec set is exit 10" \
+  || bad "a clip count short of the spec set was accepted"
+
+echo ""
+echo "-- mutate shares the spec-set resolution and the empty-set stop --"
+new_repo mut-empty
+mkdir -p "$R/src"; printf 'x\n' > "$R/src/app.ts"
+git -C "$R" add -A && git -C "$R" commit -qm src
+printf 'y\n' > "$R/src/app.ts"
+printf 'test\n' > "$R/e2e/written.spec.ts"
+: > "$NPX_ARGV"
+NPX_EXIT=1 run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/nothing.spec.ts --grep t --mutated src/app.ts
+[ "$?" = 2 ] && ok "a --written spec that is not on disk is exit 2 on mutate too" \
+  || bad "expected exit 2 for a missing written spec"
+
+echo ""
+echo "-- the film summary's own clip count is the floor when it is passed --"
+# The spec SET is the only floor this verb can compute alone: one clip per spec FILE. A spec holding
+# three scenarios filmed three clips, and the weaker floor would absorb two of them going missing.
+mutate_repo mut-clips-count
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}" --clips 2
+[ "$?" = 0 ] && ok "a count the standing clips meet still passes" || bad "a met --clips count failed the run"
+mutate_repo mut-clips-short
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}" --clips 3
+[ "$?" = 10 ] && ok "two clips against a three-scenario filming run is exit 10" \
+  || bad "a multi-scenario spec's missing clips were absorbed by the spec-file floor"
+[ "$(jq_field 'clips.expected_at_least')" = 3 ] \
+  && ok "the summary names the count it held the clips to" || bad "expected_at_least wrong: $(summary)"
+mutate_repo mut-clips-bad
+run mutate "${MUT_FLAGS[@]}" --clips lots
+[ "$?" = 1 ] && ok "a --clips that is not a count is a usage error" || bad "--clips accepted a non-number"
+run audit --config playwright.proof.config.ts --test-dir e2e --base main --clips 2
+[ "$?" = 1 ] && ok "--clips belongs to mutate alone" || bad "audit accepted --clips"
+
+echo ""
+echo "-- a run that executed NO test is never a red verdict --"
+# The one verb where nonzero means success: a grep matching nothing would otherwise publish "the
+# spec guards the change" over a run that executed no assertion at all.
+mutate_repo mut-no-tests
+printf 'Error: No tests found.\n' > "$W/runner-out"
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 2 ] && ok "a grep that matched no test is exit 2, not a red verdict" \
+  || bad "a run that executed nothing was read as 'the spec guards the change'"
+grep -q 'no verdict' "$W/err" && ok "the stop says there is no verdict to read" \
+  || bad "the stop does not say why the run proves nothing"
+git -C "$R" diff --quiet -- src/app.ts \
+  && ok "the revert still ran before that stop" || bad "the no-tests stop left the mutation standing"
+: > "$W/runner-out"
+
+echo ""
+echo "-- a red run carries its failure signature, so the agent can place it --"
+mutate_repo mut-signature
+cat > "$W/runner-out" <<'OUT'
+  1) [chromium] > e2e/written.spec.ts:12:5 > saves the profile
+    Error: expect(locator).toBeVisible() failed
+    Locator: locator('#saved-banner')
+OUT
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 0 ] && ok "the red run still exits 0" || bad "expected exit 0"
+[ "$(jq_field 'signature.locator')" = "#saved-banner" ] \
+  && ok "the summary names what went red, so an infrastructure failure is not read as a guard" \
+  || bad "signature wrong: $(summary)"
+[ "$(jq_field 'signature.error_class')" = "expect(locator).toBeVisible" ] \
+  && ok "and the error class beside it" || bad "error class wrong: $(summary)"
+: > "$W/runner-out"
+
+# A GREEN run has no failure to describe, and a signature invented for one would be a fabrication.
+mutate_repo mut-green-signature
+NPX_EXIT=0 run mutate "${MUT_FLAGS[@]}"
+[ "$(jq_field 'signature')" = null ] \
+  && ok "a green mutation run carries no signature" || bad "signature not null on green: $(summary)"
+
+echo ""
+echo "-- one ledger line, phase mutate --"
+mutate_repo mut-ledger
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+if [ "$(grep -c '^PWPROVE_RUN .*"script":"proof-run.mjs".*"phase":"mutate"' "$W/out")" = 1 ]; then
+  ok "one ledger line from proof-run.mjs, phase mutate"
+else
+  bad "no single PWPROVE_RUN line for proof-run.mjs with phase mutate: $(grep '^PWPROVE_RUN ' "$W/out")"
+fi
+[ "$(grep -c '^PWPROVE_SUMMARY ' "$W/out")" = 1 ] \
+  && ok "exactly one JSON summary line from mutate" || bad "mutate summary line count wrong"
+[ -d "$R/.pw-prove" ] && bad "mutate left a state directory behind — it keeps none" \
+  || ok "mutate writes no state of its own"
 
 echo ""
 echo "  proof-run: $pass passed, $fail failed"
