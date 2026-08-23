@@ -60,6 +60,12 @@ printf '%s
 # A filming run leaves webms behind; the shim stands in for that so the frame phase has clips.
 for c in ${NPX_MAKE_CLIPS-}; do mkdir -p "test-results/$c"; printf 'webm
 ' > "test-results/$c/video.webm"; done
+# A real proof run writes traces under test-results/; the hermetic phase reads them, so the shim
+# has to produce them the way the run does — after the clearing, not before it.
+if [ -n "${NPX_TRACE_SRC:-}" ]; then
+  mkdir -p test-results/a-spec-ts-scenario-chromium
+  cp "$NPX_TRACE_SRC" test-results/a-spec-ts-scenario-chromium/trace.zip
+fi
 [ -f "$NPX_STDOUT" ] && cat "$NPX_STDOUT"
 exit "${NPX_EXIT:-0}"
 SHIM
@@ -576,6 +582,202 @@ NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base m
 [ "$(jq_field 'signature')" = null ] && ok "a green run carries no signature" || bad "signature not cleared"
 
 echo ""
+echo "-- the hermetic phase: the network the audit run put on the wire --"
+# The classification is DELEGATED to hermetic.mjs, which is a sibling module invoked by absolute
+# path — so it is exercised for real here, over a real trace.zip, exactly as a proof run would be.
+# The fixture zip is synthesized rather than committed: a stored-entry writer keeps the repo free of
+# a binary fixture and free of a `zip` dependency, and pins the field the classifier keys on — a
+# request the browser put on the wire carries `serverIPAddress`, a route.fulfill() response does not.
+cat > "$W/mkzip.mjs" <<'MKZIP'
+import fs from 'node:fs';
+const [, , zipPath, name, srcPath] = process.argv;
+const data = fs.readFileSync(srcPath);
+const nm = Buffer.from(name, 'utf8');
+// Table-free CRC-32, so the helper works on every Node this repo's CI might carry.
+let crc = ~0;
+for (const b of data) {
+  crc ^= b;
+  for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+}
+crc = (~crc) >>> 0;
+const local = Buffer.alloc(30);
+local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4);
+local.writeUInt32LE(crc, 14); local.writeUInt32LE(data.length, 18);
+local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nm.length, 26);
+const central = Buffer.alloc(46);
+central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+central.writeUInt32LE(crc, 16); central.writeUInt32LE(data.length, 20);
+central.writeUInt32LE(data.length, 24); central.writeUInt16LE(nm.length, 28);
+central.writeUInt32LE(0, 42);
+const eocd = Buffer.alloc(22);
+eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(1, 8); eocd.writeUInt16LE(1, 10);
+eocd.writeUInt32LE(central.length + nm.length, 12);
+eocd.writeUInt32LE(local.length + nm.length + data.length, 16);
+fs.writeFileSync(zipPath, Buffer.concat([local, nm, data, central, nm, eocd]));
+MKZIP
+
+if ! command -v unzip >/dev/null 2>&1; then
+  # Refused, not skipped. `unzip` is a hard dependency of the classification this phase delegates
+  # to, so a host without it cannot exercise a single assertion below — and a suite that goes green
+  # while the whole feature under test went unmeasured is the instrument lying about its own reach.
+  bad "hermetic phase: unzip is not installed, so the classification cannot be exercised at all"
+else
+  # One entry per class, in the shape Playwright 1.61 writes.
+  cat > "$W/0-trace.network" <<'NETWORK'
+{"type":"resource-snapshot","snapshot":{"_resourceType":"document","serverIPAddress":"127.0.0.1","request":{"url":"http://app.test/en/settings","method":"GET"},"response":{"status":200}}}
+{"type":"resource-snapshot","snapshot":{"_resourceType":"fetch","serverIPAddress":"10.0.0.4","request":{"url":"http://api.test/api/v1/exchange-rates?x=1","method":"GET"},"response":{"status":200}}}
+{"type":"resource-snapshot","snapshot":{"_resourceType":"fetch","request":{"url":"http://api.test/api/v1/sections/custom_scripts","method":"PUT"},"response":{"status":200}}}
+{"type":"resource-snapshot","snapshot":{"_resourceType":"fetch","request":{"url":"http://widget.intercom.io/boot","method":"POST"},"response":{"status":-1,"_failureText":"net::ERR_ABORTED"}}}
+NETWORK
+  node "$W/mkzip.mjs" "$W/trace.zip" 0-trace.network "$W/0-trace.network"
+  export NPX_TRACE_SRC="$W/trace.zip"
+
+  echo ""
+  echo "  -- a declared live call --"
+  new_repo hermetic-declared
+  cat > "$R/e2e/a.spec.ts" <<'SPEC'
+// CARVE-OUT: GET /api/v1/exchange-rates — the live round-trip IS the AC — restore: read-only
+test('scenario', async ({ page }) => { await page.goto('/') })
+SPEC
+  NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  [ "$?" = 0 ] && ok "a green run with a declared carve-out is still exit 0" \
+    || { bad "the hermetic phase changed the exit code"; head -5 "$W/err"; }
+  [ "$(jq_field 'phases.hermetic.status')" = ok ] \
+    && ok "the summary carries the hermetic phase" || bad "hermetic phase missing: $(summary)"
+  [ "$(jq_field 'phases.hermetic.live.map(e=>e.call).join(",")')" = "GET http://api.test/api/v1/exchange-rates" ] \
+    && ok "the LIVE classification is carried in the summary" || bad "live wrong: $(summary)"
+  [ "$(jq_field 'phases.hermetic.mocked.map(e=>e.call).join(",")')" = "PUT http://api.test/api/v1/sections/custom_scripts" ] \
+    && ok "the MOCKED classification is carried too" || bad "mocked wrong: $(summary)"
+  [ "$(jq_field 'phases.hermetic.failed.map(e=>e.call).join(",")')" = "POST http://widget.intercom.io/boot" ] \
+    && ok "the FAILED classification is carried too" || bad "failed wrong: $(summary)"
+  [ "$(jq_field 'phases.hermetic.undeclared.length')" = 0 ] \
+    && ok "a live call with a matching carve-out line is NOT undeclared" \
+    || bad "a declared call was reported undeclared: $(summary)"
+  [ "$(jq_field 'phases.hermetic.in_spec_round_trips.length')" = 0 ] \
+    && ok "a spec with no route.fetch reports zero round-trips" || bad "round-trips wrong: $(summary)"
+
+  echo ""
+  echo "  -- an undeclared live call --"
+  # The twin carries a carve-out for a DIFFERENT path, so "some carve-out exists" cannot pass for
+  # "this call is declared" — the presence test is per call, not per spec.
+  new_repo hermetic-undeclared
+  cat > "$R/e2e/a.spec.ts" <<'SPEC'
+// CARVE-OUT: GET /api/v1/some-other-endpoint — live round-trip IS the AC — restore: read-only
+test('scenario', async ({ page }) => { await page.goto('/') })
+SPEC
+  NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  [ "$?" = 0 ] && ok "an undeclared live call does not fail the audit run — it is reported" \
+    || bad "the audit verb refused over an undeclared live call"
+  [ "$(jq_field 'phases.hermetic.undeclared.join(",")')" = "GET http://api.test/api/v1/exchange-rates" ] \
+    && ok "a live call with no matching carve-out line is reported undeclared" \
+    || bad "undeclared wrong: $(summary)"
+  [ "$(jq_field 'phases.hermetic.mocked.length')" = 1 ] \
+    && ok "a mocked call is never undeclared" || bad "mocked leaked into the undeclared list"
+  grep -q "UNDECLARED live call" "$W/err" && ok "the undeclared list reaches the transcript as well" \
+    || bad "the undeclared list is only in the summary"
+
+  echo ""
+  echo "  -- the method is part of the comparison --"
+  new_repo hermetic-method
+  cat > "$R/e2e/a.spec.ts" <<'SPEC'
+// CARVE-OUT: POST /api/v1/exchange-rates — the live round-trip IS the AC — restore: not needed
+test('scenario', async ({ page }) => { await page.goto('/') })
+SPEC
+  NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  [ "$(jq_field 'phases.hermetic.undeclared.length')" = 1 ] \
+    && ok "a carve-out naming another method does not declare this call" \
+    || bad "the method was ignored: $(summary)"
+
+  echo ""
+  echo "  -- the restore clause is not a second declared method --"
+  # The documented carve-out form carries a `restore:` verb after the separator. Scanning the whole
+  # line for methods would read that verb as declared and turn this leading-path-only carve-out into
+  # a false `undeclared` — which would send the agent to declare what is already declared.
+  new_repo hermetic-restore
+  cat > "$R/e2e/a.spec.ts" <<'SPEC'
+// CARVE-OUT: /api/v1/exchange-rates — the live round-trip IS the AC — restore: DELETE /api/v1/rates/:id
+test('scenario', async ({ page }) => { await page.goto('/') })
+SPEC
+  NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  [ "$(jq_field 'phases.hermetic.undeclared.length')" = 0 ] \
+    && ok "a method named only in the restore clause does not narrow the declaration" \
+    || bad "the restore clause was read as the declared method: $(summary)"
+
+  echo ""
+  echo "  -- a carve-out anywhere in the spec SET declares the call --"
+  new_repo hermetic-set
+  git -C "$R" checkout -qb feature
+  cat > "$R/e2e/carried.spec.ts" <<'SPEC'
+// CARVE-OUT: GET /api/v1/exchange-rates — the live round-trip IS the AC — restore: read-only
+test('carried', async ({ page }) => { await page.goto('/') })
+SPEC
+  git -C "$R" add -A && git -C "$R" commit -qm carried
+  printf "test('written', async () => {})\n" > "$R/e2e/written.spec.ts"
+  NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/written.spec.ts
+  [ "$(jq_field 'phases.hermetic.undeclared.length')" = 0 ] \
+    && ok "the carve-out lines of every spec in the set are read, not only this run's" \
+    || bad "a carve-out in a carried spec was missed: $(summary)"
+
+  echo ""
+  echo "  -- the in-spec round-trip a trace cannot see --"
+  new_repo hermetic-roundtrip
+  cat > "$R/e2e/a.spec.ts" <<'SPEC'
+// CARVE-OUT: GET /api/v1/exchange-rates — the live round-trip IS the AC — restore: read-only
+test('scenario', async ({ page }) => {
+  await page.route('**/api/flags**', async (r) => {
+    const real = await r.fetch()
+    await r.fulfill({ json: { ...(await real.json()), on: true } })
+  })
+})
+SPEC
+  NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  [ "$(jq_field 'phases.hermetic.in_spec_round_trips.length')" = 1 ] \
+    && ok "a route.fetch round-trip is carried in the summary" || bad "round-trip missed: $(summary)"
+  [ "$(jq_field 'phases.hermetic.in_spec_round_trips[0].spec')" = e2e/a.spec.ts ] \
+    && ok "the round-trip names the spec it sits in" || bad "round-trip spec wrong: $(summary)"
+  [ "$(jq_field 'phases.hermetic.in_spec_round_trips[0].line')" = 4 ] \
+    && ok "the round-trip names its line" || bad "round-trip line wrong: $(summary)"
+
+  echo ""
+  echo "  -- a run that recorded no traces --"
+  new_repo hermetic-no-traces
+  printf "test('t', async () => {})\n" > "$R/e2e/a.spec.ts"
+  ( unset NPX_TRACE_SRC; NPX_EXIT=0 run audit --config playwright.proof.config.ts \
+      --test-dir e2e --base main --written e2e/a.spec.ts )
+  [ "$?" = 0 ] && ok "a run that recorded no traces still exits on its own result" \
+    || bad "the hermetic phase invented an exit code for a missing trace"
+  [ "$(jq_field 'phases.hermetic.status')" = failed ] \
+    && ok "the phase reports failed rather than an empty classification" || bad "status wrong: $(summary)"
+  [ "$(jq_field 'phases.hermetic.reason')" = no-traces ] \
+    && ok "the summary says why — no traces to classify" || bad "reason wrong: $(summary)"
+
+  echo ""
+  echo "  -- a red run never reaches the classification --"
+  new_repo hermetic-red
+  printf "test('t', async () => {})\n" > "$R/e2e/a.spec.ts"
+  cat > "$W/runner-out" <<'OUT'
+  1) [chromium] › e2e/a.spec.ts:12:5 › scenario
+    TimeoutError: locator.click: Timeout 30000ms exceeded.
+    Call log:
+      - waiting for locator('[data-testid="save"]')
+OUT
+  NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+    --written e2e/a.spec.ts
+  [ "$?" = 6 ] && ok "a red run is still exit 6" || bad "the hermetic phase changed a red run's exit"
+  [ "$(jq_field 'phases.hermetic.status')" = not-reached ] \
+    && ok "a red run reports the classification as not-reached, never as clean" \
+    || bad "status wrong: $(summary)"
+  : > "$W/runner-out"
+  unset NPX_TRACE_SRC
+fi
+
+echo ""
 echo "-- one summary line, and one ledger line per invocation --"
 [ "$(grep -c '^PWPROVE_SUMMARY ' "$W/out")" = 1 ] \
   && ok "exactly one JSON summary line on stdout" || bad "summary line count wrong"
@@ -646,7 +848,7 @@ NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/no-dwell.spec.ts
 [ -s "$NPX_ARGV" ] && bad "the runner filmed over a spec that carries no dwell" \
   || ok "nothing was filmed while the precondition stood"
 [ "$(jq_field 'result')" = refused ] && ok "the summary says refused" || bad "result wrong: $(summary)"
-[ "$(jq_field 'schema')" = 2 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
+[ "$(jq_field 'schema')" = 3 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
 
 echo ""
 echo "-- the precondition does not clear the results directory --"

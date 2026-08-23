@@ -60,6 +60,34 @@
 //   `--grep`, so every attempt the agent makes is an attempt the bound sees; a raw runner call
 //   would leave the bound blind to exactly the attempts it exists to count.
 //
+//   THE NETWORK CLASSIFICATION IS DELEGATED TO `hermetic.mjs`, AND ONLY THE MECHANICAL HALF OF THE
+//   CARVE-OUT CHECK IS COMPUTED HERE. The classification runs on the audit run's traces, on a green
+//   run, because that is the run the body licenses filming from — a red run's traces describe a spec
+//   that is still being healed, and reporting them would read as a finding about the PR. The module
+//   renders no verdict by deliberate design (ADR-0010): matching live calls against the spec's
+//   `// CARVE-OUT:` lines is a judgement about INTENT, and that stays with the agent. But PRESENCE is
+//   not a judgement — a live call whose path appears in no carve-out line anywhere in the spec set is
+//   undeclared, and that is a string comparison. So this verb computes presence and reports the
+//   undeclared list; whether a carve-out that IS present earns its place is still the agent's call.
+//   The hermetic module is invoked, never reimplemented and never modified: a second copy of that
+//   classification is the copy that drifts.
+//
+//   IT IS INVOKED ONCE PER SPEC, because its `--spec` scan takes one file and the round-trip class it
+//   finds — `route.fetch()`, which leaves the machine from the Playwright process and so appears
+//   MOCKED in a trace — is per spec. The classification itself is read from the first invocation
+//   only; every invocation reads the same traces, so the rest would be the same list re-derived. The
+//   price is re-reading the traces per spec, and it is the price of not growing a second `--spec`
+//   flag onto a module whose contract this change is not allowed to touch.
+//
+//   A RUN THAT RECORDED NO TRACES IS REPORTED, NOT REDEFINED. `hermetic.mjs` exits 2 when there is
+//   nothing to classify — the proof config must set `trace: 'on'`, and the committed one does. That
+//   is a phase result (`failed`, reason `no-traces`), not a new exit code: the run's own result is
+//   what the exit code carries, and inventing a code here would make one code mean two things.
+//
+//   AN UNDECLARED LIVE CALL DOES NOT REFUSE THIS VERB. The audit pass REPORTS the network; the
+//   refusal that costs a re-run rather than the clips belongs to the filming verb, which is where the
+//   spend it protects actually happens.
+//
 //   THE MODULE'S STATE IS EXCLUDED REPO-LOCALLY, through `.git/info/exclude` and never through the
 //   project's `.gitignore` — the convention the HAR bind already sets. The state is this run's
 //   private working state; a stray `.gitignore` diff is churn the delivery step would have to
@@ -136,9 +164,11 @@ const EXIT = {
 };
 
 const VERBS = new Set(['audit', 'film']);
-// Schema 2 added the film verb's fields: `clips`, `viewport` and `verdict`. Fields are added over
-// time, so a reader reads the schema before it reads anything else.
-const SUMMARY_SCHEMA = 2;
+// 2 added the `phases` record (the two preconditions report themselves whatever they did) and the
+// film verb's fields: `clips`, `viewport` and `verdict`.
+// 3 added `phases.hermetic`: the network classification and the undeclared live calls.
+// Fields are added over time, so a reader reads the schema before it reads anything else.
+const SUMMARY_SCHEMA = 3;
 const STATE_SCHEMA = 1;
 // Fixed, not a flag. The bound is the body's bound, and a knob whose only caller would be a test is
 // a test-only injection point — the one thing this module is not allowed to grow.
@@ -155,6 +185,18 @@ const SPEC_RE = /\.(spec|test)\.[cm]?[jt]sx?$/;
 // skill can be installed anywhere; never reimplemented here.
 const CLIP_FIDELITY = path.join(path.dirname(fileURLToPath(import.meta.url)), 'clip-fidelity.mjs');
 
+// The hermetic module's own exit table, read rather than re-derived: 2 is "no traces to classify",
+// which is a phase result here and never this verb's exit code.
+const HERMETIC = { NO_TRACES: 2 };
+// The methods a carve-out line can name. A line that names none declares the path for every method;
+// a line that names one declares only that one, so a `POST` carve-out cannot cover a live `GET`.
+const METHOD_RE = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g;
+// Only the HEAD of the line declares — the text before the first separator. The documented form is
+// `CARVE-OUT: POST /api/v2/drafts — why — restore: DELETE /api/v2/drafts/:id`, so a method scan over
+// the WHOLE line reads the restore clause's verb as a second declared method and turns a
+// leading-path-only carve-out into a false `undeclared` — the one direction this check must not err
+// in, since it would send the agent to declare something already declared.
+const DECLARATION_HEAD = /^([^\u2014\u2013]*)/;
 // The scrubber's own exit table, read rather than re-derived. Its bind mode answers three ways that
 // mean different things here: 4 an unbindable match key, 5 a destination git would commit, and
 // 1/2 an input this module handed it wrong — which is this module's bug, not a bind refusal.
@@ -374,6 +416,19 @@ function writeState(state) {
 const phases = {
   typecheck: { status: PHASE.NOT_REACHED, tsconfig: null },
   har_bind: { status: PHASE.NOT_REACHED, har: null, out: null, reason: null, argv: null },
+  // The classification, the mechanical half of the carve-out check, and the round-trip class the
+  // trace cannot see. `not-reached` until a green run, which is the only run it is asked about.
+  hermetic: {
+    status: PHASE.NOT_REACHED,
+    traces: null,
+    live: [],
+    mocked: [],
+    failed: [],
+    carve_outs: [],
+    undeclared: [],
+    in_spec_round_trips: [],
+    reason: null,
+  },
 };
 let summarize = () => {};
 // The fields every record from THIS verb carries whatever happened — spelled once, so a stop that
@@ -748,7 +803,179 @@ if (!opts.har) {
 const run = runSpecSet(specs, boundHar ? { PW_PROVE_HAR: boundHar } : {});
 const runnerOutput = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
 
+// ---- the network classification, delegated to the hermetic module ------------------------------
+// It renders no verdict and this verb does not add one: it computes PRESENCE — a live call whose
+// path appears in no `// CARVE-OUT:` line anywhere in the spec set — and leaves legitimacy alone.
+// Its report is human-readable by design, so it is read as text here rather than re-implemented.
+const ENTRY_RE = /^ {2}(\S+ \S+)\s+×(\d+)(?:\s+\[([^\]]*)\])?\s+\((\d+) tests?\)/;
+const SITE_RE = /^ {2}(.+):(\d+) {2}(.*)$/;
+// A path a carve-out line can name: a bare path, or the path half of a full URL.
+const PATH_TOKEN_RE = /(?:https?:\/\/\S+?)?(\/[^\s,;)"'`]*)/g;
+
+function parseClassification(text) {
+  const buckets = { live: [], mocked: [], failed: [] };
+  let bucket = null;
+  for (const line of text.split('\n')) {
+    if (/^LIVE\b/.test(line)) bucket = buckets.live;
+    else if (/^MOCKED\b/.test(line)) bucket = buckets.mocked;
+    else if (/^FAILED\b/.test(line)) bucket = buckets.failed;
+    else if (/^\S/.test(line)) bucket = null;
+    else if (bucket) {
+      const m = line.match(ENTRY_RE);
+      if (m) {
+        bucket.push({
+          call: m[1],
+          count: Number(m[2]),
+          statuses: m[3] ? m[3].split(',') : [],
+          tests: Number(m[4]),
+        });
+      }
+    }
+  }
+  return buckets;
+}
+
+function parseRoundTrips(text, spec) {
+  const sites = [];
+  let inSection = false;
+  for (const line of text.split('\n')) {
+    if (/^IN-SPEC LIVE ROUND-TRIPS/.test(line)) {
+      inSection = true;
+      continue;
+    }
+    if (!inSection) continue;
+    if (/^\S/.test(line)) {
+      inSection = false;
+      continue;
+    }
+    const m = line.match(SITE_RE);
+    if (m) sites.push({ spec, line: Number(m[2]), text: m[3] });
+  }
+  return sites;
+}
+
+// Every spec in the SET, not only the one this run wrote: a carried spec's carve-out declares the
+// call it was written for, and re-declaring it in this run's spec is not something the body asks of
+// anyone.
+function carveOutsIn(specPaths) {
+  const found = [];
+  for (const spec of specPaths) {
+    let src;
+    try {
+      src = fs.readFileSync(spec, 'utf8');
+    } catch {
+      continue;
+    }
+    src.split('\n').forEach((line, i) => {
+      const m = line.match(/CARVE-OUT:\s*(.+)$/);
+      if (m) found.push({ spec, line: i + 1, text: m[1].trim() });
+    });
+  }
+  return found;
+}
+
+// A carve-out names a resource, so it declares the path it names and the paths under it: a
+// `:param` segment stands for one segment and a `*` for any run of characters. Deliberately
+// generous where it is unsure — a false "declared" leaves the agent the judgement it already owns,
+// while a false "undeclared" would send it to declare something already declared.
+function pathMatches(token, pathname) {
+  const pattern = token
+    .replace(/[.+^${}()|[\]\\?]/g, '\\$&')
+    .replace(/\*+/g, '\\S*')
+    .replace(/:[A-Za-z_]\w*/g, '[^/]+')
+    .replace(/\/$/, '');
+  return new RegExp(`^${pattern}(?:/|$)`).test(pathname);
+}
+
+function declaredBy(carveOuts, call) {
+  // `METHOD URL`, the shape the classifier renders. Split defensively rather than on an index that
+  // is -1 when it is not: that silently yields an empty method and a URL missing its first
+  // character, and both would then be compared against every carve-out line as if they were real.
+  const sep = call.indexOf(' ');
+  const method = sep === -1 ? '' : call.slice(0, sep);
+  const url = sep === -1 ? call : call.slice(sep + 1);
+  let pathname = url;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    /* a URL the classifier could not parse either — compare it whole */
+  }
+  return carveOuts.some((c) => {
+    // A line naming no method declares the path for every method; one naming a method declares
+    // only that method, so a `POST` carve-out never covers a live `GET`.
+    const methods = c.text.match(DECLARATION_HEAD)[1].match(METHOD_RE);
+    if (method && methods && !methods.includes(method)) return false;
+    if (c.text.includes(url)) return true;
+    return [...c.text.matchAll(PATH_TOKEN_RE)]
+      .map((m) => m[1])
+      .filter((t) => t !== '/')
+      .some((t) => pathMatches(t, pathname));
+  });
+}
+
+function hermeticPhase(specPaths) {
+  const script = fileURLToPath(new URL('./hermetic.mjs', import.meta.url));
+  const roundTrips = [];
+  let classification = null;
+  let traces = null;
+  for (const spec of specPaths) {
+    const r = spawnSync(process.execPath, [script, RESULTS_DIR, '--spec', spec], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const first = classification === null && traces === null;
+    // The classifier's whole account goes to stderr once — this verb's stdout stays the runner's
+    // output plus one summary line. Once, because every invocation reports the same traces.
+    if (first) err(`${r.stdout ?? ''}${r.stderr ?? ''}`);
+    if (r.error) {
+      return { status: PHASE.FAILED, reason: 'hermetic-not-run' };
+    }
+    if (r.status === HERMETIC.NO_TRACES) {
+      return { status: PHASE.FAILED, reason: 'no-traces' };
+    }
+    if (r.status !== 0) {
+      return { status: PHASE.FAILED, reason: 'hermetic-input' };
+    }
+    const text = r.stdout ?? '';
+    if (first) {
+      classification = parseClassification(text);
+      traces = Number(text.match(/^--- hermetic audit --- (\d+) trace/m)?.[1] ?? 0);
+    }
+    roundTrips.push(...parseRoundTrips(text, spec));
+  }
+  const carveOuts = carveOutsIn(specPaths);
+  const undeclared = classification.live.map((e) => e.call).filter((c) => !declaredBy(carveOuts, c));
+  return {
+    status: PHASE.OK,
+    traces,
+    ...classification,
+    carve_outs: carveOuts,
+    undeclared,
+    in_spec_round_trips: roundTrips,
+    reason: null,
+  };
+}
+
 if (run.status === 0) {
+  // The classification is asked only of a green run: it is the run the body licenses filming from,
+  // and a red run's traces describe a spec still being healed.
+  phases.hermetic = { ...phases.hermetic, ...hermeticPhase(specs.map((s) => s.path)) };
+  if (phases.hermetic.reason === 'no-traces') {
+    err(
+      'proof-run audit: the run recorded no traces, so nothing was classified. The proof config ' +
+        "must set `trace: 'on'` — the committed one does. Re-run the audit run through it.\n",
+    );
+  }
+  if (phases.hermetic.undeclared.length) {
+    err(
+      `proof-run audit: ${phases.hermetic.undeclared.length} UNDECLARED live call(s) — no ` +
+        `\`// CARVE-OUT:\` line in the spec set names them:\n` +
+        phases.hermetic.undeclared.map((c) => `  ${c}\n`).join('') +
+        'Mock each one, or declare it as a carve-out when the real round-trip IS the AC, and ' +
+        're-run this verb. Judging whether a carve-out that IS present earns its place is still ' +
+        'yours; presence is not.\n',
+    );
+  }
   // A green run ends the heal loop, so the budget it was spending goes with it.
   writeState({ attempts: 0, signature: null, stalled: false });
   auditSummary('green', EXIT.OK, null, state.attempts);

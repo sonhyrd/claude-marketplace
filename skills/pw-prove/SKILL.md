@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.31.0"
+  version: "0.32.0"
 ---
 
 # pw-prove
@@ -857,7 +857,8 @@ node <skill-base>/scripts/proof-run.mjs audit \
 # precondition phases, the attempt count and the failure signature. Read it; do not re-derive any of
 # it from the console output.
 
-# ...green, then the hermetic audit (it reads the traces under test-results/) and any fix it forces...
+# ...green, then read phases.hermetic from the summary (the verb classified the run's own traces)
+# and take any fix the carve-out judgement forces...
 
 # FILMING RUN — one command. It runs the Step-6 clip-fidelity audit again as a PRECONDITION, clears
 # test-results/ (the audit run's traces have served their purpose, and only the filming run's webms
@@ -886,7 +887,7 @@ record at a size the app never rendered at.
 
 | Exit | Meaning | What to do |
 |---|---|---|
-| `0` | The spec set went green | Proceed to the hermetic audit |
+| `0` | The spec set went green | Read `phases.hermetic` and take the carve-out judgement below |
 | `1` | Usage — a flag is missing or unknown | Fix the invocation; nothing was run |
 | `2` | Unreadable input, or `npx` is not on PATH | Fix the flag it names; nothing was run |
 | `3` | The spec set resolved **empty** | The resolution is wrong — a wrong `--base`, or a `--test-dir` that is not where the specs landed. Fix it; never proceed on an empty set |
@@ -895,7 +896,7 @@ record at a size the app never rendered at.
 | `6` | Tests red | Diagnose and heal, below. Rerun through this same verb with `--grep "<title>"` |
 | `7` | **Checkpoint refusal** — the failure signature did not move, or the attempt bound is spent | Stop the loop. Do not attempt another fix: invoke `playwright-debugger` and take the handover stop |
 
-Every summary carries both phases whatever they did — `ok`, `skipped` (the project has no tsconfig, or no `--har` was passed), `failed`, `refused`, or **`not-reached`** on an exit that stopped before the phases ran at all (`3` and `7`). `not-reached` is not `skipped`: the first says the question was never asked, the second says it was asked and had no answer to give.
+Every summary carries all three phases whatever they did — `ok`, `skipped` (the project has no tsconfig, or no `--har` was passed), `failed`, `refused`, or **`not-reached`** on an exit that stopped before the phase ran at all (`3` and `7`, and any non-green exit for `hermetic`, which is asked only of a green run). `not-reached` is not `skipped`: the first says the question was never asked, the second says it was asked and had no answer to give.
 
 **Branch on the film verb's exit code — `1`, `2` and `3` mean exactly what they mean above:**
 
@@ -970,18 +971,24 @@ A **flaky verdict** (passed only on retry) is not clean — diagnose once. If th
 
 ### Hermetic audit (on the audit run, before anything is filmed)
 
-The spec is hermetic by default. `hermetic.mjs` classifies the **audit run's** traces — do **not** hand-write a trace parser; that recurring detour cost one real run ~3 minutes of parsers that were thrown away the moment they printed:
+The spec is hermetic by default, and **the audit verb already classified the run** — the phase runs on a green run, over the run's own traces, once per spec in the set. You do not invoke a classifier and you do not hand-write a trace parser; that recurring detour cost one real run ~3 minutes of parsers that were thrown away the moment they printed. Read `phases.hermetic` from the summary:
 
-```bash
-node <skill-base>/scripts/hermetic.mjs test-results --spec <generated-spec-file>
-```
+| Field | What it holds |
+|---|---|
+| `live` | The calls the browser put on the wire — each one must be a declared carve-out |
+| `mocked` / `failed` | Answered in-browser / aborted (blocked third parties land here) |
+| `in_spec_round_trips` | The spec's `route.fetch()` call sites — those leave the machine but *look* mocked in a trace, because a trace records the browser and not the Playwright process |
+| `undeclared` | The **mechanical** half of the check: every `live` call no `// CARVE-OUT:` line in the spec set names |
+| `carve_outs` | Every carve-out line found in the spec set, with the spec and line it sits on |
+| `status: failed`, `reason: no-traces` | The run recorded no traces, so nothing was classified — the proof config must set `trace: 'on'`; re-run the audit run through it |
 
-It prints LIVE (the browser reached the network) / MOCKED (answered in-browser) / FAILED, plus the in-spec `route.fetch()` call sites — those leave the machine but *look* mocked in a trace, because a trace records the browser and not the Playwright process. **Always pass `--spec`**: without it that class is unchecked, and unchecked reads exactly like clean. Exit 2 means the run recorded no traces — re-run the audit run through the proof config.
+**The presence test is deliberately generous, and its generosity is yours to check.** A carve-out declares the path it names *and the paths under it* (a `:param` segment stands for one segment, a `*` for any run of characters), and a line naming no method declares that path for every method — so `// CARVE-OUT: /api` would leave every live `/api/**` call out of `undeclared`. That is the safe direction to err in mechanically: a false *undeclared* would send you to declare what is already declared, while a false *declared* leaves you the judgement you already owe. Read `carve_outs` beside `live` — a carve-out broader than the call it was written for is a finding.
 
-The verdict stays yours, matched against the spec's `// CARVE-OUT:` header:
+**Presence is computed; legitimacy is yours.** An `undeclared` entry is a string comparison, so it needs no judgement from you — but the reverse is not true: a call that *is* declared is a call whose carve-out you still have to accept or reject, against the AC. A carve-out is legitimate only where the real round-trip **is** the acceptance criterion; one that exists to make a mock unnecessary is a live call wearing a comment.
 
-- Every live call (and every in-spec round-trip) named in a `// CARVE-OUT:` line → pass; the report's `Tests` line carries `hermetic (carve-outs: <list>)`.
-- **Any undeclared live call → the run FAILS**, even though green: mock it (or declare the carve-out if the real round-trip IS the AC) and re-run the audit run. An undeclared live *write* to a shared tenant is a data-pollution incident — say so in the report.
+- Every live call (and every in-spec round-trip) named in a `// CARVE-OUT:` line **you accept** → pass; the report's `Tests` line carries `hermetic (carve-outs: <list>)`.
+- **Any undeclared live call → the run FAILS**, even though green: mock it (or declare the carve-out if the real round-trip IS the AC) and re-run the audit verb. An undeclared live *write* to a shared tenant is a data-pollution incident — say so in the report.
+- An in-spec round-trip is **not** in `undeclared` — a source line is not a URL, so matching it against a carve-out is a reading, not a comparison. Judge each one.
 
 **A clean audit is what licenses the filming run.** Fix here and the fix costs one cheap re-run; fix after filming and it costs the clips as well.
 
@@ -1229,7 +1236,7 @@ All paths are in this directory.
 - HAR scrubber and replay binding — **`probe.mjs` already runs the scrub at capture**, so a manual pass is a re-scrub, never the first one. `--verify` is Step 8's read-only check (exit 3 residue, exit 6 over-scrub) and `bind` is the audit verb's second phase, which invokes it rather than you (its own exit 4 and exit 5 reach you as the verb's exit 5, with `phases.har_bind.reason` saying which); both contracts are at those steps. One behavior stated nowhere else: a learned value too short to tell apart from ordinary content is placeheld **only where it was found**, never swept across the recording, and is reported by learn site and length: `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
 - Step-7 verify mechanics — `audit` (spec-set resolution, the clearing, the bounded heal loop) and `film` (the fidelity precondition, the clip flag and effective viewport, frame extraction, the clip manifest in its summary). Exit codes are one table across the verbs; the reasons behind each mechanic are in the module's header: `scripts/proof-run.mjs`
-- Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see): `scripts/hermetic.mjs`
+- Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see) — **the audit verb invokes it rather than you**, and reaches you as the summary's `phases.hermetic`; it renders no verdict by design, and the undeclared list the verb computes beside it is presence, never legitimacy: `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`
 - Conventions & seed template (Step 5b): `conventions-template.md`
