@@ -47,15 +47,54 @@ esac
 for a in "$@"; do printf '%s\n' "$a" >> "$NPX_ARGV"; done
 if [ -d "test-results" ]; then echo present > "$NPX_PRESTATE"; else echo absent > "$NPX_PRESTATE"; fi
 # The bound recording reaches the run through the environment, so the environment is recorded too.
-printf '%s\n' "${PW_PROVE_HAR-<unset>}" > "$NPX_ENV_HAR"
+printf '%s
+' "${PW_PROVE_HAR-<unset>}" > "$NPX_ENV_HAR"
+# The filming run's per-run values arrive as ENVIRONMENT, not argv, so the shim records them too —
+# otherwise "carries the effective viewport it was given" would be unobservable at this boundary.
+{ printf 'PW_PROVE_CLIP=%s
+' "${PW_PROVE_CLIP-}"
+  printf 'PW_PROVE_W=%s
+' "${PW_PROVE_W-}"
+  printf 'PW_PROVE_H=%s
+' "${PW_PROVE_H-}"; } > "$NPX_ENV"
+# A filming run leaves webms behind; the shim stands in for that so the frame phase has clips.
+for c in ${NPX_MAKE_CLIPS-}; do mkdir -p "test-results/$c"; printf 'webm
+' > "test-results/$c/video.webm"; done
 [ -f "$NPX_STDOUT" ] && cat "$NPX_STDOUT"
 exit "${NPX_EXIT:-0}"
 SHIM
 chmod +x "$BIN/npx"
 
-export NPX_ARGV="$W/argv" NPX_PRESTATE="$W/prestate" NPX_STDOUT="$W/runner-out"
+# The video tooling, faked at the same boundary. `-version` decides whether the tooling is USABLE at
+# all (video.mjs probes by running each tool), so a case turns it off by setting FAKE_VIDEO=absent.
+# A clip whose path carries `good` probes as ten readable seconds and yields a frame; anything else
+# is unreadable, which is the "a clip yielded no frame" path.
+cat > "$BIN/ffprobe" <<'FF'
+#!/usr/bin/env bash
+[ "${FAKE_VIDEO-}" = absent ] && exit 1
+[ "$1" = "-version" ] && { echo "ffprobe fake"; exit 0; }
+file="${@: -1}"
+case "$file" in
+  *good*) echo '{"streams":[{"codec_type":"video","codec_name":"vp8","width":1600,"height":900}],"format":{"duration":"10.000000"}}'; exit 0 ;;
+  *) echo "unreadable" >&2; exit 1 ;;
+esac
+FF
+cat > "$BIN/ffmpeg" <<'FF'
+#!/usr/bin/env bash
+[ "${FAKE_VIDEO-}" = absent ] && exit 1
+[ "$1" = "-version" ] && { echo "ffmpeg fake"; exit 0; }
+target="${@: -1}"
+case "$target" in
+  *.png) printf 'PNG' > "$target"; exit 0 ;;
+esac
+exit 0
+FF
+chmod +x "$BIN/ffprobe" "$BIN/ffmpeg"
+
+export NPX_ARGV="$W/argv" NPX_PRESTATE="$W/prestate" NPX_STDOUT="$W/runner-out" NPX_ENV="$W/env"
 export NPX_TSC_ARGV="$W/tsc-argv" NPX_TSC_STDOUT="$W/tsc-out" NPX_ENV_HAR="$W/env-har"
 : > "$NPX_STDOUT"; : > "$NPX_TSC_STDOUT"; : > "$NPX_TSC_ARGV"
+: > "$NPX_ENV"
 
 # One fixture repository per case group: a real git repo, because the spec set is resolved from a
 # real merge base. The test directory is FLAT — that is the shape the broken pathspec returned
@@ -71,7 +110,12 @@ new_repo() {
 }
 
 run() { ( cd "$R" && PATH="$BIN:$PATH" PWPROVE_LEDGER="$W/ledger.jsonl" \
+  FAKE_VIDEO="${FAKE_VIDEO-}" NPX_MAKE_CLIPS="${NPX_MAKE_CLIPS-}" \
   node "$S" "$@" >"$W/out" 2>"$W/err" ); }
+
+env_has() {
+  if grep -qxF -- "$2" "$NPX_ENV"; then ok "$1"; else bad "$1 — env lacks '$2': $(tr '\n' ' ' < "$NPX_ENV")"; fi
+}
 
 summary() { grep -m1 '^PWPROVE_SUMMARY ' "$W/out" | sed 's/^PWPROVE_SUMMARY //'; }
 # A path the summary does not carry prints <missing> rather than a stack trace, so a red case shows
@@ -540,6 +584,201 @@ if grep -m1 '^PWPROVE_RUN ' "$W/out" | grep -q '"phase":"audit"'; then
 else
   bad "no PWPROVE_RUN line with phase audit: $(grep '^PWPROVE_RUN ' "$W/out")"
 fi
+
+echo ""
+echo "=============================== film ==============================="
+
+# A fixture whose spec CARRIES the clip-fidelity contract, and one that does not. The two differ in
+# exactly one thing — the PW_PROVE_CLIP-gated dwell — because that is the hole the precondition
+# exists to close: a real run passed the clip flag at Step 7 over a spec with no reader for it.
+film_repo() {
+  new_repo "$1"
+  cat > "$R/playwright.config.ts" <<'CFG'
+import { defineConfig } from '@playwright/test';
+export default defineConfig({ use: { viewport: { width: 1600, height: 900 } } });
+CFG
+  cat > "$R/e2e/a.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test('saves the profile', async ({ page }) => {
+  await expect(page.getByText('Saved')).toBeVisible();
+  // JUSTIFIED: proof-clip payoff hold. Runs only under PW_PROVE_CLIP.
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
+});
+SPEC
+  cat > "$R/e2e/no-dwell.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test('saves the profile', async ({ page }) => {
+  await expect(page.getByText('Saved')).toBeVisible();
+});
+SPEC
+}
+
+FILM_FLAGS=(--config playwright.proof.config.ts --test-dir e2e --base main
+  --project-config playwright.config.ts --verdict deliberate:1600x900)
+
+echo "-- usage: film's own required flags --"
+film_repo film-usage
+run film --config playwright.proof.config.ts --test-dir e2e --base main \
+  --project-config playwright.config.ts
+[ "$?" = 1 ] && ok "film without --verdict is a usage error (exit 1)" || bad "expected exit 1 without --verdict"
+run film --config playwright.proof.config.ts --test-dir e2e --base main \
+  --verdict deliberate:1600x900
+[ "$?" = 1 ] && ok "film without --project-config is a usage error (exit 1)" \
+  || bad "expected exit 1 without --project-config"
+run film "${FILM_FLAGS[@]}" --verdict sideways:1600x900 --written e2e/a.spec.ts
+[ "$?" = 1 ] && ok "a verdict that is neither pinned: nor deliberate: is a usage error" \
+  || bad "expected exit 1 for a malformed verdict"
+run audit --config playwright.proof.config.ts --test-dir e2e --base main --verdict deliberate:1600x900
+[ "$?" = 1 ] && ok "a film-only flag on audit is a usage error, never silently ignored" \
+  || bad "audit accepted --verdict"
+run film --config playwright.proof.config.ts --test-dir e2e --base main \
+  --project-config nope.config.ts --verdict deliberate:1600x900 --written e2e/a.spec.ts
+[ "$?" = 2 ] && ok "a --project-config that does not exist is exit 2" \
+  || bad "expected exit 2 for a missing project config"
+
+echo ""
+echo "-- the fidelity contract is a PRECONDITION of filming --"
+film_repo film-precondition
+: > "$NPX_ARGV"
+NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/no-dwell.spec.ts
+[ "$?" = 12 ] && ok "a spec with no PW_PROVE_CLIP reader refuses filming (exit 12)" \
+  || bad "expected exit 12 when the spec carries no dwell"
+[ -s "$NPX_ARGV" ] && bad "the runner filmed over a spec that carries no dwell" \
+  || ok "nothing was filmed while the precondition stood"
+[ "$(jq_field 'result')" = refused ] && ok "the summary says refused" || bad "result wrong: $(summary)"
+[ "$(jq_field 'schema')" = 2 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
+
+echo ""
+echo "-- the precondition does not clear the results directory --"
+film_repo film-preserve
+mkdir -p "$R/test-results/earlier-run"
+printf 'old\n' > "$R/test-results/earlier-run/video.webm"
+NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/no-dwell.spec.ts
+[ -f "$R/test-results/earlier-run/video.webm" ] \
+  && ok "a refused film leaves the previous run's evidence standing" \
+  || bad "a refused film deleted the results directory"
+
+echo ""
+echo "-- the filming run itself --"
+film_repo film-green
+git -C "$R" checkout -qb feature
+printf 'test\n' > "$R/e2e/carried.spec.ts"
+cat > "$R/e2e/carried.spec.ts" <<'SPEC'
+import { test, expect } from '@playwright/test';
+test('carried scenario', async ({ page }) => {
+  await expect(page.getByText('Saved')).toBeVisible();
+  // JUSTIFIED: proof-clip payoff hold.
+  if (process.env.PW_PROVE_CLIP) await page.waitForTimeout(2500);
+});
+SPEC
+rm -f "$R/e2e/no-dwell.spec.ts"
+git -C "$R" add -A && git -C "$R" commit -qm "specs on the branch"
+mkdir -p "$R/test-results/stale-run"
+printf 'old\n' > "$R/test-results/stale-run/video.webm"
+: > "$NPX_ARGV"
+NPX_MAKE_CLIPS="good-one good-two" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+rc=$?
+[ "$rc" = 0 ] && ok "a green filming run exits 0" || { bad "exit $rc"; head -5 "$W/err"; }
+[ "$(cat "$NPX_PRESTATE")" = absent ] \
+  && ok "test-results was cleared BEFORE the filming run" || bad "stale test-results survived into the filming run"
+argv_has "the no-install form" "--no-install"
+argv_has "the subcommand" "test"
+argv_has "the proof config" "playwright.proof.config.ts"
+argv_has "the project defaults to the browser the pipeline launches" "--project=chromium"
+argv_has "the spec this run wrote reaches the filming run" "e2e/a.spec.ts"
+argv_has "the carried spec is filmed too" "e2e/carried.spec.ts"
+if grep -qE '^(-j|--workers)' "$NPX_ARGV"; then
+  bad "a worker override reached the filming run (ADR-0017 forbids one)"
+else
+  ok "no worker override on the filming run either (ADR-0017)"
+fi
+env_has "the clip flag is set on this run" "PW_PROVE_CLIP=1"
+env_has "the effective viewport travels as PW_PROVE_W, never a fixed literal" "PW_PROVE_W=1600"
+env_has "the effective viewport travels as PW_PROVE_H" "PW_PROVE_H=900"
+
+echo ""
+echo "-- the clips and their measured durations are in the summary --"
+NPX_MAKE_CLIPS="good-one good-two" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$(jq_field 'clips.length')" = 2 ] && ok "both clips are in the summary" || bad "clip count wrong: $(summary)"
+[ "$(jq_field 'clips[0].seconds')" = 10 ] \
+  && ok "each clip carries its measured duration" || bad "duration wrong: $(summary)"
+[ "$(jq_field 'clips[0].inspected')" = true ] \
+  && ok "a clip that yielded a frame is inspected" || bad "inspected wrong: $(summary)"
+[ -f "$R/test-results/good-one/video.frame.png" ] \
+  && ok "one frame per clip is extracted beside it" || bad "no frame was written"
+
+echo ""
+echo "-- a clip that yields no frame is uninspected; the rest still get theirs --"
+NPX_MAKE_CLIPS="good-one bad-two" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "an unreadable clip still leaves the run passing" || bad "an unreadable clip failed the run"
+[ "$(jq_field 'clips.find(c=>c.path.includes("bad-two")).inspected')" = false ] \
+  && ok "the clip nothing could read is reported uninspected" || bad "uninspected wrong: $(summary)"
+[ "$(jq_field 'clips.find(c=>c.path.includes("good-one")).inspected')" = true ] \
+  && ok "the other clip still got its frame" || bad "a readable clip lost its frame: $(summary)"
+
+echo ""
+echo "-- absent video tooling leaves the run passing, every clip uninspected --"
+FAKE_VIDEO=absent NPX_MAKE_CLIPS="good-one good-two" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" \
+  --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "no ffmpeg is not a failed proof — exit 0" || bad "absent video tooling failed the run"
+[ "$(jq_field 'clips.filter(c=>c.inspected).length')" = 0 ] \
+  && ok "every clip is reported uninspected" || bad "a clip was claimed inspected with no tooling: $(summary)"
+[ "$(jq_field 'result')" = green ] && ok "the run is still green" || bad "result wrong: $(summary)"
+unset FAKE_VIDEO
+
+echo ""
+echo "-- a red filming run is exit 6, and nothing is claimed inspected --"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=1 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 6 ] && ok "a red filming run is exit 6" || bad "expected exit 6 on a red filming run"
+
+echo ""
+echo "-- film shares the audit verb's spec-set resolution and empty-set stop --"
+new_repo film-empty
+cat > "$R/playwright.config.ts" <<'CFG'
+import { defineConfig } from '@playwright/test';
+export default defineConfig({ use: { viewport: { width: 1600, height: 900 } } });
+CFG
+: > "$NPX_ARGV"
+NPX_EXIT=0 run film "${FILM_FLAGS[@]}"
+[ "$?" = 3 ] && ok "an empty spec set stops film with the same exit 3" || bad "expected exit 3 on an empty set"
+[ -s "$NPX_ARGV" ] && bad "the runner filmed an empty set" || ok "nothing was filmed over an empty set"
+[ "$(jq_field 'viewport.width')" = 1600 ] \
+  && ok "even the earliest stop reports the viewport the verb was given" || bad "viewport missing: $(summary)"
+
+echo ""
+echo "-- a DIFFERENT viewport is carried, not substituted --"
+# Its own fixture, whose config pins a size nothing else in this suite uses. Re-running the case
+# above with the same 1600x900 would pass against a module that hardcoded 1600x900, which is exactly
+# the defect the "never a fixed literal" rule names — so the size has to MOVE, in the config text
+# (which the fidelity precondition re-derives the verdict from) and in the verdict together.
+film_repo film-viewport
+cat > "$R/playwright.config.ts" <<'CFG'
+import { defineConfig } from '@playwright/test';
+export default defineConfig({ use: { viewport: { width: 1280, height: 720 } } });
+CFG
+: > "$NPX_ENV"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film --config playwright.proof.config.ts \
+  --test-dir e2e --base main --project-config playwright.config.ts \
+  --verdict deliberate:1280x720 --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "a 1280x720 project viewport films" || { bad "exit $?"; head -5 "$W/err"; }
+env_has "the width the verdict declared is the width that travels" "PW_PROVE_W=1280"
+env_has "the height the verdict declared is the height that travels" "PW_PROVE_H=720"
+[ "$(jq_field 'viewport.width')" = 1280 ] \
+  && ok "the summary states the viewport the run filmed at" || bad "viewport wrong: $(summary)"
+
+echo ""
+echo "-- one ledger line, phase film --"
+film_repo film-ledger
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+# The delegated clip-fidelity calls emit ledger lines of their own — that is the convention, one
+# record per entry point — so this asserts on THIS module's line rather than on the first one out.
+if [ "$(grep -c '^PWPROVE_RUN .*"script":"proof-run.mjs".*"phase":"film"' "$W/out")" = 1 ]; then
+  ok "one ledger line from proof-run.mjs, phase film"
+else
+  bad "no single PWPROVE_RUN line for proof-run.mjs with phase film: $(grep '^PWPROVE_RUN ' "$W/out")"
+fi
+[ "$(grep -c '^PWPROVE_SUMMARY ' "$W/out")" = 1 ] \
+  && ok "exactly one JSON summary line from film" || bad "film summary line count wrong"
 
 echo ""
 echo "  proof-run: $pass passed, $fail failed"

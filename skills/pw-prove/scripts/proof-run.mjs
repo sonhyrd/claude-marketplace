@@ -4,6 +4,9 @@
 //   node proof-run.mjs audit --config <proof config> --test-dir <testDir> --base <ref>
 //                           [--written <spec>]... [--har <recording>] [--origin <url>]
 //                           [--bindings <json>] [--project <name>] [--grep <title>]
+//   node proof-run.mjs film  --config <proof config> --test-dir <testDir> --base <ref>
+//                           --project-config <the project's own playwright.config>
+//                           --verdict <pinned:WxH|deliberate:WxH> [--written <spec>]... [--project <name>]
 //
 // Step 7 was the largest section of pw-prove's body and the only large one with no module behind
 // it: bring-up has preflight.mjs, recon has probe.mjs, the recording has har-scrub.mjs, the
@@ -12,44 +15,9 @@
 // here twice, both times as a wrong argument: a spec-set pathspec that returned nothing on a flat
 // test dir, and an inherited `webServer` entry pointed the wrong way. Both were fixed in prose,
 // landing on no test surface, so nothing stops either being reintroduced by an edit that reads
-// fine. This module is the test surface. `audit` is its first verb; `film` and `mutate` follow.
+// fine. This module is the test surface. `audit` and `film` are its verbs; `mutate` follows.
 //
-// WHAT THIS VERB OWNS, AND WHY EACH PIECE IS HERE RATHER THAN IN THE BODY:
-//
-//   TWO PRECONDITIONS RUN BEFORE ANYTHING IS SPENT, EACH REFUSING UNDER ITS OWN CODE. A browser run
-//   is the expensive thing in this pass, and both of these are questions that can be answered
-//   without one. They run after the spec set resolves and after the no-progress checkpoint —
-//   resolution is a git query and the checkpoint pays for nothing, so a stalled loop is refused
-//   before it buys even a type check — and before the runner, which is the whole point.
-//
-//   THE TYPE CHECK IS THE FIRST PHASE, AND WHICH TSCONFIG IT TAKES IS THE VERB'S BRANCH. The e2e
-//   tsconfig when the project has one, the root one otherwise, and the phase is SKIPPED when it has
-//   neither rather than guessed at — a JavaScript project is not a defect. There is deliberately no
-//   flag pointing it elsewhere: a reader who has to make the branch is a reader who can get it
-//   wrong, and a flag for it would be one more thing every invocation has to carry correctly.
-//   `--no-install` is fixed here for the reason it is fixed everywhere in this skill. A spec that
-//   does not compile fails in seconds; learning that from a browser run costs the run.
-//
-//   THE HAR BIND IS THE SECOND PHASE, AND IT IS DELEGATED, NEVER REIMPLEMENTED. The committed
-//   recording is canonical — no port, every secret a stable placeholder — and Playwright's replay
-//   matches a recorded entry by EXACT request-URL string equality, so an unbound recording cannot
-//   match anything this run does: under `notFound: 'abort'` every read aborts and the transcript
-//   reads as a broken application. So the recording is bound to this run's origin before any test
-//   executes, by `har-scrub.mjs bind`, which already owns that transform. The bound copy carries
-//   this run's live credential, so its destination is fixed under the run's own dot-directory —
-//   already excluded repo-locally above — rather than being a flag a caller could point at a
-//   committable path. It reaches the run that follows through `PW_PROVE_HAR`, set on the runner's
-//   environment here rather than left to a caller to export: every runner invocation is a fresh
-//   environment, and setting it once in a shell is how a bound recording goes missing.
-//
-//   A BIND THAT CANNOT BE MADE SAFE IS A STOP (exit 5), IN BOTH ITS FORMS. A placeholder sitting in
-//   the replay match key — a `token=` in a URL, a matched POST body — has no value this run can
-//   supply, so that entry can never match; left alone it surfaces later as an aborted call and gets
-//   diagnosed as an application defect rather than as a bind that was never done. And a bind
-//   destination git would commit is a live credential heading for the index. The summary
-//   distinguishes the two (`unbound-placeholder` / `committable-output`) so the next move is read
-//   rather than inferred. A project with NO recording skips the phase; only a recording that was
-//   named and cannot be bound stops the run.
+// WHAT THESE VERBS OWN, AND WHY EACH PIECE IS HERE RATHER THAN IN THE BODY:
 //
 //   THE SPEC SET IS RESOLVED MECHANICALLY, AND THE PATHSPEC FORM IS THE WHOLE TRICK. In PR-mode
 //   both runs execute every spec that proves the PR, not only the one this run wrote — a run that
@@ -97,30 +65,63 @@
 //   private working state; a stray `.gitignore` diff is churn the delivery step would have to
 //   explain.
 //
+//   FILMING IS GATED ON THE SPEC ACTUALLY CARRYING THE FIDELITY CONTRACT. `film` runs the Step-6
+//   spec-side audit again, as a PRECONDITION, with the Step-4 viewport verdict. This is the hole
+//   `clip-fidelity.mjs` was written for: a real run passed `PW_PROVE_CLIP=1` at Step 7 while the
+//   generated spec contained no reader for the variable, so the flag was inert, the dwell never
+//   happened, and every gate stayed green over a recording that showed nothing. The audit already
+//   ran once at Step 6 — and that is exactly why it runs again here: a precondition the verb
+//   enforces cannot be skipped by an agent that believes it already ran it, and a heal-loop edit
+//   between Step 6 and Step 7 can have dropped the dwell it checks for. A refusal (exit 12) leaves
+//   the results directory ALONE: nothing was filmed, so nothing about the standing evidence changed.
+//
+//   THE EFFECTIVE VIEWPORT IS CARRIED, NEVER A LITERAL. `--verdict` is the Step-4 Assumptions
+//   block's Effective viewport line verbatim, and it does two jobs with one value: it is what the
+//   fidelity audit compares against the config text, and its size is what travels to the recording
+//   as `PW_PROVE_W`/`PW_PROVE_H`. One flag rather than two because a second one could disagree with
+//   the first, and the disagreement would be silent — the clip would record at a size the app never
+//   rendered at, which is the failure the verdict check exists to catch one level up.
+//
+//   FRAME EXTRACTION CLOSES THE RUN AND NEVER FAILS IT. One frame per clip, delegated to
+//   `clip-fidelity.mjs frames` rather than reimplemented, because that module owns where in the clip
+//   the frame comes from and why. Absent video tooling leaves the run PASSING with every clip
+//   reported uninspected, and a clip that yields no frame is uninspected while the rest keep theirs:
+//   an unread clip is not a good one, and "uninspected" is the honest verdict. A missing `ffmpeg` is
+//   not a failed test, and a gate that trips here would abort a whole recording over an inspection.
+//
+//   THE CLIPS AND THEIR MEASURED DURATIONS TRAVEL IN THE SUMMARY, so Step 8's publish step reads a
+//   manifest source rather than assembling one by globbing the results directory afterwards — by
+//   which time it cannot tell this run's webms from anything else standing there. Durations come
+//   through `video.mjs`, the one place a Proof clip is measured, because a live-recorded webm often
+//   declares no duration in its container and a second copy of that logic is the copy that trusts it.
+//
 // WHAT STAYS WITH THE AGENT, unchanged: diagnosing a red test and writing the fix, judging whether
-// a present carve-out is legitimate, and the handover stop when the loop is exhausted.
+// a present carve-out is legitimate, READING EACH EXTRACTED FRAME and naming what is wrong with it,
+// and the handover stop when the loop is exhausted.
 //
 // Zero dependencies, Node stdlib only, per the shipped-scripts convention.
 //
 // Exit codes are the contract both the agent and the ledger read. They are one table across the
 // three verbs, so a code never means two things:
 //   0   success (for `audit`: the run went green)
-//   1   usage                                  } no summary line while they exit before the spec
-//   2   unreadable input, or no resolvable runner }   set is resolved — nothing to summarize yet
+//   1   usage                                  } no summary line: these exit before the spec set
+//   2   unreadable input, or no resolvable runner }   exists, so there is nothing to summarize
 //   3   spec set resolved empty
-//   4   type check failed
-//   5   HAR bind refused — a placeholder in the replay match key, or a committable bind output
+//   4   type check failed                    } reserved — the audit verb's first phase
+//   5   HAR bind refused                     } reserved — the audit verb's bind phase
 //   6   tests red
 //   7   checkpoint refusal — an unchanged failure signature, or an attempt past the bound
 //   8   mutation run green (the spec does not guard the change)   } reserved — `mutate`
 //   9   tree residue after the revert, a hard stop                } reserved — `mutate`
 //   10  clips clobbered or count mismatched                       } reserved — `film`/`mutate`
 //   11  restart unproven                                          } reserved — `mutate`
+//   12  filming precondition refused — the spec does not carry the clip-fidelity contract
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pwproveRun } from './pwprove-run.mjs';
+import { frameFor, probeVideo, videoTooling } from './video.mjs';
 
 const EXIT = {
   OK: 0,
@@ -131,10 +132,12 @@ const EXIT = {
   HAR_BIND: 5,
   TESTS_RED: 6,
   CHECKPOINT: 7,
+  FIDELITY: 12,
 };
 
-const VERBS = new Set(['audit']);
-// 2 added the `phases` record: the two preconditions report themselves whatever they did.
+const VERBS = new Set(['audit', 'film']);
+// Schema 2 added the film verb's fields: `clips`, `viewport` and `verdict`. Fields are added over
+// time, so a reader reads the schema before it reads anything else.
 const SUMMARY_SCHEMA = 2;
 const STATE_SCHEMA = 1;
 // Fixed, not a flag. The bound is the body's bound, and a knob whose only caller would be a test is
@@ -147,6 +150,11 @@ const STATE_DIR = '.pw-prove';
 // The extension filter that runs AFTER the directory pathspec. Deliberately the same set the body
 // documented: .spec/.test, any of js/jsx/ts/tsx, with the cjs/mjs prefixes projects do use.
 const SPEC_RE = /\.(spec|test)\.[cm]?[jt]sx?$/;
+// The sibling module that owns both halves of the fidelity contract — the Step-6 gate `film` runs as
+// its precondition, and the Step-7 frame extraction that closes it. Resolved beside this file so the
+// skill can be installed anywhere; never reimplemented here.
+const CLIP_FIDELITY = path.join(path.dirname(fileURLToPath(import.meta.url)), 'clip-fidelity.mjs');
+
 // The scrubber's own exit table, read rather than re-derived. Its bind mode answers three ways that
 // mean different things here: 4 an unbindable match key, 5 a destination git would commit, and
 // 1/2 an input this module handed it wrong — which is this module's bug, not a bind refusal.
@@ -169,7 +177,11 @@ const err = (s) => process.stderr.write(s);
 const USAGE =
   'usage: proof-run.mjs audit --config <proof config> --test-dir <testDir> --base <ref>\n' +
   '                          [--written <spec>]... [--har <recording>] [--origin <url>]\n' +
-  '                          [--bindings <json>] [--project <name>] [--grep <title>]\n';
+  '                          [--bindings <json>] [--project <name>] [--grep <title>]\n' +
+  '       proof-run.mjs film  --config <proof config> --test-dir <testDir> --base <ref>\n' +
+  "                          --project-config <the project's own playwright.config>\n" +
+  '                          --verdict <pinned:WxH|deliberate:WxH>\n' +
+  '                          [--written <spec>]... [--project <name>]\n';
 
 const verb = process.argv[2];
 // Read before validation so even a usage-error exit leaves a ledger record; the phase is the verb.
@@ -180,8 +192,9 @@ function usage(message) {
   process.exit(EXIT.USAGE);
 }
 
-if (!verb) usage('no verb — expected one of: audit');
-if (!VERBS.has(verb)) usage(`unknown verb '${verb}' — expected one of: audit`);
+const VERB_LIST = [...VERBS].join(', ');
+if (!verb) usage(`no verb — expected one of: ${VERB_LIST}`);
+if (!VERBS.has(verb)) usage(`unknown verb '${verb}' — expected one of: ${VERB_LIST}`);
 
 const opts = {
   config: null,
@@ -193,6 +206,8 @@ const opts = {
   bindings: null,
   project: 'chromium',
   grep: null,
+  projectConfig: null,
+  verdict: null,
 };
 
 const argv = process.argv.slice(3);
@@ -211,16 +226,57 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--bindings') opts.bindings = need(++i, a);
   else if (a === '--project') opts.project = need(++i, a);
   else if (a === '--grep' || a === '-g') opts.grep = need(++i, a);
+  else if (a === '--project-config') opts.projectConfig = need(++i, a);
+  else if (a === '--verdict') opts.verdict = need(++i, a);
   else usage(`unknown flag '${a}'`);
 }
 
-for (const [flag, value] of [
-  ['--config', opts.config],
-  ['--test-dir', opts.testDir],
-  ['--base', opts.base],
-]) {
-  if (!value) usage(`${flag} is required`);
+// Per-verb, in both directions. A flag a verb does not use is a usage error rather than a silent
+// no-op: a flag that reads as accepted and does nothing is exactly the class of defect — a wrong
+// argument nothing notices — this module exists to make impossible.
+const REQUIRED = {
+  audit: ['--config', '--test-dir', '--base'],
+  film: ['--config', '--test-dir', '--base', '--project-config', '--verdict'],
+};
+const FLAG_VALUES = {
+  '--config': opts.config,
+  '--test-dir': opts.testDir,
+  '--base': opts.base,
+  '--project-config': opts.projectConfig,
+  '--verdict': opts.verdict,
+  '--har': opts.har,
+  '--origin': opts.origin,
+  '--bindings': opts.bindings,
+};
+const OWNED = {
+  audit: ['--grep', '--har', '--origin', '--bindings'],
+  film: ['--project-config', '--verdict'],
+};
+for (const flag of REQUIRED[verb]) {
+  if (!FLAG_VALUES[flag]) usage(`${flag} is required for '${verb}'`);
 }
+for (const [owner, flags] of Object.entries(OWNED)) {
+  if (owner === verb) continue;
+  for (const flag of flags) {
+    if (FLAG_VALUES[flag]) usage(`${flag} belongs to '${owner}', not to '${verb}'`);
+  }
+}
+
+// The Step-4 Assumptions block's Effective viewport line, verbatim — the same value the fidelity
+// audit is handed, and the source of the recording size. Parsed strictly: a verdict whose size
+// cannot be read has no viewport to carry, and a default substituted here would be the fixed
+// literal the whole flag exists to prevent.
+const viewport = (() => {
+  if (verb !== 'film') return null;
+  const m = /^\s*(pinned|deliberate)\s*:\s*(\d+)\s*[xX\u00d7]\s*(\d+)\s*$/.exec(opts.verdict);
+  if (!m) {
+    usage(
+      `--verdict '${opts.verdict}' is neither pinned:<WxH> nor deliberate:<WxH> — it is the ` +
+        "Step-4 Assumptions block's Effective viewport line, verbatim",
+    );
+  }
+  return { width: Number(m[2]), height: Number(m[3]) };
+})();
 function stop(code, message) {
   err(`proof-run ${verb}: ${message}\n`);
   process.exit(code);
@@ -230,6 +286,9 @@ const git = (...args) => spawnSync('git', args, { encoding: 'utf8' });
 
 if (!fs.existsSync(opts.config)) {
   stop(EXIT.INPUT, `--config '${opts.config}' does not exist`);
+}
+if (opts.projectConfig && !fs.existsSync(opts.projectConfig)) {
+  stop(EXIT.INPUT, `--project-config '${opts.projectConfig}' does not exist`);
 }
 for (const spec of opts.written) {
   if (!fs.existsSync(spec)) {
@@ -257,6 +316,9 @@ const top = git('rev-parse', '--show-toplevel');
 if (top.status !== 0) stop(EXIT.INPUT, 'not inside a git repository — the spec set is resolved from a merge base');
 const repoTop = top.stdout.trim();
 
+// Only where state is actually kept. `film` reads and writes none, and a verb that leaves an empty
+// directory behind is a side effect nobody asked for.
+if (verb === 'audit') {
 fs.mkdirSync(STATE_DIR, { recursive: true });
 // `.git/info/exclude`, never the project's `.gitignore`: this is the run's private working state.
 // The path comes from `--git-common-dir` and NOT from `<toplevel>/.git`, because in a worktree or a
@@ -276,6 +338,7 @@ try {
   }
 } catch (e) {
   stop(EXIT.INPUT, `cannot write the repo-local exclude entry (${e.message})`);
+}
 }
 
 const statePath = path.join(STATE_DIR, 'audit-state.json');
@@ -304,6 +367,8 @@ function writeState(state) {
 // from the runner's console output.
 // Bound once the spec set is known, so the invariant half of the record is spelled in exactly one
 // place and only the varying half travels to a call site.
+// The core is the same for every verb — schema, verb, spec set, result, exit — and each verb adds
+// the fields only it has. Two records that agree on the core can be read by one reader.
 // The two preconditions report themselves whatever they did — ok, skipped, or the refusal and its
 // reason — so "was the bind done?" is read out of one line rather than inferred from its absence.
 const phases = {
@@ -311,24 +376,26 @@ const phases = {
   har_bind: { status: PHASE.NOT_REACHED, har: null, out: null, reason: null, argv: null },
 };
 let summarize = () => {};
+// The fields every record from THIS verb carries whatever happened — spelled once, so a stop that
+// exits early cannot report a smaller record than a stop that exits late.
+const VERB_FIELDS = verb === 'film' ? { viewport, verdict: opts.verdict } : {};
 function bindSummary(specs) {
-  summarize = (result, exit, signature, attempt) => {
+  summarize = (result, exit, extra = {}) => {
     out(
       `PWPROVE_SUMMARY ${JSON.stringify({
         schema: SUMMARY_SCHEMA,
         verb,
         specs,
-        phases,
-        grep: opts.grep,
-        attempt,
-        attempt_bound: ATTEMPT_BOUND,
         result,
-        signature,
         exit,
+        ...VERB_FIELDS,
+        ...extra,
       })}\n`,
     );
   };
 }
+const auditSummary = (result, exit, signature, attempt) =>
+  summarize(result, exit, { phases, grep: opts.grep, attempt, attempt_bound: ATTEMPT_BOUND, signature });
 
 // ---- spec-set resolution ---------------------------------------------------------------------
 const mergeBase = git('merge-base', opts.base, 'HEAD');
@@ -357,7 +424,8 @@ const specs = [
 bindSummary(specs);
 
 if (specs.length === 0) {
-  summarize('empty', EXIT.EMPTY_SET, null, 0);
+  if (verb === 'audit') auditSummary('empty', EXIT.EMPTY_SET, null, 0);
+  else summarize('empty', EXIT.EMPTY_SET);
   stop(
     EXIT.EMPTY_SET,
     `no spec resolved from '${opts.testDir}' against --base '${opts.base}'. PR-mode reaches ` +
@@ -366,13 +434,194 @@ if (specs.length === 0) {
   );
 }
 
+// ---- the run, shared by both verbs -------------------------------------------------------------
+// The results directory is cleared BEFORE the runner starts, on EVERY verb and without anyone
+// remembering to: whatever stands in test-results/ at publish time becomes the evidence, so a
+// leftover webm from an earlier — or mutated — run published as proof is a lie. The runner's shape
+// is fixed here rather than passed, so there is exactly one invocation to read and to assert.
+function runSpecSet(specs, extraEnv = {}) {
+  fs.rmSync(RESULTS_DIR, { recursive: true, force: true });
+  const runnerArgs = [
+    '--no-install',
+    'playwright',
+    'test',
+    ...specs.map((s) => s.path),
+    `--project=${opts.project}`,
+    '--config',
+    opts.config,
+    '--reporter=html',
+    ...(opts.grep ? ['-g', opts.grep] : []),
+  ];
+  const run = spawnSync('npx', runnerArgs, {
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+    env: { ...process.env, ...extraEnv },
+  });
+  if (run.error) {
+    stop(EXIT.INPUT, `cannot run the test runner (${run.error.message}). 'npx' must be on PATH.`);
+  }
+  out(run.stdout ?? '');
+  err(run.stderr ?? '');
+  return run;
+}
+
+// ---- the failure signature ---------------------------------------------------------------------
+// The error class plus the failing locator: what a raw attempt count cannot see. `expect(...)`
+// assertions are read at their call shape rather than as a bare `Error`, because every one of them
+// would otherwise collapse into one indistinguishable class.
+function signatureOf(text) {
+  const expectMatch = text.match(/(expect\([^)]*\)(?:\.\w+)+)/);
+  const errorMatch = text.match(/\b([A-Z]\w*Error)\b/);
+  const errorClass = expectMatch ? expectMatch[1] : errorMatch ? errorMatch[1] : 'unknown';
+  const locatorMatch = text.match(/locator\((['"`])([\s\S]*?)\1\)/);
+  const getByMatch = text.match(/(getBy\w+\([^\n]*?\))/);
+  const siteMatch = text.match(/([\w./-]+\.(?:spec|test)\.[cm]?[jt]sx?:\d+:\d+)/);
+  const locator = locatorMatch
+    ? locatorMatch[2]
+    : getByMatch
+      ? getByMatch[1]
+      : siteMatch
+        ? siteMatch[1]
+        : 'unknown';
+  return { error_class: errorClass, locator };
+}
+const same = (a, b) => a && b && a.error_class === b.error_class && a.locator === b.locator;
+
+// ---- the filming run's closing phase ------------------------------------------------------------
+/**
+ * Every webm the filming run left behind, depth-first and sorted, so the manifest source is stable
+ * between runs. Playwright writes one per test under a per-test directory whose name it chooses, so
+ * the shape below is a walk rather than a pattern: a fixed depth would silently miss clips the next
+ * Playwright version nests differently.
+ */
+function collectClips(dir) {
+  const found = [];
+  const walk = (d) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.webm')) found.push(full);
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return found.sort();
+}
+
+/**
+ * The filming run's closing phase: measure every clip, extract one frame from each, and say which
+ * ones were actually inspected.
+ *
+ * NOTHING HERE FAILS THE RUN. Absent video tooling, an unreadable recording and a frame ffmpeg
+ * declined to write all land the same way: that clip is reported `inspected: false`, and the others
+ * still get theirs. A missing `ffmpeg` is not a failed test, and an unread clip is not a good one —
+ * "uninspected" is the honest verdict and the report is required to carry it.
+ *
+ * The extraction is delegated to `clip-fidelity.mjs frames`, which owns WHERE in the clip the frame
+ * comes from (inside the payoff hold) and prints the diagnosis table the agent reads next. Its
+ * output is forwarded verbatim; only the frame FILES it wrote are read back, beside their clips,
+ * because a path read off disk cannot drift from a sentence the way a parsed line can.
+ */
+function inspectClips(clips) {
+  if (clips.length === 0) return [];
+  const tooling = videoTooling();
+  const measured = clips.map((clip) => ({
+    path: clip,
+    // `video.mjs` is the one place a Proof clip is measured: a live-recorded webm frequently
+    // declares no duration in its container, and a second copy of this would be the copy that
+    // trusts it and reports a boot screen as a ten-second proof.
+    seconds: tooling.ok ? (probeVideo(clip, () => ({ seconds: null })).seconds ?? null) : null,
+    frame: null,
+    inspected: false,
+  }));
+
+  const frames = spawnSync(process.execPath, [CLIP_FIDELITY, 'frames', ...clips], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  out(frames.stdout ?? '');
+  err(frames.stderr ?? '');
+  if (frames.error) {
+    err(`proof-run film: frame extraction could not run (${frames.error.message}). THE RUN STANDS — ` +
+      'every clip is reported uninspected.\n');
+    return measured;
+  }
+  for (const clip of measured) {
+    const beside = frameFor(clip.path);
+    if (fs.existsSync(beside) && fs.statSync(beside).size > 0) {
+      clip.frame = beside;
+      clip.inspected = true;
+    }
+  }
+  const uninspected = measured.filter((c) => !c.inspected);
+  if (uninspected.length) {
+    err(
+      `proof-run film: ${uninspected.length}/${measured.length} clip(s) yielded no frame. THE RUN ` +
+        'STANDS — report each of them as `uninspected` in the completion report, never as good.\n',
+    );
+  }
+  return measured;
+}
+
+// ================================================================================== film
+if (verb === 'film') {
+  // 1. THE PRECONDITION. The Step-6 gate, run again over the spec set that is about to be filmed,
+  //    before anything is cleared or spent. A refusal here costs nothing and leaves the standing
+  //    evidence alone; the same defect discovered after the run costs the clips as well.
+  const pre = spawnSync(
+    process.execPath,
+    [CLIP_FIDELITY, 'spec', ...specs.map((s) => s.path), '--config', opts.projectConfig, '--verdict', opts.verdict],
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  );
+  if (pre.error) {
+    stop(EXIT.INPUT, `cannot run the clip-fidelity audit (${pre.error.message})`);
+  }
+  out(pre.stdout ?? '');
+  err(pre.stderr ?? '');
+  if (pre.status !== 0) {
+    summarize('refused', EXIT.FIDELITY, { fidelity_exit: pre.status });
+    stop(
+      EXIT.FIDELITY,
+      `the clip-fidelity audit refused the spec set (its exit ${pre.status}, named above) — NOTHING ` +
+        'was filmed and test-results/ is untouched. Filming a spec that carries no reader for ' +
+        'PW_PROVE_CLIP records footage that shows nothing while every gate stays green. Fix the ' +
+        'COMMITTED spec, then run this verb again.',
+    );
+  }
+
+  // 2. THE RUN. The clip flag and the effective viewport arrive as ENVIRONMENT, because they are the
+  //    run's only per-run values and the proof config is static and committed. The size is the one
+  //    the verdict declared — never a literal.
+  const run = runSpecSet(specs, {
+    PW_PROVE_CLIP: '1',
+    PW_PROVE_W: String(viewport.width),
+    PW_PROVE_H: String(viewport.height),
+  });
+  if (run.status !== 0) {
+    const signature = signatureOf(`${run.stdout ?? ''}\n${run.stderr ?? ''}`);
+    summarize('red', EXIT.TESTS_RED, { clips: [], signature });
+    stop(
+      EXIT.TESTS_RED,
+      `the filming run went red — ${signature.error_class} at ${signature.locator}. A spec that was ` +
+        'green in the audit run and red under PW_PROVE_CLIP is a filming-law violation: the ' +
+        'variable may only ADD time. Fix it, re-run the audit verb, then film again.',
+    );
+  }
+
+  // 3. THE CLOSING PHASE. Never a gate: every outcome below leaves the run passing, and a clip that
+  //    could not be inspected is reported uninspected rather than as good.
+  const clips = collectClips(RESULTS_DIR);
+  summarize('green', EXIT.OK, { clips: inspectClips(clips) });
+  process.exit(EXIT.OK);
+}
+
+// ================================================================================== audit
 // ---- the no-progress checkpoint, before a run is spent ----------------------------------------
 const state = readState();
 // Both halves refuse BEFORE a run is spent. The stalled flag is what makes that possible for the
 // signature half: an unchanged signature can only be recognised on the attempt that repeats it, so
 // that attempt records the stall and every invocation after it is refused without paying for a run.
 if (state.stalled) {
-  summarize('refused', EXIT.CHECKPOINT, state.signature, state.attempts);
+  auditSummary('refused', EXIT.CHECKPOINT, state.signature, state.attempts);
   stop(
     EXIT.CHECKPOINT,
     `the loop already stalled on an unchanged failure signature (${state.signature?.error_class} ` +
@@ -381,7 +630,7 @@ if (state.stalled) {
   );
 }
 if (state.attempts >= ATTEMPT_BOUND) {
-  summarize('refused', EXIT.CHECKPOINT, state.signature, state.attempts);
+  auditSummary('refused', EXIT.CHECKPOINT, state.signature, state.attempts);
   stop(
     EXIT.CHECKPOINT,
     `${state.attempts} attempt(s) already spent against a bound of ${ATTEMPT_BOUND} — no run ` +
@@ -414,7 +663,7 @@ if (!tsconfig) {
   err(`${tsc.stdout ?? ''}${tsc.stderr ?? ''}`);
   if (tsc.status !== 0) {
     phases.typecheck = { status: PHASE.FAILED, tsconfig };
-    summarize('typecheck-failed', EXIT.TYPECHECK, null, state.attempts);
+    auditSummary('typecheck-failed', EXIT.TYPECHECK, null, state.attempts);
     stop(
       EXIT.TYPECHECK,
       `the spec set does not compile against '${tsconfig}' — no run was made. Fix the type ` +
@@ -475,7 +724,7 @@ if (!opts.har) {
       argv: bindReport,
     };
     const code = refused ? EXIT.HAR_BIND : EXIT.INPUT;
-    summarize('har-bind-refused', code, null, state.attempts);
+    auditSummary('har-bind-refused', code, null, state.attempts);
     stop(
       code,
       reason === 'unbound-placeholder'
@@ -495,61 +744,14 @@ if (!opts.har) {
   phases.har_bind = { status: PHASE.OK, har: opts.har, out: outPath, reason: null, argv: bindReport };
 }
 
-// ---- the run ----------------------------------------------------------------------------------
-// Cleared BEFORE the runner starts: whatever stands here at publish time becomes the evidence.
-fs.rmSync(RESULTS_DIR, { recursive: true, force: true });
 
-const runnerArgs = [
-  '--no-install',
-  'playwright',
-  'test',
-  ...specs.map((s) => s.path),
-  `--project=${opts.project}`,
-  '--config',
-  opts.config,
-  '--reporter=html',
-  ...(opts.grep ? ['-g', opts.grep] : []),
-];
-// PW_PROVE_HAR is set HERE and not left to a caller: every runner invocation is a fresh
-// environment, so a bound recording exported once in a shell goes missing on the next one.
-const run = spawnSync('npx', runnerArgs, {
-  encoding: 'utf8',
-  maxBuffer: 256 * 1024 * 1024,
-  env: boundHar ? { ...process.env, PW_PROVE_HAR: boundHar } : process.env,
-});
-if (run.error) {
-  stop(EXIT.INPUT, `cannot run the test runner (${run.error.message}). 'npx' must be on PATH.`);
-}
+const run = runSpecSet(specs, boundHar ? { PW_PROVE_HAR: boundHar } : {});
 const runnerOutput = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
-out(run.stdout ?? '');
-err(run.stderr ?? '');
-
-// ---- the failure signature ---------------------------------------------------------------------
-// The error class plus the failing locator: what a raw attempt count cannot see. `expect(...)`
-// assertions are read at their call shape rather than as a bare `Error`, because every one of them
-// would otherwise collapse into one indistinguishable class.
-function signatureOf(text) {
-  const expectMatch = text.match(/(expect\([^)]*\)(?:\.\w+)+)/);
-  const errorMatch = text.match(/\b([A-Z]\w*Error)\b/);
-  const errorClass = expectMatch ? expectMatch[1] : errorMatch ? errorMatch[1] : 'unknown';
-  const locatorMatch = text.match(/locator\((['"`])([\s\S]*?)\1\)/);
-  const getByMatch = text.match(/(getBy\w+\([^\n]*?\))/);
-  const siteMatch = text.match(/([\w./-]+\.(?:spec|test)\.[cm]?[jt]sx?:\d+:\d+)/);
-  const locator = locatorMatch
-    ? locatorMatch[2]
-    : getByMatch
-      ? getByMatch[1]
-      : siteMatch
-        ? siteMatch[1]
-        : 'unknown';
-  return { error_class: errorClass, locator };
-}
-const same = (a, b) => a && b && a.error_class === b.error_class && a.locator === b.locator;
 
 if (run.status === 0) {
   // A green run ends the heal loop, so the budget it was spending goes with it.
   writeState({ attempts: 0, signature: null, stalled: false });
-  summarize('green', EXIT.OK, null, state.attempts);
+  auditSummary('green', EXIT.OK, null, state.attempts);
   process.exit(EXIT.OK);
 }
 
@@ -557,7 +759,7 @@ const signature = signatureOf(runnerOutput);
 const attempt = state.attempts + 1;
 const unchanged = same(signature, state.signature);
 writeState({ attempts: attempt, signature, stalled: unchanged });
-summarize(
+auditSummary(
   unchanged ? 'refused' : 'red',
   unchanged ? EXIT.CHECKPOINT : EXIT.TESTS_RED,
   signature,

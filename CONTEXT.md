@@ -174,6 +174,18 @@ against the e2e tsconfig when the project has one and the root one otherwise, an
 points the canonical recording at this run's origin — delegated to `har-scrub.mjs bind`, reaching
 the run through `PW_PROVE_HAR`, and stopping outright when the bind cannot be made safe.
 
+## Filming run
+The second of Step 7's two runs of the same spec set, and the one whose webms are delivered: it
+carries `PW_PROVE_CLIP=1` — which enables the committed spec's payoff dwell — and the
+[effective viewport](#effective-viewport) as `PW_PROVE_W`/`PW_PROVE_H`. It comes second because a
+[hermetic audit](#hermetic-audit) finding is a spec edit and a spec edit invalidates footage, so the
+cheap run protects the expensive one. Since #145 it is an interface rather than a description:
+`proof-run.mjs film` runs the spec-side [clip fidelity](#clip-fidelity-contract) audit as a
+**precondition** — a spec with no reader for the clip variable never reaches a filming run — clears
+the results directory, films the set, extracts one frame per clip for the
+[clip inspection](#clip-inspection), and carries the clip paths and their measured durations in its
+summary so the publish step reads a manifest source rather than globbing for one.
+
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
 **audit run** — the un-clipped, un-dwelled proof run that precedes filming, so a finding costs a
