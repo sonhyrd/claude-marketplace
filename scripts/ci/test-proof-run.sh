@@ -30,18 +30,32 @@ BIN="$W/bin"; mkdir -p "$BIN"
 # space cannot be mistaken for two), records whether the results directory was standing when the
 # runner started — which is how "cleared BEFORE the run" is observable at all — and replays a
 # canned exit code and stdout from files the case sets.
+# The type check goes through the same `npx` the runner does, so the shim splits on which tool it
+# was handed: the two invocations are separate contracts and an assertion about one must never be
+# satisfiable by the other.
 cat > "$BIN/npx" <<'SHIM'
 #!/usr/bin/env bash
+case " $* " in
+  *" tsc "*)
+    : > "$NPX_TSC_ARGV"
+    for a in "$@"; do printf '%s\n' "$a" >> "$NPX_TSC_ARGV"; done
+    [ -f "$NPX_TSC_STDOUT" ] && cat "$NPX_TSC_STDOUT"
+    exit "${NPX_TSC_EXIT:-0}"
+    ;;
+esac
 : > "$NPX_ARGV"
 for a in "$@"; do printf '%s\n' "$a" >> "$NPX_ARGV"; done
 if [ -d "test-results" ]; then echo present > "$NPX_PRESTATE"; else echo absent > "$NPX_PRESTATE"; fi
+# The bound recording reaches the run through the environment, so the environment is recorded too.
+printf '%s\n' "${PW_PROVE_HAR-<unset>}" > "$NPX_ENV_HAR"
 [ -f "$NPX_STDOUT" ] && cat "$NPX_STDOUT"
 exit "${NPX_EXIT:-0}"
 SHIM
 chmod +x "$BIN/npx"
 
 export NPX_ARGV="$W/argv" NPX_PRESTATE="$W/prestate" NPX_STDOUT="$W/runner-out"
-: > "$NPX_STDOUT"
+export NPX_TSC_ARGV="$W/tsc-argv" NPX_TSC_STDOUT="$W/tsc-out" NPX_ENV_HAR="$W/env-har"
+: > "$NPX_STDOUT"; : > "$NPX_TSC_STDOUT"; : > "$NPX_TSC_ARGV"
 
 # One fixture repository per case group: a real git repo, because the spec set is resolved from a
 # real merge base. The test directory is FLAT — that is the shape the broken pathspec returned
@@ -60,9 +74,14 @@ run() { ( cd "$R" && PATH="$BIN:$PATH" PWPROVE_LEDGER="$W/ledger.jsonl" \
   node "$S" "$@" >"$W/out" 2>"$W/err" ); }
 
 summary() { grep -m1 '^PWPROVE_SUMMARY ' "$W/out" | sed 's/^PWPROVE_SUMMARY //'; }
-jq_field() { summary | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const o=JSON.parse(s);process.stdout.write(String(eval("o."+process.argv[1])))})' "$1"; }
+# A path the summary does not carry prints <missing> rather than a stack trace, so a red case shows
+# what it asserted instead of drowning the run in one.
+jq_field() { summary | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const o=JSON.parse(s);process.stdout.write(String(eval("o."+process.argv[1])))}catch{process.stdout.write("<missing>")}})' "$1"; }
 argv_has() {
   if grep -qxF -- "$2" "$NPX_ARGV"; then ok "$1"; else bad "$1 — argv lacks '$2': $(tr '\n' ' ' < "$NPX_ARGV")"; fi
+}
+tsc_argv_has() {
+  if grep -qxF -- "$2" "$NPX_TSC_ARGV"; then ok "$1"; else bad "$1 — tsc argv lacks '$2': $(tr '\n' ' ' < "$NPX_TSC_ARGV")"; fi
 }
 
 echo "-- usage --"
@@ -272,6 +291,153 @@ NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base m
 [ "$?" = 7 ] && ok "a fourth attempt is refused with exit 7" || bad "the bound of 3 did not hold"
 [ "$(wc -l < "$NPX_ARGV")" = "$prev" ] \
   && ok "the refused attempt spends no run" || bad "the runner was invoked past the bound"
+
+echo ""
+echo "-- phase 1: the type check, and which tsconfig the verb takes --"
+# The branch is the verb's, not the reader's: there is deliberately no flag to point it elsewhere.
+new_repo tsc-e2e
+printf 'test\n' > "$R/e2e/a.spec.ts"
+printf '{}\n' > "$R/tsconfig.json"
+printf '{}\n' > "$R/e2e/tsconfig.json"
+: > "$NPX_TSC_ARGV"
+NPX_TSC_EXIT=0 NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "a clean type check lets the audit run" || { bad "type check blocked a clean run"; head -3 "$W/err"; }
+tsc_argv_has "the type check never auto-installs" "--no-install"
+tsc_argv_has "the type checker" "tsc"
+tsc_argv_has "it emits nothing" "--noEmit"
+tsc_argv_has "the e2e tsconfig wins when the project has one" "e2e/tsconfig.json"
+[ "$(jq_field 'phases.typecheck.status')" = ok ] \
+  && ok "the summary carries the type-check phase" || bad "typecheck phase missing: $(summary)"
+[ "$(jq_field 'phases.typecheck.tsconfig')" = e2e/tsconfig.json ] \
+  && ok "the summary names the tsconfig the phase used" || bad "tsconfig not named: $(summary)"
+
+new_repo tsc-root
+printf 'test\n' > "$R/e2e/a.spec.ts"
+printf '{}\n' > "$R/tsconfig.json"
+: > "$NPX_TSC_ARGV"
+NPX_TSC_EXIT=0 NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+tsc_argv_has "the root tsconfig is the fallback when there is no e2e one" "tsconfig.json"
+if grep -qxF -- "e2e/tsconfig.json" "$NPX_TSC_ARGV"; then
+  bad "the verb named an e2e tsconfig that is not on disk"
+else
+  ok "no e2e tsconfig is invented when the project has none"
+fi
+
+new_repo tsc-none
+printf 'test\n' > "$R/e2e/a.spec.ts"
+: > "$NPX_TSC_ARGV"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "a project with no tsconfig runs anyway" || bad "a JS project was blocked by the type check"
+[ -s "$NPX_TSC_ARGV" ] && bad "the type checker ran with no tsconfig to point it at" \
+  || ok "the phase is skipped rather than guessed at"
+[ "$(jq_field 'phases.typecheck.status')" = skipped ] \
+  && ok "the summary says the phase was skipped" || bad "skip not reported: $(summary)"
+
+echo ""
+echo "-- a type error stops the run before anything expensive --"
+new_repo tsc-red
+printf 'test\n' > "$R/e2e/a.spec.ts"
+printf '{}\n' > "$R/e2e/tsconfig.json"
+printf 'e2e/a.spec.ts(3,7): error TS2322: Type string is not assignable to type number.\n' > "$W/tsc-out"
+: > "$NPX_ARGV"
+NPX_TSC_EXIT=2 NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ "$?" = 4 ] && ok "a type error is exit 4, its own code" || bad "expected exit 4 on a type error"
+[ -s "$NPX_ARGV" ] && bad "the browser run was paid for after a type error" \
+  || ok "no browser run is paid for to learn the spec does not compile"
+[ "$(jq_field 'phases.typecheck.status')" = failed ] \
+  && ok "the summary carries the failed phase" || bad "failure not in summary: $(summary)"
+grep -q 'TS2322' "$W/err" && ok "the refusal carries the compiler's own diagnosis" \
+  || bad "the type error was swallowed"
+: > "$W/tsc-out"
+
+echo ""
+echo "-- phase 2: the HAR bind, delegated to the scrubber --"
+# A canonical, portless recording with every secret placeheld — the committed shape. Replay matches
+# on exact URL equality, so it has to be bound to this run's origin before any test can match it.
+write_har() { printf '%s\n' "{\"log\":{\"version\":\"1.2\",\"entries\":[{\"request\":{\"method\":\"GET\",\"url\":\"$2\",\"headers\":[],\"queryString\":[],\"cookies\":[]},\"response\":{\"status\":200,\"headers\":[],\"cookies\":[],\"redirectURL\":\"\",\"content\":{\"text\":\"{}\"}}}]}}" > "$1"; }
+
+new_repo har-ok
+printf 'test\n' > "$R/e2e/a.spec.ts"
+write_har "$R/e2e/feature.api.har" "http://localhost/api/items"
+: > "$NPX_ENV_HAR"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har --origin http://127.0.0.1:4173
+[ "$?" = 0 ] && ok "a bindable recording lets the audit run" || { bad "bind blocked a clean run"; head -5 "$W/err"; }
+[ -f "$R/.pw-prove/feature.api.har" ] \
+  && ok "the bound copy lands under the run's gitignored dot-directory" || bad "no bound copy on disk"
+grep -q '127.0.0.1:4173' "$R/.pw-prove/feature.api.har" \
+  && ok "the recording is bound to THIS run's origin" || bad "the bind did not re-point the origin"
+grep -q 'localhost/api' "$R/e2e/feature.api.har" \
+  && ok "the committed recording stays canonical" || bad "the committed HAR was rewritten"
+[ "$(cat "$NPX_ENV_HAR")" = "$R/.pw-prove/feature.api.har" ] \
+  && ok "the bound recording is reachable by the run that follows (PW_PROVE_HAR)" \
+  || bad "PW_PROVE_HAR did not reach the runner: $(cat "$NPX_ENV_HAR")"
+[ "$(jq_field 'phases.har_bind.status')" = ok ] \
+  && ok "the summary carries the bind phase" || bad "bind phase missing: $(summary)"
+
+new_repo har-none
+printf 'test\n' > "$R/e2e/a.spec.ts"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "a project with no recording runs anyway" || bad "a project with no HAR was blocked"
+[ "$(jq_field 'phases.har_bind.status')" = skipped ] \
+  && ok "the bind phase is skipped rather than failed" || bad "skip not reported: $(summary)"
+
+new_repo har-ghost
+printf 'test\n' > "$R/e2e/a.spec.ts"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/ghost.api.har
+[ "$?" = 2 ] && ok "a --har that is not on disk is exit 2, not a silent skip" \
+  || bad "a named-but-absent recording did not stop the run"
+
+echo ""
+echo "-- a bind that cannot be made safe stops the run under its own code --"
+new_repo har-unbound
+printf 'test\n' > "$R/e2e/a.spec.ts"
+write_har "$R/e2e/feature.api.har" "http://localhost/api/items?token=__PWPROVE_SCRUBBED__"
+: > "$NPX_ARGV"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har --origin http://127.0.0.1:4173
+[ "$?" = 5 ] && ok "a placeholder in the replay match key is exit 5" \
+  || bad "expected exit 5 for an unbindable recording"
+grep -q '__PWPROVE_SCRUBBED__' "$W/err" && ok "the refusal names the placeholder" \
+  || bad "the refusal does not say which placeholder is unbindable"
+[ -s "$NPX_ARGV" ] && bad "the run was paid for over a recording whose every read would abort" \
+  || ok "nothing was run over an unbindable recording"
+[ "$(jq_field 'phases.har_bind.reason')" = unbound-placeholder ] \
+  && ok "the summary distinguishes an unbindable key from a committable output" \
+  || bad "bind reason wrong: $(summary)"
+
+new_repo har-committable
+printf 'test\n' > "$R/e2e/a.spec.ts"
+printf '!.pw-prove/\n' > "$R/.gitignore"   # the project un-ignores the run's own directory
+write_har "$R/e2e/feature.api.har" "http://localhost/api/items"
+: > "$NPX_ARGV"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har --origin http://127.0.0.1:4173
+[ "$?" = 5 ] && ok "a bind output git would commit is exit 5" \
+  || bad "expected exit 5 for a committable bind output"
+[ "$(jq_field 'phases.har_bind.reason')" = committable-output ] \
+  && ok "the summary names the committable output" || bad "bind reason wrong: $(summary)"
+[ -s "$NPX_ARGV" ] && bad "the run was paid for after a refused bind" || ok "nothing was run"
+
+echo ""
+echo "-- the phases run in order: type check, then bind, then the run --"
+new_repo phase-order
+printf 'test\n' > "$R/e2e/a.spec.ts"
+printf '{}\n' > "$R/e2e/tsconfig.json"
+write_har "$R/e2e/feature.api.har" "http://localhost/api/items"
+: > "$NPX_ARGV"
+NPX_TSC_EXIT=2 NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts --har e2e/feature.api.har --origin http://127.0.0.1:4173
+[ "$?" = 4 ] && ok "the type error wins over the bind" || bad "expected exit 4"
+[ -f "$R/.pw-prove/feature.api.har" ] && bad "the bind ran after the type check had already failed" \
+  || ok "a failed type check costs no bind"
+NPX_TSC_EXIT=0
 
 echo ""
 echo "-- a green run ends the loop and clears the budget --"

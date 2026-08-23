@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.29.0"
+  version: "0.30.0"
 ---
 
 # pw-prove
@@ -31,7 +31,7 @@ Step 3  Bring-up + Probe            (ONE live pass: merge base, four-phase bring
 Step 4  Plan                         (scenarios + locator table + assumptions; PR-mode notify-and-continue · coverage-gap approval gate)
 Step 5  Generate                     (POM always; HAR-first mocks; PROVES headers; clip-fidelity viewport pin + framing + payoff dwell — see code-rules.md)
 Step 6  e2e-reviewer                 (YAGNI audit + PROVES audit + clip-fidelity audit + e2e-reviewer skill quality gate)
-Step 7  Verify                       (tsc → audit run [traces, no clip] → hermetic audit → filming run [PW_PROVE_CLIP=1, PR spec set] → look at one frame per clip → mutation check)
+Step 7  Verify                       (audit run [tsc + HAR bind, then traces, no clip] → hermetic audit → filming run [PW_PROVE_CLIP=1, PR spec set] → look at one frame per clip → mutation check)
 Step 8  Deliver                      (PR-mode: publish chaptered recordings, 6 ACs each → Clips · commit spec+POM+api.har · push · PR comment · report)
 ```
 
@@ -756,32 +756,21 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 
 ## Step 7: Verify
 
-```bash
-# 1. Type check — 0 errors. Use the e2e tsconfig if present, else root. --no-install: never auto-install.
-npx --no-install tsc --noEmit -p <e2e/tsconfig.json or tsconfig.json>
-```
+**1. Two preconditions, and both are phases of the audit verb.** The type check and the HAR bind run inside `proof-run.mjs audit`, before it spends a browser run — you do not run either by hand, and there is no documented raw fallback for either.
 
-**1b. Bind the HAR to this run** — the committed recording is canonical (no port) and every secret in it is a placeholder, and Playwright's replay matches on exact URL equality, so it must be bound before it can match anything. Bind into a **gitignored** path; the bound copy carries this run's live credential and is never staged:
+- **The type check** takes the e2e tsconfig when the project has one and the root one otherwise; that branch is the verb's, not yours, and a project with neither is skipped rather than failed. Exit **4** is a spec set that does not compile.
+- **The HAR bind** is delegated to `har-scrub.mjs bind`, which the verb invokes with the recording you pass as `--har` and a destination fixed under `.pw-prove/` — the committed recording stays canonical, and the bound copy carrying this run's live credential never reaches a path git tracks. The verb then puts `PW_PROVE_HAR` on the runner's own environment, so every invocation it makes has the bound recording; you never export it. **Pass `--har` only when the project has a recording**; omitted, the phase is skipped.
 
-```bash
-# Exclude it repo-locally rather than editing .gitignore: the bound copy is this run's private
-# working state, and a stray .gitignore diff is churn Step 8 would have to explain.
-mkdir -p .pw-prove
-grep -qxF '.pw-prove/' .git/info/exclude || printf '.pw-prove/\n' >> .git/info/exclude
-node <skill-base>/scripts/har-scrub.mjs bind <testDir>/<feature>.api.har \
-  --out .pw-prove/<feature>.api.har --origin "$BASE_URL"
-export PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har"
-```
+**Exit 5 is a bind that cannot be made safe, in either of its two forms**, and the summary's `phases.har_bind.reason` says which:
 
-Most recordings need nothing more: a credential that travelled only in headers and cookies plays no part in the lookup and stays placeheld. **Exit 4 names each placeholder that does sit in the match key** (a `token=` in a URL, a POST body) and the entry it belongs to — that entry cannot replay as it stands, so add the placeholders it names to a bindings file under the same gitignored directory and bind again with `--bindings .pw-prove/bindings.json`:
+| `reason` | What it means | What to do |
+|---|---|---|
+| `unbound-placeholder` | A placeholder sits in the replay **match key** — a `token=` in a URL, a matched POST body. That entry can never match, and left alone it aborts mid-run and reads as a broken application | The refusal names each one. Put this run's own value against it in a bindings file under `.pw-prove/` and pass `--bindings .pw-prove/bindings.json`, or re-record. Most recordings need none of this: a credential that travelled only in headers and cookies plays no part in the lookup and stays placeheld |
+| `committable-output` | The project un-ignores `.pw-prove/`, so the bound copy would land where git tracks it — with a live credential in it | Stop un-ignoring the run's own directory. Never bind into a tracked path |
 
-```json
-{ "__PWPROVE_SCRUBBED__": "<the token this run's session uses>" }
-```
+**When the project owns rebinding, drop `--origin` and say so.** Some repos ship their own replay helper that rebinds the recording to whatever origin the run is on (an `installApiHar()` over `routeFromHAR`, typically honouring `PW_PROVE_HAR` itself). You will have read it in Step 1. Where one is present, re-pointing the origin here duplicates work the app does at run time — so leave `--origin` off and note it in the report. **Keep everything else**: `--har` still goes in, and if the bind refuses on a placeholder in the match key that binding is still yours to do, because a repo-owned rebinder does not supply it. Dropping the recording entirely on the strength of a runtime helper is how a token in a query string turns back into an aborted read.
 
-**When the project owns rebinding, skip the `--origin` bind and say so.** Some repos ship their own replay helper that rebinds the recording to whatever origin the run is on (an `installApiHar()` over `routeFromHAR`, typically honouring `PW_PROVE_HAR` itself). You will have read it in Step 1. Where one is present, `har-scrub.mjs bind --origin` is duplicating work the app does at runtime — drop the `--origin` rebind and note it in the report. **Keep everything else**: if exit 4 names a placeholder sitting in the match key, that binding is still yours to do, and a repo-owned rebinder does not supply it. Dropping the whole block on the strength of a runtime helper is how a token in a query string turns back into an aborted read.
-
-Never run the proof past an exit 4 and let it surface as an aborted call — that reads as a broken application. Exit 5 means the `--out` path is committable: the bound copy holds a live credential and belongs under a gitignored path. Carry `PW_PROVE_HAR` on **every** runner invocation from here on (proof run, heal runs, mutation run) — each invocation is a fresh environment, and setting it once in your shell is not enough. Unset in CI, the spec falls back to the committed HAR by construction.
+Unset in CI, the spec falls back to the committed HAR by construction.
 
 **2a. In PR-mode, both runs execute the PR spec set** — every spec that proves this PR, not only the one this run wrote. A run that films its own delta delivers a proof page holding two chapters of a thirteen-scenario PR, and nothing in the artifact says so. **`proof-run.mjs audit` resolves that set** from the merge base, tags every spec `carried` or `written` in its summary, and stops on an empty one. You do not assemble it, and there is no documented raw-runner fallback: a fallback is a second copy, and the second copy is the one that drifts. The reasons behind each mechanic are in the module's header comment; read it when you need to check a claim.
 
@@ -860,9 +849,11 @@ The **only** legitimate reason to edit an existing proof config is a structural 
 # is in the config, so the traces the hermetic audit reads arrive anyway.
 node <skill-base>/scripts/proof-run.mjs audit \
   --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base> \
-  --written <the spec this run wrote>
-# One JSON summary line on stdout carries the spec set with its carried/written tags, the attempt
-# count and the failure signature. Read it; do not re-derive any of it from the console output.
+  --written <the spec this run wrote> \
+  --har <testDir>/<feature>.api.har --origin "$BASE_URL"     # both omitted when there is no recording
+# One JSON summary line on stdout carries the spec set with its carried/written tags, both
+# precondition phases, the attempt count and the failure signature. Read it; do not re-derive any of
+# it from the console output.
 
 # ...green, then the hermetic audit (it reads the traces under test-results/) and any fix it forces...
 
@@ -886,6 +877,8 @@ PW_PROVE_CLIP=1 PW_PROVE_W=<effective.width> PW_PROVE_H=<effective.height> \
 | `1` | Usage — a flag is missing or unknown | Fix the invocation; nothing was run |
 | `2` | Unreadable input, or `npx` is not on PATH | Fix the flag it names; nothing was run |
 | `3` | The spec set resolved **empty** | The resolution is wrong — a wrong `--base`, or a `--test-dir` that is not where the specs landed. Fix it; never proceed on an empty set |
+| `4` | **The spec set does not compile** | Fix the type errors the phase printed and invoke the verb again. Nothing was run |
+| `5` | **The HAR bind refused** | Read `phases.har_bind.reason` and take the row above. Nothing was run — never run the proof past this and let it surface as an aborted call |
 | `6` | Tests red | Diagnose and heal, below. Rerun through this same verb with `--grep "<title>"` |
 | `7` | **Checkpoint refusal** — the failure signature did not move, or the attempt bound is spent | Stop the loop. Do not attempt another fix: invoke `playwright-debugger` and take the handover stop |
 
@@ -912,7 +905,7 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 | Selector mismatch | Heal by intent: re-snapshot the live page, find the element the step semantically targets, write a fresh locator at the highest stable tier (role+name > placeholder > testid). Tweaking the old string re-breaks on the next DOM change. |
 | Assertion failure | Fix expected values, add `{ timeout }` for slow elements |
 | Structural | Fix missing `await`, wrong setup, incorrect `beforeEach` |
-| Unrecorded call aborted (`notFound:'abort'`) | First check the binding: **every** read aborting means the HAR was not bound to this run (Step 7 item 1b — `PW_PROVE_HAR` unset, or bound to a different port), not that the recording is short. A *particular* call aborting is a genuine miss — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
+| Unrecorded call aborted (`notFound:'abort'`) | First check the binding: **every** read aborting means the HAR was not bound to this run — the audit verb was invoked without `--har`, or with an `--origin` that is not the origin this run proved — not that the recording is short. The summary's `phases.har_bind` says which of the two it was. A *particular* call aborting is a genuine miss — re-record with the probe (`RECORD_HAR`, navigate the missed interaction) or add a hand-mock; never widen to a live call |
 | Every test errored — `Executable doesn't exist at …/chromium_headless_shell-…` (runner exit 2) | The browser was never installed — Playwright's binaries do not come from a package-manager install. This is the Step-3 `browser` phase's failure arriving late, so **do not heal, rebuild, or touch the spec**: run the install command that phase prints (`node <skill-base>/scripts/preflight.mjs browser` names it), then re-run. A run that got here with `BROWSER=skipped` in its bring-up summary is the expected path — the check was skipped, not passed. |
 | **Zero** tests ran — `Timed out waiting <n>ms from config.webServer` | A live `webServer` entry existed and never became ready — that is all this message proves. Match on `from config.webServer`: the number is that entry's own `timeout`, not a constant, and the message names no url, so with an array it does not say which entry. Curl the entry's url: **nothing answers** → the proof config still inherits a development server, so add `webServer: undefined` (Step 7); **the proof target answers** → the entry is the right one and its own readiness check timed out, so re-read the url it declares against the proved origin. |
 | **Zero** tests ran — nothing listening at the origin, connection refused on the first navigation | The opposite mistake: a `webServer` that builds and boots the proof target was dropped, so nothing produces the origin. A live entry makes this impossible, which is what tells it apart from the row above. Restore the entry in the proof config (Step 7), or bring the origin up yourself through `preflight.mjs`. |
