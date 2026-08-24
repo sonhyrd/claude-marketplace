@@ -225,7 +225,7 @@ broken software. Since #147 `proof-run.mjs mutate` records it as a marker file u
 dot-directory (`.pw-prove/artifact-stale`) rather than paying for an unconditional rebuild it may
 not need: the revert is immediate, the rebuild is **lazy**, and the marker is what makes laziness
 safe. `audit` and `film` **refuse while it stands** (exit 15), changing nothing and clearing
-nothing, and print the exact three commands that clear it — force the build, prove the restart, then
+nothing, and print the exact commands that clear it, in order — force the build, prove the restart, then
 remove the marker. They never self-heal, because a silent rebuild would hide that the mutation check
 left the machine in this state. `mutate` is not refused by it: it forces a rebuild by construction,
 and its [proven restart](#proven-restart) clears a standing marker before it writes its own.

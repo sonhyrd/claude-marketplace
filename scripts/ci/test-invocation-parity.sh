@@ -49,6 +49,14 @@ pass=0; fail=0
 ok()  { echo "  [PASS] $1"; pass=$((pass + 1)); }
 bad() { echo "  [FAIL] $1"; fail=$((fail + 1)); }
 
+# perl builds the mutated bodies. It refuses by name rather than skipping: a suite that skips its own
+# discrimination proof reports green while proving nothing, which is the failure mode this whole
+# check exists to end. (AGENTS.md sets the same rule for test-case-shapes.sh and python3/PyYAML.)
+if ! command -v perl >/dev/null 2>&1; then
+  echo "invocation parity: perl is not on PATH — it builds the mutated bodies this suite is proven against" >&2
+  exit 1
+fi
+
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 SANDBOX="$W/sandbox"; mkdir -p "$SANDBOX"
 
@@ -96,7 +104,7 @@ ask() {
   local f
   for f in "$@"; do args+=("$f" "X"); done
 
-  local out rc
+  local out
   if [ "$kind" = "PROSE" ]; then
     # Fill in whatever the module says it requires, discovering the list from the module itself
     # rather than restating it here. Bounded: each round adds one flag, and the module's longest
@@ -112,8 +120,6 @@ ask() {
   else
     out=$( cd "$SANDBOX" && PWPROVE_LEDGER=/dev/null node "$REPO_ROOT/$MODULE" "${args[@]}" 2>&1 )
   fi
-  rc=$?
-  : "$rc"
 
   printf '%s\n' "$out" | grep -E "unknown verb|unknown flag|belongs to '|is required for '" || true
 }

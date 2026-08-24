@@ -1,18 +1,10 @@
 #!/usr/bin/env node
 // proof-run.mjs — Step 7's mechanics, as code. The judgement stays with the agent.
 //
-//   node proof-run.mjs audit --config <proof config> --test-dir <testDir> --base <ref>
-//                           [--written <spec>]... [--har <recording>] [--origin <url>]
-//                           [--bindings <json>] [--project <name>] [--grep <title>]
-//   node proof-run.mjs film  --config <proof config> --test-dir <testDir> --base <ref>
-//                           --project-config <the project's own playwright.config>
-//                           --verdict <pinned:WxH|deliberate:WxH> [--written <spec>]... [--project <name>]
-//   node proof-run.mjs mutate --config <proof config> --test-dir <testDir> --base <ref>
-//                           --written <spec>... --grep <the guarding test> --mutated <file>...
-//                           --build-command <the app's build script> --origin <the preview origin>
-//                           --server-pid <the recorded pid> --server-log <the preview task's log>
-//                           --serve-command <how the server is started again>
-//                           [--app-root <dir>] [--build-output <dist>] [--clips <n>] [--project <name>]
+// For the synopsis, run `node proof-run.mjs` with no verb: `USAGE` below prints it. It is
+// deliberately NOT restated here — a header copy is a second copy, it drifts from the one the
+// module actually enforces, and this file's whole argument is that the second copy is the one that
+// drifts. What this header carries instead is the part `USAGE` cannot: why each mechanic is here.
 //
 // Step 7 was the largest section of pw-prove's body and the only large one with no module behind
 // it: bring-up has preflight.mjs, recon has probe.mjs, the recording has har-scrub.mjs, the
@@ -808,7 +800,7 @@ const VERB_FIELDS = {
   // any point reports what had actually been established by then rather than a smaller record.
   mutate: { grep: opts.grep, mutated: opts.mutated, output: MUTATION_OUT, server: serverState },
 }[verb];
-function bindSummary(specs) {
+function summariesCarrySpecSet(specs) {
   summarize = (result, exit, extra = {}) => {
     out(
       `PWPROVE_SUMMARY ${JSON.stringify({
@@ -850,7 +842,7 @@ const specs = [
   ...written.map((p) => ({ path: p, tag: 'written' })),
 ];
 
-bindSummary(specs);
+summariesCarrySpecSet(specs);
 
 // ---- the stale-artifact refusal ---------------------------------------------------------------
 // The mutation check's revert leaves the TREE looking untouched while the built artifact still
