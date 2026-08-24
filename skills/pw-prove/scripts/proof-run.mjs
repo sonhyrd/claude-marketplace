@@ -1,18 +1,10 @@
 #!/usr/bin/env node
 // proof-run.mjs — Step 7's mechanics, as code. The judgement stays with the agent.
 //
-//   node proof-run.mjs audit --config <proof config> --test-dir <testDir> --base <ref>
-//                           [--written <spec>]... [--har <recording>] [--origin <url>]
-//                           [--bindings <json>] [--project <name>] [--grep <title>]
-//   node proof-run.mjs film  --config <proof config> --test-dir <testDir> --base <ref>
-//                           --project-config <the project's own playwright.config>
-//                           --verdict <pinned:WxH|deliberate:WxH> [--written <spec>]... [--project <name>]
-//   node proof-run.mjs mutate --config <proof config> --test-dir <testDir> --base <ref>
-//                           --written <spec>... --grep <the guarding test> --mutated <file>...
-//                           --build-command <the app's build script> --origin <the preview origin>
-//                           --server-pid <the recorded pid> --server-log <the preview task's log>
-//                           --serve-command <how the server is started again>
-//                           [--app-root <dir>] [--build-output <dist>] [--clips <n>] [--project <name>]
+// For the synopsis, run `node proof-run.mjs` with no verb: `USAGE` below prints it. It is
+// deliberately NOT restated here — a header copy is a second copy, it drifts from the one the
+// module actually enforces, and this file's whole argument is that the second copy is the one that
+// drifts. What this header carries instead is the part `USAGE` cannot: why each mechanic is here.
 //
 // Step 7 was the largest section of pw-prove's body and the only large one with no module behind
 // it: bring-up has preflight.mjs, recon has probe.mjs, the recording has har-scrub.mjs, the
@@ -49,6 +41,22 @@
 //   THE RESULTS DIRECTORY IS CLEARED BEFORE THE RUN, without anyone remembering to. Whatever sits
 //   in test-results/ at publish time becomes the evidence, so a leftover webm from an earlier — or
 //   mutated — run published as proof is a lie.
+//
+//   THE TWO PRECONDITIONS ARE PHASES OF THIS VERB, NOT INSTRUCTIONS TO THE AGENT, because both of
+//   them are cheaper than the browser run they stand in front of and neither involves a judgement.
+//   The TYPE CHECK takes the e2e tsconfig when the project has one and the root one otherwise — a
+//   branch nobody should have to re-derive per run — and a project with neither is SKIPPED rather
+//   than failed, because a project that does not typecheck its tests has not failed this run's
+//   spec. A spec set that does not compile is exit 4, and nothing is paid for a browser to learn
+//   it. The HAR BIND is delegated to `har-scrub.mjs bind` rather than reimplemented — that module
+//   owns what a placeholder in a replay match key is — and the destination is FIXED under
+//   `.pw-prove/` rather than passed: the committed recording must stay canonical, and the bound
+//   copy carries THIS run's live credential, so it must never land where git tracks it. Exit 5 is a
+//   bind that cannot be made safe, and its two forms (`unbound-placeholder`, `committable-output`)
+//   are reported in the phase's `reason` rather than as two codes, because the claim is one claim
+//   and only the next move differs. `PW_PROVE_HAR` then goes on the RUNNER's environment, so every
+//   invocation this verb makes has the bound recording without the agent carrying it — the other
+//   two verbs have no bind phase of their own and inherit it from the environment they are given.
 //
 //   THE RUN CARRIES NO WORKER OVERRIDE (ADR-0017). Scaffolded configs leave `workers` undefined off
 //   CI, so the run takes Playwright's default of cores/2 and the scenarios go together: measured
@@ -792,7 +800,7 @@ const VERB_FIELDS = {
   // any point reports what had actually been established by then rather than a smaller record.
   mutate: { grep: opts.grep, mutated: opts.mutated, output: MUTATION_OUT, server: serverState },
 }[verb];
-function bindSummary(specs) {
+function summariesCarrySpecSet(specs) {
   summarize = (result, exit, extra = {}) => {
     out(
       `PWPROVE_SUMMARY ${JSON.stringify({
@@ -834,7 +842,7 @@ const specs = [
   ...written.map((p) => ({ path: p, tag: 'written' })),
 ];
 
-bindSummary(specs);
+summariesCarrySpecSet(specs);
 
 // ---- the stale-artifact refusal ---------------------------------------------------------------
 // The mutation check's revert leaves the TREE looking untouched while the built artifact still

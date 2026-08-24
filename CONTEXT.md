@@ -200,6 +200,36 @@ a spec set that has moved under the record is named `stale` rather than read as 
 agent recalling across a diagnosis and a re-run which attempt this was. Only a run that produced
 clips spends the re-film; a green audit opens a fresh cycle.
 
+## Proven restart
+The only evidence the mutation check accepts that the preview server now serves the rebuilt
+artifact: the server's **own new announcement in its own log, past a mark taken before the stop was
+issued**. An answer on the port is explicitly not this — a restart that loses the port to its own
+predecessor leaves the *old* process answering, serving the pre-mutation build, and an observed run
+spent 128s reaching a page stuck on its loading splash before it would have reported "the spec
+guards the change" on evidence that proved nothing; killing the survivor gave the genuine RED in
+18.7s. Since #147 `proof-run.mjs mutate` sequences `preflight.mjs`'s `build` and `serve` phases to
+produce it — the stop is confirmed rather than assumed, escalating to SIGKILL — and an unproven
+restart is **exit 11 with no verdict to read**, because the run it would have paid for could only
+describe an artifact nothing rebuilt. Since #148 the mark is taken when the restart is *issued*,
+not before the build: a mark taken earlier includes the build's own output and a predecessor's
+dying words in the window it is meant to exclude. A proven restart is also what clears a standing
+[stale artifact](#stale-artifact) marker.
+
+## Stale artifact
+The state the machine is in between a mutation check's **revert** and the next build: the working
+tree is back to what it was, and the *built artifact the preview server holds still contains the
+reverted mutation*. It is precisely the case the build-reuse check cannot see, because reuse is
+measured against HEAD plus the working-tree difference and the revert restored both — so nothing
+downstream could tell that heal, evidence or a re-film taken from that server describes deliberately
+broken software. Since #147 `proof-run.mjs mutate` records it as a marker file under the run's
+dot-directory (`.pw-prove/artifact-stale`) rather than paying for an unconditional rebuild it may
+not need: the revert is immediate, the rebuild is **lazy**, and the marker is what makes laziness
+safe. `audit` and `film` **refuse while it stands** (exit 15), changing nothing and clearing
+nothing, and print the exact commands that clear it, in order — force the build, prove the restart, then
+remove the marker. They never self-heal, because a silent rebuild would hide that the mutation check
+left the machine in this state. `mutate` is not refused by it: it forces a rebuild by construction,
+and its [proven restart](#proven-restart) clears a standing marker before it writes its own.
+
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
 **audit run** — the un-clipped, un-dwelled proof run that precedes filming, so a finding costs a
