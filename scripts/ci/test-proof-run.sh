@@ -1246,7 +1246,7 @@ mutate_repo() {
   BUILD_LOG="$W/builds-$1"; : > "$BUILD_LOG"
   MUT_FLAGS=(--config playwright.proof.config.ts --test-dir e2e --base main
     --written e2e/written.spec.ts --grep "saves the profile" --mutated src/app.ts
-    --build-command "printf 'built\n' >> $BUILD_LOG" --app-root .
+    --build-command "printf 'built reuse=%s cmd=%s root=%s\\n' \"\$BUILD_REUSE\" \"\$BUILD_COMMAND\" \"\$PWD\" >> $BUILD_LOG" --app-root .
     --server-pid "$SRV_PID" --server-log "$SRV_LOG"
     --serve-command "node $W/serve.js $SRV_PORT" --origin "http://localhost:$SRV_PORT")
 }
@@ -1503,6 +1503,14 @@ grep -q 'BUILD_REUSE=miss' "$W/out" && ok "the standing artifact was NOT inherit
 grep -q 'BUILD_REUSE_REASON=forced' "$W/out" \
   && ok "and it was forced, not merely missed — the one run that must never benefit from reuse" \
   || bad "the rebuild was not forced"
+# The environment the bring-up module was handed IS the contract here, the way argv is for the
+# runner: it is read off the build the module actually ran, not off a token in its report.
+grep -q 'reuse=never' "$BUILD_LOG" \
+  && ok "BUILD_REUSE=never reached the bring-up module, as the build's own environment" \
+  || bad "the build ran without BUILD_REUSE=never: $(cat "$BUILD_LOG")"
+grep -q "root=$R" "$BUILD_LOG" \
+  && ok "and the build ran in the application root it was given" \
+  || bad "the build ran in the wrong directory: $(cat "$BUILD_LOG")"
 
 # Twice over an unmoved tree: reuse is what makes a batch cheap, and this is the run it must not
 # make cheap. A second invocation pays for the build again.
@@ -1515,6 +1523,32 @@ NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"; note_pid "$(started_pid)"
   || bad "the second run inherited an artifact (builds=$(builds))"
 
 echo ""
+echo ""
+echo "-- an application root that is not the cwd, and a relative --server-log --"
+# The bring-up module resolves a relative SERVER_LOG against APP_ROOT, so a monorepo whose app root
+# is a subdirectory is where a restart poll looks for the log somewhere it never was and reports
+# `no-log` — a gap in the invocation, arriving as a verdict about the server.
+mutate_repo mut-app-root
+mkdir -p "$R/app"
+SRV_LOG="$R/app/preview.log"
+kill "$SRV_PID" 2>/dev/null
+SRV_PORT=$(free_port)
+: > "$SRV_LOG"
+node "$W/serve.js" "$SRV_PORT" >> "$SRV_LOG" 2>&1 &
+SRV_PID=$!
+note_pid "$SRV_PID"
+wait_announce "$SRV_LOG"
+NPX_EXIT=1 run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/written.spec.ts --grep "saves the profile" --mutated src/app.ts \
+  --build-command "printf 'built\\n' >> $BUILD_LOG" --app-root app \
+  --server-pid "$SRV_PID" --server-log app/preview.log \
+  --serve-command "node $W/serve.js $SRV_PORT" --origin "http://localhost:$SRV_PORT"
+rc=$?
+[ "$rc" = 0 ] && ok "a relative --server-log is resolved where it was validated, not under the app root" \
+  || bad "expected exit 0 with --app-root app and a relative --server-log, got $rc"
+[ "$(jq_field 'server.restart')" = proven ] \
+  && ok "and the restart is still proven" || bad "restart wrong: $(summary)"
+
 echo "-- the server is stopped by its recorded process id, and confirmed gone --"
 mutate_repo mut-restart
 OLD_PID="$SRV_PID"

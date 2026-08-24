@@ -191,6 +191,13 @@
 //   appends. The stop is confirmed rather than assumed, escalating to SIGKILL, for the same reason:
 //   a survivor keeps the port and keeps serving the artifact the rebuild just replaced.
 //
+//   THE TWO STOPS ABOVE THE RUN LEAVE THE MUTATION IN THE TREE, and they are the only ones that do.
+//   The unconditional revert exists so that no branch which SPENT a run can leave a deliberately
+//   broken tree behind; a rebuild that failed and a restart that could not be proven spent nothing
+//   and are both retried by invoking this verb again — reverting there would throw away the line
+//   the agent chose and make every retry start by re-applying it. Both stops say so, and both mark
+//   the artifact, so nothing else can run against the machine in the meantime.
+//
 //   A REBUILD THAT FAILS IS NOT A VERDICT EITHER (exit 14). The mutation the agent chose may simply
 //   not compile; nothing ran, and "the spec does not guard the change" would be a claim about a run
 //   that never happened.
@@ -1250,6 +1257,11 @@ if (verb === 'mutate') {
   //    the old process kept answering, the poll said SERVE=ok, and the mutation run failed 128
   //    seconds later against an artifact nothing had rebuilt — a RED that proved nothing.
   const appRoot = opts.appRoot ?? cwd;
+  // Resolved against THIS process's cwd, which is where it was validated, and handed on absolute.
+  // The bring-up module resolves a relative SERVER_LOG against APP_ROOT, so a monorepo whose app
+  // root is a subdirectory would otherwise have the poll look for the log somewhere it never was
+  // and report `no-log` — a gap in the invocation reported as a verdict about the server.
+  const serverLog = path.resolve(cwd, opts.serverLog);
   const preflight = (phase, env) => {
     const r = spawnSync(process.execPath, [PREFLIGHT, phase], {
       encoding: 'utf8',
@@ -1264,9 +1276,6 @@ if (verb === 'mutate') {
   // Sleeping in a synchronous flow, on the standard library: the whole verb is spawnSync from end
   // to end, and an async island here would reorder its output against the subprocesses'.
   const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-
-  // The mark, in bytes, at the moment the restart is issued.
-  serverState.mark = fs.statSync(opts.serverLog).size;
 
   // THE FORCED REBUILD. Failure here is not a verdict about the spec: the mutated source did not
   // build, so nothing was proved and nothing can be. The artifact is marked either way — a build
@@ -1284,10 +1293,17 @@ if (verb === 'mutate') {
       EXIT.REBUILD,
       `the forced rebuild failed (the bring-up module's exit ${build.status}, its diagnosis above) ` +
         '— NOTHING was run and there is no verdict. The mutation you applied may simply not ' +
-        'compile: revert it, choose a line the build accepts, and invoke this verb again. The ' +
-        'artifact is marked stale until something rebuilds it.',
+        'compile: it is still in the tree, so revert it yourself, choose a line the build accepts, ' +
+        'and invoke this verb again. The artifact is marked stale until something rebuilds it.',
     );
   }
+
+  // THE MARK, in bytes, taken here and not a moment earlier: only announcements past it belong to
+  // the process that replaces the one about to be stopped. The rebuild above takes minutes, and the
+  // old server is still running and still writing through all of them — a mark taken before it
+  // would leave those lines past the mark, where the poll would read one of them as the new
+  // process's own announcement and call an unproven restart proven.
+  serverState.mark = fs.statSync(serverLog).size;
 
   // THE STOP, by the process id the agent recorded when it started the server. Confirmed gone
   // rather than assumed: a predecessor that survives keeps the port and keeps serving the artifact
@@ -1338,7 +1354,8 @@ if (verb === 'mutate') {
       EXIT.RESTART,
       `the preview server (pid ${pid}) is still running after SIGTERM and SIGKILL, so the port it ` +
         'holds is still serving the artifact the rebuild replaced. NOTHING was run and there is no ' +
-        'verdict. Stop whatever holds that port by hand and invoke this verb again.',
+        'verdict. Your mutation is still in the tree: stop whatever holds that port by hand and ' +
+        'invoke this verb again, or revert the mutation yourself to abandon the check.',
     );
   }
 
@@ -1350,7 +1367,7 @@ if (verb === 'mutate') {
   // what a later step stops (`kill -- -<pid>` takes the tree a shell wrapper leaves behind).
   let started;
   try {
-    const logFd = fs.openSync(opts.serverLog, 'a');
+    const logFd = fs.openSync(serverLog, 'a');
     started = spawn(opts.serveCommand, {
       shell: true,
       cwd: appRoot,
@@ -1375,7 +1392,8 @@ if (verb === 'mutate') {
           SERVE_RESTART: '1',
           RESTART_LOG_OFFSET: String(serverState.mark),
           BASE_URL: opts.origin,
-          SERVER_LOG: opts.serverLog,
+          SERVER_LOG: serverLog,
+          APP_ROOT: appRoot,
         });
   if (!serve || serve.status !== 0) {
     serverState.cause = /SERVE_CAUSE=(\S+)/.exec(serve?.stdout ?? '')?.[1] ?? 'not-started';
@@ -1387,8 +1405,9 @@ if (verb === 'mutate') {
       `the restart is UNPROVEN (${serverState.cause}) — NOTHING was run and there is no verdict to ` +
         'read. An origin that answers with no new announcement past the mark may be the ' +
         'PREDECESSOR, still holding the port and still serving the artifact this rebuild replaced: ' +
-        'a mutation run against it proves nothing whichever way it goes. Stop whatever holds the ' +
-        'port, then invoke this verb again.',
+        'a mutation run against it proves nothing whichever way it goes. Your mutation is still in ' +
+        'the tree: stop whatever holds the port and invoke this verb again, or revert it yourself ' +
+        'to abandon the check.',
     );
   }
   serverState.restart = 'proven';
