@@ -6,8 +6,8 @@
 // pointing PW_PROVE_CLIPS_ENDPOINT here. Every request is appended to $CAP/requests.jsonl as
 // {method,url,headers,body} so the test can assert on what would have been sent.
 //
-//   CAP=<dir> STUB_MODE=ok|validation|unauthorized|unknown-tool|unknown-tool-prefixed|error \
-//     node clips-stub-server.mjs
+//   CAP=<dir> STUB_MODE=ok|validation|unauthorized|unknown-tool|unknown-tool-prefixed|error|garbled \
+//     STUB_ENCODING=json|sse node clips-stub-server.mjs
 //
 // The modes are the shapes the live deployment was MEASURED to produce (2026-08-05/06), and the
 // split between them is the whole point of the check:
@@ -18,10 +18,31 @@
 //   unknown-tool-prefixed  the same refusal wearing the "Error: " prefix the wrapper uses elsewhere
 //   unauthorized           401, and the body is NOT JSON-RPC at all: no `result`, no `jsonrpc`
 //   error                  500, a plain body — the destination fell over
+//   garbled                200, a body that is not JSON-RPC at all — the ONE mode that is not a
+//                          measured shape. It stands for the next unmodelled response, and exists so
+//                          the client's 'unexpected' fallthrough stays reachable under both encodings
 //
 // Only `unauthorized` carries a non-2xx status that means "refused". Everything after auth arrives
 // at HTTP 200, so a caller keyed on the status code passes vacuously — which is what this fixture
 // exists to make a test failure rather than a live-run surprise.
+//
+// STUB_ENCODING is a SECOND AXIS, orthogonal to STUB_MODE: it decides how a response the stub has
+// already chosen is written on the wire, and nothing about which response that is.
+//
+//   json  (default)  the body is plain `application/json` — every existing case is unchanged
+//   sse              the SAME body as one `text/event-stream` frame: `event: message`, then the
+//                    JSON on a `data:` line
+//
+// It is an axis rather than an `ok-sse` mode because on the live deployment the wire encoding is
+// independent of the outcome, and a mode value would bake in the assumption that only successes
+// ever arrive as a stream.
+//
+// Measured, like the modes: the live deployment answers some responses as plain JSON and others as
+// the `event: message` / `data: {…}` frame carried here, with the identical JSON-RPC body, on the
+// same endpoint and the same bearer within one session. The frame appears in six recorded session
+// transcripts across pw-prove 0.27.0 through 0.35.0 — first recorded as FR23 at 0.27.0, where it
+// read as a flaky destination because it cleared on the next publish. The bodies themselves are not
+// quoted: they carry a live share link and a vault lease id.
 //
 // Prints `PORT <n>` as its first stdout line once listening, then serves until killed.
 import fs from 'node:fs';
@@ -30,6 +51,7 @@ import path from 'node:path';
 
 const CAP = process.env.CAP || process.cwd();
 const MODE = process.env.STUB_MODE || 'ok';
+const ENCODING = process.env.STUB_ENCODING || 'json';
 const CAPTURE = path.join(CAP, 'requests.jsonl');
 
 const server = http.createServer((req, res) => {
@@ -53,9 +75,17 @@ const server = http.createServer((req, res) => {
       );
     }
 
+    // One body, two wire encodings. `sse` writes exactly the bytes the live deployment was measured
+    // to send: one `event: message` frame whose `data:` line carries the identical JSON.
     const send = (status, payload) => {
+      const json = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      if (ENCODING === 'sse') {
+        res.writeHead(status, { 'Content-Type': 'text/event-stream' });
+        res.end(`event: message\ndata: ${json}\n\n`);
+        return;
+      }
       res.writeHead(status, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(payload));
+      res.end(json);
     };
     const id = body?.id ?? null;
     // A tool result is a JSON-RPC result carrying content blocks — the action's own JSON travels
@@ -86,6 +116,12 @@ const server = http.createServer((req, res) => {
       // and every failure path in the client ends in an excerpt of a foreign body printed into a
       // run log — so this mode is what proves the client refuses to repeat the bearer.
       return send(500, { error: 'Internal server error', received: req.headers.authorization ?? '' });
+    }
+    if (MODE === 'garbled') {
+      // Prose where a JSON-RPC envelope belongs. Under `sse` it travels as the `data:` payload, so
+      // the client unwraps the frame successfully and STILL has nothing it can parse — which is the
+      // fallthrough this mode exists to keep reachable.
+      return send(200, 'the destination is having a think about it');
     }
     if (MODE === 'unknown-tool') return toolError(`Unknown tool: ${action}`);
     // The same refusal as `unknown-tool`, wearing the `Error: ` prefix this wrapper puts on its

@@ -72,10 +72,10 @@ if [ ! -s "$W/a.webm" ] || [ ! -s "$W/b.webm" ]; then
 fi
 
 # --- the stub destination -----------------------------------------------------------------------
-start_stub() { # usage: start_stub <mode>
+start_stub() { # usage: start_stub <mode> [json|sse]
   stop_stub
   : > "$W/cap/requests.jsonl"
-  CAP="$W/cap" STUB_MODE="$1" node "$REPO_ROOT/$STUB" > "$W/stub.out" 2>"$W/stub.err" &
+  CAP="$W/cap" STUB_MODE="$1" STUB_ENCODING="${2:-json}" node "$REPO_ROOT/$STUB" > "$W/stub.out" 2>"$W/stub.err" &
   STUB_PID=$!
   PORT=""
   for _ in $(seq 1 50); do
@@ -153,8 +153,13 @@ jassert "the call names the import action and wraps the payload in params.argume
 # regression that sent nothing at all would pass this as written without it.
 jassert "no initialize handshake precedes the call" \
   'all.length === 3 && all.every((x) => x.body?.method === "tools/call")'
-jassert "the request declares JSON, and accepts the event-stream framing it never receives" \
-  'r.headers["content-type"] === "application/json" && String(r.headers.accept).includes("application/json")'
+# The client reads a JSON-RPC body under either wire encoding, but what it ASKS for is JSON: it
+# advertised `text/event-stream` while its parser could not read one, which is the advertisement
+# this drops. Asserted as an absence, because "includes application/json" is true of the old header
+# too and would have gone on passing.
+jassert "the request declares JSON and asks for JSON, advertising no encoding it does not want" \
+  'r.headers["content-type"] === "application/json" && String(r.headers.accept).includes("application/json")
+   && !String(r.headers.accept).includes("event-stream")'
 jassert "the video travels as a base64 data URL" \
   'typeof args.data === "string" && args.data.startsWith("data:video/webm;base64,") && args.data.length > 1000'
 jassert "chapters are in manifest order, each labelled with its scenario" \
@@ -324,6 +329,46 @@ merged=$(sed -n 's/^PWPROVE_URL //p' "$W/merged" | head -n1)
 [ "$merged" = "$ORIGIN/share/rec_stub_1" ] \
   && ok "the share URL is still recoverable from merged stdout+stderr" \
   || bad "merged streams lost the URL: '$merged'"
+
+echo ""
+echo "-- the SAME happy path over an SSE-encoded response --"
+# The deployment answers some responses as plain JSON and others as a Server-Sent Events frame
+# carrying the identical JSON-RPC body, on the same endpoint and bearer within one session. Reading
+# only the first cost a run that had ALREADY published its film both its share link and every one of
+# its per-AC comments: the parse threw, the response classified `unexpected`, and the publish
+# switch's default branch reported a successful publish as undelivered. Both consequences are
+# asserted here, not just the link — the comments are the half that went unrecorded for three
+# versions.
+start_stub ok sse
+rm -f "$PROOF"
+publish m.json
+rc=$?
+[ "$rc" = 0 ] && ok "SSE — exit 0" || { bad "SSE — exit $rc, wanted 0"; sed 's/^/         /' "$W/err" | tail -5; }
+
+SHARE="$ORIGIN/share/rec_stub_1"
+sse_marker=$(sed -n 's/^PWPROVE_URL //p' "$W/out" | head -n1)
+[ "$sse_marker" = "$SHARE" ] && ok "SSE — the share URL is on the PWPROVE_URL marker line" \
+  || bad "SSE — marker line: '$sse_marker' != '$SHARE'"
+grep -qF "publish-proof: 2 chapter(s) published -> $SHARE" "$W/err" \
+  && ok "SSE — the operator is told the chapter count and where the recording is" \
+  || { bad "SSE — no chapter count and share URL was reported"; sed 's/^/         /' "$W/err" | tail -3; }
+# The defect's own signature, asserted as an absence: the run reported `publish failed` and told the
+# operator to attach a 55MB webm by hand over a film that was already published and correct.
+grep -q 'publish-proof: publish failed' "$W/err" \
+  && bad "SSE — a successful publish is still reported as undelivered" \
+  || ok "SSE — the publish is not reported as undelivered"
+
+sse_reqs=$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')
+[ "$sse_reqs" = 3 ] && ok "SSE — one import call plus one comment per chapter (3 calls for 2 chapters)" \
+  || bad "SSE — expected 3 requests (1 import + 2 comments), got $sse_reqs"
+jassert "SSE — the import call is first, and every later call is an add-comment for this recording" \
+  'all.length === 3
+   && all[0].body.params.name === "import-recording-from-url"
+   && all.slice(1).every((x) => x.body.params.name === "add-comment"
+        && x.body.params.arguments.recordingId === "rec_stub_1")'
+grep -q 'publish-proof: 2 timestamped comment(s) attached' "$W/err" \
+  && ok "SSE — both comments are reported as attached" \
+  || { bad "SSE — the comment outcome was not reported"; sed 's/^/         /' "$W/err" | tail -3; }
 
 echo ""
 echo "-- configuration and manifest refusals --"
@@ -596,6 +641,18 @@ alive_case "an HTTP 200 rejecting the arguments"
 grep -q 'rejected the publish' "$W/err" \
   && ok "an HTTP 200 carrying an error is a failed publish, not a success" \
   || { bad "an HTTP 200 error was not reported as a failure"; sed 's/^/         /' "$W/err" | tail -3; }
+
+# The fallthrough must survive the unwrap: an SSE frame whose data payload is not JSON has nothing
+# in it to classify, so it stays 'unexpected' and the run keeps its exit 0 and its kept file. The
+# `garbled` mode is a 200 whose body is not JSON-RPC at all, which is unparseable under EITHER
+# encoding — so the guard holds the axis down on both sides rather than only on the new one.
+start_stub garbled
+alive_case "a 200 whose body is not JSON-RPC"
+start_stub garbled sse
+alive_case "an SSE frame whose data payload is not JSON"
+grep -q 'rejected the publish' "$W/err" \
+  && ok "an unparseable SSE payload reports as a failed publish, never as a silent success" \
+  || { bad "the unparseable SSE payload was not reported"; sed 's/^/         /' "$W/err" | tail -3; }
 
 # A refused connection, not a slow one: port 1 on loopback answers with ECONNREFUSED immediately.
 start_stub ok
