@@ -102,6 +102,13 @@
 //   minute after would go unseen and the refusal would outlive the edit that answered it — which is
 //   no better than having no refusal at all.
 //
+//   EXIT 13 MEANS ONE THING: no current audit clears this spec set's network. It answers with a
+//   `reason` — `undeclared` or `stale` — because the next move differs, but the claim behind both is
+//   the single one the code names, which is what the one-table rule asks of it. Collapsing the two
+//   would be the error in the other direction: `stale` does not assert that a call is undeclared,
+//   and reporting it as if it did would send an agent to declare something it may already have
+//   mocked.
+//
 //   A RECORD SAYS NOTHING ABOUT SPECS IT DID NOT SEE, AND SAYS SO. Mocking a call — the body's other
 //   fix — is invisible in the spec's carve-out lines, so a record whose specs have moved cannot be
 //   read as either clearance or indictment. `film` refuses that case under the same code and names it
@@ -550,25 +557,31 @@ if (verb === 'audit') fs.rmSync(path.join(STATE_DIR, 'audit-network.json'), { fo
 const statePath = path.join(STATE_DIR, 'audit-state.json');
 const networkPath = path.join(STATE_DIR, 'audit-network.json');
 const filmStatePath = path.join(STATE_DIR, 'film-state.json');
-function readState() {
+
+// Three FILES because they answer to three lifetimes — but one on-disk SHAPE, so they are read and
+// written through one codec. Every record is schema-stamped and names the verb that wrote it, and a
+// record whose schema is not the one being asked for reads as absent: that is what makes adding a
+// field a version bump rather than a migration.
+const readRecord = (file, schema) => {
   try {
-    const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-    if (parsed?.schema !== STATE_SCHEMA) return { attempts: 0, signature: null, stalled: false };
-    return {
-      attempts: Number(parsed.attempts) || 0,
-      signature: parsed.signature ?? null,
-      stalled: parsed.stalled === true,
-    };
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return parsed?.schema === schema ? parsed : null;
   } catch {
-    return { attempts: 0, signature: null, stalled: false };
+    return null;
   }
+};
+const writeRecord = (file, schema, body) =>
+  fs.writeFileSync(file, `${JSON.stringify({ schema, verb, ...body }, null, 2)}\n`);
+
+function readState() {
+  const record = readRecord(statePath, STATE_SCHEMA);
+  return {
+    attempts: Number(record?.attempts) || 0,
+    signature: record?.signature ?? null,
+    stalled: record?.stalled === true,
+  };
 }
-function writeState(state) {
-  fs.writeFileSync(
-    statePath,
-    `${JSON.stringify({ schema: STATE_SCHEMA, verb, ...state }, null, 2)}\n`,
-  );
-}
+const writeState = (state) => writeRecord(statePath, STATE_SCHEMA, state);
 
 // The spec set's text, as one hash. It is what tells `film` whether the audit's live list still
 // describes the specs in front of it — see `networkCheck` for what that answer is used for. The
@@ -592,40 +605,16 @@ function specDigest(specPaths) {
 // lines are a fact about the SPEC TEXT, which `film` can simply re-read. Persisting the derived list
 // instead would freeze the spec half at audit time, and the refusal would then outlive the very edit
 // that answered it — which is no better than having no refusal at all.
-function writeNetwork(specPaths, live) {
-  fs.writeFileSync(
-    networkPath,
-    `${JSON.stringify(
-      { schema: NETWORK_SCHEMA, verb: 'audit', specs: specPaths, spec_digest: specDigest(specPaths), live },
-      null,
-      2,
-    )}\n`,
-  );
-}
+const writeNetwork = (specPaths, live) =>
+  writeRecord(networkPath, NETWORK_SCHEMA, { specs: specPaths, spec_digest: specDigest(specPaths), live });
 function readNetwork() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(networkPath, 'utf8'));
-    if (parsed?.schema !== NETWORK_SCHEMA) return null;
-    return {
-      live: Array.isArray(parsed.live) ? parsed.live : [],
-      spec_digest: parsed.spec_digest ?? null,
-    };
-  } catch {
-    return null;
-  }
+  const record = readRecord(networkPath, NETWORK_SCHEMA);
+  if (!record) return null;
+  return { live: Array.isArray(record.live) ? record.live : [], spec_digest: record.spec_digest ?? null };
 }
 
-function readFilms() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filmStatePath, 'utf8'));
-    return parsed?.schema === FILM_SCHEMA ? Number(parsed.films) || 0 : 0;
-  } catch {
-    return 0;
-  }
-}
-function writeFilms(films) {
-  fs.writeFileSync(filmStatePath, `${JSON.stringify({ schema: FILM_SCHEMA, verb: 'film', films }, null, 2)}\n`);
-}
+const readFilms = () => Number(readRecord(filmStatePath, FILM_SCHEMA)?.films) || 0;
+const writeFilms = (films) => writeRecord(filmStatePath, FILM_SCHEMA, { films });
 
 // ---- the summary ----------------------------------------------------------------------------
 // ONE JSON line on stdout, so the agent reads a machine-readable account instead of re-deriving one
@@ -842,7 +831,6 @@ function declaredBy(carveOuts, call) {
   });
 }
 
-
 /**
  * Whether the audit's network finding still refuses this filming run.
  *
@@ -863,7 +851,9 @@ function networkCheck(specPaths) {
   if (!record) {
     return { status: PHASE.NOT_REACHED, live: [], undeclared: [], specs_moved: false, reason: null };
   }
-  const undeclared = record.live.filter((call) => !declaredBy(carveOutsIn(specPaths), call));
+  // Read once rather than once per call: the carve-out set is the same for every live call here.
+  const carveOuts = carveOutsIn(specPaths);
+  const undeclared = record.live.filter((call) => !declaredBy(carveOuts, call));
   const specsMoved = specDigest(specPaths) !== record.spec_digest;
   if (undeclared.length === 0) {
     return { status: PHASE.OK, live: record.live, undeclared, specs_moved: specsMoved, reason: null };

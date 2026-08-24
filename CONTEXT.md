@@ -172,7 +172,11 @@ directory, runs it with no worker override, and bounds the heal loop through the
 preconditions, each refusing under its own exit code before a browser run is spent: a type check
 against the e2e tsconfig when the project has one and the root one otherwise, and the HAR bind that
 points the canonical recording at this run's origin — delegated to `har-scrub.mjs bind`, reaching
-the run through `PW_PROVE_HAR`, and stopping outright when the bind cannot be made safe.
+the run through `PW_PROVE_HAR`, and stopping outright when the bind cannot be made safe. Since #146
+it also hands its classification forward: the live calls the run made are persisted under the run's
+dot-directory for the [filming run](#filming-run) to be refused by, dropped at the top of every
+invocation and rewritten only by the classification phase — so an audit that never asked the
+question leaves no clean bill of health behind.
 
 ## Filming run
 The second of Step 7's two runs of the same spec set, and the one whose webms are delivered: it
@@ -185,6 +189,16 @@ cheap run protects the expensive one. Since #145 it is an interface rather than 
 the results directory, films the set, extracts one frame per clip for the
 [clip inspection](#clip-inspection), and carries the clip paths and their measured durations in its
 summary so the publish step reads a manifest source rather than globbing for one.
+
+Since #146 it carries two more things it will not let an agent forget. It is **refused while an
+undeclared live call from the audit stands** (exit 13): the [audit run](#audit-run) persists the live
+calls it saw under the run's dot-directory, and this verb recomputes the undeclared list against the
+spec text in front of it — so declaring the carve-out clears the refusal with no second audit, while
+a spec set that has moved under the record is named `stale` rather than read as clearance. And it
+**counts itself**: the body allows exactly one re-film, so the second filming run sets
+`publish_with_warning` in its summary for Step 8 and the completion report to carry, instead of the
+agent recalling across a diagnosis and a re-run which attempt this was. Only a run that produced
+clips spends the re-film; a green audit opens a fresh cycle.
 
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
