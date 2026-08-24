@@ -46,7 +46,13 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    const isContinuation = /^\s/.test(raw) && !isItem;
+    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -74,7 +80,11 @@ const checks = [
   [/converg/i, "the answer never reads the run as converging"],
   [/third attempt|attempt 3/i, "the answer never commits to spending the third attempt"],
   [/expected|3 results|12 results/i, "the answer never fixes the assertion's expected value, which is the actual defect"],
+  // Re-derived by #150: the rerun has to go through the SAME verb. A raw runner call is invisible to
+  // the attempt bound and the signature comparison, so an attempt made that way is an attempt nothing
+  // is bounding — which is the whole reason the third attempt can be spent safely at all.
   [/-g\b|--grep/, "the answer never reruns only the failing test with -g"],
+  [/proof-run\.mjs["']?\s+audit|\baudit verb\b|\bsame verb\b/i, "the rerun never goes back through the audit verb, so the attempt bound would never see it"],
   [/full spec|whole spec|entire spec|all (?:five|5) /i, "the full spec is never run once after the last fix as the gate"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));

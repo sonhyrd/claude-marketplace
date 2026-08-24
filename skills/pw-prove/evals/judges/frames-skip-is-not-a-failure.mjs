@@ -1,11 +1,24 @@
 #!/usr/bin/env node
-// Judge (case-38): clip-fidelity frames exiting 6 is a SKIP — the run carries on and the report says the clips are uninspected.
+// Judge (case-38): an uninspected clip is the honest verdict — the run carries on and the report says so.
 //
 // SKILL.md Step 7. The frame extract is an inspection, not a gate, and a missing tool is not a
-// failed test. The run continues to the hermetic audit and the mutation check. The report must say
-// 'uninspected — no video tooling' and must never describe frames that were never opened. Delivery is
-// unaffected: publishing has its own tooling check and its own skip. Nothing is installed into the
-// user's project.
+// failed test. The report must say 'uninspected — no video tooling' and must never describe frames
+// that were never opened. Delivery is unaffected: publishing has its own tooling check and its own
+// skip. Nothing is installed into the user's project.
+//
+// Re-derived by #150 against the prompt the Step-7 rewrite left behind. Before that rewrite the
+// agent ran `clip-fidelity.mjs frames` by hand and read its exit 6; the film verb now extracts the
+// frames as a closing phase, exits 0 anyway, and reports `"inspected": false` per clip. Three
+// assertions were re-derived:
+//   - `exit 6` became unreachable. A correct answer against the new body never sees that code, so
+//     demanding it failed every correct answer. It is replaced by the summary field the answer
+//     actually meets, `inspected: false`.
+//   - `skip` as a bare word went with it. The verb does not report a skip; it reports an
+//     uninspected clip and a passing run, so the assertion is now that the run is not failed.
+//   - `hermetic` became WRONG rather than merely unreachable. The hermetic classification happens
+//     in the AUDIT run, before anything is filmed, so an answer that carries on to it from here has
+//     the order backwards. The forward step from a filming run is the mutation check.
+// The uninspected/no-fabrication half — the case's centre — is unchanged.
 //
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
@@ -45,7 +58,13 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    const isContinuation = /^\s/.test(raw) && !isItem;
+    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -59,6 +78,7 @@ function offenders(t, phrases) {
 const bad = offenders(text, [
   /\b(?:install|npm i|apt-get install|brew install)\b[^\n]{0,30}(?:ffmpeg|ffprobe)/i,
   /\bretry\b[^\n]{0,30}(?:extract|frames)|re-?run[^\n]{0,20}(?:the )?(?:extract|frames)/i,
+  /re-?film[^\n]{0,40}(?:frames?|extract|tooling)/i,
   /\bI (?:\w+ )?(?:fail|stop|abort|block)\b[^\n]{0,20}(?:the )?run\b/i,
 ]);
 if (bad.length) {
@@ -68,10 +88,9 @@ if (bad.length) {
 }
 
 const checks = [
-  [/exit(?:s|ed)?\s*6|\bexit code 6\b/i, "the answer never reads the exit code that says this is a skip"],
-  [/\bskip\w*/i, "the answer never calls exit 6 a skip"],
+  [/"?inspected"?\s*[:=]\s*false|\binspected: ?false\b/i, "the answer never reads the summary field that says the frames were never opened"],
+  [/\bexit(?:s|ed)?\s*0\b|\bpass\w*|\bgreen\b|\bdoes ?n\S* fail|\bnot a fail\w*|\bnever fails?\b/i, "the answer never says the run still passes"],
   [/uninspected/i, "the report never says the clips are `uninspected` — a silent omission reads as a good clip"],
-  [/hermetic/i, "the run never carries on to the hermetic audit"],
   [/mutation/i, "the run never carries on to the mutation check"],
   [/publish|deliver/i, "the answer never says delivery is unaffected"],
 ];
@@ -81,4 +100,4 @@ if (missing.length) {
   process.exit(1);
 }
 
-console.log("PASS: exit 6 is a skip, the run continues, and the report says the clips are uninspected rather than good");
+console.log("PASS: the run still passes, it carries on to the mutation check, and the report says the clips are uninspected rather than good");

@@ -235,8 +235,8 @@ instrument certified as skill-free.
 | `b05-handoff-stale` | behavior | Step 4 › *Assumptions* › the Handoff line (and the Step-2 handoff verdict it reports) | **3/3** | **+1** (clean) | **active** |
 | `case-15-no-throwaway-recon-spec` | behavior | Step 3 › *Recon — the probe is the question channel, the test run is the validator* (ADR 0004) | **3/3** | **+1** (re-taken under #78; baseline SKILL-FREE and failed — the inference it was admitted on is now a measurement) | **active** |
 | `case-50-announced-port-adopted` | behavior | Step 3 › *Bring the environment up* — the announced origin, `BASE_URL`/`PORT_SOURCE` | **3/3** → **3/3** after #66 (see below) | **+1** (clean) | **active** |
-| `case-60-no-workers-in-command` | behavior | Step 7 › *Verify* — the filming run's command | **3/3** → **3/3** after #67 (see below) | **+1** (clean) | **active** |
-| `case-28-hermetic-audit-not-hand-parsed` | behavior | Step 7 › *Hermetic audit (on the audit run, before anything is filmed)* | **3/3** (re-characterized under #75 — the earlier 3/3 held a CONTAMINATED iteration) | **+1** (re-measured under #75; baseline SKILL-FREE) | **active** |
+| `case-60-no-workers-in-command` | behavior | Step 7 › *Verify* — the filming run's command | **3/3** → **3/3** after #67, **stale since #149** (see *#150* below) | **+1** (clean), stale | **active** — repaired #150, **re-measurement owed** |
+| `case-28-hermetic-audit-not-hand-parsed` | behavior | Step 7 › *Hermetic audit* — the classification is READ from the audit summary | **3/3** under #75, **stale since #144** (see *#150* below) | **+1** (#75; baseline SKILL-FREE), stale | **active** — repaired #150, **re-measurement owed** |
 | `case-48-dev-guarded-rung-skipped` | behavior | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* | **3/3** | **+1** (re-measured under #75, third attempt; baseline SKILL-FREE) | **active** |
 | `w01-bringup-own-port` | behavior (**wet**) | Step 3 › *Bring the environment up* — bullet 1, the packaged serve script that hard-codes a port | **3/3** | **+1** (clean; the discriminating half is the gate, see #69 below) | **active** |
 | `b32-dwell-inline` | behavior | Step 6 › *Clip-fidelity audit* — the dwell is inline per `test()` | **0/3** → **3/3** (re-characterized under #71, once its judge stopped reading a tool preamble as turn 1) | **+1** (clean, and measured at **n=3 per arm** rather than n=1: 3/3 with the skill against **0/3** skill-free, all three baseline arms certified SKILL-FREE by the sweep) | **active** |
@@ -246,7 +246,7 @@ instrument certified as skill-free.
 | `case-81-untested-routes` | trigger (**collision arm**) | frontmatter `description:` — pw-prove's coverage clause **against e2e-reviewer's**, an untested-routes request | **3/3** before the wording repair, **3/3** after (#81) | **+1** by construction, and the discriminating before/after is **flat** — see *the collision was in the text, not in the behaviour* | **active** in `eval.collision.yaml` |
 | `case-81-spec-quality` | trigger (**collision arm**) | frontmatter `description:` — e2e-reviewer's, and the pw-prove clause that must NOT swallow it | **3/3** before, **3/3** after (#81) | as above | **active** in `eval.collision.yaml` |
 | `case-81-ambiguous-coverage` | trigger (**collision arm**) | frontmatter `description:` — the bare phrase *"coverage gaps"*, which both skills claimed | **3/3** before, **3/3** after (#81) | as above | **active** in `eval.collision.yaml` |
-| `case-43-har-bound-not-rerecorded` | behavior | Step 7 › *Verify* — item 1b, the HAR is bound to this run (Step 5 › HAR-first mocking) | **0/3** → **3/3** (re-characterized under #72, once the premise it asserted was actually on disk and three judge defects were repaired) | **+1** (**n=3 per arm**: 3/3 with the skill against **0/3** skill-free, and again on a second independent run — six baseline arms, all six certified SKILL-FREE) | **active** |
+| `case-43-har-bound-not-rerecorded` | behavior | Step 7 › *Verify* — item 1, the HAR bind is a **phase of the audit verb** | **0/3** → **3/3** (#72), **stale since #143** (see *#150* below) | **+1** (#72, n=3 per arm), stale | **active** — repaired #150, **re-measurement owed** |
 
 
 | `w02-auth-cookie-from-app` | behavior (**wet**) | Step 3 › *Auth — drive the app's OWN entry (never a blind localStorage seed)* — the ladder as written code | **3/3**, and 2/2 more with-skill arms over the final fixture | **unstable** — 1 of 2 skill-free baseline arms passed, so there is no `+1` to admit on and no clean `0` to retire on | quarantined — see #69 below |
@@ -278,7 +278,7 @@ seal landed. The pass rates are batch 2's own and are unaffected.
 | `case-17` | behavior | Step 6 › *PROVES-header audit* | 3/3 | **0** (re-measured under #78, third attempt; baseline SKILL-FREE and **passed**) | **retired — deleted** |
 | `case-23-viewport-descriptor-pinned` | behavior | Step 4 › *Effective viewport* — a desktop descriptor is scaffold boilerplate | **2/3** (re-characterized on a real fixture, #76 — the 3/3 it used to carry was on a fixture it never read) | baseline **0/3**, both arms certified skill-free | quarantined |
 | `case-4-auth-ladder-exhausted-stops` | behavior | Step 3 › *Auth* — the token-source ladder exhausted, and the public-route false positive | **2/3** | not measured | quarantined |
-| `case-24-proof-config-reused` | behavior | Step 7 › *Proof run* — a committed proof config is reused, not rewritten (ADR 0008) | **2/3** | not measured | quarantined |
+| `case-24-proof-config-reused` | behavior | Step 7 › *Proof run* — a committed proof config is reused, not rewritten (ADR 0008) | **2/3**, stale — repaired #150 (three assertions had become unreachable) | not measured | quarantined |
 | `case-29-unit-proven-acs-folded` | behavior | Step 2 › *6. Fold ACs the diff already proves cheaper* | **3/3** (re-characterized under #77, on a judge that reads the Proven-by column; the 0/3 was the judge reading scenario titles) | **+1** (baseline SKILL-FREE and failed) | **active** |
 | `case-9` | behavior | Step 7 › *Hermetic audit* | — | — | **retired — deleted** |
 | `case-13` | behavior | Step 3 › *Auth* — the server-set cookie rung | — | — | **retired — deleted** |
@@ -322,22 +322,22 @@ must-FAIL fixture pair before it could run at all.
 | `case-35-clip-audit-blocks-step7` | behavior | Step 6 › *Clip-fidelity audit* — `spec` exit 2 blocks Step 7 | **3/3** | **+1** (clean) | **active** |
 | `case-36-clip-audit-respects-deliberate` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, agreed by the Step-6 audit | **3/3** | **+1** (clean) | **active** |
 | `case-22-viewport-deliberate-respected` | behavior | Step 4 › *Effective viewport* — the `deliberate:` branch, resolved from a config **read off disk** | **3/3** (#76, and *after* the judge lost two out-of-branch assertions — 1/3 before, on reds that resolved the viewport correctly) | **+1** — baseline 0/2 on the arms the sweep certified skill-free (a third arm read the body by `bash` and passed; counted, it is still 3/3 vs 1/3) | **active** |
-| `case-37-illegible-clip-refilmed-once` | behavior | Step 7 › the clip inspection — diagnose, fix ungated, re-audit, re-film once | **3/3** | **+1** (clean) | **active** |
-| `case-38-frames-skip-is-not-a-failure` | behavior | Step 7 › the frame extract — exit 6 is a SKIP, not a failed test | **3/3** (after judge repair) | **+1** (first baseline CONTAMINATED; re-measured SKILL-FREE and still failed) | **active** |
+| `case-37-illegible-clip-refilmed-once` | behavior | Step 7 › the clip inspection — diagnose, fix ungated, re-film once **through the verb** | **3/3**, **stale since #145** (see *#150* below) | **+1** (clean), stale | **active** — repaired #150, **re-measurement owed** |
+| `case-38-frames-skip-is-not-a-failure` | behavior | Step 7 › the clip inspection — an **uninspected** clip is the honest verdict, not a failure | **3/3**, **stale since #145** (see *#150* below) | **+1** (re-measured SKILL-FREE), stale | **active** — repaired #150, **re-measurement owed** |
 | `case-45-proof-config-drops-webserver` | behavior | Step 7 › *Proof run* — the committed proof config must not inherit `webServer` (ADR 0008) | **3/3** | **+1** (clean) | **active** |
 | `case-64-proof-config-keeps-target-building-webserver` | behavior | Step 7 › *Proof run* — the inherited `webServer` is **kept** when the proof target answers at its url (ADR 0016, scoped by #116) | not measured | not measured | quarantined — **never run**, see below |
-| `case-46-same-signature-takes-handover` | behavior | Step 7 › *Failure handling* — the no-progress checkpoint takes the handover stop | **3/3** (after judge repair) | **+1** (clean) | **active** |
+| `case-46-same-signature-takes-handover` | behavior | Step 7 › *Failure handling* — **exit 7** is the loop ending, and the handover stop is taken | **3/3**, premise re-routed through the verb by #150 | **+1** (clean), stale | **active** — repaired #150, **re-measurement owed** |
 | `case-51` | behavior | Step 3 › *Bring the environment up* — `SERVE_CAUSE=no-announcement` is a server fault | **3/3** | **0** (re-measured on a certified SKILL-FREE baseline, which **passed**) | **retired — deleted** |
-| `case-52-build-reuse-mutation-rebuilds` | behavior | Step 3 › build reuse **and** Step 7 › *Mutation check* — artifact isolation | **3/3** (after judge repair) | **+1** (clean) | **active** |
+| `case-52-build-reuse-mutation-rebuilds` | behavior | Step 3 › build reuse **and** Step 7 › *Mutation check* — artifact isolation | **3/3**, **stale since #147/#148** (see *#150* below) | **+1** (clean), stale | **active** — repaired #150, **re-measurement owed** |
 | `case-57-eval-expression-evaluated` | behavior | Step 4 › *Recon* — a string `expression` is evaluated, not called | **3/3** | **+1** (clean) | **active** |
-| `case-47-changed-signature-spends-budget` | behavior | Step 7 › *Failure handling* — a moved signature is a converging run | **3/3** (after judge repair) | not measured — **both arms failed**, so there is no difference to read | quarantined |
+| `case-47-changed-signature-spends-budget` | behavior | Step 7 › *Failure handling* — a moved signature is a converging run | **3/3**, stale — repaired #150 (the rerun goes through the verb now) | not measured — **both arms failed**, so there is no difference to read | quarantined |
 | `case-54-overscrub-is-rerecorded` | behavior | Step 8 › *Hygiene sweep* — `har-scrub` exit 6 is over-scrub, not residue | **3/3** | not measured — both arms failed | quarantined |
-| `case-55-unproven-restart-no-verdict` | behavior | Step 7 › *Mutation check* — `RESTART=unproven` has no verdict to read | **3/3** | not measured — both arms failed | quarantined |
+| `case-55-unproven-restart-no-verdict` | behavior | Step 7 › *Mutation check* — **exit 11** has no verdict to read | **3/3**, stale — repaired #150 (`RESTART=unproven` is now inside the verb) | not measured — both arms failed | quarantined |
 | `case-58-eval-arg-carries-data` | behavior | Step 4 › *Recon* — the eval `arg` carries JSON data, not a page handle | **3/3** (after judge repair) | not measured — both arms failed | quarantined |
-| `case-59-serialise-once-to-diagnose` | behavior | Step 7 › *Verify* — serialise once as a diagnostic (ADR 0017) | **3/3** | not measured — both arms failed | quarantined |
+| `case-59-serialise-once-to-diagnose` | behavior | Step 7 › *Verify* — serialise once as a diagnostic (ADR 0017) | **3/3**, re-read under #150 and **unaffected** — the rewrite kept this raw invocation verbatim and named it as the one that is not a fallback | not measured — both arms failed | quarantined |
 | `case-41-har-residue-refusal` | behavior | Step 8 › *Hygiene sweep* — the residue refusal, not an eyeball confirmation | **1/3** | not measured | quarantined |
 | `case-42-capture-time-scrub-trusted` | behavior | Step 3 › the capture-time scrub is trusted, not repeated | **1/3** | not measured | quarantined |
-| `case-56-proven-restart-is-the-red` | behavior | Step 7 › *Mutation check* — a proven restart is proven | **1/3** | not measured | quarantined |
+| `case-56-proven-restart-is-the-red` | behavior | Step 7 › *Mutation check* — a proven restart is proven | **1/3** | not measured | **retired — deleted (#150)**: the restart proof moved entirely inside the mutate verb, so there is nothing left for the agent to re-litigate and no regression that can take it red |
 | `case-53-probe-vocabulary-one-batch` | behavior | Step 3 › *Recon* — the probe's verb surface | **3/3** (#82, after the **judge** was repaired — 2/3 at #79, 0/3 before that; 3/3 again on an independent n=3 in #82) | **+3** — baseline 0/3, all three arms certified SKILL-FREE (#79 run) | **active** — admitted **#82** |
 | `case-61-serial-in-the-spec` | behavior | Step 5 › *Generate* — serialisation belongs in the spec, not the command line | **2/3** (#82, after the vestigial judge clause was removed — 0/3 at #80; 3/3 on the #79-run responses replayed through the same final judge) | **+2** — baseline 0/3, all three arms certified SKILL-FREE | quarantined — **#82**, short of 3/3 on the fresh run |
 
@@ -386,7 +386,12 @@ The near-misses are worth naming, because each looks retirable on its section co
   `case-24` is 2/3.
 - **`case-55` and `case-56` are a matched pair**, as are `case-46` and `case-47`: each is the
   false-positive twin of the other's rule. The registry values that shape — it is why `case-4` was
-  kept over `case-13` in batch 2 — so neither was retired as the other's duplicate.
+  kept over `case-13` in batch 2 — so neither was retired as the other's duplicate. **#150 broke that
+  pair**, and the reason is worth stating because it does not generalise: `case-56` was not retired as
+  a duplicate but because its whole surface moved inside `proof-run.mjs mutate`. `case-55` survived
+  the same move — exit 11 is still a row the agent has to read and act on — so the pair was split by
+  where the body ended up, not by a judgement about redundancy. A matched pair is still worth keeping
+  where both halves have a surface.
 - **`case-53`, `case-57` and `case-58` all sit on the probe's eval surface** and are not duplicates:
   `case-57` is the wrong *form* (a string expression is evaluated, never called), `case-58` is the
   right form with the wrong *argument*, and `case-53` is the verb surface. Only `case-57` was
@@ -1440,7 +1445,7 @@ and move the row into the batch table above with its numbers when you do.
 | Case | Shape | Guards (SKILL.md section) | Pass rate | Uplift | Status |
 |---|---|---|:--:|:--:|---|
 | `b06-profile-contradicted-written-back` | behavior | Step 1 › *Runtime profile* › **the write-back** — a contradicted entry is rewritten in `.pw-prove/profile.md`, not merely reported | not run | not measured | quarantined — uncharacterized (authored with the write loop) |
-| `case-62-mutation-revert-marks-stale` | behavior | Step 7 › *Mutation check* — step 4, the revert marks the artifact **stale** and the rebuild is lazy (ADR 0020) | not run | not measured | quarantined — uncharacterized (authored with #98's lazy rebuild) |
+| `case-62-mutation-revert-marks-stale` | behavior | Step 7 › *Mutation check* — the revert marks the artifact **stale** and the rebuild is lazy (ADR 0020) | not run; premise re-routed to the verb by #150, which also gave it the exit-15 refusal | not measured | quarantined — uncharacterized (authored with #98's lazy rebuild) |
 
 Why this rule and not another part of the write loop: the `CONTRADICTED` Assumptions line predates
 the write half, so the report-only answer is the one that looks complete. That is where the loop
@@ -1604,3 +1609,112 @@ because the forbidden thing here is a token an answer writes inline and a senten
 must not boot its own server, so I add `webServer: undefined`"* carries a negation that has nothing
 to do with it. That is the bare-substring defect in its keep-side form, and both fixtures are what
 catch it.
+
+## #150 — the Step-7 cases, re-characterized against the prose that replaced Step 7
+
+#142–#149 replaced Step 7's mechanics with `proof-run.mjs`'s three verbs and rewrote the prose those
+cases were written against. This is the re-characterization, and it is a **static** one: the premises
+were repaired, the judges re-read against the repaired prompts, the digests re-stamped after that
+reading, and the rows above marked accordingly. **No measurement was bought.** Every affected row
+therefore reads *re-measurement owed* rather than carrying forward a pass rate taken against prose
+that no longer exists — a stale number presented as current is worse than an owed one.
+
+### Fifteen cases, and the registry's `step:` field is what found them
+
+`step:` is a checked field on every case file, so the Step-7 set is a lookup rather than a judgement:
+`case-24`, `case-28`, `case-37`, `case-38`, `case-43`, `case-45`, `case-46`, `case-47`, `case-52`,
+`case-55`, `case-56`, `case-59`, `case-60`, `case-62`, `case-64`. That is what the `step:` key was
+added for, and it is the first ticket to spend it.
+
+### Six ACTIVE cases were INVERTED, and that is the finding
+
+Not stale, not loosened — **inverted**. Each judge REQUIRED an artifact the rewritten body now
+forbids, so a correct answer against the current Step 7 fails it, and the case would have gone red on
+the skill being right:
+
+| Case | What the judge demanded | What Step 7 now says |
+|---|---|---|
+| `case-60` | a raw `npx playwright test --config … --project=chromium` filming command, with `PW_PROVE_CLIP`/`PW_PROVE_W`/`PW_PROVE_H` on it | the filming run is `proof-run.mjs film`; there is **no raw-runner fallback anywhere in Step 7**, and the verb sets the clip environment from `--verdict` |
+| `case-28` | a shell block running `hermetic.mjs --spec` | "you do not invoke a classifier" — the audit verb already classified the run; read `phases.hermetic` |
+| `case-43` | a shell block running `har-scrub.mjs bind` | the bind is a **phase of the audit verb**, reached with `--har`, and there is no documented raw fallback for it |
+| `case-52` | `BUILD_REUSE=never` and `--output=/tmp/pw-prove-mutation` on the command line | both are fixed **by construction** in the mutate verb and appear on no command line |
+| `case-37` | a hand-run `clip-fidelity.mjs frames`, then `rm -rf test-results`, then a re-film | the film verb extracts the frames, clears the directory and re-runs the fidelity audit as its precondition |
+| `case-38` | `exit 6` from that same hand-run extract | the film verb exits **0** with `"inspected": false` per clip |
+
+Two of those six also carried an assertion that had gone *wrong* rather than merely unreachable, and
+both are the kind a repair can leave standing — the #80 failure mode. `case-38` told the run to carry
+on to the hermetic audit, which now happens in the **audit** run *before* anything is filmed, so the
+order was backwards; `case-52` described the mutation run's isolation as a flag the agent passes,
+which is now a usage error against the module. Neither would have shown up as an unreachable
+assertion; both had to be read.
+
+### What each repair did
+
+- **Repaired premise and judge** (the six above), each judge carrying a re-derivation note naming the
+  assertions that moved and why. Fixtures were rewritten in both halves, and every judge keeps a
+  must-PASS twin that **names the forbidden thing in order to reject it** — for the four command-shaped
+  cases that twin now also names the *retired* form, because emitting a raw runner call is the drift
+  the rewrite's removal exists to prevent.
+- **Repaired premise only**: `case-46` (the checkpoint is now the verb's **exit 7**), `case-47`
+  (reruns go back through the audit verb with `--grep`), `case-55` (**exit 11**), `case-62`
+  (**exit 0** from the verb, which has already reverted and already written the marker), `case-24`
+  (three assertions had become unreachable with the clip environment).
+- **Unaffected, re-read and left alone**: `case-45` and `case-64`, whose subject is the committed
+  proof config's `webServer` and which the rewrite did not touch; and `case-59`, whose serialised
+  `-j 1` diagnostic the rewrite kept **verbatim** and explicitly named as the one raw invocation that
+  is not a fallback. Their `derived_from_prompt` digests are unchanged, which is the record that they
+  were read and needed nothing.
+- **Retired and DELETED**: `case-56`. See below.
+
+### `case-56` is retired because its surface moved inside the verb
+
+`case-56-proven-restart-is-the-red` asserted that a fast restart is still a proven one and must not be
+re-litigated — the agent read `RESTART=proven` off the serve phase and was graded on not distrusting
+it. `proof-run.mjs mutate` now stops the server, restarts it and proves the restart **internally**;
+the agent never sees a restart proof at Step 7 at all, and the verdict it does see is exit 0 or exit
+8. There is no longer anything for the agent to re-litigate, so no regression in the body can take
+this case red. A case that cannot go red when the skill regresses is not a guard, and dormancy is
+what produced 49 unusable files — so the case file, its judge and its fixtures were deleted rather
+than left on disk. Its assertions survive in `mined-assertions.md`, which says the same thing there.
+
+Its twin `case-55` survived the same move, because exit 11 is still a row the agent has to read and
+act on. That asymmetry is the whole reason the retirement is defensible on the rule rather than on a
+count.
+
+### Two judge defects were found by re-reading, and both are the #59 family one layer deeper
+
+Both were found the way step 3 of this ticket asks — by reading the judge against the *repaired*
+prompt rather than assuming it — and both failed a must-PASS twin that was correct in every
+particular:
+
+- **A wrapped list item resets the rejection-header scope.** The shared `offenders()` helper treats
+  any non-item line as re-deciding the scope, so the second line of a wrapped bullet under "What I
+  explicitly do **not** do:" ends the list, and the *next* bullet's refusal reads as the answer's
+  plan — the #59 defect one level deeper than #66's list form. Fixed by treating an **indented**
+  non-item line as a continuation. The fix landed in **all 41 judges carrying the helper**, not only
+  the three re-derived here, and not by choice: `test-eval-judges.sh` compares the helper
+  byte-for-byte across every judge and goes red on drift, which is the check doing exactly its job.
+  So a defect found by re-reading three Step-7 judges was repaired suite-wide, and the cases outside
+  Step 7 whose verdicts that may move are named in the handoff below.
+- **A shell-only fence regex swallows the prose after a `ts` block.** Matching ```` ```(bash|sh)? ````
+  leaves the *closing* fence of a ```` ```ts ```` block reading as an opener, so everything up to the
+  next fence is judged as an emitted command. It failed `case-37`'s own must-PASS twin. Fixed in the
+  two judges affected by matching every fence **with** its language tag and filtering after.
+
+### Handoff — the helper fix reaches every case, and only Step 7's were measured
+
+The wrapped-item fix is in all 41 judges, because the drift check requires it to be. It can only ever
+turn a red into a green — it *widens* what counts as a refusal, and never narrows it — so no case can
+start failing because of it. But a case that was red on this defect and is now green is a case whose
+recorded pass rate is understated, and #150 did not buy a run to find out which.
+
+Every non-Step-7 case judged by one of those 41 judges therefore carries a small chance that its
+registry pass rate is low by the width of this defect. The candidates are the ones whose answers are
+list-shaped enough to hit it — `case-12` and `case-4` and `case-44` and `case-41` and `case-42` are
+each quarantined on a rate this could have depressed, and each is worth re-taking before it is next
+judged on that number. That is a separate ticket, and it is a measurement rather than a repair.
+
+The fence-parser fix is narrower: it is not in the shared block, so it was applied to the two judges
+that needed it (`case-37` and `case-60`) and nowhere else. Any judge that scans fenced blocks with a
+shell-only opener has the same latent bug, and the drift check does not cover that code because it is
+not shared.

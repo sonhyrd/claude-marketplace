@@ -48,7 +48,13 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    const isContinuation = /^\s/.test(raw) && !isItem;
+    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -71,6 +77,12 @@ if (bad.length) {
 }
 
 const checks = [
+  // Re-derived by #150. The repaired prompt STATES the unchanged signature, because the verb is what
+  // records it now — so `signature` and `unchanged` became cheap to restate. The assertion that is
+  // still earned is the reading of exit 7: the loop ENDING, with the remaining attempt deliberately
+  // unspent, rather than a failure to diagnose harder.
+  [/exit\s*7\b|\bexit code 7\b|checkpoint/i, "the answer never reads exit 7, which is the verb telling it the loop has ended"],
+  [/unspent|remaining attempt|third attempt|do not attempt|no (?:4th|fourth)|not (?:a )?(?:4th|fourth)|loop end\w*|ends? the loop/i, "the answer never says the loop is over and the remaining attempt goes unspent"],
   [/signature/i, "the answer never reasons about the failure signature, which is what decides this"],
   [/unchanged|identical|the same/i, "the answer never says the signature did not move"],
   [/playwright-debugger/i, "playwright-debugger is never invoked for the diagnosis"],

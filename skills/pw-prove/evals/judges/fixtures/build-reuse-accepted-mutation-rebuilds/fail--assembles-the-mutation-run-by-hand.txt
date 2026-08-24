@@ -1,0 +1,16 @@
+**At Step 3** the reuse is a legitimate pass: `BUILD=reused`, `BUILD_REUSE=hit`,
+`BUILD_REUSE_REASON=commit-and-tree-unchanged` says the artifact came from this exact commit and
+working tree, so the gate is satisfied.
+
+**At Step 7** the proof target is a build, so a mutation against the standing artifact is green by
+construction. I rebuild and restart it myself, then run the guarding test into its own directory so
+`test-results/` survives:
+
+```bash
+BUILD_REUSE=never pnpm build
+kill 41822 && pnpm preview --port 4173 &
+npx --no-install playwright test e2e/reports.spec.ts -g "renames a report" \
+  --config e2e/playwright.proof.config.ts --output=/tmp/pw-prove-mutation
+```
+
+Then I revert the file and mark the artifact stale rather than rebuilding on the spot.

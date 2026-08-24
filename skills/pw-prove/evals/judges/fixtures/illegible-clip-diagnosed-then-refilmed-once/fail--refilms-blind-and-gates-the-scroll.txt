@@ -2,7 +2,10 @@ Clip 3 looks wrong, so I re-film and see whether it comes out better this time.
 
 ```bash
 rm -rf test-results
-PW_PROVE_CLIP=1 npx playwright test --config playwright.proof.config.ts
+PW_PROVE_HAR="$PWD/.pw-prove/records.api.har" \
+  node "$SB/scripts/proof-run.mjs" film \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --project-config e2e/playwright.config.ts --verdict pinned:1600x900
 ```
 
 If it is still cut off I add the centring to the proof config behind the clip flag, so it only costs

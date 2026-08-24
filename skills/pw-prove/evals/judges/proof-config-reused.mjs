@@ -5,6 +5,17 @@
 // re-derive or refresh it", and Step 8 hygiene keeps it. The correct answer names the rewrite and the
 // deletion in order to refuse both.
 //
+// Re-derived by #150 against the prompt the Step-7 rewrite left behind. Before that rewrite the
+// agent assembled a raw runner command and set the clip environment on it; the audit and film verbs
+// now take `--config` and the film verb sets `PW_PROVE_CLIP`/`PW_PROVE_W`/`PW_PROVE_H` itself from
+// `--verdict`. Two assertions were re-derived:
+//   - `PW_PROVE_CLIP=1`, `PW_PROVE_W=1600` and `PW_PROVE_H=900` became UNREACHABLE. They no longer
+//     appear on any command line, so demanding them failed every correct answer. `--verdict` and
+//     the viewport it carries replace them.
+//   - `--config` survives, because it is still what the verbs are pointed at, and it is still the
+//     assertion that says the committed config was used rather than a fresh one.
+// The centre — reused verbatim, surviving hygiene, absent from the Generated block — is unchanged.
+//
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
 
@@ -43,7 +54,13 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    const isContinuation = /^\s/.test(raw) && !isItem;
+    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -68,9 +85,9 @@ if (bad.length) {
 const checks = [
   [/\breus\w*|\bas[- ]is\b|\bverbatim\b|\buntouched\b|\bunchanged\b/i, "the answer never says the existing proof config is reused untouched"],
   [/--config\s+e2e\/playwright\.proof\.config\.ts/, "the proof run never passes --config e2e/playwright.proof.config.ts"],
-  [/PW_PROVE_CLIP=1/, "the proof run never sets PW_PROVE_CLIP=1"],
-  [/PW_PROVE_W=1600/, "the proof run never carries PW_PROVE_W=1600"],
-  [/PW_PROVE_H=900/, "the proof run never carries PW_PROVE_H=900"],
+  [/--verdict/, "the effective viewport never reaches the film verb as --verdict, so the recording size is not the one Step 4 decided"],
+  [/1600/, "the answer never carries the effective viewport's width"],
+  [/900/, "the answer never carries the effective viewport's height"],
   [/test-results|playwright-report|litter/i, "the answer never scopes the hygiene deletion to the run litter"],
   [/Generated/, "the answer never says what the completion report Generated block does with the proof config"],
   [/Generated[\s\S]{0,400}\b(?:omit|exclude|leave out|no line|not listed|does ?n)|\b(?:omit|exclude|leave out|no line|not listed|does ?n)[\s\S]{0,200}Generated/i, "the Generated block never omits the proof-config line, which this run did not create"],

@@ -2,19 +2,19 @@ First, confirm nothing in the repo still pins concurrency — this is the check 
 leaves behind, and it names the flag because it is grepping for it:
 
 ```bash
-rg -n -- '--workers' playwright.config.ts playwright.proof.config.ts package.json
+rg -n -- '--workers|-j ' e2e/playwright.config.ts e2e/playwright.proof.config.ts package.json
 ```
 
-With that clean, the proof run is:
+With that clean, the filming run is:
 
 ```bash
-rm -rf test-results/
-PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
-  npx playwright test tests/proof/pr-2866.proof.spec.ts \
-  --config=playwright.proof.config.ts \
-  --project=chromium \
-  --reporter=html
+PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har" \
+  node "$SB/scripts/proof-run.mjs" film \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts \
+  --project-config e2e/playwright.config.ts \
+  --verdict pinned:1600x900
 ```
 
-The run command carries no concurrency flag at all; Playwright picks cores/2 on the machine it is
+The command carries no concurrency flag at all; Playwright picks cores/2 on the machine it is
 running on.

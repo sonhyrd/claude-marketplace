@@ -1,27 +1,33 @@
-**That failure is not the mutation check's RED, and I refuse to read it as one.**
+**Exit 11 is an unproven restart, and there is no verdict to read at all.** I refuse to take that
+failure as the mutation check's RED.
 
-`RESTART=unproven` says the process answering 36495 is **not** the one I just started. The
-`EADDRINUSE` line says why: the previous preview server did not die, so it still holds the port, and
-my new process failed to bind and exited. `http://localhost:36495` answers 200 because the *old*
-server is answering.
+`server.restart: "unproven"` says the process answering 36495 is **not** the one the verb just
+started. The `EADDRINUSE` line says why: the previous preview server did not die, so it still holds
+the port, and the new process failed to bind and exited. `http://localhost:36495` answers 200 because
+the *old* server is answering.
 
-So the guarding test just ran against the **previous artifact** — the one built before the mutation.
-Its failure is evidence about a stale server, not about whether the spec guards the change. The 128s
-loading splash is the same story: the old bundle against a rebuilt backend state, not a slow
-application to be waited out with a longer timeout.
+So the guarding test ran against the **previous artifact** — the one built before the mutation. The
+signature in the summary is evidence about a stale server, not about whether the spec guards the
+change. The 128s loading splash is the same story: the old bundle against a rebuilt backend state,
+not a slow application to be waited out with a longer timeout.
 
-**Fix the bring-up first:**
+**Clear the port first:**
 
 ```bash
 lsof -ti tcp:36495 | xargs -r kill
 ```
 
-Then restart the preview against the freshly built artifact and re-run the serve phase with
-`SERVE_RESTART=1` and a fresh `RESTART_LOG_OFFSET` mark, until it reports `RESTART=proven` and
-`SERVE=ok`.
+**Then invoke the mutate verb again**, with the same flags. I do not stop and restart the server
+myself and I do not re-run a serve phase with `SERVE_RESTART=1` — the verb forces the rebuild, stops
+the server by the PID I gave it, starts it again with my serve command, and proves the restart
+against the server's own announcement past a mark it takes before the stop. The verdict comes from
+that invocation or from none.
 
-**Only then** do I re-run the guarding test, and I take the mutation verdict from *that* run.
+The artifact is marked **stale** by this exit, so `audit` and `film` would refuse with exit 15 until
+the marker is cleared by the exact commands the refusal prints. A further `mutate` needs no clearing:
+it forces a rebuild by construction and its proven restart clears the standing marker before writing
+its own.
 
 What I do not do in the meantime: record a RED, write "the spec guards the change" on the strength of
-this failure, or proceed to the revert-and-rebuild step. All three would be conclusions drawn from a
-run whose server was never the one under test.
+this failure, or read the summary's signature as a verdict. All three would be conclusions drawn from
+a run whose server was never the one under test.
