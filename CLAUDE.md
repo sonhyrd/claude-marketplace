@@ -19,8 +19,13 @@ These live as skills so they load only when you're doing the task:
 - `plugins/mattpocock-skills/` is a **git subtree** of
   [mattpocock/skills](https://github.com/mattpocock/skills), not hand-maintained code, and it is
   published as the plugin **`matt`** (so skills invoke as `/matt:<skill>`). Never edit anything in
-  it beyond the two known deviations: `plugin.json`'s `"name"` is `matt`, not `mattpocock-skills`,
-  and `.codex-plugin/plugin.json` is generated. Every other byte matches upstream. Sync with `git
+  it beyond the three known deviations: `plugin.json`'s `"name"` is `matt`, not
+  `mattpocock-skills`; `plugin.json`'s `skills` array additionally declares
+  `./skills/in-progress/claude-handoff` and `./skills/in-progress/implement-spec`, which upstream
+  deliberately leaves undeclared (see `changelogs/matt.md` 1.2.5 — both carry
+  `disable-model-invocation: true`, so leaving them out of the array made them invisible on *both*
+  paths at once and therefore unusable, and this override is what makes them user-invocable); and
+  `.codex-plugin/plugin.json` is generated. Every other byte matches upstream. Sync with `git
   subtree pull --prefix=plugins/mattpocock-skills mattpocock main`, then mirror upstream's new
   version number into `.claude-plugin/marketplace.json` — **unless upstream's number did not move**,
   which happens whenever the pull crosses commits upstream is still holding as unreleased
