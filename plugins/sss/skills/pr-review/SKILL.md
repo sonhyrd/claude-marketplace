@@ -4,11 +4,11 @@ description: Carry a PR or branch from review to proof — three tracks at once 
 license: MIT
 compatibility: >
   Requires the `matt`, `sss` and `e2e` plugins from this marketplace, and four
-  CLIs on PATH: `gh` for PR mode, `ocr` for the OCR track, the `orca`
-  CLI for the session that runs the proof, and `git`. No JSON parser: this
-  skill reads the handful of keys it needs rather than depending on one. Step 1 preflights all of
-  them and stops the run naming the one command that installs whichever is
-  missing, so a run that starts is a run that can finish at full strength.
+  CLIs on PATH: `gh` for PR mode, `ocr` for the OCR track, the `orca` CLI for
+  the session that runs the proof, and `git`. No JSON parser: it reads the few
+  keys it needs directly. Step 1 preflights all of them and stops the run naming
+  the one command that installs whichever is missing, so a run that starts can
+  finish at full strength.
   `/sss:claude-settings` provisions the whole set in one pass.
 metadata:
   author: sonhyrd
