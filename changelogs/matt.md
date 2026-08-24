@@ -8,6 +8,47 @@ All notable changes to the matt plugin in this marketplace will be documented in
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.5] - Unreleased
+
+### Added
+
+- **Two in-progress skills are now declared, deliberately overriding upstream.** `claude-handoff`
+  and `implement-spec` are added to `.claude-plugin/plugin.json`'s `skills` array. This reverses the
+  standing decision recorded under 1.2.0 below ("this marketplace does not override" upstream's
+  exclusion of `skills/in-progress/`), at the user's request, because the two are wanted for daily
+  use. It is a **third** marketplace-only deviation in that manifest, alongside the `"name"` rename
+  and the local version — a hunk in the file upstream churns most, so expect it in future pulls'
+  conflicts and re-apply it there.
+- **Why declaring them was the fix, and not a settings change.** Both carry
+  `disable-model-invocation: true`, which removes a skill from the model-facing listing entirely, so
+  it is reachable only by the user typing its name. Combined with being absent from the `skills`
+  array — which shapes the published manifest an installer reads — the skill was invisible on both
+  paths at once: not installed, and not listed. On disk under the subtree the whole time, and
+  unusable. Declaring it closes the installer half; the flag correctly keeps the model half shut, so
+  both stay user-invoked, exactly as upstream marks them.
+- `implement-spec` (new upstream, see below) takes a spec plus its tickets and drives them to one
+  PR: the tickets are read as a **task graph** with blocking edges rather than a list, implementer
+  subagents run in background worktrees across the ready frontier, a merger subagent folds each back
+  into the PR branch, and the flow closes with `/code-review` before the PR is marked ready. It
+  overlaps `sss:autoship` and `sss:delegate-tickets` in intent; unlike those it is engine-agnostic
+  and carries no Orca dependency.
+- `claude-handoff` writes a handoff summary of the current conversation and launches a background
+  agent seeded with it via `claude --bg`, returning immediately.
+
+### Changed
+
+- Subtree pulled from `mattpocock/main` (`0ab1b63` → `5b15a47`, 2 commits), both of them the single
+  `implement-spec` addition and a wording pass over its steps. Upstream also gitignores `.claude`.
+  **No skill upstream already exposed changed at all** — no description, no body, no name — so
+  nothing re-routes on the 25 previously-declared entries.
+- **The version is ours again, for the same reason as 1.2.4.** Upstream still declares `1.2.3`;
+  `implement-spec` sits on `main` as an unreleased `patch` changeset. `1.2.4` was already spent on
+  the previous divergence, so this is `1.2.5`.
+- 2 conflicts, both expected and neither a surprise from the merge base: `.claude-plugin/plugin.json`
+  (resolved to keep `"name": "matt"` and the local version) and `skills/in-progress/README.md`
+  (resolved to upstream — our copy simply lacked the new bullet). The merge commit carries the
+  `git-subtree-dir` / `git-subtree-mainline` / `git-subtree-split: 5b15a47` trailers.
+
 ## [1.2.4] - Unreleased
 
 ### Changed

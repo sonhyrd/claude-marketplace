@@ -1,6 +1,6 @@
 {
   "name": "matt",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Matt Pocock's agent skills for real engineering: grilling, spec/ticket flows, TDD, code review, domain modelling and more. Plug-and-play, not vibe coding.",
   "author": {
     "name": "Matt Pocock",
@@ -43,6 +43,8 @@
     "./skills/productivity/teach",
     "./skills/productivity/to-questionnaire",
     "./skills/productivity/wait-what",
-    "./skills/productivity/writing-for-agents"
+    "./skills/productivity/writing-for-agents",
+    "./skills/in-progress/claude-handoff",
+    "./skills/in-progress/implement-spec"
   ]
 }
