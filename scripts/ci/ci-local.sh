@@ -158,6 +158,19 @@ if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_SPAN_INDEX:-}" != "1" ]; then
+  step "Span index (span-index.py, process boundary)"
+  # Issue #132: the run-forensics seam whose failure is silent — a mis-sliced span yields a
+  # confident distillation of the wrong turns. Synthesised ledger + transcript tree in a temp
+  # directory; asserts the bracketed range, the no-transcript marker, corpus/control/excluded
+  # classification, schema refusal, and the non-zero exit on an empty window.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-span-index.sh >/dev/null 2>&1 || fail "test-span-index.sh"
+  else
+    bash scripts/ci/test-span-index.sh || fail "test-span-index.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_SMELL_SCAN:-}" != "1" ]; then
   step "E2E smell scan"
   # Self-scan checks OUR files' Tier-3 cleanliness. Skip the eslint download tier here:

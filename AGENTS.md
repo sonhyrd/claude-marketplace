@@ -67,7 +67,8 @@ brought with it afterwards.
 docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
 **the probe HAR contract**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
-**run-ledger smoke**, e2e smell scan). If you change any check, update this script first.
+**run-ledger smoke**, **span index**, e2e smell scan). If you change any check, update this
+script first.
 
 ## Directory Layout
 
@@ -91,8 +92,9 @@ docs orphan check, language,
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   └── playwright-debugger/
-├── scripts/                # NOT shipped — repo CI tooling, stays shell
+├── scripts/                # NOT shipped — repo tooling: shell, plus python3 where it parses JSON
 │   ├── ci/                 # parity, security, corpus golden, per-script process-boundary suites
+│   ├── forensics/          # run-forensics tooling: span-index.py (ledger + transcripts -> inventory + spans)
 │   ├── run-evals-isolated.sh # eval runs: isolated $HOME + the per-case skill-loaded sweep
 │   └── verify-fixes.sh     # post-bulk-fix verification (sed-artifact AST detection)
 ├── tests/pattern-corpus/   # one hit + one JUSTIFIED twin per check, and the golden
@@ -104,7 +106,7 @@ Each `skills/<name>/SKILL.md` is the contract. Everything in the skill body shou
 **task-actionable instructions for the agent**, not narrative documentation; supporting reference
 material (long tables, framework references) goes in sibling `.md` files and is read on demand.
 
-### Shipped scripts are Node; repo scripts are shell
+### Shipped scripts are Node; repo scripts are shell and python3
 
 The shipped scripts under `skills/*/scripts/` run inside a **user's** repository, so they are plain
 ESM `.mjs` on the Node standard library — **no npm dependency, no build step, nothing installed into
@@ -120,7 +122,9 @@ load-bearing on a possessive quantifier JS cannot express, and rewriting it sile
 check (see `tests/pattern-corpus/README.md`). Dropping the ripgrep dependency is a separate change
 with its own fixtures.
 
-Everything under `scripts/` is repo-only tooling and stays shell.
+Everything under `scripts/` is repo-only tooling. Shell is the default; python3 is used where a
+script parses JSON or walks a tree rather than orchestrating subprocesses — `scripts/ci/derive-stamp.py`,
+the docs orphan check, and `scripts/forensics/span-index.py`. None of them takes an npm dependency.
 
 ## Conventions
 
@@ -158,6 +162,7 @@ bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context cl
 bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
+bash scripts/ci/test-span-index.sh  # span-index.py: bracketed span, reaction tail and its caps, no-transcript marker, classification, schema refusal
 bash scripts/run-evals-isolated.sh --self-test # the eval runtime's own seam (no API calls)
 bash scripts/ci/pre-push-security.sh
 node skills/e2e-reviewer/scripts/scan.mjs path/to/tests   # standalone scanner
