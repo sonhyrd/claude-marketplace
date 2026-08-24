@@ -65,13 +65,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
     // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
     // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
     // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
     // again: the list form was fixed by #66, the wrapped-item form was not.
-    const isContinuation = /^\s/.test(raw) && !isItem;
-    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -94,25 +99,6 @@ if (reRun.length) {
   process.exit(1);
 }
 
-// --- the verdict ---------------------------------------------------------------------------------------
-if (!/route\.fetch|in_spec_round_trips/.test(text)) {
-  console.error('FAIL: the answer never names the in-spec round trips (route.fetch / in_spec_round_trips) a trace records as MOCKED');
-  process.exit(1);
-}
-if (!/carve-?out/i.test(text)) {
-  console.error('FAIL: the answer never reaches a verdict against the declared CARVE-OUT lines');
-  process.exit(1);
-}
-
-if (!/\bundeclared\b/i.test(text)) {
-  console.error('FAIL: the answer never reads the `undeclared` list, which is the mechanical half of the check');
-  process.exit(1);
-}
-if (!/\bgreen\b|\bpass(?:ed|ing)?\b|\bfails? the run\b/i.test(text)) {
-  console.error('FAIL: the answer never says an undeclared live call fails the run even though it is green');
-  process.exit(1);
-}
-
 // --- and nothing hand-rolled -----------------------------------------------------------------------------
 const handRolled = [];
 for (const b of shell) {
@@ -127,6 +113,31 @@ if (handRolled.length) {
   for (const l of [...new Set(handRolled)].slice(0, 3)) console.error('   ' + l);
   process.exit(1);
 }
+// --- the verdict ---------------------------------------------------------------------------------------
+if (!/route\.fetch|in_spec_round_trips/.test(text)) {
+  console.error('FAIL: the answer never names the in-spec round trips (route.fetch / in_spec_round_trips) a trace records as MOCKED');
+  process.exit(1);
+}
+if (!/carve-?out/i.test(text)) {
+  console.error('FAIL: the answer never reaches a verdict against the declared CARVE-OUT lines');
+  process.exit(1);
+}
+
+// The word `undeclared` is one the PROMPT supplies, so its presence is not contact — the README's
+// own caution, one layer over. What is earned is saying what an EMPTY `undeclared` does and does not
+// settle: it is the mechanical half only, and it does not clear the in-spec round trip, which is
+// absent from that list by construction because a source line is not a URL.
+if (!/mechanical|\bonly half\b|not the verdict|does ?n\S*[^\n]{0,30}(?:settle|clear|cover)|string comparison|by construction|a source line is not a URL/i.test(text)) {
+  console.error('FAIL: the answer treats the empty `undeclared` list as the verdict — it is the mechanical half only, and it never covered the in-spec round trip');
+  process.exit(1);
+}
+// And the consequence, which is the rule an answer has to state rather than a word it can echo:
+// an undeclared live call FAILS a run that is green.
+if (!/\bfails?\b[^\n]{0,60}\b(?:green|even though|despite|passing)\b|\b(?:green|even though|despite|passing)\b[^\n]{0,60}\bfails?\b/i.test(text)) {
+  console.error('FAIL: the answer never says an undeclared live call fails the run even though it is green');
+  process.exit(1);
+}
+
 const bad = offenders(text, [
   /\bwrite (?:a|my own) (?:parser|script)\b/i,
   /\bhand-?roll\w*\b/i,

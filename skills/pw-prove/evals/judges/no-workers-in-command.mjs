@@ -27,12 +27,18 @@ if (!text.trim()) {
   process.exit(1);
 }
 
-// Every fence is matched WITH its language tag, then filtered. Matching only shell fences leaves
-// the closing ``` of a ```ts block reading as the opener of the next one, which swallows the prose
-// between them and judges it as a command.
-const blocks = [...text.matchAll(/```([^\n]*)\n([\s\S]*?)```/g)]
-  .filter((m) => m[1].trim() === '' || /^(?:bash|sh|shell|zsh|console|shell-session)$/i.test(m[1].trim()))
-  .map((m) => m[2]);
+// >>> shell fences
+// Every fence is matched WITH its language tag, then filtered. Matching only shell fences leaves the
+// closing ``` of a ```ts block reading as the OPENER of the next one, which swallows the prose
+// between them and judges it as an emitted command — #150 found it failing a must-PASS twin. The
+// region between these markers is compared byte-for-byte by test-eval-judges.sh; the name it is
+// bound to below the closing marker is each judge's own.
+const shellFences = (t) =>
+  [...t.matchAll(/```([^\n]*)\n([\s\S]*?)```/g)]
+    .filter((m) => m[1].trim() === '' || /^(?:bash|sh|shell|zsh|console|shell-session)$/i.test(m[1].trim()))
+    .map((m) => m[2]);
+// <<< shell fences
+const blocks = shellFences(text);
 // --- and no raw runner invocation standing in for the verb ---------------------------------------
 // The ONE sanctioned raw invocation in Step 7 is the serialised diagnostic, which is not this
 // question and would carry a worker override anyway. Any other `playwright test` block here is the
@@ -69,6 +75,7 @@ const need = [
   [/--config\b/, 'the film verb is invoked without --config, so it has no proof config to film through'],
   [/--test-dir\b/, 'the film verb is invoked without --test-dir, so the spec set cannot resolve'],
   [/--base\b/, 'the film verb is invoked without --base, so the merge base the spec set comes from is unstated'],
+  [/--written\b/, "the film verb is invoked without --written, so nothing in the resolved set is tagged as the spec this run wrote"],
   [/--project-config\b/, "the film verb is invoked without --project-config, so the fidelity precondition has no project config to read"],
   [/--verdict\b/, 'the film verb is invoked without --verdict, so the effective viewport is not the one Step 4 decided'],
   [/PW_PROVE_HAR\s*=\s*\S/, 'PW_PROVE_HAR is not carried inline — the film verb has no bind phase, and unset here every recorded read aborts on the run that gets published'],

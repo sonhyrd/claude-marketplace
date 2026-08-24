@@ -1705,8 +1705,15 @@ particular:
 
 The wrapped-item fix is in all 41 judges, because the drift check requires it to be. It can only ever
 turn a red into a green — it *widens* what counts as a refusal, and never narrows it — so no case can
-start failing because of it. But a case that was red on this defect and is now green is a case whose
-recorded pass rate is understated, and #150 did not buy a run to find out which.
+start failing because of it. **That property was not free, and the first version of the fix did not
+have it**: treating every indented non-item line as a continuation also stopped an *indented*
+"things I will not do:" from OPENING a scope, which narrows the filter in exactly the direction this
+paragraph claims it cannot. The review caught it, and the corrected form exempts a header line from
+the continuation test. The claim above is a property of the code, not a hope about it, and it is
+worth re-checking rather than inheriting the next time this helper moves.
+
+A case that was red on this defect and is now green is a case whose recorded pass rate is
+understated, and #150 did not buy a run to find out which.
 
 Every non-Step-7 case judged by one of those 41 judges therefore carries a small chance that its
 registry pass rate is low by the width of this defect. The candidates are the ones whose answers are
@@ -1714,7 +1721,9 @@ list-shaped enough to hit it — `case-12` and `case-4` and `case-44` and `case-
 each quarantined on a rate this could have depressed, and each is worth re-taking before it is next
 judged on that number. That is a separate ticket, and it is a measurement rather than a repair.
 
-The fence-parser fix is narrower: it is not in the shared block, so it was applied to the two judges
-that needed it (`case-37` and `case-60`) and nowhere else. Any judge that scans fenced blocks with a
-shell-only opener has the same latent bug, and the drift check does not cover that code because it is
-not shared.
+The fence-parser fix is narrower: only two judges split fenced blocks this way (`case-37`'s and
+`case-60`'s). Rather than leave a second copy nothing polices — which is how the wrapped-item defect
+survived in eight files before #66 — it was extracted behind `// >>> shell fences` markers and
+`test-eval-judges.sh` now compares that region byte-for-byte, the same way it already does the
+`offenders()` filters, the routing core and the wet judges' workspace preamble. A third judge that
+needs to split commands should carry the same region rather than write a third parser.

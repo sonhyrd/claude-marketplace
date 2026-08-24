@@ -60,13 +60,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
     // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
     // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
     // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
     // again: the list form was fixed by #66, the wrapped-item form was not.
-    const isContinuation = /^\s/.test(raw) && !isItem;
-    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -93,13 +98,18 @@ if (bad.length) {
 // results directory or runs the fidelity audit beside the verb is the defect, and prose naming
 // either to explain that the verb owns it is not. Judging the prose here would fail every correct
 // answer, which is the #59 defect the rest of this file already guards against.
-// Every fence is matched WITH its language tag, then filtered. Matching only shell fences leaves
-// the closing ``` of a ```ts block reading as the opener of the next one, which swallows the prose
-// between them and judges it as a command — it failed this judge's own must-PASS twin.
-const emitted = [...text.matchAll(/```([^\n]*)\n([\s\S]*?)```/g)]
-  .filter((m) => m[1].trim() === '' || /^(?:bash|sh|shell|zsh|console|shell-session)$/i.test(m[1].trim()))
-  .map((m) => m[2])
-  .join('\n');
+// >>> shell fences
+// Every fence is matched WITH its language tag, then filtered. Matching only shell fences leaves the
+// closing ``` of a ```ts block reading as the OPENER of the next one, which swallows the prose
+// between them and judges it as an emitted command — #150 found it failing a must-PASS twin. The
+// region between these markers is compared byte-for-byte by test-eval-judges.sh; the name it is
+// bound to below the closing marker is each judge's own.
+const shellFences = (t) =>
+  [...t.matchAll(/```([^\n]*)\n([\s\S]*?)```/g)]
+    .filter((m) => m[1].trim() === '' || /^(?:bash|sh|shell|zsh|console|shell-session)$/i.test(m[1].trim()))
+    .map((m) => m[2]);
+// <<< shell fences
+const emitted = shellFences(text).join('\n');
 const usurped = [];
 for (const line of emitted.split('\n')) {
   if (/\brm\s+-rf?\s+[^\n]*test-results\b/i.test(line)) usurped.push(line.trim());

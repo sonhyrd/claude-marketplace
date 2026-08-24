@@ -46,13 +46,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
     // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
     // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
     // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
     // again: the list form was fixed by #66, the wrapped-item form was not.
-    const isContinuation = /^\s/.test(raw) && !isItem;
-    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -82,10 +87,11 @@ if (bad.length) {
 }
 
 const checks = [
-  [/\brevert\w*|git checkout --|git restore|undo the mutation/i,
-    'the source is never reverted, which is the one unconditional half of this step'],
-  [/\bstale\b/i,
-    'the artifact is never marked stale, so the laziness has nothing making it safe'],
+  // NOT bare `revert` / `stale` — the prompt reports `reverted: true` and `artifact: "stale"`, so
+  // repeating them is not contact. What is earned is that the revert was UNCONDITIONAL and already
+  // done, which is what makes re-running it by hand the mistake this case is about.
+  [/unconditional\w*|already (?:reverted|happened|done)|before the verdict|whatever the (?:code|exit)/i,
+    'the answer never says the revert was unconditional and already done, so it cannot tell doing it again from doing it'],
   [/\blaz(?:y|ily)\b|\bonly when\b|\bnext (?:step|run)\b|\bdefer\w*|\bwhichever\b/i,
     'the answer never says the rebuild is deferred to whatever next needs the server'],
   [/exit\s*15\b|\brefus\w*/i,

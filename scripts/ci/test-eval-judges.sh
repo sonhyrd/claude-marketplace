@@ -326,6 +326,35 @@ else
   ok "$core_carriers routing judges compared"
 fi
 
+# --- and the shell-fence parser is one text too ----------------------------------------------------
+# A judge that judges the EMITTED COMMAND has to split fenced blocks first, and the naive
+# shell-only opener (```` ```(bash|sh)? ````) reads the CLOSING fence of a ```ts block as an opener
+# and swallows the prose after it. #150 found that failing a must-PASS twin. Two judges carry the
+# corrected parser and a third will; duplicated for the same reason everything else here is, and
+# policed for the same reason — an unpoliced copy is how one judge quietly keeps the older rule.
+echo ""
+echo "-- the shell-fence parser is verbatim across the judges that split commands --"
+fence_of() { awk '/^\/\/ >>> shell fences/ { p = 1 } p { print } /^\/\/ <<< shell fences/ { exit }' "$1"; }
+fence_ref=""; fence_ref_name=""; fence_carriers=0
+for n in "${judge_names[@]}"; do
+  grep -q '^// >>> shell fences' "$JUDGES/$n.mjs" || continue
+  fence_carriers=$((fence_carriers + 1))
+  sum="$(fence_of "$JUDGES/$n.mjs" | md5sum | cut -d' ' -f1)"
+  if [ -z "$fence_ref" ]; then
+    fence_ref="$sum"; fence_ref_name="$n"
+    ok "$n carries the shell-fence parser (reference copy)"
+  elif [ "$sum" = "$fence_ref" ]; then
+    ok "$n carries it verbatim"
+  else
+    bad "$n's shell-fence parser has drifted from $fence_ref_name's — one judge splits commands by an older rule"
+  fi
+done
+if [ "$fence_carriers" -lt 2 ]; then
+  bad "found $fence_carriers fence-splitting judge(s) — the extraction has stopped matching, so this check is proving nothing"
+else
+  ok "$fence_carriers fence-splitting judges compared"
+fi
+
 # --- and the workspace judges' preamble is one text too --------------------------------------------
 # A WET case's judge reads the run's artifacts rather than its prose (judges/README.md), and the way
 # it finds them — the refusal on an absent input, `$PWPROVE_JUDGE_ROOT` or cwd, the `read()` helper —

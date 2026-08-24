@@ -54,13 +54,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
     // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
     // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
     // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
     // again: the list form was fixed by #66, the wrapped-item form was not.
-    const isContinuation = /^\s/.test(raw) && !isItem;
-    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -85,9 +90,12 @@ if (bad.length) {
 const checks = [
   [/\breus\w*|\bas[- ]is\b|\bverbatim\b|\buntouched\b|\bunchanged\b/i, "the answer never says the existing proof config is reused untouched"],
   [/--config\s+e2e\/playwright\.proof\.config\.ts/, "the proof run never passes --config e2e/playwright.proof.config.ts"],
+  // NOT bare `1600` / `900` — the prompt hands the agent `pinned:1600x900`, so repeating the numbers
+  // is not contact. What is earned is where they travel: through the film verb's `--verdict`, which
+  // is the flag that keeps the recording size out of the static config's diff.
   [/--verdict/, "the effective viewport never reaches the film verb as --verdict, so the recording size is not the one Step 4 decided"],
-  [/1600/, "the answer never carries the effective viewport's width"],
-  [/900/, "the answer never carries the effective viewport's height"],
+  [/\bstatic\b|per-?run|\benv\w*|command line|not in the (?:config|file)|no(?:t)? a (?:file )?diff/i,
+    "the answer never says why the size travels on the invocation rather than in the config, which is the reason the config can stay reused"],
   [/test-results|playwright-report|litter/i, "the answer never scopes the hygiene deletion to the run litter"],
   [/Generated/, "the answer never says what the completion report Generated block does with the proof config"],
   [/Generated[\s\S]{0,400}\b(?:omit|exclude|leave out|no line|not listed|does ?n)|\b(?:omit|exclude|leave out|no line|not listed|does ?n)[\s\S]{0,200}Generated/i, "the Generated block never omits the proof-config line, which this run did not create"],

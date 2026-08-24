@@ -58,13 +58,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
     // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
     // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
     // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
     // again: the list form was fixed by #66, the wrapped-item form was not.
-    const isContinuation = /^\s/.test(raw) && !isItem;
-    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -88,8 +93,15 @@ if (bad.length) {
 }
 
 const checks = [
-  [/"?inspected"?\s*[:=]\s*false|\binspected: ?false\b/i, "the answer never reads the summary field that says the frames were never opened"],
-  [/\bexit(?:s|ed)?\s*0\b|\bpass\w*|\bgreen\b|\bdoes ?n\S* fail|\bnot a fail\w*|\bnever fails?\b/i, "the answer never says the run still passes"],
+  // NOT `inspected: false` — the prompt supplies that field, so echoing it is not contact. What is
+  // earned is the reason it is not a failure: the extract is an INSPECTION, not a gate.
+  [/\binspection\b|\bnot a gate\b|\bno gate\b|\bnever gates?\b/i,
+    "the answer never says the frame extract is an inspection rather than a gate, which is why a missing tool is not a failure"],
+  // Deliberately NOT `\bpass\w*`: "the passing run", "the clips the run passed with" fire on it, so
+  // it would be satisfied by any answer that mentions the run at all. The assertion is that the
+  // answer says the missing tool does not FAIL this run — a claim it has to make on purpose.
+  [/\bdoes ?n\S*\s+fail\b|\bnot a fail\w*|\bnever fails?\b|\bwithout failing\b|\bfail(?:s|ing)? nothing\b|\bnot a gate\b|\bcarry (?:straight )?on\b|\bcontinues?\b/i,
+    "the answer never says the missing tool does not fail the run"],
   [/uninspected/i, "the report never says the clips are `uninspected` — a silent omission reads as a good clip"],
   [/mutation/i, "the run never carries on to the mutation check"],
   [/publish|deliver/i, "the answer never says delivery is unaffected"],

@@ -61,13 +61,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
     // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
     // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
     // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
     // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
     // again: the list form was fixed by #66, the wrapped-item form was not.
-    const isContinuation = /^\s/.test(raw) && !isItem;
-    if (!isItem && !isContinuation) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -93,13 +98,19 @@ if (bad.length) {
 }
 
 const checks = [
-  [/exit\s*11\b|\bexit code 11\b|unproven/i, "the answer never reads the exit code that invalidates the run"],
+  // NOT a bare `unproven` / `exit 11` — the prompt states both, so echoing them is not contact.
+  // What is earned is naming what the port is actually serving: the PREVIOUS artifact.
+  [/previous artifact|pre-?mutation artifact|predecessor|old(?:er)? (?:server|process|bundle)|previous (?:preview )?server/i,
+    "the answer never says what the port is serving — the previous artifact, which is what makes the failure meaningless"],
   [/no verdict|nothing to read|cannot (?:read|take) (?:a |the )?verdict|not a verdict|there is no red/i, "the answer never says there is no verdict to read, which is the whole finding"],
   [/36495/, "the answer never names the port that is being held"],
   [/previous|stale|old|did not die/i, "the answer never identifies what is answering as the previous server"],
   [/\bkill\b|\bpkill\b|\blsof\b|\bfuser\b/i, "nothing is done about the process holding the port"],
   [/proof-run\.mjs["']?\s+mutate|\bmutate verb\b|invoke (?:it|the verb) again|run (?:it|the verb) again/i, "the mutate verb is never invoked again, so no verdict is ever taken from a proven server"],
-  [/\bstale\b/i, "the answer never notices the artifact was marked stale, which is what the next audit or film run will refuse on"],
+  // NOT a bare `stale` — the prompt reports `artifact: "stale"`. The earned half is the CONSEQUENCE:
+  // audit and film refuse on it, so the marker is something to act on rather than a field to repeat.
+  [/exit\s*15\b|\brefus\w*/i,
+    "the answer never says what the stale marker does — audit and film refuse on it, and a marker nothing acts on is a field, not a state"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));
 if (missing.length) {
