@@ -159,6 +159,19 @@ if [ "${E2E_SKILLS_SKIP_PROOF_RUN:-}" != "1" ]; then
   fi
 fi
 
+if [ "${E2E_SKILLS_SKIP_INVOCATION_PARITY:-}" != "1" ]; then
+  step "Invocation parity (SKILL.md's commands vs proof-run.mjs)"
+  # Issue #149: Step 7 documents no raw-runner fallback any more, so every verb and flag the body
+  # tells an agent to type is a claim about the module's interface — and a wrong one now stops the
+  # proof rather than degrading. The module itself is the oracle (no table copied out of it), and
+  # the suite proves it discriminates: green against the shipped body, red against four mutants.
+  if [ "$QUIET" = "1" ]; then
+    bash scripts/ci/test-invocation-parity.sh >/dev/null 2>&1 || fail "test-invocation-parity.sh"
+  else
+    bash scripts/ci/test-invocation-parity.sh || fail "test-invocation-parity.sh"
+  fi
+fi
+
 if [ "${E2E_SKILLS_SKIP_RUN_LEDGER:-}" != "1" ]; then
   step "Run-ledger smoke (PWPROVE_RUN contract)"
   # Issue #5: every shipped-script invocation leaves one PWPROVE_RUN {json} record — stdout line plus

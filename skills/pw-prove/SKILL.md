@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.35.0"
+  version: "0.36.0"
 ---
 
 # pw-prove
@@ -759,7 +759,7 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 **1. Two preconditions, and both are phases of the audit verb.** The type check and the HAR bind run inside `proof-run.mjs audit`, before it spends a browser run — you do not run either by hand, and there is no documented raw fallback for either.
 
 - **The type check** takes the e2e tsconfig when the project has one and the root one otherwise; that branch is the verb's, not yours, and a project with neither is skipped rather than failed. Exit **4** is a spec set that does not compile.
-- **The HAR bind** is delegated to `har-scrub.mjs bind`, which the verb invokes with the recording you pass as `--har` and a destination fixed under `.pw-prove/` — the committed recording stays canonical, and the bound copy carrying this run's live credential never reaches a path git tracks. The verb then puts `PW_PROVE_HAR` on the runner's own environment, so every invocation **it** makes has the bound recording. **Pass `--har` only when the project has a recording**; omitted, the phase is skipped.
+- **The HAR bind** takes the recording you pass as `--har` and binds it to a copy under `.pw-prove/`, which the verb then puts on the runner's own environment. **Pass `--har` only when the project has a recording**; omitted, the phase is skipped.
 
 **The two verbs with no bind phase of their own still have to carry it.** `film` and `mutate` below run in a fresh environment each: unset there, the spec falls back to the committed placeheld recording and *every* read aborts under `notFound: 'abort'` — on the run whose footage gets published. So both carry `PW_PROVE_HAR=$PWD/.pw-prove/<feature>.api.har` as an inline assignment, exactly as written in their command blocks. The path is the one the audit summary's `phases.har_bind.out` names; read it there rather than reconstructing it.
 
@@ -774,7 +774,7 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 
 Unset in CI, the spec falls back to the committed HAR by construction.
 
-**2a. In PR-mode, both runs execute the PR spec set** — every spec that proves this PR, not only the one this run wrote. A run that films its own delta delivers a proof page holding two chapters of a thirteen-scenario PR, and nothing in the artifact says so. **`proof-run.mjs audit` resolves that set** from the merge base, tags every spec `carried` or `written` in its summary, and stops on an empty one. You do not assemble it, and there is no documented raw-runner fallback: a fallback is a second copy, and the second copy is the one that drifts. The reasons behind each mechanic are in the module's header comment; read it when you need to check a claim.
+**2a. In PR-mode, both runs execute the PR spec set** — every spec that proves this PR, not only the one this run wrote. A run that films its own delta delivers a proof page holding two chapters of a thirteen-scenario PR, and nothing in the artifact says so. **`proof-run.mjs audit` resolves that set** from the merge base, tags every spec `carried` or `written` in its summary, and stops on an empty one. You do not assemble it. **There is no raw-runner fallback anywhere in this step** — not for the audit run, not for the filming run, not for the mutation run: a fallback is a second copy, and the second copy is the one that drifts. A project whose invocation these flags cannot express is a defect report, not a bypass. The reasons behind each mechanic are in the module's header comment (`scripts/proof-run.mjs`); read it when you need to check a claim.
 
 Target and coverage-gap mode prove one run's work by definition — pass the spec this run wrote as `--written` and the resolution comes back to that spec alone.
 
@@ -789,7 +789,7 @@ That resolved set is `<spec set>` below. It widens what is **filmed**. It does n
 | **Audit run** — no `PW_PROVE_CLIP` | Getting the spec green (the whole heal loop happens here), and producing the traces the [hermetic audit](#hermetic-audit-before-the-filming-run) classifies | Cheapest form of the run: `trace: 'on'` is in the config, so traces arrive regardless, and every dwell is skipped |
 | **Filming run** — `PW_PROVE_CLIP=1` | The clips that get delivered | The dwells, plus video encoding |
 
-**The audit comes first because a hermetic finding is a spec edit, and a spec edit invalidates footage.** Filming before auditing means every LIVE call found costs a re-film of clips already shot — an observed run paid exactly that, on three calls (socket.io polling and two Intercom POSTs) that were already sitting in the recon HAR seven minutes before it filmed against them. Auditing first makes the un-clipped run strictly cheaper than the footage it protects.
+**The audit comes first because a hermetic finding is a spec edit, and a spec edit invalidates footage.** Fix it before filming and it costs one cheap re-run; fix it after and it costs the clips as well.
 
 **Seed the third-party block list at recon, so the first audit usually has nothing to say.** After the probe pass writes its HAR (Step 3), read the recorded entries for origins outside the fixture's `**/api/**` scope — analytics, chat widgets, websocket polling — and block them in the generated spec. **Seeding is an optimisation and never a verdict**: the audit still classifies every request and still fails on any LIVE call missing a `// CARVE-OUT:` line, so a block list that missed something produces exactly the failure it produces today.
 
@@ -878,11 +878,6 @@ PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har" \
 # its MEASURED duration and whether a frame was extracted — that is Step 8's manifest source.
 ```
 
-**`--verdict` does two jobs with one value, which is why there is no viewport flag.** It is what the
-fidelity audit compares against the config text, *and* its size is what travels to the recording as
-`PW_PROVE_W`/`PW_PROVE_H`. A second flag could disagree with the first, silently, and the clip would
-record at a size the app never rendered at.
-
 **Branch on the audit verb's exit code — each one is a different next move:**
 
 | Exit | Meaning | What to do |
@@ -909,9 +904,9 @@ Every summary carries all three phases whatever they did — `ok`, `skipped` (th
 | `13` | **An undeclared live call from the audit stands** | Nothing was filmed and `test-results/` is untouched. The refusal names each call and the summary's `network.reason` says which kind it is: `undeclared` — mock the call, or add the `// CARVE-OUT:` line when the real round-trip **is** the AC, and film again (a declaration clears it with **no** second audit); `stale` — the spec set has moved since the audit that recorded these calls, so that record cannot speak for it. Run the audit verb again |
 | `15` | **The built artifact is marked stale** — the last mutation check reverted its mutation and did not rebuild | Nothing was run and nothing was cleared. What the server holds is not what the source says, so heal or evidence taken from it means nothing. Rebuild forcing the build, prove the restart, then `rm .pw-prove/artifact-stale` — the refusal prints the exact three commands |
 
-**Why the refusal is here and not on the audit verb.** An undeclared live call is a spec edit waiting to happen, and a spec edit invalidates footage: fix it before filming and it costs one cheap re-run, fix it after and it costs the clips as well. The finding reaches this verb through the run's own state — a summary is stdout *you* read, and a refusal that depended on you volunteering the finding would not be one. What is persisted is the **live calls**, never the undeclared list: a live call is a fact about a run and cannot be re-derived without paying for another one, while the carve-out lines are a fact about the spec text, which the verb re-reads every time. That is why declaring the carve-out clears the refusal immediately, and why mocking the call — invisible in the spec's carve-out lines — needs the audit re-run. **Judging whether a carve-out that *is* present earns its place remains yours**; presence is all this refusal computes.
+**Judging whether a carve-out that *is* present earns its place remains yours**; presence is all exit 13 computes. Declaring the carve-out clears it immediately; mocking the call — invisible in the spec's carve-out lines — needs the audit re-run.
 
-**The precondition is not a duplicate of Step 6, and running it there does not license skipping it here.** A heal-loop edit between the two can have moved or dropped the dwell, and a precondition the verb enforces cannot be skipped by an agent that believes it already ran it. Filming a spec with no reader for `PW_PROVE_CLIP` is the originating regression: the flag is inert, the dwell never happens, and every gate stays green over a recording that shows nothing.
+**Running the fidelity audit at Step 6 does not license skipping it here.** A heal-loop edit between the two can have moved or dropped the dwell, so the verb enforces it again rather than trusting that it ran.
 
 **The proof run is concurrent — the worker count is Playwright's.** The verb expresses no worker override by construction (ADR-0017), so the run takes Playwright's default of `cores/2` and the scenarios go together. Do not pin one in the committed proof config or in the project's `playwright.config` either.
 
@@ -923,7 +918,7 @@ Two things this does not license:
 
 If the project config is not spread-friendly (a function export, or per-project `use` that must win), adapt the proof config **once** — a dedicated `use.video`/`use.trace` in its own `use` block, or per-project overrides — and commit that adaptation. Still never edit the project's `playwright.config`.
 
-**No *gate* measures the finished webm — the agent looks instead** (*Clip inspection* below). There is no dimension gate and no legibility heuristic by design: a post-processing pass is ruled out, and a frame-difference gate was rejected because its failure mode is dropping a good proof, and a gate that trips aborts the whole recording. One frame is extracted and read; its verdict informs the agent rather than vetoing the artifact.
+**No *gate* measures the finished webm — the agent looks instead** (*Clip inspection* below). One frame is extracted and read; its verdict informs you rather than vetoing the artifact.
 
 Fidelity is still held at authoring time: `PW_PROVE_W`/`PW_PROVE_H` carry the Step-4 effective viewport, and a `pinned:` verdict has already produced a `test.use({ viewport })` line in the committed spec. A letterboxed clip means that pin is missing from the **spec** — fix it there, never by adding `viewport` to the proof config.
 
@@ -945,7 +940,7 @@ Per attempt, diagnose the actual failure and apply the matching fix:
 
 **Token diet.** Inside the fix loop, run tool calls back-to-back — no prose narration between them; the diagnosis lands in the fix. Write the spec **once** from the `pomInventory` + Locator Mapping Table — never scaffold a throwaway skeleton and rewrite it. **Non-deliverable spec probes are forbidden** — no `_recon.spec.ts`, no `zz-debug.spec.ts`: the probe is the recon channel, the test runner is not a REPL.
 
-**No-progress checkpoint — the bound is three attempts, but not three retries.** The verb owns this: it records each attempt's **failure signature** (the error class plus the failing locator), persists it under the run's dot-directory, and exits **7** on the attempt that repeats an unchanged one, and refuses every invocation after that — and every invocation past the bound — without paying for a run at all. A raw count cannot tell those apart; three attempts at one unchanging timeout is one retry paid three times. Exit 7 is not a failure to diagnose harder: it is the loop ending, and the remaining attempt is deliberately unspent.
+**No-progress checkpoint — the bound is three attempts, but not three retries.** The verb owns it: it records and persists each attempt's **failure signature** and exits **7** on the attempt that repeats an unchanged one, or on any invocation past the bound. Exit 7 is not a failure to diagnose harder: it is the loop ending, and the remaining attempt is deliberately unspent.
 
 When the loop ends without a green run — three attempts spent, or the checkpoint tripped at two — **invoke `playwright-debugger`** (Skill tool) pointed at `playwright-report/` (HTML + traces) for the diagnosis. Do not attempt a 4th fix. Then stop: PR-mode takes the handover stop below; target and coverage-gap modes emit the stop report from the Pipeline Overview.
 
@@ -976,7 +971,7 @@ A **flaky verdict** (passed only on retry) is not clean — diagnose once. If th
 
 ### Hermetic audit (on the audit run, before anything is filmed)
 
-The spec is hermetic by default, and **the audit verb already classified the run** — the phase runs on a green run, over the run's own traces, once per spec in the set. You do not invoke a classifier and you do not hand-write a trace parser; that recurring detour cost one real run ~3 minutes of parsers that were thrown away the moment they printed. Read `phases.hermetic` from the summary:
+The spec is hermetic by default, and **the audit verb already classified the run** — the phase runs on a green run, over the run's own traces, once per spec in the set. You do not invoke a classifier and you do not hand-write a trace parser. Read `phases.hermetic` from the summary:
 
 | Field | What it holds |
 |---|---|
@@ -1001,12 +996,12 @@ The spec is hermetic by default, and **the audit verb already classified the run
 
 The run that motivated this shipped a correctly sized, held clip that showed **nothing**: the element under proof sat against the screen edge. Every gate was green, and the *operator* discovered their own broken evidence after the PR was commented on. So one frame per clip is extracted at the moment of the hold, and you **read it**:
 
-**The film verb already extracted them** — one frame per clip at duration − 0.5s, inside the payoff hold, landing beside its clip under `test-results/` so Step 8's sweep removes it and no image reaches the repo. You do not run a command for this; you read what the run handed you. Its summary line names every clip, its measured duration, its frame, and whether the frame exists:
+**The film verb already extracted them**, beside their clips under `test-results/`. You do not run a command for this; you read what the run handed you. Its summary line names every clip, its measured duration, its frame, and whether the frame exists:
 
 - `"inspected": true` → **open the frame** (image tool) and give it a line in the report — `Clip 1 — the saved banner reads "Saved", centred, page settled`.
 - `"inspected": false` → that clip is reported `uninspected` and nothing else. It happens when `ffmpeg`/`ffprobe` are absent (every clip, `uninspected — no video tooling`) or when one recording yielded no frame while the rest got theirs.
 
-**Neither case fails the run**, by design: a missing tool is not a failed test, and a gate that tripped here would abort a whole recording over an inspection. A clip you did not look at is reported as **uninspected**, which is the honest verdict — an unread clip is not a good one, and inventing a description of a frame you never opened is the failure this whole section exists to prevent.
+**Neither case fails the run.** A clip you did not look at is reported as **uninspected**, which is the honest verdict — an unread clip is not a good one, and inventing a description of a frame you never opened is the failure this whole section exists to prevent.
 
 **An illegible frame is diagnosed, then fixed, then re-filmed — in that order.** A re-film with no preceding fix is deterministic and reproduces the same frame, so the diagnosis is the only thing that makes the retry worth having:
 
@@ -1024,7 +1019,7 @@ The fix goes into the **committed spec** — never into the proof config, and ne
 
 **Exactly one re-film, and the verb is the one counting.** A second illegible frame **publishes anyway**, with an explicit warning: `Clip N — illegible (<diagnosis>), published with warning`, in both the completion report and the PR comment. A bad clip is not a failed test; the proof is the passing test plus the mutation verdict.
 
-Which attempt this is is **read, never recalled**: the film summary carries `films` (this filming run's number) and `publish_with_warning`. `publish_with_warning: true` means this run is a re-film, so any clip still illegible after it goes out with the warning above rather than round again — carry that flag into Step 8 and the completion report. Only a run that produced clips spends the re-film, so a refusal and a red run leave the count where it was; a green **audit** resets it, because a green audit is what licenses filming and so opens the cycle the count runs in.
+Which attempt this is is **read, never recalled**: the film summary carries `films` (this filming run's number) and `publish_with_warning`. `publish_with_warning: true` means this run is a re-film, so any clip still illegible after it goes out with the warning above rather than round again — carry that flag into Step 8 and the completion report.
 
 ### Mutation check (PR-mode: REQUIRED — hard-bounded)
 
@@ -1032,11 +1027,9 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 
 **Scope: the scenarios this run wrote.** A carried scenario's mutation verdict was recorded by the run that wrote it, and re-deriving it costs one forced-no-reuse rebuild each (~635s, below). So the run carries two scopes and they are different on purpose: **filmed** is the PR spec set (Step 7), **mutation-verified** is this run's new scenarios. Widening one leaves the other where it is. A run that wrote no new scenario — a re-film of an unchanged branch — reports `Mutation: carried (no new scenario this run)` and mutates nothing.
 
-**The mutation run must not touch the clips**, and the verb is what makes that true by construction: it sends the run to an isolated output, leaves `test-results/` exactly as it stands — the one verb that does not clear it — and counts the clips afterwards against the PR spec set, carried scenarios included. Getting this wrong costs a full extra proof run to regenerate clips, and only if you notice.
+**The mutation run must not touch the clips**, and the verb is what makes that true by construction: it sends the run to an isolated output, leaves `test-results/` exactly as it stands — the one verb that does not clear it — and counts the clips afterwards against the PR spec set, carried scenarios included.
 
-**The mutation must be in the artifact under test, and the verb is what puts it there.** The proof target is a *build*, so a mutated source file changes nothing until it is rebuilt — a mutation check run against the standing artifact is green by construction and proves nothing, which arrives as "the spec does not guard the change". So the verb forces the rebuild, stops the preview server by the PID you recorded at Step 3, starts it again with the command you give it, and **proves** the restart against the server's own new announcement past a mark it takes before the stop. You pass the four things only you know — the build script, the recorded PID, the preview task's log, and how the server is started — and it sequences `preflight.mjs`'s own `build` and `serve` phases with them.
-
-**An answer on the port is not evidence a restart happened.** A restart that loses the port to its own predecessor leaves the *old* server answering — serving the pre-mutation artifact, or code whose hashed chunks the rebuild has since overwritten. An observed run took 128s to a page stuck on its loading splash and would have reported "the spec guards the change" on evidence that proves nothing; killing the stale process and re-running gave the genuine RED — a failed assertion on the missing hint — in 18.7s. So an unproven restart is **exit 11** and there is no verdict to read: fix the restart (kill whatever holds the port) and invoke the verb again. The rebuild is forced for its own reason — the reuse check is what makes a batch cheap, and this is the one run that must never inherit an artifact. Budget for it: this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
+**The mutation must be in the artifact under test, and the verb is what puts it there.** The proof target is a *build*, so the verb forces the rebuild, stops the preview server by the PID you recorded at Step 3, starts it again with the command you give it, and **proves** the restart against the server's own new announcement past a mark it takes before the stop. You pass the four things only you know — the build script, the recorded PID, the preview task's log, and how the server is started. An unproven restart is **exit 11** and there is no verdict to read: kill whatever holds the port and invoke the verb again. Budget for it: this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
 
 1. **Mutate the changed behavior** — one line is enough, in a file git already tracks, left **unstaged**. Choosing which line is yours: pick the one the AC is actually about, not a nearby constant a stronger layer would restore.
 2. **Run the verb.** It forces the rebuild, restarts the preview server and proves the restart, captures the tree's pre-state, runs the guarding test into an isolated output with `test-results/` untouched, reverts the file you named, marks the artifact stale, checks the tree came back, and counts the clips.
@@ -1052,7 +1045,7 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
      --clips <the film summary's clips.length>
    ```
 
-   `--serve-command` is the same command Step 3 started the server with, `PORT` included — the verb runs it detached and appends its output to `--server-log`, which is why the mark it takes beforehand is what tells the new announcement from the old one. The summary's `server.pid_after` is the **new** process id: carry it as the recorded PID from here on, and stop it with `kill -- -<pid>` (it leads its own process group). `--written` is repeatable and is the mutation-verified scope; `--grep` scopes the run to ONE test, so **give the test's `test(...)` title verbatim** — a title that also matches a second written spec's test widens the scope silently. `--clips` is the filming summary's own `clips.length`: without it the verb can only hold the surviving clips to one per spec file, which a multi-scenario spec passes while two of its clips are missing. `PW_PROVE_HAR` travels inline for the same reason it does on the filming run: this verb has no bind phase, and unset there every read aborts under `notFound: 'abort'`. Read the exit code:
+   `--serve-command` is the same command Step 3 started the server with, `PORT` included. The summary's `server.pid_after` is the **new** process id: carry it as the recorded PID from here on, and stop it with `kill -- -<pid>` (it leads its own process group). `--written` is repeatable and is the mutation-verified scope; `--grep` scopes the run to ONE test, so **give the test's `test(...)` title verbatim** — a title that also matches a second written spec's test widens the scope silently. `--clips` is the filming summary's own `clips.length`; without it the surviving-clip floor is one per spec file, which a multi-scenario spec passes while two of its clips are missing. `PW_PROVE_HAR` travels inline for the same reason it does on the filming run: this verb has no bind phase. Read the exit code:
 
    | Exit | Meaning | Do |
    |---|---|---|
@@ -1070,21 +1063,9 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 
 3. **The artifact is marked stale, and nothing rebuilds it here.** The verb writes `.pw-prove/artifact-stale` after the revert. The revert is unconditional and immediate; the rebuild is **lazy**, and the marker is what makes laziness safe:
 
-   **`audit` and `film` refuse (exit 15) while that marker stands** — they never silently rebuild, because a self-heal would hide that the mutation check left the machine in this state. Clear it by doing what the refusal prints: force the build, prove the restart (a fresh `MARK`, `SERVE_RESTART=1`, exactly as the verb does), then `rm .pw-prove/artifact-stale`. A further `mutate` needs no clearing — it forces a rebuild by construction, and its proven restart clears the standing marker before writing its own.
+   **`audit` and `film` refuse (exit 15) while that marker stands** — they never silently rebuild, because a self-heal would hide that the mutation check left the machine in this state. **Clear it by running the exact three commands the refusal prints**, in the order it prints them; they are the only copy, and reconstructing them from memory is how the mark gets taken after the stop instead of before it. A further `mutate` needs no clearing — it forces a rebuild by construction, and its proven restart clears the standing marker before writing its own.
 
-   ```bash
-   MARK=$(wc -c < "<the preview task's log>")   # taken BEFORE you stop the server
-   BUILD_REUSE=never BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
-     node <skill-base>/scripts/preflight.mjs build
-   # ...stop the preview server by its recorded PID, start it again on the same port...
-   SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
-     SERVER_LOG="<the preview task's log>" node <skill-base>/scripts/preflight.mjs serve
-   rm .pw-prove/artifact-stale
-   ```
-
-   That closes the hazard the old unconditional rebuild guarded — a re-film, a heal run or an audit running against deliberately broken software — without asking this step to predict whether any of them is still coming. **Step 8 hygiene stops a stale server rather than rebuilding it**, which is the common case: a mutation check that is the run's last step now pays nothing. An observed run paid an 82-second rebuild at 13:24:33 for a server it stopped at 13:26:55.
-
-   The marker exists because the *artifact* is out of step with a tree that looks unchanged — precisely the case the build-reuse check cannot see, since reuse is measured against HEAD plus the working-tree difference and the revert restored the tree. Build reuse is otherwise unaffected on this path.
+   **Step 8 hygiene stops a stale server rather than rebuilding it**, which is the common case: a mutation check that is the run's last step pays nothing.
 
 **On full pass:** PR-mode → Step 8. Target/coverage-gap → the completion report directly (Step 8's proof page only when a clip was requested or the publish prerequisites are ready).
 
@@ -1244,7 +1225,7 @@ All paths are in this directory.
 - Step-3 recon probe (persistent context; `RECORD_HAR` captures the API-scoped HAR; `STORAGE_STATE`; browserless exit 2): `scripts/probe.mjs`
 - HAR scrubber and replay binding — **`probe.mjs` already runs the scrub at capture**, so a manual pass is a re-scrub, never the first one. `--verify` is Step 8's read-only check (exit 3 residue, exit 6 over-scrub) and `bind` is the audit verb's second phase, which invokes it rather than you (its own exit 4 and exit 5 reach you as the verb's exit 5, with `phases.har_bind.reason` saying which); both contracts are at those steps. One behavior stated nowhere else: a learned value too short to tell apart from ordinary content is placeheld **only where it was found**, never swept across the recording, and is reported by learn site and length: `scripts/har-scrub.mjs`
 - Step-6 clip-fidelity audit (re-derives the effective viewport from the config text, fails on a disagreement with the declared verdict, and asserts the committed pin + a JUSTIFIED `PW_PROVE_CLIP`-gated dwell per `test()`; refuses on an ambiguous config): `scripts/clip-fidelity.mjs`
-- Step-7 verify mechanics — `audit` (spec-set resolution, the clearing, the bounded heal loop) and `film` (the fidelity precondition, the clip flag and effective viewport, frame extraction, the clip manifest in its summary). Exit codes are one table across the verbs; the reasons behind each mechanic are in the module's header: `scripts/proof-run.mjs`
+- Step-7 verify mechanics, and the only invocation of them — `audit` (the two preconditions, spec-set resolution, the clearing, the bounded heal loop, the network classification), `film` (the fidelity precondition, the clip flag and effective viewport, frame extraction, the clip manifest in its summary) and `mutate` (the forced rebuild and proven restart, the isolated output, the revert, the residue and clip counts, the stale-artifact marker). **There is no raw-runner fallback for any of the three.** Exit codes are one table across the verbs; the reasons behind each mechanic are in the module's header: `scripts/proof-run.mjs`
 - Step-7 hermetic audit (classifies the run's traces LIVE/MOCKED/FAILED + finds `route.fetch` round-trips a trace cannot see) — **the audit verb invokes it rather than you**, and reaches you as the summary's `phases.hermetic`; it renders no verdict by design, and the undeclared list the verb computes beside it is presence, never legitimacy: `scripts/hermetic.mjs`
 - Step-8 publish (manifest in, ONE chaptered Clips recording out; stream-copy concat, four gates, `PWPROVE_URL` / `PWPROVE_PROOF_FILE` marker lines): `scripts/publish-proof.mjs`
 - Recommended lint hardening (propose by default): `recommended-lint.md`

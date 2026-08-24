@@ -50,6 +50,22 @@
 //   in test-results/ at publish time becomes the evidence, so a leftover webm from an earlier — or
 //   mutated — run published as proof is a lie.
 //
+//   THE TWO PRECONDITIONS ARE PHASES OF THIS VERB, NOT INSTRUCTIONS TO THE AGENT, because both of
+//   them are cheaper than the browser run they stand in front of and neither involves a judgement.
+//   The TYPE CHECK takes the e2e tsconfig when the project has one and the root one otherwise — a
+//   branch nobody should have to re-derive per run — and a project with neither is SKIPPED rather
+//   than failed, because a project that does not typecheck its tests has not failed this run's
+//   spec. A spec set that does not compile is exit 4, and nothing is paid for a browser to learn
+//   it. The HAR BIND is delegated to `har-scrub.mjs bind` rather than reimplemented — that module
+//   owns what a placeholder in a replay match key is — and the destination is FIXED under
+//   `.pw-prove/` rather than passed: the committed recording must stay canonical, and the bound
+//   copy carries THIS run's live credential, so it must never land where git tracks it. Exit 5 is a
+//   bind that cannot be made safe, and its two forms (`unbound-placeholder`, `committable-output`)
+//   are reported in the phase's `reason` rather than as two codes, because the claim is one claim
+//   and only the next move differs. `PW_PROVE_HAR` then goes on the RUNNER's environment, so every
+//   invocation this verb makes has the bound recording without the agent carrying it — the other
+//   two verbs have no bind phase of their own and inherit it from the environment they are given.
+//
 //   THE RUN CARRIES NO WORKER OVERRIDE (ADR-0017). Scaffolded configs leave `workers` undefined off
 //   CI, so the run takes Playwright's default of cores/2 and the scenarios go together: measured
 //   over 31 runs and 120 test instances at 1.76–1.89× less wall clock, with zero failures and zero
