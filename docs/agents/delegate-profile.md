@@ -79,6 +79,20 @@ Taking one side silently deletes a worker's evals. pw-prove's copy was retired i
 now one file per case, where the same trap appears as two workers adding a case with the same id —
 but `e2e-reviewer` and `playwright-debugger` still carry the array form.
 
+### Merge-back trap: two workers appending to `CONTEXT.md` land under the wrong heading
+
+`CONTEXT.md` is a glossary that grows by appending at the tail, so two workers adding terms in the
+same frontier conflict there every time — the same shape as the `metadata.version` trap above, and
+it happened on the first pair of the #130 tree (#131 and #132).
+
+**Resolve by keeping both sides, then check which heading each side's entries belong under.** The
+conflict is trivial; the real defect is invisible in it. A worker that adds a new glossary *part*
+(an H1) and a worker that adds entries to the tail cannot see each other, so the second one's
+entries sit under whatever H1 was last on its own branch — semantically wrong, with no marker.
+#132's `Span` / `Span index` / `Corpus, control and excluded` were authored under `# Eval
+vocabulary` and belonged under `# Run forensics vocabulary`, which only existed on #131's branch.
+Cross-links between the two sides resolve only after this is fixed.
+
 ### Merge-back trap: a conflicted region can silently DROP lines neither side deleted
 
 Measured 2026-08-23 merging #145 on top of #143, both of which extended the same shipped module
@@ -111,6 +125,25 @@ coordinator on the merged result, all `24 passed, 0 failed`.
 Treat a lone drift-smoke failure as suspect, not as a verdict: **re-run before acting on it.** A
 second failure, or one that names a file the branch touched, is real and must be investigated.
 Do not add a retry to the script to make this go away — that would hide the real case too.
+
+### Known noise: publish-proof's three credential-probe cases are network-dependent
+
+On 2026-08-22, a **docs-only** merge (#136, three markdown files) produced three `[FAIL]`s in
+`scripts/ci/test-publish-proof.sh`:
+
+```
+a refused credential warns without blocking — exit 3, wanted 0
+a refused credential makes the run's delivery not ready — exit 3, wanted 0
+no rejected-credential warning on 401
+```
+
+All three are the credential-probe cases, all three reach the network, and the merged diff could not
+have touched them. Two immediate re-runs — the suite alone, then the whole of `ci-local.sh` — came
+back **128 passed, 0 failed** and all-green.
+
+**Re-run before acting on a failure in these three.** Same rule as the drift smoke above: a second
+failure, or a failure in a case that is not one of the three, is real. Do not add a retry to the
+script — that would hide the real case too.
 
 ### Dispatch note: the whole `worker-*` family does not know low-level dispatches
 

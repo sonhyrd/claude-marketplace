@@ -153,7 +153,11 @@ Scope: [framework scope](docs/framework-scope.md) (Playwright and Cypress only) 
 Agent workflow config: [delegation profile](docs/agents/delegate-profile.md) ·
 [issue tracker](docs/agents/issue-tracker.md). Agent guide: [AGENTS.md](./AGENTS.md).
 
-Specs: [publish the Proof page over MCP](docs/specs/0001-clips-mcp-publish.md).
+Specs: [the pw-prove fix spec](docs/specs/0002-pw-prove-fix-spec.md) — the 25 verified friction findings
+turned into changes to the prompt and the shipped scripts, in the ranking the evidence gave them:
+what to change and where, what not changing it measurably cost, the two findings that get a
+regression guard instead of a fix, and the three ADR numbers reserved for the decisions that are
+structural. It proposes; it files no tickets.
 
 Studies: [proof target measurements](docs/studies/proof-target-measurements.md) — development server
 against a built preview, measured, plus the two claims that were verified by running them ·
@@ -162,7 +166,31 @@ pull request on a real application, with the timings against the numbers this wo
 and the twelve behaviours no fixture shows ·
 [Playwright config composition](docs/studies/playwright-config-composition.md) — what Playwright
 itself documents and implements about `webServer`, `reuseExistingServer`, deriving one config from
-another, and the four places the current `webServer: undefined` rule outruns its sources.
+another, and the four places the current `webServer: undefined` rule outruns its sources ·
+[run forensics](docs/studies/run-forensics.md) — the plan and index for what pw-prove cost across 26
+real sessions: the corpus and the three groups it splits into, what the exercise will file here, and
+the scope boundaries stated up front so an absence of findings is not read as an all-clear ·
+[session distillation](docs/studies/session-distillation.md) — the instrument that exercise reads a
+session with: the fixed schema, the sub-agent prompt verbatim, the redaction rule that runs at
+source because nothing sandboxes it, how far past the last script exit a distillation reads, and what
+running it over all 26 sessions said about the instrument itself ·
+[profile audit](docs/studies/profile-audit.md) — whether 538 lines of `.pw-prove/profile.md` across
+the two target repositories earn their keep, judged entry by entry on applied / contradicted /
+declared, plus the two findings that outrank every entry: the file a run reads is not the file the
+last run wrote, and the contradiction line the skill requires appears in none of the 26 sessions. ·
+[friction findings](docs/studies/friction-findings.md) — the ranked list those 26 records produce:
+thirty-two stable `FR` categories assigned from the evidence, ordered frequency-first with every
+severity lift stated, time reported alongside rather than folded in, each one attributed to a
+`SKILL.md` section or a named script and stamped with the version it was observed on, repository
+faults kept separate and boundary cases kept as boundary cases ·
+[setup — nuxt-hyrd-chrysus](docs/studies/setup-nuxt-hyrd-chrysus.md) — what that repository could
+provide so the next proof against it does not re-pay for it: the build that is 10–29% of every run,
+the preview server whose announced pid is never the listener, the specs that had never been run, and
+the application facts a 321-line profile is failing to deliver ·
+[setup — hyrd-widget](docs/studies/setup-hyrd-widget.md) — the same for the other repository, which
+differs: three proof targets and no way to name one (a published, fully-gated proof of the wrong
+subject), thirty standing P0 findings, carried scenarios that film nothing, and a push rule that
+stopped five runs for a question a narrower rule could answer.
 
 Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-input.md) ·
 [0002 merge main before proof](docs/adr/0002-merge-main-before-proof.md) ·
