@@ -853,7 +853,7 @@ NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/no-dwell.spec.ts
 [ -s "$NPX_ARGV" ] && bad "the runner filmed over a spec that carries no dwell" \
   || ok "nothing was filmed while the precondition stood"
 [ "$(jq_field 'result')" = refused ] && ok "the summary says refused" || bad "result wrong: $(summary)"
-[ "$(jq_field 'schema')" = 3 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
+[ "$(jq_field 'schema')" = 4 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
 
 echo ""
 echo "-- the precondition does not clear the results directory --"
@@ -986,6 +986,190 @@ else
 fi
 [ "$(grep -c '^PWPROVE_SUMMARY ' "$W/out")" = 1 ] \
   && ok "exactly one JSON summary line from film" || bad "film summary line count wrong"
+
+echo ""
+echo "-- film refuses while an undeclared live call from the audit stands --"
+# The audit REPORTS the undeclared call and films nothing; the refusal that costs a re-run rather
+# than the clips is this verb's. The finding reaches it through the run's own state, because the
+# audit's summary is stdout an agent read and not something a later process can see.
+if [ ! -f "$W/trace.zip" ]; then
+  bad "film refusal: no trace fixture (unzip absent), so the audit could not classify anything"
+else
+export NPX_TRACE_SRC="$W/trace.zip"
+film_repo film-undeclared
+rm -f "$R/e2e/no-dwell.spec.ts"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ "$(jq_field 'phases.hermetic.undeclared.length')" = 1 ] \
+  && ok "the audit leaves one undeclared live call standing" || bad "audit setup wrong: $(summary)"
+[ -f "$R/.pw-prove/audit-network.json" ] \
+  && ok "the audit's network finding is persisted under the run's dot-directory" \
+  || bad "the finding reached no state file, so film cannot see it"
+unset NPX_TRACE_SRC
+
+mkdir -p "$R/test-results/earlier-run"
+printf 'old\n' > "$R/test-results/earlier-run/video.webm"
+: > "$NPX_ARGV"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 13 ] && ok "film refuses under its own exit code (13)" \
+  || bad "expected exit 13 while an undeclared live call stands"
+[ -s "$NPX_ARGV" ] && bad "the runner filmed while an undeclared live call stood" \
+  || ok "nothing was filmed, so nothing was paid for"
+[ -f "$R/test-results/earlier-run/video.webm" ] \
+  && ok "a refused film leaves the standing evidence alone" || bad "a refused film cleared test-results"
+[ "$(jq_field 'result')" = refused ] && ok "the summary says refused" || bad "result wrong: $(summary)"
+[ "$(jq_field 'network.undeclared.join(",")')" = "GET http://api.test/api/v1/exchange-rates" ] \
+  && ok "the summary names the call that refused the run" || bad "network.undeclared wrong: $(summary)"
+[ "$(jq_field 'network.reason')" = undeclared \
+  ] && ok "the summary says which refusal this is" || bad "network.reason wrong: $(summary)"
+grep -q "UNDECLARED live call" "$W/err" && ok "the refusal names the call in the transcript too" \
+  || bad "the refusal is silent about which call stands"
+
+echo ""
+echo "-- declaring the carve-out clears the refusal, with no second audit --"
+# The live list is a fact about a RUN; the carve-out lines are a fact about the SPEC TEXT. So the
+# record persists only the run half and the verb re-reads the spec half — which is what makes a
+# refusal unable to outlive the edit that answered it.
+sed -i '1i // CARVE-OUT: GET /api/v1/exchange-rates — the live round-trip IS the AC — restore: read-only' \
+  "$R/e2e/a.spec.ts"
+: > "$NPX_ARGV"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+rc=$?
+[ "$rc" = 0 ] && ok "the declared call films, without re-running the audit" \
+  || { bad "exit $rc after the carve-out was declared"; head -5 "$W/err"; }
+[ "$(jq_field 'network.undeclared.length')" = 0 ] \
+  && ok "the recomputed list is empty" || bad "network.undeclared wrong: $(summary)"
+[ "$(jq_field 'network.status')" = ok ] \
+  && ok "the summary reports the check ran and cleared" || bad "network.status wrong: $(summary)"
+
+echo ""
+echo "-- a spec edit that did NOT answer the finding leaves the refusal standing --"
+# Mocking the call is invisible in the spec's carve-out lines, so a record whose specs have moved
+# cannot speak for them: it refuses under the same code and says the finding predates the edit,
+# rather than silently licensing a filming run nothing has cleared.
+export NPX_TRACE_SRC="$W/trace.zip"
+film_repo film-stale
+rm -f "$R/e2e/no-dwell.spec.ts"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+unset NPX_TRACE_SRC
+printf '// an unrelated edit\n' >> "$R/e2e/a.spec.ts"
+: > "$NPX_ARGV"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 13 ] && ok "an unrelated spec edit does not clear the refusal" \
+  || bad "expected exit 13 after an edit that answered nothing"
+[ "$(jq_field 'network.reason')" = stale ] \
+  && ok "the summary says the finding predates the current spec text" || bad "network.reason wrong: $(summary)"
+[ "$(jq_field 'network.specs_moved')" = true ] \
+  && ok "the summary says the specs moved under the record" || bad "specs_moved wrong: $(summary)"
+[ -s "$NPX_ARGV" ] && bad "the runner filmed under a record that cannot speak for these specs" \
+  || ok "nothing was filmed under a stale record"
+
+echo ""
+echo "-- a fresh audit is what clears a stale record --"
+export NPX_TRACE_SRC="$W/trace.zip"
+sed -i '1i // CARVE-OUT: GET /api/v1/exchange-rates — the live round-trip IS the AC — restore: read-only' \
+  "$R/e2e/a.spec.ts"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+unset NPX_TRACE_SRC
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "the re-run audit clears it — one cheap re-run, not the clips" \
+  || { bad "exit $? after a clean audit"; head -5 "$W/err"; }
+
+echo ""
+echo "-- an audit that reached no classification licenses nothing and refuses nothing --"
+# A red audit never asks the question, so it must leave no record behind for a later film to read
+# as a clean bill of health.
+export NPX_TRACE_SRC="$W/trace.zip"
+film_repo film-record-cleared
+rm -f "$R/e2e/no-dwell.spec.ts"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+[ -f "$R/.pw-prove/audit-network.json" ] || bad "no record from the green audit"
+cat > "$W/runner-out" <<'OUT'
+  1) [chromium] › e2e/a.spec.ts:12:5 › saves the profile
+    TimeoutError: locator.click: Timeout 30000ms exceeded.
+    Call log:
+      - waiting for locator('[data-testid="save"]')
+OUT
+NPX_EXIT=1 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+: > "$W/runner-out"
+unset NPX_TRACE_SRC
+[ -f "$R/.pw-prove/audit-network.json" ] \
+  && bad "a red audit left the previous run's finding standing" \
+  || ok "an audit that classified nothing leaves no record behind"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "with no record, film is refused by nothing" || bad "film refused with no record: $(summary)"
+[ "$(jq_field 'network.status')" = not-reached ] \
+  && ok "the summary says no finding was there to read" || bad "network.status wrong: $(summary)"
+fi
+
+echo ""
+echo "-- the re-film count, and the warning the second one publishes with --"
+# The body allows exactly one re-film; a second illegible frame PUBLISHES, with a warning. So this
+# is never a refusal — it is a fact the module carries forward for Step 8 and the completion report,
+# instead of an agent recalling across a diagnosis and a re-run which attempt this was.
+film_repo film-count
+rm -f "$R/e2e/no-dwell.spec.ts"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "the first filming run is green" || bad "exit $? on the first film"
+[ "$(jq_field 'films')" = 1 ] && ok "the first filming run is film 1" || bad "films wrong: $(summary)"
+[ "$(jq_field 'publish_with_warning')" = false ] \
+  && ok "a first filming run does not publish with a warning" || bad "warning set on the first film: $(summary)"
+[ -f "$R/.pw-prove/film-state.json" ] \
+  && ok "the count is kept in the run's own state" || bad "no film state was written"
+
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 0 ] && ok "the re-film is green too — this is never a refusal" || bad "exit $? on the re-film"
+[ "$(jq_field 'films')" = 2 ] && ok "the count survives between invocations" || bad "films wrong: $(summary)"
+[ "$(jq_field 'publish_with_warning')" = true ] \
+  && ok "the second filming run sets publish-with-warning in the summary" \
+  || bad "publish_with_warning wrong: $(summary)"
+grep -q "published with warning" "$W/err" \
+  && ok "the warning reaches the transcript in the words the report must carry" \
+  || bad "the re-film said nothing about the warning"
+
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$(jq_field 'films')" = 3 ] && ok "a third film still counts" || bad "films wrong: $(summary)"
+[ "$(jq_field 'publish_with_warning')" = true ] \
+  && ok "the warning stands past the one re-film the body allows" || bad "warning cleared: $(summary)"
+
+echo ""
+echo "-- a refused film is not a film --"
+film_repo film-count-refused
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/no-dwell.spec.ts
+[ "$?" = 12 ] && ok "the precondition still refuses" || bad "expected exit 12"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$(jq_field 'films')" = 1 ] \
+  && ok "a run that filmed nothing did not spend the re-film" || bad "films wrong: $(summary)"
+
+echo ""
+echo "-- a red filming run does not spend the re-film either --"
+film_repo film-count-red
+rm -f "$R/e2e/no-dwell.spec.ts"
+NPX_EXIT=1 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$?" = 6 ] && ok "a red filming run is still exit 6" || bad "expected exit 6"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$(jq_field 'films')" = 1 ] \
+  && ok "the first film that produced clips is film 1" || bad "films wrong: $(summary)"
+
+echo ""
+echo "-- a green audit opens a fresh filming cycle --"
+# A green audit is what licenses filming, so it is where a filming cycle begins: without that, a
+# second proof in the same worktree would warn on its very first clip.
+film_repo film-count-cycle
+rm -f "$R/e2e/no-dwell.spec.ts"
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$(jq_field 'publish_with_warning')" = true ] || bad "the cycle fixture did not reach the warning"
+NPX_EXIT=0 run audit --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/a.spec.ts
+NPX_MAKE_CLIPS="good-one" NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/a.spec.ts
+[ "$(jq_field 'films')" = 1 ] && ok "the count starts again after a green audit" || bad "films wrong: $(summary)"
+[ "$(jq_field 'publish_with_warning')" = false ] \
+  && ok "the next proof's first clip publishes without a warning" || bad "warning carried over: $(summary)"
 
 echo ""
 echo "=============================== mutate ==============================="

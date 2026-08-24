@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.33.0"
+  version: "0.34.0"
 ---
 
 # pw-prove
@@ -905,6 +905,9 @@ Every summary carries all three phases whatever they did — `ok`, `skipped` (th
 | `0` | The set was filmed | **Read every frame** (*Clip inspection* below), then the mutation check |
 | `6` | The filming run went red | A spec green in the audit run and red under `PW_PROVE_CLIP` is a **filming-law violation** — the variable may only add time. Fix the spec, re-run the audit verb, film again |
 | `12` | **Fidelity precondition refused** — the spec set does not carry the clip-fidelity contract | Nothing was filmed and `test-results/` is untouched. The audit's own output names the offending spec and the fix; apply it to the **committed spec** and film again. This holds for a `carried` spec too: the dwell is proof machinery, not an assertion about the PR's behaviour, so repairing it is not the loosening a carried failure forbids |
+| `13` | **An undeclared live call from the audit stands** | Nothing was filmed and `test-results/` is untouched. The refusal names each call and the summary's `network.reason` says which kind it is: `undeclared` — mock the call, or add the `// CARVE-OUT:` line when the real round-trip **is** the AC, and film again (a declaration clears it with **no** second audit); `stale` — the spec set has moved since the audit that recorded these calls, so that record cannot speak for it. Run the audit verb again |
+
+**Why the refusal is here and not on the audit verb.** An undeclared live call is a spec edit waiting to happen, and a spec edit invalidates footage: fix it before filming and it costs one cheap re-run, fix it after and it costs the clips as well. The finding reaches this verb through the run's own state — a summary is stdout *you* read, and a refusal that depended on you volunteering the finding would not be one. What is persisted is the **live calls**, never the undeclared list: a live call is a fact about a run and cannot be re-derived without paying for another one, while the carve-out lines are a fact about the spec text, which the verb re-reads every time. That is why declaring the carve-out clears the refusal immediately, and why mocking the call — invisible in the spec's carve-out lines — needs the audit re-run. **Judging whether a carve-out that *is* present earns its place remains yours**; presence is all this refusal computes.
 
 **The precondition is not a duplicate of Step 6, and running it there does not license skipping it here.** A heal-loop edit between the two can have moved or dropped the dwell, and a precondition the verb enforces cannot be skipped by an agent that believes it already ran it. Filming a spec with no reader for `PW_PROVE_CLIP` is the originating regression: the flag is inert, the dwell never happens, and every gate stays green over a recording that shows nothing.
 
@@ -987,7 +990,7 @@ The spec is hermetic by default, and **the audit verb already classified the run
 **Presence is computed; legitimacy is yours.** An `undeclared` entry is a string comparison, so it needs no judgement from you — but the reverse is not true: a call that *is* declared is a call whose carve-out you still have to accept or reject, against the AC. A carve-out is legitimate only where the real round-trip **is** the acceptance criterion; one that exists to make a mock unnecessary is a live call wearing a comment.
 
 - Every live call (and every in-spec round-trip) named in a `// CARVE-OUT:` line **you accept** → pass; the report's `Tests` line carries `hermetic (carve-outs: <list>)`.
-- **Any undeclared live call → the run FAILS**, even though green: mock it (or declare the carve-out if the real round-trip IS the AC) and re-run the audit verb. An undeclared live *write* to a shared tenant is a data-pollution incident — say so in the report.
+- **Any undeclared live call → the run FAILS**, even though green: mock it (or declare the carve-out if the real round-trip IS the AC) and re-run the audit verb. You are not the only thing standing between it and the clips — **the film verb refuses while any stands** (exit `13`) — but reaching that refusal means you carried a known finding into the next command. An undeclared live *write* to a shared tenant is a data-pollution incident — say so in the report.
 - An in-spec round-trip is **not** in `undeclared` — a source line is not a URL, so matching it against a carve-out is a reading, not a comparison. Judge each one.
 
 **A clean audit is what licenses the filming run.** Fix here and the fix costs one cheap re-run; fix after filming and it costs the clips as well.
@@ -1015,9 +1018,11 @@ The run that motivated this shipped a correctly sized, held clip that showed **n
 The fix goes into the **committed spec** — never into the proof config, and never into a filming-only branch (the filming law: `PW_PROVE_CLIP` may only add time).
 
 1. Apply the matching fix.
-2. **Re-film once** — the same `proof-run.mjs film` command. It re-runs the clip-fidelity audit over the edited spec as its precondition (an edit that moved the dwell can have dropped its marker), clears `test-results/` itself, and re-extracts the frames. Exit 12 means the edit broke the contract rather than fixing the frame.
+2. **Re-film once** — the same `proof-run.mjs film` command. It re-runs the clip-fidelity audit over the edited spec as its precondition (an edit that moved the dwell can have dropped its marker), clears `test-results/` itself, re-extracts the frames, and counts this run as the re-film. Exit 12 means the edit broke the contract rather than fixing the frame; exit 13 means the edit moved the spec set out from under the audit's network finding — re-run the audit verb.
 
-**Exactly one re-film.** A second illegible frame **publishes anyway**, with an explicit warning: `Clip N — illegible (<diagnosis>), published with warning`, in both the completion report and the PR comment. A bad clip is not a failed test; the proof is the passing test plus the mutation verdict.
+**Exactly one re-film, and the verb is the one counting.** A second illegible frame **publishes anyway**, with an explicit warning: `Clip N — illegible (<diagnosis>), published with warning`, in both the completion report and the PR comment. A bad clip is not a failed test; the proof is the passing test plus the mutation verdict.
+
+Which attempt this is is **read, never recalled**: the film summary carries `films` (this filming run's number) and `publish_with_warning`. `publish_with_warning: true` means this run is a re-film, so any clip still illegible after it goes out with the warning above rather than round again — carry that flag into Step 8 and the completion report. Only a run that produced clips spends the re-film, so a refusal and a red run leave the count where it was; a green **audit** resets it, because a green audit is what licenses filming and so opens the cycle the count runs in.
 
 ### Mutation check (PR-mode: REQUIRED — hard-bounded)
 
