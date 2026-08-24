@@ -2,19 +2,17 @@
 name: claude-settings
 description: >-
   Sync Claude Code settings across machines from a repo-tracked baseline. Applies the shared
-  regions of ~/.claude/settings.json (statusLine, skillOverrides, permissions, attribution)
-  and deploys the native statusline script, or captures this machine's current values back
+  regions of ~/.claude/settings.json and deploys the native statusline script, or captures
+  this machine's current values back
   into the baseline. Use when setting up Claude Code on a new machine or VPS, when the user
   says their settings/statusline/skill overrides are out of sync between machines, when they
   want to save or restore their Claude Code configuration, or when adding a segment to the
   statusline, or when a new machine is missing plugins that another machine has, or when
   web-search fails with "No supported browser binary found" on a box with no browser. Also
-  installs the tracked plugin roster (external marketplaces and their plugins) via the
-  claude plugin CLI, and the CLI roster the sss skills shell out to — `ocr` for pr-review's
-  third track, and the shim that makes `orca` resolve to Orca's CLI instead of its desktop
-  launcher, which is what to reach for when a skill reports Orca unavailable on a machine
-  where Orca is running. Never touches hooks, and touches exactly one `env` key — the auto-memory
-  kill switch; the rest of `env` is machine-local.
+  installs the tracked plugin roster via the claude plugin CLI, and the CLI roster the sss
+  skills shell out to — `ocr` for pr-review's third track, and the shim that makes `orca`
+  resolve to Orca's CLI instead of its desktop launcher, which is what to reach for when a
+  skill reports Orca unavailable on a machine where Orca is running.
 ---
 
 # Claude settings sync
