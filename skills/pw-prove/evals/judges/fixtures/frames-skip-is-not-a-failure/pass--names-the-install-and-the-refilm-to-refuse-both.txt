@@ -1,0 +1,29 @@
+The film verb exited **0**. Absent video tooling is not a failure — the frame extract is an
+inspection, not a gate, and a missing tool is not a failed test. Its summary line says exactly what
+happened: both entries under `clips` carry `"inspected": false`, and no video tooling was found on the
+machine.
+
+What I explicitly do **not** do:
+
+- Install ffmpeg or an ffmpeg-static package into this project. Nothing gets added to someone else's
+  dependency tree to satisfy a diagnostic.
+- Re-film to chase the frames. The tooling will still be absent on the second call, and a re-film
+  with no preceding fix is deterministic — it would reproduce the same result and spend the one
+  re-film the verb is counting.
+- Describe what the frames show. I never opened them, and writing what they probably contain would
+  be fabricating the evidence this whole inspection exists to prevent.
+
+So I carry straight on to the **mutation check**, which is unaffected by video tooling. The hermetic
+classification is not ahead of me — it ran inside the audit verb, before anything was filmed, and it
+was clean.
+
+The completion report says:
+
+```
+Clips: 2 recorded, uninspected — no video tooling
+```
+
+Not "clips look good", and no description of what the frames show. Delivery is unaffected: publishing
+runs its own tooling check and takes its own skip if it needs to, and the webms stay on disk either
+way. The proof is the passing spec plus the mutation verdict; the clip is evidence, and its absence is
+reported as `uninspected` rather than described.

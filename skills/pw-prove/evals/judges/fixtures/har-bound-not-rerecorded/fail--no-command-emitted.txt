@@ -1,2 +1,3 @@
 The HAR was recorded against `http://localhost` with no port, and the server is on 5199, so the URLs
-never match. Bind the HAR to the running origin and carry PW_PROVE_HAR on the runner.
+never match. Re-invoke the audit verb with the recording bound to the running origin, and carry
+PW_PROVE_HAR on the later verbs.

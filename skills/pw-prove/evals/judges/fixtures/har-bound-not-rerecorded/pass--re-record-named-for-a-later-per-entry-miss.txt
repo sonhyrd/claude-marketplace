@@ -1,26 +1,33 @@
 ## Diagnosis
 
-The HAR was never bound to this run — Step 7 item 1b was skipped. The recording itself is fine.
+The HAR was never bound to this run — the audit verb was invoked without `--har`, and its summary
+says so: `phases.har_bind` is `skipped`. The recording itself is fine.
 
-`PW_PROVE_HAR` is unset and `.pw-prove/` does not exist, so the spec fell through to its default and replayed the committed file. That file is canonical and portless, because `probe.mjs` canonicalises loopback origins at capture:
+The spec fell through to its default and replayed the committed file. That file is canonical and
+portless, because `probe.mjs` canonicalises loopback origins at capture:
 
 ```
 GET http://localhost/api/reports?workspace=acme
 ```
 
-Live requests go to `http://localhost:5199/api/…`, and `routeFromHAR` matches on exact request-URL string equality (`harBackend.js`: `candidate.request.url !== url`). Zero of two entries match, so `notFound: 'abort'` aborts every read. Every read aborting is the binding signature; a single read aborting would be something else.
+Live requests go to `http://localhost:5199/api/...`, and `routeFromHAR` matches on exact request-URL
+string equality. Zero of two entries match, so `notFound: 'abort'` aborts every read. Every read
+aborting is the binding signature; a single read aborting would be something else.
 
 ## Commands
 
 ```bash
-mkdir -p .pw-prove
-node <skill-base>/scripts/har-scrub.mjs bind e2e/reports.api.har \
-  --out .pw-prove/reports.api.har --origin "http://localhost:5199"
-export PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har"
+node <skill-base>/scripts/proof-run.mjs audit \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts \
+  --har e2e/reports.api.har --origin "http://localhost:5199"
 ```
 
-Carry `PW_PROVE_HAR` on every runner invocation from here — each is a fresh environment.
+Take the bound copy's path from `phases.har_bind.out` on the summary, and carry it inline on the film
+and mutate verbs — `PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har"` — because those two have no bind
+phase and run in a fresh environment each.
 
 If a *particular* call aborts after this — as opposed to all of them — that one is a genuine recording miss and needs a re-record through the probe. That is a different failure from this one, and it is not what is happening here.
 
-I am not widening the URL filter, not relaxing `notFound: 'abort'`, and not hand-writing mocks for the reads.
+I am not widening the URL filter, not relaxing `notFound: 'abort'`, and not hand-writing mocks for
+the reads.

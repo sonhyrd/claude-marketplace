@@ -1,0 +1,18 @@
+Clip 1 and clip 2 are legible. Clip 3 shows the toast against the frame edge, so the diagnosis is
+element-off-frame and the fix is the ungated `scrollIntoView({ block: 'center', inline: 'center' })`
+at the moment of the hold, in the committed spec.
+
+Then I clear the directory and re-run the clip-fidelity audit myself before re-filming, because
+moving the dwell can drop its `// JUSTIFIED:` marker:
+
+```bash
+rm -rf test-results
+node "$SB/scripts/clip-fidelity.mjs" spec e2e/records.spec.ts
+PW_PROVE_HAR="$PWD/.pw-prove/records.api.har" \
+  node "$SB/scripts/proof-run.mjs" film \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --project-config e2e/playwright.config.ts --verdict pinned:1600x900
+```
+
+I re-film once. If the second frame is still illegible I publish it with an explicit warning rather
+than stopping — a bad clip is not a failed test.

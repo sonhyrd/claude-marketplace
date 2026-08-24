@@ -1,0 +1,33 @@
+I do not re-run `hermetic.mjs` myself, I do not unzip trace.zip, I do not pipe the `*.network` files
+through jq, and I am not hand-rolling a parser. The audit verb already did the classification — the
+phase ran on the green run, over the run's own traces, once per spec in the set — so the answer is in
+`phases.hermetic` on the summary line I already have, and re-running the classifier by hand would
+only be a second copy of a reading that already exists.
+
+Reading `phases.hermetic`:
+
+- `live` — one entry, `POST /api/auth/session`, the auth bootstrap.
+- `mocked` — the section GET.
+- `in_spec_round_trips` — one entry, tests/e2e/checkout.spec.ts.
+- `undeclared` — empty.
+- `carve_outs` — one, the spec header's CARVE-OUT for the live auth bootstrap.
+
+`undeclared` being empty is the mechanical half only, and it is not the verdict. The section GET is
+patched in flight with `const response = await route.fetch()` followed by `route.fulfill`, so the
+browser only ever sees a fulfilled response and the trace files it under `mocked`. A trace records
+the browser, not the Playwright process — the `route.fetch()` call leaves the runner and hits the
+real server, so it is live traffic. It is deliberately absent from `undeclared` because a source line
+is not a URL, and matching one against a carve-out is a reading rather than a comparison. That
+reading is mine.
+
+The verdict: the header's single carve-out covers the auth bootstrap and does not cover the
+`route.fetch()` section GET. So this run FAILS the hermetic audit even though it is green. Two ways
+out, and they are not equivalent — replace the patch-in-flight with a static mock taken from the
+recording, which is the default and makes the spec genuinely hermetic; or declare a second carve-out,
+legitimate only if the real section response is itself the acceptance criterion. Either way I fix it
+before anything is filmed and re-run the audit verb: a hermetic finding is a spec edit, and a spec
+edit invalidates footage.
+
+The declared auth carve-out is still mine to accept or reject as well. Presence is computed;
+legitimacy is not, and a carve-out that exists only to make a mock unnecessary is a live call wearing
+a comment. Here the session bootstrap is genuinely the app's own entry, so I accept it.
