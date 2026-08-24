@@ -1,4 +1,5 @@
-First, the inspection itself — what each frame shows:
+First, the inspection itself — what each frame shows. The film verb extracted them for me and the
+summary says which exist, so this is reading rather than a command I run:
 
 - **Clip 1** — the saved banner, centred and settled. Legible.
 - **Clip 2** — the saved banner on the second record, centred and settled. Legible.
@@ -25,14 +26,26 @@ Two things this is deliberately **not**:
 - It goes in the **committed spec**, not the proof config. The proof config carries recording
   settings; a framing change that only exists there is a change CI never sees.
 
-**Then, in order:**
+**Then the re-film, which is the same `proof-run.mjs film` command I already ran.** I do not clear
+`test-results/` by hand and I do not run `clip-fidelity.mjs` beside it — the verb does both. It
+re-runs the clip-fidelity audit over the edited spec as its **precondition** (an edit that moved the
+dwell can have dropped its `// JUSTIFIED:` marker), clears the results directory itself, films again,
+re-extracts the frames, and counts this run as the re-film:
 
-1. Re-run the Step-6 clip-fidelity audit on the edited spec and require **exit 0** before re-filming.
-   Moving the dwell can drop its `// JUSTIFIED:` marker, and that is a Step-6 failure I would
-   otherwise carry into the film.
-2. `rm -rf test-results`
-3. Re-film **once**, and re-extract the frames.
+```bash
+PW_PROVE_HAR="$PWD/.pw-prove/records.api.har" \
+  node "$SB/scripts/proof-run.mjs" film \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/records.spec.ts \
+  --project-config e2e/playwright.config.ts \
+  --verdict pinned:1600x900
+```
 
-If the second frame is still illegible I **publish it with an explicit warning** —
-`Clip 3 — illegible (element off-frame), published with warning` — rather than stopping. A bad clip
-is not a failed test, and I do not re-film a second time chasing it.
+Exit 12 would mean the edit broke the fidelity contract rather than fixing the frame; exit 13 would
+mean the edit moved the spec set out from under the audit's network finding, and I would run the
+audit verb again.
+
+Which attempt this is I **read** rather than recall: the new summary carries `films: 2` and
+`publish_with_warning: true`. So if the second frame is still illegible I **publish it with an
+explicit warning** — `Clip 3 — illegible (element off-frame), published with warning` — rather than
+stopping. A bad clip is not a failed test, and I do not re-film a second time chasing it.

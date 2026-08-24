@@ -1,8 +1,8 @@
-The frame extract failed because ffprobe is missing, so I install the tooling and retry the extract:
+The film summary reports `"inspected": false` for both clips because ffprobe is missing, so I install
+the tooling and retry the extract:
 
 ```bash
 npm i -D ffmpeg-static
-node <skill>/scripts/clip-fidelity.mjs frames test-results/*/video.webm
 ```
 
 If that still does not work the run fails at Step 7 — an unverified clip is an unverified proof. The

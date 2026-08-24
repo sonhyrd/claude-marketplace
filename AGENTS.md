@@ -67,8 +67,8 @@ brought with it afterwards.
 docs orphan check, language,
 **scanner pattern corpus**, the shipped pw-prove scripts at the process boundary, hermetic audit,
 **the probe HAR contract**, the **HAR scrubber**, publish-proof, **clip-fidelity audit**,
-**run-ledger smoke**, **span index**, e2e smell scan). If you change any check, update this
-script first.
+**the proof-run audit and film verbs**, **body/module invocation parity**, **run-ledger smoke**,
+**span index**, e2e smell scan). If you change any check, update this script first.
 
 ## Directory Layout
 
@@ -88,7 +88,7 @@ script first.
 │   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
 │   │   ├── evals/files/    # NOT shipped — repo fixtures the wet cases run pw-prove against
 │   │   ├── evals/prompt-shapes.md # NOT shipped — the trigger/behavior rule and the classification
-│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/clips/video/pwprove-run .mjs
+│   │   └── scripts/        # SHIPPED — Node, zero deps: preflight/probe/har-scrub/hermetic/clip-fidelity/publish-proof/proof-run/clips/video/pwprove-run .mjs
 │   ├── e2e-reviewer/
 │   │   └── scripts/        # SHIPPED — scan.mjs + ast-grep-rules/
 │   └── playwright-debugger/
@@ -161,6 +161,8 @@ bash scripts/ci/test-publish-proof.sh # publish-proof.mjs: manifest in, one Clip
 bash scripts/ci/test-probe-har.sh   # probe.mjs: recordHar flushes on context close, and says so
 bash scripts/ci/test-har-scrub.sh   # har-scrub.mjs: scrub/residue exit codes; the referrer + query-parameter under-scrub
 bash scripts/ci/test-clip-fidelity.sh # clip-fidelity.mjs: the Step-6 dwell/pin/verdict exit codes, and the Step-7 frame over real video
+bash scripts/ci/test-proof-run.sh   # proof-run.mjs audit + film: exit codes, the JSON summary, the exact runner argv
+bash scripts/ci/test-invocation-parity.sh # SKILL.md's proof-run.mjs verbs/flags vs the module itself (red against four mutated bodies)
 bash scripts/ci/test-run-ledger.sh  # PWPROVE_RUN run-ledger contract on the shipped scripts
 bash scripts/ci/test-span-index.sh  # span-index.py: bracketed span, reaction tail and its caps, no-transcript marker, classification, schema refusal
 bash scripts/run-evals-isolated.sh --self-test # the eval runtime's own seam (no API calls)
@@ -225,7 +227,7 @@ was mined and retired in #61. The surface is eight things:
 |---|---|
 | `skills/pw-prove/evals/eval.yaml` | Suite config: runtime, engine, the **active** case list, judge defaults. Installs pw-prove **alone** |
 | `skills/pw-prove/evals/eval.collision.yaml` | The **two-skill arm** (#81), identical to `eval.yaml` except that its `skills:` list installs pw-prove **and** e2e-reviewer. Its three cases are judged on *which* skill a request reached, which no single-skill arm can ask. Run it by name with `PWPROVE_EVAL_YAML=…` |
-| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **52 on disk, 33 active in `eval.yaml` and 3 in `eval.collision.yaml`** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift. An id names what the case guards (`case-33-missing-har-declared`), the file name matches the id, and a `step:` key names the SKILL.md section — so a body edit's blast radius is readable from the case files as well as from `REGISTRY.md` |
+| `skills/pw-prove/evals/cases/<id>.yaml` | One file per case. **55 on disk, 33 active in `eval.yaml` and 3 in `eval.collision.yaml`** — the rest are quarantined. Every one carries a `REGISTRY.md` row: batch 3 (#65) closed the registry over the whole suite, so there is no undecided inventory left. One active case is [wet](CONTEXT.md#wet-case) (`w01`); `w02` is the wet case quarantined for an unstable uplift. An id names what the case guards (`case-33-missing-har-declared`), the file name matches the id, and a `step:` key names the SKILL.md section — so a body edit's blast radius is readable from the case files as well as from `REGISTRY.md` |
 | `skills/pw-prove/evals/judges/` | Script judges, plus `fixtures/<judge>/{pass,fail}--*.{txt,jsonl}` — a `.txt` is fed as the final message, a `.jsonl` as the transcript |
 | `skills/pw-prove/evals/files/` | Repo fixtures a [wet case](CONTEXT.md#wet-case) runs pw-prove against, staged into the run's workspace by that case's `context.repo_fixture`, which copies the directory's **contents** to the workspace **root** — so a prompt says "your current working directory", never "evals/files/x/". **`context.files` is `{workspace_path: INLINE CONTENT}`** (established from skill-up's `internal/evaluator/fixtures.go`, #76): the value is written verbatim as the file's body, so `p: p` stages a one-line file containing its own path and the case answers a different question. `scripts/ci/test-case-shapes.sh` fails on all three mistakes. Note also that a fixture written in a didactic voice is read by the skill-free baseline arm too, which is why a fixture-staging case's uplift needs its baseline checked (#69) |
 | `skills/pw-prove/evals/prompt-shapes.md` | The trigger/behavior rule, the per-case classification, and what it measured |

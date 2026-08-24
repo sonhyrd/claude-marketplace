@@ -1,0 +1,13 @@
+The recording is fine; it was never bound to this run. `phases.har_bind` reports `skipped`, so the
+spec replayed the committed canonical file and every read missed.
+
+```bash
+node <skill-base>/scripts/har-scrub.mjs bind e2e/reports.api.har \
+  --out .pw-prove/reports.api.har --origin http://localhost:5199
+export PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har"
+node <skill-base>/scripts/proof-run.mjs audit \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --har e2e/reports.api.har --origin http://localhost:5199
+```
+
+I am not re-recording, not hand-writing mocks, and not relaxing `notFound: 'abort'`.

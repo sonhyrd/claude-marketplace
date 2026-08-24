@@ -1,34 +1,47 @@
 **At Step 3 — the reuse is a legitimate pass.**
 
-`BUILD=reused`, `BUILD_REUSE=hit`, `BUILD_REUSE_REASON=commit-and-tree-unchanged`. The reason is
-the part that matters: the artifact was built from *this exact commit and working tree*, and nothing
-has been touched since the first run finished. The gate is satisfied by `BUILD=reused` exactly as it
-is by `BUILD=ok`.
+`BUILD=reused`, `BUILD_REUSE=hit`, `BUILD_REUSE_REASON=commit-and-tree-unchanged`. The reason is the
+part that matters: the artifact was built from *this exact commit and working tree*, and nothing has
+been touched since the first run finished. The gate is satisfied by `BUILD=reused` exactly as it is
+by `BUILD=ok`.
 
-So I do not force a rebuild to feel safe — that would spend a full build to arrive at the byte-identical
-artifact I already have. And an instant build phase here is neither a skipped build nor a failed one;
-it is a hit with its reason printed.
+So I do not force a rebuild to feel safe — that would spend a full build to arrive at the
+byte-identical artifact I already have. And an instant build phase here is neither a skipped build
+nor a failed one; it is a hit with its reason printed.
 
-**At Step 7 — the mutation check pays for its own build.**
+**At Step 7 — the mutation check pays for its own build, and the verb is what makes it.**
 
 The proof target is a *build*. Mutating one line of the changed component changes nothing in the
-standing artifact, so a mutation run against it is **green by construction** — the spec would pass,
-I would record "the spec does not guard the change", and that conclusion would be an artifact of
-never having rebuilt.
+standing artifact, so a mutation run against it is **green by construction** — the spec would pass, I
+would record "the spec does not guard the change", and that conclusion would be an artifact of never
+having rebuilt.
 
-So, in order:
+`proof-run.mjs mutate` closes that by construction rather than by my remembering. It forces the
+rebuild, stops the preview server by the PID I recorded at Step 3, starts it again with the command I
+give it, and **proves** the restart against the server's own new announcement past a mark it takes
+before the stop. An unproven restart is exit 11 and there is no verdict to read. I pass it the four
+things only I know:
 
-1. Mutate the line.
-2. Rebuild, forcing it past the reuse cache: `BUILD_REUSE=never`.
-3. Stop and **restart** the preview server so it serves the rebuilt artifact.
-4. Run the guarding test, keeping its artifacts out of the proof's:
+```bash
+PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har" \
+  node "$SB/scripts/proof-run.mjs" mutate \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts --grep "renames a report" --mutated src/ReportCard.tsx \
+  --build-command "pnpm build" --app-root "$PWD" \
+  --server-pid 41822 --server-log /tmp/preview.log \
+  --serve-command "pnpm preview --port 4173" --origin "$BASE_URL" \
+  --clips 3
+```
 
-   ```bash
-   npx playwright test e2e/reports.spec.ts -g "..." \
-     --config playwright.proof.config.ts --output=/tmp/pw-prove-mutation
-   ```
+Two things I explicitly do **not** put on that line, because the verb fixes both:
 
-   Without `--output` the mutation run would overwrite `test-results/` and destroy the clips and
-   trace the proof run just produced.
-5. **Revert** the mutation exactly, then mark the artifact **stale** rather than rebuilding here.
-   Whichever later step next needs the server pays that rebuild; Step 8 hygiene just stops it.
+- `BUILD_REUSE=never`. The forced-no-reuse build is the verb's, not a variable I export around it.
+- `--output=/tmp/pw-prove-mutation`. The isolated output directory is fixed by construction; the verb
+  is the one that sends the run somewhere else and leaves `test-results/` exactly as it stands, which
+  is what keeps the clips I am about to deliver from being overwritten with footage of deliberately
+  broken behaviour.
+
+Then the verb reverts the file I named — unconditionally, before the verdict is read — marks the
+artifact **stale**, checks the tree came back, and counts the clips. Nothing rebuilds here: the
+rebuild is lazy, paid by whichever later step next needs the server, and Step 8 hygiene stops a stale
+server rather than rebuilding it, so a mutation check that is the run's last step pays nothing.

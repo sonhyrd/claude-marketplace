@@ -93,6 +93,28 @@ entries sit under whatever H1 was last on its own branch — semantically wrong,
 vocabulary` and belonged under `# Run forensics vocabulary`, which only existed on #131's branch.
 Cross-links between the two sides resolve only after this is fixed.
 
+### Merge-back trap: a conflicted region can silently DROP lines neither side deleted
+
+Measured 2026-08-23 merging #145 on top of #143, both of which extended the same shipped module
+from the same base. Git conflicted on four regions of `proof-run.mjs` and resolved a fifth — the
+`EXIT` table — by itself, taking one side's shorter list and dropping the two entries the other
+side had added beside it. The constants became `undefined`, so two refusal paths called
+`process.exit(undefined)` and reported **success**.
+
+Neither worker's review could have seen it: each branch was correct alone. **Run the merged
+result's own suite before the post-merge check**, and read its failures as merge damage rather than
+as a worker's mistake — here `test-proof-run.sh` went 138/6 on a tree where both branches had been
+green, and the six named exactly the dropped constants.
+
+### Dispatch trap: the worktree directory name is not the branch name, and not always the same shape
+
+Orca prefixes the branch with the GitHub account. It prefixes the **directory** sometimes: `#142`
+(passed `--name sonhyrd/ticket-142-…`) landed at `workspaces/e2e-skills/sonhyrd-ticket-142-…`,
+while `#143` and `#145` (passed `--name ticket-143-…`) landed at `workspaces/e2e-skills/ticket-143-…`
+with branch `sonhyrd/ticket-143-…`. **Do not compute the worktree path from `--name`** — read it out
+of `worker-start`'s `effects[].id`, or `ls` the workspaces directory. A `git -C <guessed path>`
+fails with `No such file or directory`, which reads like a worker that never started.
+
 ### Known noise: `test-parity.sh` drift smoke has failed once, unreproducibly
 
 During #50 (2026-08-13) one full `ci-local.sh` run showed a single drift-smoke failure in

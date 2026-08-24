@@ -9,6 +9,19 @@
 // re-filming. Re-film once; a still-illegible clip is PUBLISHED with an explicit warning, because a
 // bad clip is not a failed test.
 //
+// Re-derived by #150 against the prompt the Step-7 rewrite left behind. Before that rewrite the
+// agent extracted the frames itself, cleared `test-results/` itself and re-ran the Step-6 audit
+// itself; the film verb now does all three, and the re-film is the same `proof-run.mjs film`
+// command. Three assertions were re-derived:
+//   - `rm -rf test-results` became WRONG rather than merely unreachable. The verb clears the
+//     directory, so an answer that clears it by hand is describing a step the body removed. It is
+//     replaced by the assertion that the re-film goes through the verb.
+//   - the clip-fidelity assertion stays, but it is now satisfied by naming the verb's PRECONDITION
+//     rather than a hand-run command, and a hand-run one is a new negative.
+//   - the re-film count is now READ from the summary (`films` / `publish_with_warning`) rather than
+//     recalled, so an answer that reaches "publish with a warning" through the summary is credited.
+// The diagnose-before-re-film half — the case's centre — is unchanged.
+//
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
 
@@ -47,7 +60,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -70,6 +94,33 @@ if (bad.length) {
   process.exit(1);
 }
 
+// The two steps the film verb absorbed. Both are ARTIFACT-shaped: a shell block that clears the
+// results directory or runs the fidelity audit beside the verb is the defect, and prose naming
+// either to explain that the verb owns it is not. Judging the prose here would fail every correct
+// answer, which is the #59 defect the rest of this file already guards against.
+// >>> shell fences
+// Every fence is matched WITH its language tag, then filtered. Matching only shell fences leaves the
+// closing ``` of a ```ts block reading as the OPENER of the next one, which swallows the prose
+// between them and judges it as an emitted command — #150 found it failing a must-PASS twin. The
+// region between these markers is compared byte-for-byte by test-eval-judges.sh; the name it is
+// bound to below the closing marker is each judge's own.
+const shellFences = (t) =>
+  [...t.matchAll(/```([^\n]*)\n([\s\S]*?)```/g)]
+    .filter((m) => m[1].trim() === '' || /^(?:bash|sh|shell|zsh|console|shell-session)$/i.test(m[1].trim()))
+    .map((m) => m[2]);
+// <<< shell fences
+const emitted = shellFences(text).join('\n');
+const usurped = [];
+for (const line of emitted.split('\n')) {
+  if (/\brm\s+-rf?\s+[^\n]*test-results\b/i.test(line)) usurped.push(line.trim());
+  if (/clip-fidelity\.mjs/.test(line)) usurped.push(line.trim());
+}
+if (usurped.length) {
+  console.error('FAIL: the emitted command does by hand what the film verb owns — clearing test-results/ and running the fidelity precondition:');
+  for (const l of [...new Set(usurped)].slice(0, 3)) console.error('   ' + l);
+  process.exit(1);
+}
+
 const checks = [
   [/clip 1|clips? 1|clip 2/i, "the answer never says what each frame shows, which is the inspection itself"],
   [/\boff-?frame\b|\bframe edge\b|\bagainst the (?:right )?edge\b/i, "clip 3 is never diagnosed — it is re-filmed without a cause"],
@@ -77,8 +128,8 @@ const checks = [
   [/inline:\s*['"]center/, "the fix never centres horizontally, which is the axis clip 3 is cut off on"],
   [/\bungated\b|\bun-gated\b|\bnot gated\b|\bnever gated\b|outside[^\n]{0,24}gate/i, "the answer never says the fix is ungated, so it would not run in CI"],
   [/committed spec|\bspec\b/i, "the answer never says the fix lands in the committed spec"],
-  [/clip-fidelity/i, "the Step-6 audit is never re-run on the edited spec, so a dropped JUSTIFIED marker goes unnoticed"],
-  [/rm -rf test-results|clear[^\n]{0,20}test-results/i, "test-results/ is never cleared, so the old clips survive the re-film"],
+  [/clip-fidelity|fidelity (?:audit|precondition)|JUSTIFIED/i, "the fidelity precondition is never named, so a dropped JUSTIFIED marker goes unnoticed"],
+  [/proof-run\.mjs["']?\s+film|\bfilm verb\b|\bthe same film\b/i, "the re-film never goes back through the film verb, which is what clears test-results/, re-runs the precondition and counts the attempt"],
   [/\bwarning\b/i, "a still-illegible clip is never published with an explicit warning"],
   [/\bpublish/i, "the answer never publishes, so a bad clip is being treated as a failed test"],
 ];
@@ -88,4 +139,4 @@ if (missing.length) {
   process.exit(1);
 }
 
-console.log("PASS: the clip is diagnosed, fixed ungated in the committed spec, re-audited, re-filmed once, and published with a warning if still bad");
+console.log("PASS: the clip is diagnosed, fixed ungated in the committed spec, re-filmed ONCE through the film verb, and published with a warning if still bad");

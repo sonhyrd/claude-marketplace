@@ -161,6 +161,75 @@ value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a
 project's own `playwright.config` is never edited. Drops the inherited `webServer` **when nothing answers at that entry's url**, so the spread cannot boot a development server behind a run aimed at the [proof target](#proof-target); keeps it when the proof target answers there, because then that entry is what produces the origin. Either way a one-time committed migration, not a per-run edit. Superseded the throwaway
 `.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
+## Audit run
+The first of Step 7's two runs of the spec set: un-clipped and un-dwelled, and the run the heal loop
+works against. It produces the traces the [hermetic audit](#hermetic-audit) classifies, which is why
+it comes first — a hermetic finding is a spec edit, and a spec edit invalidates footage, so auditing
+before the filming run makes the cheap run the one that protects the expensive one. Since #142 it is an
+interface rather than a description: `proof-run.mjs audit` resolves the spec set, clears the results
+directory, runs it with no worker override, and bounds the heal loop through the
+[no-progress checkpoint](#no-progress-checkpoint). Since #143 it also owns the run's two
+preconditions, each refusing under its own exit code before a browser run is spent: a type check
+against the e2e tsconfig when the project has one and the root one otherwise, and the HAR bind that
+points the canonical recording at this run's origin — delegated to `har-scrub.mjs bind`, reaching
+the run through `PW_PROVE_HAR`, and stopping outright when the bind cannot be made safe. Since #146
+it also hands its classification forward: the live calls the run made are persisted under the run's
+dot-directory for the [filming run](#filming-run) to be refused by, dropped at the top of every
+invocation and rewritten only by the classification phase — so an audit that never asked the
+question leaves no clean bill of health behind.
+
+## Filming run
+The second of Step 7's two runs of the same spec set, and the one whose webms are delivered: it
+carries `PW_PROVE_CLIP=1` — which enables the committed spec's payoff dwell — and the
+[effective viewport](#effective-viewport) as `PW_PROVE_W`/`PW_PROVE_H`. It comes second because a
+[hermetic audit](#hermetic-audit) finding is a spec edit and a spec edit invalidates footage, so the
+cheap run protects the expensive one. Since #145 it is an interface rather than a description:
+`proof-run.mjs film` runs the spec-side [clip fidelity](#clip-fidelity-contract) audit as a
+**precondition** — a spec with no reader for the clip variable never reaches a filming run — clears
+the results directory, films the set, extracts one frame per clip for the
+[clip inspection](#clip-inspection), and carries the clip paths and their measured durations in its
+summary so the publish step reads a manifest source rather than globbing for one.
+
+Since #146 it carries two more things it will not let an agent forget. It is **refused while an
+undeclared live call from the audit stands** (exit 13): the [audit run](#audit-run) persists the live
+calls it saw under the run's dot-directory, and this verb recomputes the undeclared list against the
+spec text in front of it — so declaring the carve-out clears the refusal with no second audit, while
+a spec set that has moved under the record is named `stale` rather than read as clearance. And it
+**counts itself**: the body allows exactly one re-film, so the second filming run sets
+`publish_with_warning` in its summary for Step 8 and the completion report to carry, instead of the
+agent recalling across a diagnosis and a re-run which attempt this was. Only a run that produced
+clips spends the re-film; a green audit opens a fresh cycle.
+
+## Proven restart
+The only evidence the mutation check accepts that the preview server now serves the rebuilt
+artifact: the server's **own new announcement in its own log, past a mark taken before the stop was
+issued**. An answer on the port is explicitly not this — a restart that loses the port to its own
+predecessor leaves the *old* process answering, serving the pre-mutation build, and an observed run
+spent 128s reaching a page stuck on its loading splash before it would have reported "the spec
+guards the change" on evidence that proved nothing; killing the survivor gave the genuine RED in
+18.7s. Since #147 `proof-run.mjs mutate` sequences `preflight.mjs`'s `build` and `serve` phases to
+produce it — the stop is confirmed rather than assumed, escalating to SIGKILL — and an unproven
+restart is **exit 11 with no verdict to read**, because the run it would have paid for could only
+describe an artifact nothing rebuilt. Since #148 the mark is taken when the restart is *issued*,
+not before the build: a mark taken earlier includes the build's own output and a predecessor's
+dying words in the window it is meant to exclude. A proven restart is also what clears a standing
+[stale artifact](#stale-artifact) marker.
+
+## Stale artifact
+The state the machine is in between a mutation check's **revert** and the next build: the working
+tree is back to what it was, and the *built artifact the preview server holds still contains the
+reverted mutation*. It is precisely the case the build-reuse check cannot see, because reuse is
+measured against HEAD plus the working-tree difference and the revert restored both — so nothing
+downstream could tell that heal, evidence or a re-film taken from that server describes deliberately
+broken software. Since #147 `proof-run.mjs mutate` records it as a marker file under the run's
+dot-directory (`.pw-prove/artifact-stale`) rather than paying for an unconditional rebuild it may
+not need: the revert is immediate, the rebuild is **lazy**, and the marker is what makes laziness
+safe. `audit` and `film` **refuse while it stands** (exit 15), changing nothing and clearing
+nothing, and print the exact commands that clear it, in order — force the build, prove the restart, then
+remove the marker. They never self-heal, because a silent rebuild would hide that the mutation check
+left the machine in this state. `mutate` is not refused by it: it forces a rebuild by construction,
+and its [proven restart](#proven-restart) clears a standing marker before it writes its own.
+
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
 **audit run** — the un-clipped, un-dwelled proof run that precedes filming, so a finding costs a
@@ -255,9 +324,10 @@ defect this pipeline exists to prevent — and the stop never emits the [deliver
 so a reported non-delivery can never be mistaken for a proof.
 
 ## No-progress checkpoint
-The Step-7 test that tells a fix apart from a retry. Each failed attempt is reduced to a **failure
-signature** — error class plus failing locator — and two consecutive attempts carrying the same
-signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
+The Step-7 test that tells a fix apart from a retry, owned by `proof-run.mjs audit` and enforced
+across invocations through state it persists under the run's dot-directory. Each failed attempt is
+reduced to a **failure signature** — error class plus failing locator — and two consecutive attempts
+carrying the same signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
 application can see. Attempts whose signatures differ are converging and still consume the full
 budget of three. The bound was always three; a raw count could not distinguish three fixes from three
 retries, and one run spent an hour rewriting the same binding against one unchanging 30-second
