@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.34.0"
+  version: "0.35.0"
 ---
 
 # pw-prove
@@ -895,6 +895,7 @@ record at a size the app never rendered at.
 | `5` | **The HAR bind refused** | Read `phases.har_bind.reason` and take the row above. Nothing was run — never run the proof past this and let it surface as an aborted call |
 | `6` | Tests red | Diagnose and heal, below. Rerun through this same verb with `--grep "<title>"` |
 | `7` | **Checkpoint refusal** — the failure signature did not move, or the attempt bound is spent | Stop the loop. Do not attempt another fix: invoke `playwright-debugger` and take the handover stop |
+| `15` | **The built artifact is marked stale** — the last mutation check reverted its mutation and did not rebuild | Nothing was run and nothing was cleared. What the server holds is not what the source says, so heal or evidence taken from it means nothing. Rebuild forcing the build, prove the restart, then `rm .pw-prove/artifact-stale` — the refusal prints the exact three commands |
 
 Every summary carries all three phases whatever they did — `ok`, `skipped` (the project has no tsconfig, or no `--har` was passed), `failed`, `refused`, or **`not-reached`** on an exit that stopped before the phase ran at all (`3` and `7`, and any non-green exit for `hermetic`, which is asked only of a green run). `not-reached` is not `skipped`: the first says the question was never asked, the second says it was asked and had no answer to give.
 
@@ -906,6 +907,7 @@ Every summary carries all three phases whatever they did — `ok`, `skipped` (th
 | `6` | The filming run went red | A spec green in the audit run and red under `PW_PROVE_CLIP` is a **filming-law violation** — the variable may only add time. Fix the spec, re-run the audit verb, film again |
 | `12` | **Fidelity precondition refused** — the spec set does not carry the clip-fidelity contract | Nothing was filmed and `test-results/` is untouched. The audit's own output names the offending spec and the fix; apply it to the **committed spec** and film again. This holds for a `carried` spec too: the dwell is proof machinery, not an assertion about the PR's behaviour, so repairing it is not the loosening a carried failure forbids |
 | `13` | **An undeclared live call from the audit stands** | Nothing was filmed and `test-results/` is untouched. The refusal names each call and the summary's `network.reason` says which kind it is: `undeclared` — mock the call, or add the `// CARVE-OUT:` line when the real round-trip **is** the AC, and film again (a declaration clears it with **no** second audit); `stale` — the spec set has moved since the audit that recorded these calls, so that record cannot speak for it. Run the audit verb again |
+| `15` | **The built artifact is marked stale** — the last mutation check reverted its mutation and did not rebuild | Nothing was run and nothing was cleared. What the server holds is not what the source says, so heal or evidence taken from it means nothing. Rebuild forcing the build, prove the restart, then `rm .pw-prove/artifact-stale` — the refusal prints the exact three commands |
 
 **Why the refusal is here and not on the audit verb.** An undeclared live call is a spec edit waiting to happen, and a spec edit invalidates footage: fix it before filming and it costs one cheap re-run, fix it after and it costs the clips as well. The finding reaches this verb through the run's own state — a summary is stdout *you* read, and a refusal that depended on you volunteering the finding would not be one. What is persisted is the **live calls**, never the undeclared list: a live call is a fact about a run and cannot be re-derived without paying for another one, while the carve-out lines are a fact about the spec text, which the verb re-reads every time. That is why declaring the carve-out clears the refusal immediately, and why mocking the call — invisible in the spec's carve-out lines — needs the audit re-run. **Judging whether a carve-out that *is* present earns its place remains yours**; presence is all this refusal computes.
 
@@ -1032,34 +1034,25 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 
 **The mutation run must not touch the clips**, and the verb is what makes that true by construction: it sends the run to an isolated output, leaves `test-results/` exactly as it stands — the one verb that does not clear it — and counts the clips afterwards against the PR spec set, carried scenarios included. Getting this wrong costs a full extra proof run to regenerate clips, and only if you notice.
 
-**The mutation must be in the artifact under test.** The proof target is a *build*, so a mutated source file changes nothing until it is rebuilt — a mutation check run against the standing artifact is green by construction and proves nothing. Rebuild after mutating and again after reverting, forcing the build both times, and restart the preview server on each so it serves the artifact you just made:
+**The mutation must be in the artifact under test, and the verb is what puts it there.** The proof target is a *build*, so a mutated source file changes nothing until it is rebuilt — a mutation check run against the standing artifact is green by construction and proves nothing, which arrives as "the spec does not guard the change". So the verb forces the rebuild, stops the preview server by the PID you recorded at Step 3, starts it again with the command you give it, and **proves** the restart against the server's own new announcement past a mark it takes before the stop. You pass the four things only you know — the build script, the recorded PID, the preview task's log, and how the server is started — and it sequences `preflight.mjs`'s own `build` and `serve` phases with them.
 
-```bash
-MARK=$(wc -c < "<the preview task's log>")   # the restart mark, taken BEFORE you stop the server
-BUILD_REUSE=never BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
-  node <skill-base>/scripts/preflight.mjs build
-# ...stop the preview server by its recorded PID (`kill <pid>`, then `kill -0 <pid>` to confirm),
-# start it again on the same port, and record the NEW pid the same way...
-SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
-  SERVER_LOG="<the preview task's log>" node <skill-base>/scripts/preflight.mjs serve
-```
+**An answer on the port is not evidence a restart happened.** A restart that loses the port to its own predecessor leaves the *old* server answering — serving the pre-mutation artifact, or code whose hashed chunks the rebuild has since overwritten. An observed run took 128s to a page stuck on its loading splash and would have reported "the spec guards the change" on evidence that proves nothing; killing the stale process and re-running gave the genuine RED — a failed assertion on the missing hint — in 18.7s. So an unproven restart is **exit 11** and there is no verdict to read: fix the restart (kill whatever holds the port) and invoke the verb again. The rebuild is forced for its own reason — the reuse check is what makes a batch cheap, and this is the one run that must never inherit an artifact. Budget for it: this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
 
-**`SERVE_RESTART=1` is not decoration, and neither is the mark.** A restart that loses the port to its own predecessor leaves the *old* server answering — serving the pre-mutation artifact, or serving code whose hashed chunks the rebuild has since overwritten. Either way the mutation run fails, and **a failure is exactly the outcome this step is looking for**: an observed run took 128s to a page stuck on its loading splash and would have reported "the spec guards the change" on evidence that proves nothing. (Killing the stale process and re-running gave the genuine RED — a failed assertion on the missing hint — in 18.7s.) So: **exit 3 with a `SERVE_CAUSE` of `restart-port-in-use` or `restart-unannounced` is not a verdict.** Do not read the mutation run's result at all — fix the restart (kill whatever holds the port) and run the mutation again. Only `RESTART=proven` licenses reading Red or Green below.
-
-`BUILD_REUSE=never` is not optional here: the reuse check is what makes a batch cheap, and the mutation check is the one run that must never inherit an artifact. (The mutation moves the fingerprint too, so both belt and braces point the same way.) Budget for it — this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
-
-1. **Mutate the changed behavior** — one line is enough, in a file git already tracks, left **unstaged**. Choosing which line is yours: pick the one the AC is actually about, not a nearby constant a stronger layer would restore. Then **rebuild and restart the preview** as above.
-2. **Run the verb.** It captures the tree's pre-state, runs the guarding test into an isolated output with `test-results/` untouched, reverts the file you named, checks the tree came back, and counts the clips. Only once the restart came back `RESTART=proven`; an unproven one has no verdict to read.
+1. **Mutate the changed behavior** — one line is enough, in a file git already tracks, left **unstaged**. Choosing which line is yours: pick the one the AC is actually about, not a nearby constant a stronger layer would restore.
+2. **Run the verb.** It forces the rebuild, restarts the preview server and proves the restart, captures the tree's pre-state, runs the guarding test into an isolated output with `test-results/` untouched, reverts the file you named, marks the artifact stale, checks the tree came back, and counts the clips.
 
    ```bash
    PW_PROVE_HAR="$PWD/.pw-prove/<feature>.api.har" \
      node <skill-base>/scripts/proof-run.mjs mutate \
      --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base ref> \
      --written <this run's spec> --grep "<the guarding test>" --mutated <the file you mutated> \
+     --build-command "<the project's build script>" --app-root "$PWD" \
+     --server-pid <the recorded PID> --server-log "<the preview task's log>" \
+     --serve-command "<how you start the preview server>" --origin "$BASE_URL" \
      --clips <the film summary's clips.length>
    ```
 
-   `--written` is repeatable and is the mutation-verified scope; `--grep` scopes the run to ONE test, so **give the test's `test(...)` title verbatim** — a title that also matches a second written spec's test widens the scope silently. `--clips` is the filming summary's own `clips.length`: without it the verb can only hold the surviving clips to one per spec file, which a multi-scenario spec passes while two of its clips are missing. `PW_PROVE_HAR` travels inline for the same reason it does on the filming run: this verb has no bind phase, and unset there every read aborts under `notFound: 'abort'`. Read the exit code:
+   `--serve-command` is the same command Step 3 started the server with, `PORT` included — the verb runs it detached and appends its output to `--server-log`, which is why the mark it takes beforehand is what tells the new announcement from the old one. The summary's `server.pid_after` is the **new** process id: carry it as the recorded PID from here on, and stop it with `kill -- -<pid>` (it leads its own process group). `--written` is repeatable and is the mutation-verified scope; `--grep` scopes the run to ONE test, so **give the test's `test(...)` title verbatim** — a title that also matches a second written spec's test widens the scope silently. `--clips` is the filming summary's own `clips.length`: without it the verb can only hold the surviving clips to one per spec file, which a multi-scenario spec passes while two of its clips are missing. `PW_PROVE_HAR` travels inline for the same reason it does on the filming run: this verb has no bind phase, and unset there every read aborts under `notFound: 'abort'`. Read the exit code:
 
    | Exit | Meaning | Do |
    |---|---|---|
@@ -1067,19 +1060,29 @@ SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
    | `8` | **Green** — the spec does not guard it. Not a failed run | Strengthen the terminal assertion and repeat **once**. Green a second time, with another layer independently preserving the outcome (e.g. a read-modify-write that re-reads and merges) → **"unguardable at this layer"**. Never a third cycle. State it in the report and PR comment, naming the masking layer |
    | `9` | Tree residue after the revert | **HARD STOP.** Report immediately; never continue on a polluted tree |
    | `10` | The clips no longer show the passing run | Delete `test-results/`, re-run the audit and filming verbs, then publish. Never publish a clip you cannot place after the last source revert |
+   | `11` | The restart is **unproven** — the stop could not be confirmed, or nothing announced past the mark | No verdict: whatever answers may be the predecessor serving the pre-mutation artifact. Kill whatever holds the port and invoke again. The artifact is marked stale |
+   | `14` | The forced rebuild failed | The line you mutated may not compile. Revert it, choose one the build accepts, invoke again |
    | `2` | The file you named is untracked or carries no change; a `--written` spec is not on disk; or `--grep` matched **no test at all** | Nothing ran, so there is no verdict. Fix the input named and invoke again |
    | `1` | Usage — a missing or malformed flag | Fix the invocation |
    | `3` | The spec set resolved empty | The wrong base ref, or a test directory that is not where the specs landed. Fix the resolution |
 
    The revert has already happened whatever the code says — it is unconditional, and runs before the verdict is read.
 
-3. **Mark the built artifact stale** — do not rebuild here. The revert the verb already did is unconditional and immediate; the rebuild is **lazy**, and the marker is what makes laziness safe:
+3. **The artifact is marked stale, and nothing rebuilds it here.** The verb writes `.pw-prove/artifact-stale` after the revert. The revert is unconditional and immediate; the rebuild is **lazy**, and the marker is what makes laziness safe:
+
+   **`audit` and `film` refuse (exit 15) while that marker stands** — they never silently rebuild, because a self-heal would hide that the mutation check left the machine in this state. Clear it by doing what the refusal prints: force the build, prove the restart (a fresh `MARK`, `SERVE_RESTART=1`, exactly as the verb does), then `rm .pw-prove/artifact-stale`. A further `mutate` needs no clearing — it forces a rebuild by construction, and its proven restart clears the standing marker before writing its own.
 
    ```bash
-   printf 'mutation reverted, artifact still holds the mutation\n' > .pw-prove/artifact-stale
+   MARK=$(wc -c < "<the preview task's log>")   # taken BEFORE you stop the server
+   BUILD_REUSE=never BUILD_COMMAND="<the project's build script>" APP_ROOT="$PWD" \
+     node <skill-base>/scripts/preflight.mjs build
+   # ...stop the preview server by its recorded PID, start it again on the same port...
+   SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="$BASE_URL" \
+     SERVER_LOG="<the preview task's log>" node <skill-base>/scripts/preflight.mjs serve
+   rm .pw-prove/artifact-stale
    ```
 
-   **Any step that needs the server rebuilds first if the marker is set**, forcing the build and proving the restart exactly as above (a fresh `MARK`, `SERVE_RESTART=1`), then removes the marker. That closes the hazard the old unconditional rebuild guarded — a re-film, a heal run or an audit running against deliberately broken software — without asking this step to predict whether any of them is still coming. **Step 8 hygiene stops a stale server rather than rebuilding it**, which is the common case: a mutation check that is the run's last step now pays nothing. An observed run paid an 82-second rebuild at 13:24:33 for a server it stopped at 13:26:55.
+   That closes the hazard the old unconditional rebuild guarded — a re-film, a heal run or an audit running against deliberately broken software — without asking this step to predict whether any of them is still coming. **Step 8 hygiene stops a stale server rather than rebuilding it**, which is the common case: a mutation check that is the run's last step now pays nothing. An observed run paid an 82-second rebuild at 13:24:33 for a server it stopped at 13:26:55.
 
    The marker exists because the *artifact* is out of step with a tree that looks unchanged — precisely the case the build-reuse check cannot see, since reuse is measured against HEAD plus the working-tree difference and the revert restored the tree. Build reuse is otherwise unaffected on this path.
 
@@ -1169,7 +1172,7 @@ PR-mode owns its tail; a proof ending with uncommitted tests or unposted clips i
 2. **Hygiene sweep** before staging:
    - Delete `test-results/`/`playwright-report/` litter (and the mutation run's isolated output, which the mutate summary names as `output` — read it there rather than reconstructing the path), plus any legacy throwaway `.pw-prove.proof.config.*` left by an older run. **Keep `playwright.proof.config.ts`** — it is a deliverable, not litter; stage it when this run created it. Publish before deleting `test-results/`: the clips live there.
    - **Never delete the kept proof file** (`$KEPT`, i.e. `$TMPDIR/pw-prove-proof.webm`) when the publish came back undelivered. It is the only remaining copy of the evidence and the operator has been told to attach it — sweeping it away deletes the fallback moments after it was created. It is litter only once the run has published (`$PAGE` set) or a gate withheld it, and the script already removes it in the gate case.
-   - **Stop the preview server if this run started it** (Step 3) — `kill <the recorded PID>`, then `kill -0 <pid>` to observe it gone — and say so in the report: `Preview server: stopped (port <N>)` — or `left running (pre-existing)` when it was already up. Keep it running only if the user asked. A **stale** artifact needs no rebuild on the way out: stopping is the last thing that touches this server. Read `.pw-prove/artifact-stale` for the report's artifact state, then delete it — a marker outliving its run makes the next run's first build unconditional.
+   - **Stop the preview server if this run started it** (Step 3) — `kill <the recorded PID>`, then `kill -0 <pid>` to observe it gone; after a mutation check the recorded PID is that verb's `server.pid_after`, which leads its own process group, so stop it with `kill -- -<pid>` — and say so in the report: `Preview server: stopped (port <N>)` — or `left running (pre-existing)` when it was already up. Keep it running only if the user asked. A **stale** artifact needs no rebuild on the way out: stopping is the last thing that touches this server. Read `.pw-prove/artifact-stale` for the report's artifact state, then delete it — a marker outliving its run makes the next run's first build unconditional.
    - Revert codegen churn (`git checkout -- '**/auto-imports.d.ts' '**/components.d.ts'` on Nuxt-style repos).
    - **Prove the HAR is clean — do not confirm it, run the refusal:**
 
