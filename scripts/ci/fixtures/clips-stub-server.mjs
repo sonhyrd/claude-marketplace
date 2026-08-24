@@ -77,6 +77,10 @@ const server = http.createServer((req, res) => {
 
     // One body, two wire encodings. `sse` writes exactly the bytes the live deployment was measured
     // to send: one `event: message` frame whose `data:` line carries the identical JSON.
+    //
+    // `payload` is an object to be serialised, OR a string already spelled the way the wire should
+    // carry it — which is how `garbled` sends prose where a JSON-RPC envelope belongs. Said here
+    // because the union is invisible at every call site below.
     const send = (status, payload) => {
       const json = typeof payload === 'string' ? payload : JSON.stringify(payload);
       if (ENCODING === 'sse') {

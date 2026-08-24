@@ -132,7 +132,7 @@ jassert() {
 # because the two arms differing by a string prefix is how one of them silently stops asserting what
 # the other does — and the whole defect being fixed here is one encoding behaving unlike the other.
 assert_happy_publish() { # usage: assert_happy_publish <label> <exit code>
-  local label="$1" rc="$2" reqs marker
+  local label="$1" rc="$2" reqs marker SHARE
   SHARE="$ORIGIN/share/rec_stub_1"
   [ "$rc" = 0 ] && ok "$label — exit 0" \
     || { bad "$label — exit $rc, wanted 0"; sed 's/^/         /' "$W/err" | tail -5; }
@@ -616,9 +616,11 @@ grep -q '<redacted bearer>' "$W/err" \
   && ok "the redaction is visible in the report, so nothing looks silently dropped" \
   || { bad "the echoed bearer was neither printed nor visibly redacted"; sed 's/^/         /' "$W/err" | tail -3; }
 
-# The same echo, arriving as a stream. Redaction runs downstream of the unwrap, so this is where
-# that ordering is proven: a bearer reassembled by the join and then quoted would be a credential in
-# a run log that the json-only case could never see.
+# The same echo, arriving as a stream. What this asserts is that redaction still happens once a body
+# has been through the unwrap — not the ORDER of the two: `error`'s body is single-line JSON, so the
+# bearer arrives whole on one `data:` line and would be redacted either side of the unwrap. Stated
+# plainly because a case whose comment claims more than it can fail on is the instrument this suite
+# spends its length refusing to be.
 start_stub error sse
 alive_case "a 500 arriving as a stream"
 if grep -qF "$TOKEN" "$W/err" "$W/out"; then

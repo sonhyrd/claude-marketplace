@@ -223,9 +223,12 @@ export async function callClipsAction(config, action, args, timeoutMs = 30_000) 
   // in that log without this. The client cannot stop a server echoing; it can refuse to repeat it.
   // The empty guard is not theatre: `''.split()` on an empty needle shreds the body into characters.
   //
-  // Redaction runs over the UNWRAPPED body, downstream of the frame: a bearer echoed across two
-  // `data:` lines is one string only after the join, and redacting the wire bytes first would hand
-  // it back reassembled.
+  // Redaction runs over the UNWRAPPED body, because the unwrapped body is what every caller quotes.
+  // Redacting the wire bytes and then unwrapping would leave the replacement to survive the join by
+  // luck rather than by construction — and a value the field syntax splits across two `data:` lines
+  // is rejoined carrying the newline between them, so neither ordering reassembles a token that
+  // arrived in halves. What is guaranteed is the thing that matters: nothing leaves this function
+  // un-redacted.
   const text = unwrapSseBody(await res.text());
   return {
     status: res.status,
