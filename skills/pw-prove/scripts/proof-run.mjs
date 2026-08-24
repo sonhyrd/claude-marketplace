@@ -87,14 +87,48 @@
 //   is a phase result (`failed`, reason `no-traces`), not a new exit code: the run's own result is
 //   what the exit code carries, and inventing a code here would make one code mean two things.
 //
-//   AN UNDECLARED LIVE CALL DOES NOT REFUSE THIS VERB. The audit pass REPORTS the network; the
+//   AN UNDECLARED LIVE CALL DOES NOT REFUSE THE AUDIT VERB. The audit pass REPORTS the network; the
 //   refusal that costs a re-run rather than the clips belongs to the filming verb, which is where the
 //   spend it protects actually happens.
+//
+//   AND IT REACHES THAT VERB THROUGH THE RUN'S STATE, NOT THROUGH THE SUMMARY. The summary is stdout
+//   an agent reads; a later process cannot see it, and a refusal that depends on the agent
+//   volunteering the finding is not a refusal. So `audit`'s classification phase persists the LIVE
+//   CALLS it saw, and `film` recomputes the undeclared list from them against the spec text as it
+//   stands at that moment. The split is along the same line the classification itself is split on: a
+//   live call is a fact about a RUN and cannot be re-derived without paying for another one, while
+//   the `// CARVE-OUT:` lines are a fact about the SPEC TEXT and cost a file read. Persisting the
+//   derived list instead would freeze the spec half at audit time, so a declaration written the
+//   minute after would go unseen and the refusal would outlive the edit that answered it — which is
+//   no better than having no refusal at all.
+//
+//   A RECORD SAYS NOTHING ABOUT SPECS IT DID NOT SEE, AND SAYS SO. Mocking a call — the body's other
+//   fix — is invisible in the spec's carve-out lines, so a record whose specs have moved cannot be
+//   read as either clearance or indictment. `film` refuses that case under the same code and names it
+//   for what it is: the finding predates the edit. One green audit settles it, and that is the cheap
+//   re-run this refusal exists to sell. Every `audit` invocation drops the record first and only the
+//   classification phase writes a new one, so a red audit, a failed type check or a run with no
+//   traces leaves NO record — a run that never asked the question cannot leave a clean bill of health.
+//   Whether a carve-out that IS present earns its place is still the agent's, in both verbs.
+//
+//   THE RE-FILM COUNT IS A FACT CARRIED FORWARD, NEVER A REFUSAL. The body allows exactly one
+//   re-film, and a second illegible frame PUBLISHES ANYWAY with an explicit warning — so there is
+//   nothing here to refuse; there is something to remember. The count lives in the run's state and
+//   the second filming run sets `publish_with_warning` in the summary, which Step 8 and the
+//   completion report carry. Today that warning depends on an agent recalling, across a diagnosis
+//   and a re-run, which attempt this was. Only a run that produced clips spends the re-film, so a
+//   refusal and a red run leave the count alone; and a GREEN AUDIT resets it, because a green audit
+//   is what licenses filming and so opens the cycle the count is counting within — without that, the
+//   count would outlive its proof and the next proof's very first clip would publish with a warning.
 //
 //   THE MODULE'S STATE IS EXCLUDED REPO-LOCALLY, through `.git/info/exclude` and never through the
 //   project's `.gitignore` — the convention the HAR bind already sets. The state is this run's
 //   private working state; a stray `.gitignore` diff is churn the delivery step would have to
-//   explain.
+//   explain. It is three files with one owner each, because they answer to different lifetimes:
+//   `audit` owns the heal budget (`audit-state.json`) and the network finding (`audit-network.json`)
+//   and clears both at the boundaries of the cycle it owns; `film` owns the re-film count
+//   (`film-state.json`) and only increments it; `mutate` writes none, and reads none. A verb that
+//   keeps no state creates no directory either.
 //
 //   FILMING IS GATED ON THE SPEC ACTUALLY CARRYING THE FIDELITY CONTRACT. `film` runs the Step-6
 //   spec-side audit again, as a PRECONDITION, with the Step-4 viewport verdict. This is the hole
@@ -190,6 +224,7 @@
 //   10  clips clobbered or count mismatched                       }   this verb is asking for
 //   11  restart unproven                                          } reserved — `mutate`, see #148
 //   12  filming precondition refused — the spec does not carry the clip-fidelity contract
+//   13  filming refused — the audit's undeclared live call(s) stand
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -212,6 +247,7 @@ const EXIT = {
   RESIDUE: 9,
   CLIPS: 10,
   FIDELITY: 12,
+  UNDECLARED: 13,
 };
 
 const VERBS = new Set(['audit', 'film', 'mutate']);
@@ -220,9 +256,16 @@ const VERBS = new Set(['audit', 'film', 'mutate']);
 // 3 added `phases.hermetic` (the network classification and the undeclared live calls) and the
 // mutate verb's fields: `mutation_run`, `output`, `mutated`, `reverted`, `residue`, and `clips` as
 // a count record rather than the film verb's list.
+// 4 added the film verb's `network` record (the audit finding this run was judged against) and its
+// `films`/`publish_with_warning` pair.
 // Fields are added over time, so a reader reads the schema before it reads anything else.
-const SUMMARY_SCHEMA = 3;
+const SUMMARY_SCHEMA = 4;
 const STATE_SCHEMA = 1;
+// The two records `audit` hands to `film`, each versioned on its own: they are written and read by
+// different invocations, so a reader that assumed one schema for all three files would break both
+// halves of the handover to change either one.
+const NETWORK_SCHEMA = 1;
+const FILM_SCHEMA = 1;
 // Fixed, not a flag. The bound is the body's bound, and a knob whose only caller would be a test is
 // a test-only injection point — the one thing this module is not allowed to grow.
 const ATTEMPT_BOUND = 3;
@@ -460,9 +503,9 @@ if (top.status !== 0) stop(EXIT.INPUT, 'not inside a git repository — the spec
 const repoTop = top.stdout.trim();
 const MUTATION_OUT = mutationOut(repoTop);
 
-// Only where state is actually kept. `film` reads and writes none, and a verb that leaves an empty
-// directory behind is a side effect nobody asked for.
-if (verb === 'audit') {
+// Only where state is actually kept. `mutate` reads and writes none, and a verb that leaves an
+// empty directory behind is a side effect nobody asked for.
+if (verb !== 'mutate') {
 fs.mkdirSync(STATE_DIR, { recursive: true });
 // `.git/info/exclude`, never the project's `.gitignore`: this is the run's private working state.
 // The path comes from `--git-common-dir` and NOT from `<toplevel>/.git`, because in a worktree or a
@@ -483,9 +526,30 @@ try {
 } catch (e) {
   stop(EXIT.INPUT, `cannot write the repo-local exclude entry (${e.message})`);
 }
+// Dropped before anything else this invocation does: from here until the classification phase
+// writes a new one, there is no network finding, and every path that stops in between leaves none.
+if (verb === 'audit') fs.rmSync(path.join(STATE_DIR, 'audit-network.json'), { force: true });
 }
 
+// THREE RECORDS UNDER THE RUN'S DOT-DIRECTORY, ONE OWNER EACH. They are separate files rather than
+// one, because they answer to different lifetimes and a single blob would make every write a
+// read-modify-write across two verbs:
+//
+//   audit-state.json    the heal budget — attempts, the last failure signature, the stalled flag.
+//                       Written by `audit` alone, cleared by a green run.
+//   audit-network.json  what the audit run put on the wire, for `film` to be refused by. Written by
+//                       `audit`'s classification phase and by nothing else; DELETED at the top of
+//                       every `audit` invocation, so the record exists only where the last audit
+//                       actually classified a green run. An audit that went red, failed its type
+//                       check or found no traces therefore leaves NO record — a run that never asked
+//                       the question must not leave a clean bill of health behind.
+//   film-state.json     the re-film count. Incremented by `film` after a run that produced clips,
+//                       and reset by a green `audit` — a green audit is what licenses filming, so it
+//                       is where a filming cycle begins. Without that reset the count would outlive
+//                       its proof and the next proof's very first clip would publish with a warning.
 const statePath = path.join(STATE_DIR, 'audit-state.json');
+const networkPath = path.join(STATE_DIR, 'audit-network.json');
+const filmStatePath = path.join(STATE_DIR, 'film-state.json');
 function readState() {
   try {
     const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
@@ -504,6 +568,63 @@ function writeState(state) {
     statePath,
     `${JSON.stringify({ schema: STATE_SCHEMA, verb, ...state }, null, 2)}\n`,
   );
+}
+
+// The spec set's text, as one hash. It is what tells `film` whether the audit's live list still
+// describes the specs in front of it — see `networkCheck` for what that answer is used for. The
+// paths go in beside their contents, so a spec added or dropped since the audit moves it too.
+function specDigest(specPaths) {
+  const h = crypto.createHash('sha1');
+  for (const spec of [...specPaths].sort()) {
+    let src;
+    try {
+      src = fs.readFileSync(spec, 'utf8');
+    } catch {
+      src = '\u0000absent';
+    }
+    h.update(spec).update('\u0000').update(src).update('\u0000');
+  }
+  return h.digest('hex');
+}
+
+// Only the LIVE CALLS are persisted, never the undeclared list the audit computed from them. A live
+// call is a fact about a RUN and cannot be re-derived without paying for another one; the carve-out
+// lines are a fact about the SPEC TEXT, which `film` can simply re-read. Persisting the derived list
+// instead would freeze the spec half at audit time, and the refusal would then outlive the very edit
+// that answered it — which is no better than having no refusal at all.
+function writeNetwork(specPaths, live) {
+  fs.writeFileSync(
+    networkPath,
+    `${JSON.stringify(
+      { schema: NETWORK_SCHEMA, verb: 'audit', specs: specPaths, spec_digest: specDigest(specPaths), live },
+      null,
+      2,
+    )}\n`,
+  );
+}
+function readNetwork() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(networkPath, 'utf8'));
+    if (parsed?.schema !== NETWORK_SCHEMA) return null;
+    return {
+      live: Array.isArray(parsed.live) ? parsed.live : [],
+      spec_digest: parsed.spec_digest ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readFilms() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filmStatePath, 'utf8'));
+    return parsed?.schema === FILM_SCHEMA ? Number(parsed.films) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+function writeFilms(films) {
+  fs.writeFileSync(filmStatePath, `${JSON.stringify({ schema: FILM_SCHEMA, verb: 'film', films }, null, 2)}\n`);
 }
 
 // ---- the summary ----------------------------------------------------------------------------
@@ -655,6 +776,107 @@ function signatureOf(text) {
 }
 const same = (a, b) => a && b && a.error_class === b.error_class && a.locator === b.locator;
 
+// ---- the carve-out presence test, shared by both verbs that ask about it ----------------------
+// `audit` computes the undeclared list from the run it just made; `film` recomputes it from the
+// live calls that run recorded against the spec text as it stands NOW. One implementation, because
+// two readings of the same declaration are two readings that drift.
+// A path a carve-out line can name: a bare path, or the path half of a full URL.
+const PATH_TOKEN_RE = /(?:https?:\/\/\S+?)?(\/[^\s,;)"'`]*)/g;
+
+// Every spec in the SET, not only the one this run wrote: a carried spec's carve-out declares the
+// call it was written for, and re-declaring it in this run's spec is not something the body asks of
+// anyone.
+function carveOutsIn(specPaths) {
+  const found = [];
+  for (const spec of specPaths) {
+    let src;
+    try {
+      src = fs.readFileSync(spec, 'utf8');
+    } catch {
+      continue;
+    }
+    src.split('\n').forEach((line, i) => {
+      const m = line.match(/CARVE-OUT:\s*(.+)$/);
+      if (m) found.push({ spec, line: i + 1, text: m[1].trim() });
+    });
+  }
+  return found;
+}
+
+// A carve-out names a resource, so it declares the path it names and the paths under it: a
+// `:param` segment stands for one segment and a `*` for any run of characters. Deliberately
+// generous where it is unsure — a false "declared" leaves the agent the judgement it already owns,
+// while a false "undeclared" would send it to declare something already declared.
+function pathMatches(token, pathname) {
+  const pattern = token
+    .replace(/[.+^${}()|[\]\\?]/g, '\\$&')
+    .replace(/\*+/g, '\\S*')
+    .replace(/:[A-Za-z_]\w*/g, '[^/]+')
+    .replace(/\/$/, '');
+  return new RegExp(`^${pattern}(?:/|$)`).test(pathname);
+}
+
+function declaredBy(carveOuts, call) {
+  // `METHOD URL`, the shape the classifier renders. Split defensively rather than on an index that
+  // is -1 when it is not: that silently yields an empty method and a URL missing its first
+  // character, and both would then be compared against every carve-out line as if they were real.
+  const sep = call.indexOf(' ');
+  const method = sep === -1 ? '' : call.slice(0, sep);
+  const url = sep === -1 ? call : call.slice(sep + 1);
+  let pathname = url;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    /* a URL the classifier could not parse either — compare it whole */
+  }
+  return carveOuts.some((c) => {
+    // A line naming no method declares the path for every method; one naming a method declares
+    // only that method, so a `POST` carve-out never covers a live `GET`.
+    const methods = c.text.match(DECLARATION_HEAD)[1].match(METHOD_RE);
+    if (method && methods && !methods.includes(method)) return false;
+    if (c.text.includes(url)) return true;
+    return [...c.text.matchAll(PATH_TOKEN_RE)]
+      .map((m) => m[1])
+      .filter((t) => t !== '/')
+      .some((t) => pathMatches(t, pathname));
+  });
+}
+
+
+/**
+ * Whether the audit's network finding still refuses this filming run.
+ *
+ * The record carries the live calls the audit run made; the carve-out lines come from the spec text
+ * as it stands right now. So declaring the carve-out clears the refusal on the next invocation with
+ * no second audit run — the only input that moved is one this verb re-reads.
+ *
+ * MOCKING the call is the other fix the body offers, and it is invisible here: a route handler is
+ * not a carve-out line, and no reading of the spec can establish what the browser would put on the
+ * wire. That is what `specs_moved` is for. When the spec text has moved and calls are STILL
+ * undeclared, this verb refuses under the same code but says the finding predates the edit, rather
+ * than either asserting a finding it can no longer stand behind or waving through a filming run
+ * nothing has cleared. One green audit — the cheap re-run this whole refusal exists to sell —
+ * settles it either way.
+ */
+function networkCheck(specPaths) {
+  const record = readNetwork();
+  if (!record) {
+    return { status: PHASE.NOT_REACHED, live: [], undeclared: [], specs_moved: false, reason: null };
+  }
+  const undeclared = record.live.filter((call) => !declaredBy(carveOutsIn(specPaths), call));
+  const specsMoved = specDigest(specPaths) !== record.spec_digest;
+  if (undeclared.length === 0) {
+    return { status: PHASE.OK, live: record.live, undeclared, specs_moved: specsMoved, reason: null };
+  }
+  return {
+    status: PHASE.REFUSED,
+    live: record.live,
+    undeclared,
+    specs_moved: specsMoved,
+    reason: specsMoved ? 'stale' : 'undeclared',
+  };
+}
+
 // ---- the filming run's closing phase ------------------------------------------------------------
 /**
  * Every webm the filming run left behind, depth-first and sorted, so the manifest source is stable
@@ -732,7 +954,33 @@ function inspectClips(clips) {
 
 // ================================================================================== film
 if (verb === 'film') {
-  // 1. THE PRECONDITION. The Step-6 gate, run again over the spec set that is about to be filmed,
+  // 1. THE NETWORK REFUSAL, first because it is the cheapest thing this verb can do: it spends no
+  //    subprocess, no run and no clip, and an undeclared live call is a spec edit waiting to
+  //    happen — one that invalidates footage the moment it lands.
+  const network = networkCheck(specs.map((s) => s.path));
+  if (network.reason) {
+    summarize('refused', EXIT.UNDECLARED, { network });
+    err(
+      `proof-run film: ${network.undeclared.length} UNDECLARED live call(s) from the audit run:\n` +
+        network.undeclared.map((c) => `  ${c}\n`).join(''),
+    );
+    stop(
+      EXIT.UNDECLARED,
+      network.reason === 'undeclared'
+        ? 'NOTHING was filmed and test-results/ is untouched. An undeclared live call is a spec ' +
+            'edit waiting to happen, and a spec edit invalidates footage: fix it now and it costs ' +
+            'one cheap re-run, fix it after filming and it costs the clips as well. Mock each call ' +
+            'above, or declare it as a `// CARVE-OUT:` line when the real round-trip IS the AC — ' +
+            'a declaration clears this refusal with no second audit. Whether a carve-out that IS ' +
+            'present earns its place is still yours to judge.'
+        : 'NOTHING was filmed and test-results/ is untouched. The spec set has MOVED since the ' +
+            'audit that recorded these calls, so that record no longer describes it — this ' +
+            'refusal predates your edit rather than answering it. If you mocked the calls, run ' +
+            'the audit verb again: only a run can say what the browser now puts on the wire.',
+    );
+  }
+
+  // 2. THE PRECONDITION. The Step-6 gate, run again over the spec set that is about to be filmed,
   //    before anything is cleared or spent. A refusal here costs nothing and leaves the standing
   //    evidence alone; the same defect discovered after the run costs the clips as well.
   const pre = spawnSync(
@@ -746,7 +994,7 @@ if (verb === 'film') {
   out(pre.stdout ?? '');
   err(pre.stderr ?? '');
   if (pre.status !== 0) {
-    summarize('refused', EXIT.FIDELITY, { fidelity_exit: pre.status });
+    summarize('refused', EXIT.FIDELITY, { network, fidelity_exit: pre.status });
     stop(
       EXIT.FIDELITY,
       `the clip-fidelity audit refused the spec set (its exit ${pre.status}, named above) — NOTHING ` +
@@ -756,7 +1004,7 @@ if (verb === 'film') {
     );
   }
 
-  // 2. THE RUN. The clip flag and the effective viewport arrive as ENVIRONMENT, because they are the
+  // 3. THE RUN. The clip flag and the effective viewport arrive as ENVIRONMENT, because they are the
   //    run's only per-run values and the proof config is static and committed. The size is the one
   //    the verdict declared — never a literal.
   const run = runSpecSet(specs, {
@@ -766,7 +1014,7 @@ if (verb === 'film') {
   });
   if (run.status !== 0) {
     const signature = signatureOf(`${run.stdout ?? ''}\n${run.stderr ?? ''}`);
-    summarize('red', EXIT.TESTS_RED, { clips: [], signature });
+    summarize('red', EXIT.TESTS_RED, { clips: [], network, signature });
     stop(
       EXIT.TESTS_RED,
       `the filming run went red — ${signature.error_class} at ${signature.locator}. A spec that was ` +
@@ -775,10 +1023,33 @@ if (verb === 'film') {
     );
   }
 
-  // 3. THE CLOSING PHASE. Never a gate: every outcome below leaves the run passing, and a clip that
+  // 4. THE CLOSING PHASE. Never a gate: every outcome below leaves the run passing, and a clip that
   //    could not be inspected is reported uninspected rather than as good.
   const clips = collectClips(RESULTS_DIR);
-  summarize('green', EXIT.OK, { clips: inspectClips(clips) });
+
+  // 5. THE RE-FILM COUNT. Counted here, at the end, because only a run that produced clips spent
+  //    the re-film: a refusal and a red run film nothing and must not consume it. The body allows
+  //    exactly ONE re-film and a second illegible frame PUBLISHES ANYWAY with a warning, so this
+  //    can never be a refusal — it is a fact carried forward, and carrying it is the point. Today
+  //    the warning depends on an agent recalling, across a diagnosis and a re-run, which attempt
+  //    this was; a number in the run's state does not forget.
+  const films = readFilms() + 1;
+  writeFilms(films);
+  const publishWithWarning = films > 1;
+  if (publishWithWarning) {
+    err(
+      `proof-run film: this is filming run ${films}. The body allows exactly ONE re-film, so a ` +
+        'clip still illegible after this one is published with warning rather than re-filmed — ' +
+        'carry `illegible (<diagnosis>), published with warning` into the completion report and ' +
+        'the PR comment. A bad clip is not a failed test.\n',
+    );
+  }
+  summarize('green', EXIT.OK, {
+    clips: inspectClips(clips),
+    network,
+    films,
+    publish_with_warning: publishWithWarning,
+  });
   process.exit(EXIT.OK);
 }
 
@@ -1071,9 +1342,6 @@ const runnerOutput = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
 // Its report is human-readable by design, so it is read as text here rather than re-implemented.
 const ENTRY_RE = /^ {2}(\S+ \S+)\s+×(\d+)(?:\s+\[([^\]]*)\])?\s+\((\d+) tests?\)/;
 const SITE_RE = /^ {2}(.+):(\d+) {2}(.*)$/;
-// A path a carve-out line can name: a bare path, or the path half of a full URL.
-const PATH_TOKEN_RE = /(?:https?:\/\/\S+?)?(\/[^\s,;)"'`]*)/g;
-
 function parseClassification(text) {
   const buckets = { live: [], mocked: [], failed: [] };
   let bucket = null;
@@ -1114,65 +1382,6 @@ function parseRoundTrips(text, spec) {
     if (m) sites.push({ spec, line: Number(m[2]), text: m[3] });
   }
   return sites;
-}
-
-// Every spec in the SET, not only the one this run wrote: a carried spec's carve-out declares the
-// call it was written for, and re-declaring it in this run's spec is not something the body asks of
-// anyone.
-function carveOutsIn(specPaths) {
-  const found = [];
-  for (const spec of specPaths) {
-    let src;
-    try {
-      src = fs.readFileSync(spec, 'utf8');
-    } catch {
-      continue;
-    }
-    src.split('\n').forEach((line, i) => {
-      const m = line.match(/CARVE-OUT:\s*(.+)$/);
-      if (m) found.push({ spec, line: i + 1, text: m[1].trim() });
-    });
-  }
-  return found;
-}
-
-// A carve-out names a resource, so it declares the path it names and the paths under it: a
-// `:param` segment stands for one segment and a `*` for any run of characters. Deliberately
-// generous where it is unsure — a false "declared" leaves the agent the judgement it already owns,
-// while a false "undeclared" would send it to declare something already declared.
-function pathMatches(token, pathname) {
-  const pattern = token
-    .replace(/[.+^${}()|[\]\\?]/g, '\\$&')
-    .replace(/\*+/g, '\\S*')
-    .replace(/:[A-Za-z_]\w*/g, '[^/]+')
-    .replace(/\/$/, '');
-  return new RegExp(`^${pattern}(?:/|$)`).test(pathname);
-}
-
-function declaredBy(carveOuts, call) {
-  // `METHOD URL`, the shape the classifier renders. Split defensively rather than on an index that
-  // is -1 when it is not: that silently yields an empty method and a URL missing its first
-  // character, and both would then be compared against every carve-out line as if they were real.
-  const sep = call.indexOf(' ');
-  const method = sep === -1 ? '' : call.slice(0, sep);
-  const url = sep === -1 ? call : call.slice(sep + 1);
-  let pathname = url;
-  try {
-    pathname = new URL(url).pathname;
-  } catch {
-    /* a URL the classifier could not parse either — compare it whole */
-  }
-  return carveOuts.some((c) => {
-    // A line naming no method declares the path for every method; one naming a method declares
-    // only that method, so a `POST` carve-out never covers a live `GET`.
-    const methods = c.text.match(DECLARATION_HEAD)[1].match(METHOD_RE);
-    if (method && methods && !methods.includes(method)) return false;
-    if (c.text.includes(url)) return true;
-    return [...c.text.matchAll(PATH_TOKEN_RE)]
-      .map((m) => m[1])
-      .filter((t) => t !== '/')
-      .some((t) => pathMatches(t, pathname));
-  });
 }
 
 function hermeticPhase(specPaths) {
@@ -1238,8 +1447,18 @@ if (run.status === 0) {
         'yours; presence is not.\n',
     );
   }
-  // A green run ends the heal loop, so the budget it was spending goes with it.
+  // The finding `film` is refused by. Written by the classification phase and by nothing else, and
+  // only when it actually classified something: a phase that failed has no live list to hand on.
+  if (phases.hermetic.status === PHASE.OK) {
+    writeNetwork(
+      specs.map((s) => s.path),
+      phases.hermetic.live.map((e) => e.call),
+    );
+  }
+  // A green run ends the heal loop, so the budget it was spending goes with it — and it opens the
+  // filming cycle the re-film count counts within, so that count goes with it too.
   writeState({ attempts: 0, signature: null, stalled: false });
+  fs.rmSync(filmStatePath, { force: true });
   auditSummary('green', EXIT.OK, null, state.attempts);
   process.exit(EXIT.OK);
 }
