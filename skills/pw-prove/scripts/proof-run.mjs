@@ -9,7 +9,10 @@
 //                           --verdict <pinned:WxH|deliberate:WxH> [--written <spec>]... [--project <name>]
 //   node proof-run.mjs mutate --config <proof config> --test-dir <testDir> --base <ref>
 //                           --written <spec>... --grep <the guarding test> --mutated <file>...
-//                           [--project <name>]
+//                           --build-command <the app's build script> --origin <the preview origin>
+//                           --server-pid <the recorded pid> --server-log <the preview task's log>
+//                           --serve-command <how the server is started again>
+//                           [--app-root <dir>] [--build-output <dist>] [--clips <n>] [--project <name>]
 //
 // Step 7 was the largest section of pw-prove's body and the only large one with no module behind
 // it: bring-up has preflight.mjs, recon has probe.mjs, the recording has har-scrub.mjs, the
@@ -167,6 +170,50 @@
 //   through `video.mjs`, the one place a Proof clip is measured, because a live-recorded webm often
 //   declares no duration in its container and a second copy of that logic is the copy that trusts it.
 //
+//   THE MUTATION MUST BE IN THE ARTIFACT UNDER TEST, WHICH IS WHY THIS VERB REBUILDS AND RESTARTS.
+//   The proof target is a BUILD. A mutated source file changes nothing until it is rebuilt, so a
+//   mutation check run against the standing artifact is green BY CONSTRUCTION and reads as "the
+//   spec does not guard the change" — the silent always-pass class this whole bundle exists to
+//   prevent, arriving as a finding about the spec. So the verb forces the rebuild (`BUILD_REUSE=never`:
+//   reuse is what makes a batch of proofs cheap, and this is the one run that must never benefit
+//   from it), stops the preview server by the process id the agent recorded, and starts it again.
+//   All of it is preflight.mjs's phases SEQUENCED, never reimplemented — that module owns what a
+//   build failure is, what an announcement looks like and which loopback forms are dialled, and a
+//   second copy of any of it here is the copy that drifts from the one Step 3 runs.
+//
+//   AND THE RESTART IS PROVEN BY THE SERVER'S OWN NEW ANNOUNCEMENT, PAST A MARK TAKEN BEFORE THE
+//   STOP — never by an answer on the port. An origin that answers may be the PREDECESSOR: an
+//   observed restart died with EADDRINUSE while the old process kept answering, the poll said
+//   SERVE=ok, and the mutation run failed 128 seconds later against an artifact nothing had
+//   rebuilt — a RED that proved nothing, at 128s where the genuine one took 18.7s. An unproven
+//   restart therefore has NO VERDICT (exit 11) and stops the check before the run is paid for; the
+//   mark is what separates the new process's announcement from its predecessor's in a log that
+//   appends. The stop is confirmed rather than assumed, escalating to SIGKILL, for the same reason:
+//   a survivor keeps the port and keeps serving the artifact the rebuild just replaced.
+//
+//   THE TWO STOPS ABOVE THE RUN LEAVE THE MUTATION IN THE TREE, and they are the only ones that do.
+//   The unconditional revert exists so that no branch which SPENT a run can leave a deliberately
+//   broken tree behind; a rebuild that failed and a restart that could not be proven spent nothing
+//   and are both retried by invoking this verb again — reverting there would throw away the line
+//   the agent chose and make every retry start by re-applying it. Both stops say so, and both mark
+//   the artifact, so nothing else can run against the machine in the meantime.
+//
+//   A REBUILD THAT FAILS IS NOT A VERDICT EITHER (exit 14). The mutation the agent chose may simply
+//   not compile; nothing ran, and "the spec does not guard the change" would be a claim about a run
+//   that never happened.
+//
+//   THE STALE-ARTIFACT MARKER IS WRITTEN AFTER THE REVERT, AND NOTHING IS REBUILT THERE. Once the
+//   revert lands, the tree looks untouched while the artifact still holds the mutation — exactly
+//   the case the build-reuse check CANNOT see, since reuse is measured against HEAD plus the
+//   working-tree difference and the revert restored both. The old answer was an unconditional
+//   rebuild here; the marker replaces it with a lazy one, so a mutation check that is the run's last
+//   step pays nothing (an observed run paid an 82-second rebuild at 13:24:33 for a server it stopped
+//   at 13:26:55). What makes laziness safe is that `audit` and `film` REFUSE while the marker stands
+//   (exit 15) rather than silently rebuilding: a self-heal would hide that the mutation check left
+//   the machine in that state, and the agent clears it by running the rebuild the refusal names.
+//   `mutate` is not refused by it — it forces a rebuild by construction, and a PROVEN restart is
+//   what clears a marker an earlier check left.
+//
 //   THE MUTATION RUN'S OUTPUT IS ISOLATED BY CONSTRUCTION, AND IT IS THE REASON THE VERB EXISTS
 //   SEPARATELY. `test-results/` holds the recorded evidence of the run that PASSED — the clips
 //   Step 8 is about to publish. A mutation run writing there overwrites them with footage of
@@ -229,10 +276,12 @@
 //   8   mutation run green (the spec does not guard the change)   } `mutate` — 0 there means the
 //   9   tree residue after the revert, a hard stop                }   run went RED, which is what
 //   10  clips clobbered or count mismatched                       }   this verb is asking for
-//   11  restart unproven                                          } reserved — `mutate`, see #148
+//   11  restart unproven — the stop or the restart could not be proven }
 //   12  filming precondition refused — the spec does not carry the clip-fidelity contract
 //   13  filming refused — the audit's undeclared live call(s) stand
-import { spawnSync } from 'node:child_process';
+//   14  the forced rebuild failed — `mutate`, and never a verdict about the spec
+//   15  refused: the built artifact is marked stale — `audit` and `film`, until something rebuilds
+import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -253,8 +302,11 @@ const EXIT = {
   MUTATION_GREEN: 8,
   RESIDUE: 9,
   CLIPS: 10,
+  RESTART: 11,
   FIDELITY: 12,
   UNDECLARED: 13,
+  REBUILD: 14,
+  STALE: 15,
 };
 
 const VERBS = new Set(['audit', 'film', 'mutate']);
@@ -265,8 +317,11 @@ const VERBS = new Set(['audit', 'film', 'mutate']);
 // a count record rather than the film verb's list.
 // 4 added the film verb's `network` record (the audit finding this run was judged against) and its
 // `films`/`publish_with_warning` pair.
+// 5 added the mutate verb's `server` record (the stop, the restart and the mark it was proven past)
+// and `artifact`, the state the marker names — which the two other verbs now report when they are
+// refused by it.
 // Fields are added over time, so a reader reads the schema before it reads anything else.
-const SUMMARY_SCHEMA = 4;
+const SUMMARY_SCHEMA = 5;
 const STATE_SCHEMA = 1;
 // The two records `audit` hands to `film`, each versioned on its own: they are written and read by
 // different invocations, so a reader that assumed one schema for all three files would break both
@@ -296,6 +351,15 @@ const SPEC_RE = /\.(spec|test)\.[cm]?[jt]sx?$/;
 // its precondition, and the Step-7 frame extraction that closes it. Resolved beside this file so the
 // skill can be installed anywhere; never reimplemented here.
 const CLIP_FIDELITY = path.join(path.dirname(fileURLToPath(import.meta.url)), 'clip-fidelity.mjs');
+// The bring-up module, resolved the same way. `mutate` SEQUENCES it — the forced rebuild and the
+// restart proof are its phases and stay its phases; a second copy of either here is the copy that
+// drifts from the one Step 3 runs.
+const PREFLIGHT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'preflight.mjs');
+// The stale-artifact marker: the ONE record `mutate` leaves behind, and the only one another verb
+// is refused by. It sits beside the other three under the run's dot-directory, excluded repo-locally
+// for the same reason they are.
+const STALE_MARKER = path.join(STATE_DIR, 'artifact-stale');
+const STALE_SCHEMA = 1;
 
 // The hermetic module's own exit table, read rather than re-derived: 2 is "no traces to classify",
 // which is a phase result here and never this verb's exit code.
@@ -338,7 +402,10 @@ const USAGE =
   '                          [--written <spec>]... [--project <name>]\n' +
   '       proof-run.mjs mutate --config <proof config> --test-dir <testDir> --base <ref>\n' +
   '                          --written <spec>... --grep <the guarding test> --mutated <file>...\n' +
-  '                          [--project <name>]\n';
+  "                          --build-command <the app's build script> --origin <the preview origin>\n" +
+  "                          --server-pid <the recorded pid> --server-log <the preview task's log>\n" +
+  '                          --serve-command <how the server is started again>\n' +
+  '                          [--app-root <dir>] [--build-output <dist>] [--clips <n>] [--project <name>]\n';
 
 const verb = process.argv[2];
 // Read before validation so even a usage-error exit leaves a ledger record; the phase is the verb.
@@ -367,6 +434,12 @@ const opts = {
   verdict: null,
   mutated: [],
   clips: null,
+  buildCommand: null,
+  appRoot: null,
+  buildOutput: null,
+  serverPid: null,
+  serverLog: null,
+  serveCommand: null,
 };
 
 const argv = process.argv.slice(3);
@@ -389,6 +462,12 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--verdict') opts.verdict = need(++i, a);
   else if (a === '--mutated') opts.mutated.push(need(++i, a));
   else if (a === '--clips') opts.clips = need(++i, a);
+  else if (a === '--build-command') opts.buildCommand = need(++i, a);
+  else if (a === '--app-root') opts.appRoot = need(++i, a);
+  else if (a === '--build-output') opts.buildOutput = need(++i, a);
+  else if (a === '--server-pid') opts.serverPid = need(++i, a);
+  else if (a === '--server-log') opts.serverLog = need(++i, a);
+  else if (a === '--serve-command') opts.serveCommand = need(++i, a);
   else usage(`unknown flag '${a}'`);
 }
 
@@ -409,8 +488,24 @@ const VERB_SPEC = {
     accepted: ['--written'],
   },
   mutate: {
-    required: ['--config', '--test-dir', '--base', '--written', '--grep', '--mutated'],
-    accepted: ['--clips'],
+    required: [
+      '--config',
+      '--test-dir',
+      '--base',
+      '--written',
+      '--grep',
+      '--mutated',
+      // The bring-up half. Every one of these is required rather than optional, because a mutation
+      // check that cannot rebuild and cannot prove its restart is the run that reads as a passing
+      // verdict over an artifact nothing touched — the silent always-pass this verb exists to
+      // prevent. An optional flag here would be a way to ask for that run by accident.
+      '--build-command',
+      '--server-pid',
+      '--server-log',
+      '--serve-command',
+      '--origin',
+    ],
+    accepted: ['--clips', '--app-root', '--build-output'],
   },
 };
 const FLAG_VALUES = {
@@ -426,6 +521,12 @@ const FLAG_VALUES = {
   '--written': opts.written.length ? opts.written : null,
   '--mutated': opts.mutated.length ? opts.mutated : null,
   '--clips': opts.clips,
+  '--build-command': opts.buildCommand,
+  '--app-root': opts.appRoot,
+  '--build-output': opts.buildOutput,
+  '--server-pid': opts.serverPid,
+  '--server-log': opts.serverLog,
+  '--serve-command': opts.serveCommand,
 };
 const takes = (v, flag) => VERB_SPEC[v].required.includes(flag) || VERB_SPEC[v].accepted.includes(flag);
 for (const flag of VERB_SPEC[verb].required) {
@@ -496,6 +597,24 @@ for (const file of opts.mutated) {
     stop(EXIT.INPUT, `--mutated '${file}' is not on disk — it is the file you just mutated`);
   }
 }
+// The process id is read as a number before anything is killed: a `--server-pid` that is not one is
+// a wrong invocation, and a stop that quietly did nothing would leave the predecessor answering.
+if (opts.serverPid !== null && !/^[1-9]\d*$/.test(opts.serverPid)) {
+  usage(`--server-pid '${opts.serverPid}' is not a process id — it is the pid you recorded at Step 3`);
+}
+// The mark is the log's size at the moment the restart is issued, so a log that is not there is a
+// restart that cannot be proven at all. Named and absent is a wrong flag, never a project without
+// a log: the mode refuses rather than falling back to the answer-on-the-port check it replaces.
+if (opts.serverLog !== null && !fs.existsSync(opts.serverLog)) {
+  stop(
+    EXIT.INPUT,
+    `--server-log '${opts.serverLog}' is not on disk — it is the preview task's own log, and the ` +
+      'restart is proven by what the server writes into it and by nothing else',
+  );
+}
+if (opts.appRoot !== null && !fs.existsSync(opts.appRoot)) {
+  stop(EXIT.INPUT, `--app-root '${opts.appRoot}' is not on disk`);
+}
 if (opts.origin) {
   try {
     new URL(opts.origin);
@@ -510,9 +629,9 @@ if (top.status !== 0) stop(EXIT.INPUT, 'not inside a git repository — the spec
 const repoTop = top.stdout.trim();
 const MUTATION_OUT = mutationOut(repoTop);
 
-// Only where state is actually kept. `mutate` reads and writes none, and a verb that leaves an
-// empty directory behind is a side effect nobody asked for.
-if (verb !== 'mutate') {
+// Every verb keeps state now: `audit` the heal budget and the network finding, `film` the re-film
+// count, and `mutate` the stale-artifact marker — the one record that is written for ANOTHER verb
+// to be refused by, and so the one that must outlive the run that wrote it.
 fs.mkdirSync(STATE_DIR, { recursive: true });
 // `.git/info/exclude`, never the project's `.gitignore`: this is the run's private working state.
 // The path comes from `--git-common-dir` and NOT from `<toplevel>/.git`, because in a worktree or a
@@ -533,10 +652,14 @@ try {
 } catch (e) {
   stop(EXIT.INPUT, `cannot write the repo-local exclude entry (${e.message})`);
 }
+// Whether the last mutation check left the built artifact holding a reverted mutation. Read here,
+// BEFORE anything is dropped or written, because a verb this refuses must change nothing at all.
+const artifactStale = fs.existsSync(STALE_MARKER);
+
 // Dropped before anything else this invocation does: from here until the classification phase
 // writes a new one, there is no network finding, and every path that stops in between leaves none.
-if (verb === 'audit') fs.rmSync(path.join(STATE_DIR, 'audit-network.json'), { force: true });
-}
+// A refused invocation is exempt — it never asked the question, so it takes nothing away either.
+if (verb === 'audit' && !artifactStale) fs.rmSync(path.join(STATE_DIR, 'audit-network.json'), { force: true });
 
 // THREE RECORDS UNDER THE RUN'S DOT-DIRECTORY, ONE OWNER EACH. They are separate files rather than
 // one, because they answer to different lifetimes and a single blob would make every write a
@@ -616,6 +739,13 @@ function readNetwork() {
 const readFilms = () => Number(readRecord(filmStatePath, FILM_SCHEMA)?.films) || 0;
 const writeFilms = (films) => writeRecord(filmStatePath, FILM_SCHEMA, { films });
 
+// The stale-artifact marker. Its EXISTENCE is the whole signal — the two verbs it refuses read
+// nothing out of it — so it is written through the shared codec for the reader who opens it and
+// read with `existsSync` by the code that acts on it. A marker left by an older run, or by the hand
+// the body used to ask for, refuses just the same.
+const writeStale = (reason) => writeRecord(STALE_MARKER, STALE_SCHEMA, { reason, mutated: opts.mutated });
+const clearStale = () => fs.rmSync(STALE_MARKER, { force: true });
+
 // ---- the summary ----------------------------------------------------------------------------
 // ONE JSON line on stdout, so the agent reads a machine-readable account instead of re-deriving one
 // from the runner's console output.
@@ -643,12 +773,24 @@ const phases = {
   },
 };
 let summarize = () => {};
+// What the rebuild-and-restart phase established, as it establishes it. `not-reached` until the
+// phase runs at all, so an input refusal never reads as a restart that was tried and failed.
+const serverState = {
+  pid_before: opts.serverPid === null ? null : Number(opts.serverPid),
+  pid_after: null,
+  stopped: null,
+  restart: PHASE.NOT_REACHED,
+  mark: null,
+  cause: null,
+};
 // The fields every record from THIS verb carries whatever happened — spelled once, so a stop that
 // exits early cannot report a smaller record than a stop that exits late.
 const VERB_FIELDS = {
   audit: {},
   film: { viewport, verdict: opts.verdict },
-  mutate: { grep: opts.grep, mutated: opts.mutated, output: MUTATION_OUT },
+  // `server` is the same object throughout, mutated in place as the phase advances, so a stop at
+  // any point reports what had actually been established by then rather than a smaller record.
+  mutate: { grep: opts.grep, mutated: opts.mutated, output: MUTATION_OUT, server: serverState },
 }[verb];
 function bindSummary(specs) {
   summarize = (result, exit, extra = {}) => {
@@ -693,6 +835,32 @@ const specs = [
 ];
 
 bindSummary(specs);
+
+// ---- the stale-artifact refusal ---------------------------------------------------------------
+// The mutation check's revert leaves the TREE looking untouched while the built artifact still
+// holds the mutation — precisely the case the build-reuse check cannot see, since reuse is measured
+// against HEAD plus the working-tree difference and the revert restored both. So the verbs that
+// need the server are refused while the marker stands, and REFUSED is the word: a silent self-heal
+// would hide that the mutation check left the machine in this state, and an audit or a filming run
+// against deliberately broken software is a finding about nothing. `mutate` is not refused by it —
+// it forces a rebuild by construction, which is what clearing the state actually consists of.
+// Nothing is taken away here: no record dropped, no directory cleared, no clip touched.
+if (artifactStale && verb !== 'mutate') {
+  summarize('stale-artifact', EXIT.STALE, { artifact: 'stale' });
+  stop(
+    EXIT.STALE,
+    `the built artifact is marked STALE (${STALE_MARKER}) — the last mutation check reverted its ` +
+      'mutation from the tree and did not rebuild, so what the server holds is not what the source ' +
+      'says. NOTHING was run and nothing was cleared. Rebuild the artifact and prove the restart, ' +
+      'then remove the marker:\n' +
+      `  MARK=$(wc -c < "<the preview task's log>")\n` +
+      `  BUILD_REUSE=never BUILD_COMMAND="<the build script>" APP_ROOT="$PWD" node ${PREFLIGHT} build\n` +
+      '  # ...stop the preview server by its recorded PID, start it again on the same port...\n' +
+      '  SERVE_RESTART=1 RESTART_LOG_OFFSET="$MARK" BASE_URL="<origin>" ' +
+      `SERVER_LOG="<the preview task's log>" node ${PREFLIGHT} serve\n` +
+      `  rm ${STALE_MARKER}`,
+  );
+}
 
 if (specs.length === 0) {
   if (verb === 'audit') auditSummary('empty', EXIT.EMPTY_SET, null, 0);
@@ -1049,11 +1217,11 @@ if (verb === 'mutate') {
   // only looked under the cwd would miss a mutation that reached a sibling directory.
   const mutatedRepoRel = opts.mutated.map((f) => path.relative(repoTop, path.resolve(cwd, f)));
 
-  // 1. THE PRE-STATE, captured before anything runs. Both halves are checked first because both
-  //    are cheap and both make a green run meaningless: a file git does not track cannot be
-  //    reverted at all, and a file carrying no unstaged change was never mutated (or was staged,
-  //    which `git checkout --` would not undo either). Paying for a run to learn that is the one
-  //    thing this verb is expensive enough to avoid.
+  // 1. THE MUTATION ITSELF, checked before anything is paid for. Both halves are cheap and both
+  //    make a green run meaningless: a file git does not track cannot be reverted at all, and a
+  //    file carrying no unstaged change was never mutated (or was staged, which `git checkout --`
+  //    would not undo either). Paying for a rebuild and a run to learn that is the one thing this
+  //    verb is expensive enough to avoid.
   for (const rel of mutatedRepoRel) {
     if (git('-C', repoTop, 'ls-files', '--error-unmatch', '--', rel).status !== 0) {
       summarize('input', EXIT.INPUT);
@@ -1074,6 +1242,183 @@ if (verb === 'mutate') {
     }
   }
 
+  // 2. THE MUTATION INTO THE ARTIFACT: a forced rebuild, and a restart proven past a mark.
+  //    Everything below is worthless without it — the proof target is a BUILD, so a mutated source
+  //    file changes nothing until it is rebuilt, and a mutation run against the standing artifact
+  //    goes green by construction and reads as "the spec does not guard the change".
+  //
+  //    It is a SEQUENCE of preflight.mjs's own phases, never a reimplementation of them: `build`
+  //    with reuse forced off, then `serve` in restart mode. The reuse check is what makes a batch of
+  //    proofs cheap, and this is the one run that must never benefit from it.
+  //
+  //    The mark is taken BEFORE the stop, because only announcements past it belong to the process
+  //    that replaced the one being killed. An origin that answers with no new announcement is an
+  //    UNPROVEN restart and has no verdict at all: an observed restart died with EADDRINUSE while
+  //    the old process kept answering, the poll said SERVE=ok, and the mutation run failed 128
+  //    seconds later against an artifact nothing had rebuilt — a RED that proved nothing.
+  const appRoot = opts.appRoot ?? cwd;
+  // Resolved against THIS process's cwd, which is where it was validated, and handed on absolute.
+  // The bring-up module resolves a relative SERVER_LOG against APP_ROOT, so a monorepo whose app
+  // root is a subdirectory would otherwise have the poll look for the log somewhere it never was
+  // and report `no-log` — a gap in the invocation reported as a verdict about the server.
+  const serverLog = path.resolve(cwd, opts.serverLog);
+  const preflight = (phase, env) => {
+    const r = spawnSync(process.execPath, [PREFLIGHT, phase], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, ...env },
+    });
+    if (r.error) stop(EXIT.INPUT, `cannot run the bring-up module (${r.error.message})`);
+    out(r.stdout ?? '');
+    err(r.stderr ?? '');
+    return r;
+  };
+  // Sleeping in a synchronous flow, on the standard library: the whole verb is spawnSync from end
+  // to end, and an async island here would reorder its output against the subprocesses'.
+  const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+  // THE FORCED REBUILD. Failure here is not a verdict about the spec: the mutated source did not
+  // build, so nothing was proved and nothing can be. The artifact is marked either way — a build
+  // that half-wrote over the standing one leaves something no later step can place.
+  const build = preflight('build', {
+    BUILD_REUSE: 'never',
+    BUILD_COMMAND: opts.buildCommand,
+    APP_ROOT: appRoot,
+    ...(opts.buildOutput ? { BUILD_OUTPUT: opts.buildOutput } : {}),
+  });
+  if (build.status !== 0) {
+    writeStale('the forced rebuild failed');
+    summarize('rebuild-failed', EXIT.REBUILD, { artifact: 'stale', build_exit: build.status });
+    stop(
+      EXIT.REBUILD,
+      `the forced rebuild failed (the bring-up module's exit ${build.status}, its diagnosis above) ` +
+        '— NOTHING was run and there is no verdict. The mutation you applied may simply not ' +
+        'compile: it is still in the tree, so revert it yourself, choose a line the build accepts, ' +
+        'and invoke this verb again. The artifact is marked stale until something rebuilds it.',
+    );
+  }
+
+  // THE MARK, in bytes, taken here and not a moment earlier: only announcements past it belong to
+  // the process that replaces the one about to be stopped. The rebuild above takes minutes, and the
+  // old server is still running and still writing through all of them — a mark taken before it
+  // would leave those lines past the mark, where the poll would read one of them as the new
+  // process's own announcement and call an unproven restart proven.
+  serverState.mark = fs.statSync(serverLog).size;
+
+  // THE STOP, by the process id the agent recorded when it started the server. Confirmed gone
+  // rather than assumed: a predecessor that survives keeps the port and keeps serving the artifact
+  // this rebuild just replaced, which is the failure the restart proof exists to catch one step
+  // later and this one avoids paying for at all.
+  const pid = Number(opts.serverPid);
+  // EPERM is a process this run may not signal, which is still a process holding the port — the one
+  // reading of "alive" that matters here.
+  const alive = () => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return e.code === 'EPERM';
+    }
+  };
+  const goneWithin = (ms) => {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      if (!alive()) return true;
+      sleep(100);
+    }
+    return !alive();
+  };
+  if (alive()) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      /* it died between the check and the signal, which is the outcome asked for */
+    }
+    // A preview server that traps SIGTERM and takes its time is ordinary; one that ignores it is
+    // not, and a stop that gave up there would hand this verb a port it does not own.
+    if (!goneWithin(5000)) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* likewise */
+      }
+      goneWithin(5000);
+    }
+  }
+  serverState.stopped = !alive();
+  if (!serverState.stopped) {
+    writeStale('the preview server could not be stopped after the forced rebuild');
+    serverState.restart = 'not-stopped';
+    summarize('restart-unproven', EXIT.RESTART, { artifact: 'stale' });
+    stop(
+      EXIT.RESTART,
+      `the preview server (pid ${pid}) is still running after SIGTERM and SIGKILL, so the port it ` +
+        'holds is still serving the artifact the rebuild replaced. NOTHING was run and there is no ' +
+        'verdict. Your mutation is still in the tree: stop whatever holds that port by hand and ' +
+        'invoke this verb again, or revert the mutation yourself to abandon the check.',
+    );
+  }
+
+  // THE START. The server's lifecycle is the agent's everywhere else in this skill, and this is the
+  // one place it cannot be: the stop and the start are two halves of the same restart, and a mark
+  // taken here can only be honoured by a start made here. Its output is APPENDED to the same log,
+  // which is why the mark is not optional — without it the predecessor's announcement reads as this
+  // process's own. It is detached and leads its own process group, so the summary's `pid_after` is
+  // what a later step stops (`kill -- -<pid>` takes the tree a shell wrapper leaves behind).
+  let started;
+  try {
+    const logFd = fs.openSync(serverLog, 'a');
+    started = spawn(opts.serveCommand, {
+      shell: true,
+      cwd: appRoot,
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+    });
+    started.unref();
+    fs.closeSync(logFd);
+  } catch (e) {
+    started = null;
+    err(`proof-run mutate: the serve command could not be started (${e.message})\n`);
+  }
+  serverState.pid_after = started?.pid ?? null;
+
+  // THE PROOF. Delegated whole: the bring-up module owns what an announcement looks like, which
+  // loopback forms are dialled, and what each failure cause means. Its verdict is forwarded rather
+  // than restated.
+  const serve =
+    serverState.pid_after === null
+      ? null
+      : preflight('serve', {
+          SERVE_RESTART: '1',
+          RESTART_LOG_OFFSET: String(serverState.mark),
+          BASE_URL: opts.origin,
+          SERVER_LOG: serverLog,
+          APP_ROOT: appRoot,
+        });
+  if (!serve || serve.status !== 0) {
+    serverState.cause = /SERVE_CAUSE=(\S+)/.exec(serve?.stdout ?? '')?.[1] ?? 'not-started';
+    serverState.restart = 'unproven';
+    writeStale('the restart after the forced rebuild was never proven');
+    summarize('restart-unproven', EXIT.RESTART, { artifact: 'stale' });
+    stop(
+      EXIT.RESTART,
+      `the restart is UNPROVEN (${serverState.cause}) — NOTHING was run and there is no verdict to ` +
+        'read. An origin that answers with no new announcement past the mark may be the ' +
+        'PREDECESSOR, still holding the port and still serving the artifact this rebuild replaced: ' +
+        'a mutation run against it proves nothing whichever way it goes. Your mutation is still in ' +
+        'the tree: stop whatever holds the port and invoke this verb again, or revert it yourself ' +
+        'to abandon the check.',
+    );
+  }
+  serverState.restart = 'proven';
+  // The artifact was just built from the tree in front of it and the server serving it is proven to
+  // be this one. Whatever an earlier mutation check left marked, it is answered now.
+  clearStale();
+
+  // 2b. THE PRE-STATE, captured after the rebuild and before the run. After, deliberately: a build
+  //     writes its own output, and a tree photographed before it would report that output as
+  //     residue the run left behind. What this comparison is for is the revert and the run, and
+  //     both happen below this line.
   const statusPathOf = (line) => {
     const p = line.slice(3).replace(/^"|"$/g, '');
     const arrow = p.indexOf(' -> ');
@@ -1104,7 +1449,7 @@ if (verb === 'mutate') {
   };
   const clipsPre = collectClips(RESULTS_DIR).map(fingerprint);
 
-  // 2. THE RUN. Scoped to the scenarios THIS run wrote and to the one test that should guard them,
+  // 3. THE RUN. Scoped to the scenarios THIS run wrote and to the one test that should guard them,
   //    into the isolated output. No PW_PROVE_CLIP: a mutation run records nothing.
   fs.rmSync(MUTATION_OUT, { recursive: true, force: true });
   const run = runSpecSet(
@@ -1113,20 +1458,30 @@ if (verb === 'mutate') {
     MUTATION_RUN,
   );
 
-  // 3. THE REVERT — unconditional and immediate, before the verdict is read at all, so no branch
+  // 4. THE REVERT — unconditional and immediate, before the verdict is read at all, so no branch
   //    below can leave a deliberately broken tree behind.
   const revert = git('-C', repoTop, 'checkout', '--', ...mutatedRepoRel);
   const reverted = revert.status === 0;
   if (!reverted) err(`proof-run mutate: git checkout failed: ${revert.stderr.trim()}\n`);
 
-  // 4. THE TREE, compared against the pre-state. A hard stop: a proof never continues on a
+  // 5. THE STALE-ARTIFACT MARKER, written HERE and not a rebuild. The revert restored the tree; the
+  //    artifact still holds the mutation, and the build-reuse check cannot see that — reuse is
+  //    measured against HEAD plus the working-tree difference, and both just came back. So the
+  //    rebuild is made LAZY and the marker is what makes laziness safe: any verb that needs the
+  //    server is refused while it stands, and a mutation check that is the run's last step pays
+  //    nothing at all (an observed run paid an 82-second rebuild for a server it stopped two
+  //    minutes later). Rebuilding here instead would pay that on every run to protect a step that
+  //    may never come.
+  writeStale('the mutation was reverted from the tree; the built artifact still holds it');
+
+  // 6. THE TREE, compared against the pre-state. A hard stop: a proof never continues on a
   //    polluted working tree, whatever the run just said.
   const statusPost = porcelain();
   const diffPost = worktreeDiff();
   const statusResidue = statusPost.filter((l) => !statusPre.includes(l));
   const residue = !reverted || diffPost !== diffPre || statusResidue.length > 0;
 
-  // 5. THE CLIPS. Every one that stood before must still stand, unmoved; and the set must cover the
+  // 7. THE CLIPS. Every one that stood before must still stand, unmoved; and the set must cover the
   //    PR spec set, carried scenarios included, because that set is what the filming run filmed.
   const clipsPost = new Set(collectClips(RESULTS_DIR).map(fingerprint));
   const survived = clipsPre.filter((c) => clipsPost.has(c)).length;
@@ -1146,7 +1501,7 @@ if (verb === 'mutate') {
   // failure is the assertion its mutation targeted and not the application falling over.
   const runnerOut = `${run.stdout ?? ''}\n${run.stderr ?? ''}`;
   if (run.status !== 0 && /no tests (?:found|match)/i.test(runnerOut)) {
-    summarize('input', EXIT.INPUT);
+    summarize('input', EXIT.INPUT, { artifact: 'stale' });
     stop(
       EXIT.INPUT,
       `the runner matched NO test against --grep '${opts.grep}' — nothing was executed, so there ` +
@@ -1157,7 +1512,14 @@ if (verb === 'mutate') {
   const mutationRun = run.status === 0 ? 'green' : 'red';
   const signature = mutationRun === 'red' ? signatureOf(runnerOut) : null;
   const record = (result, exit) =>
-    summarize(result, exit, { mutation_run: mutationRun, signature, reverted, residue, clips });
+    summarize(result, exit, {
+      mutation_run: mutationRun,
+      signature,
+      reverted,
+      residue,
+      clips,
+      artifact: 'stale',
+    });
 
   if (residue) {
     record('residue', EXIT.RESIDUE);

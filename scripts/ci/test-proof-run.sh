@@ -101,6 +101,38 @@ exit 0
 FF
 chmod +x "$BIN/ffprobe" "$BIN/ffmpeg"
 
+# THE PREVIEW SERVER, real rather than faked: the mutation verb stops one by its recorded process
+# id, starts another, and proves the restart against the server's OWN announcement. A fake would
+# have to fake the process table and the log both, which is the whole of what is under test. It
+# announces its origin on stdout the way a preview server does — the harness appends that to the
+# task log — and then serves. SILENT=1 makes it announce NOTHING, which is the unproven-restart
+# shape: something answers on the port and nothing identifies it as the process that restarted.
+cat > "$W/serve.js" <<'JS'
+const http = require('http');
+const port = Number(process.argv[2]);
+http.createServer((_q, r) => r.end('ok')).listen(port, '127.0.0.1', () => {
+  if (!process.env.SILENT) console.log(`  \u2192  Local:   http://localhost:${port}/`);
+});
+JS
+
+# A port nothing holds, asked of the kernel rather than guessed: these cases run beside whatever
+# else is on the machine, and a literal port is how a suite goes red for a reason it is not about.
+free_port() { node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{const p=s.address().port;s.close(()=>console.log(p))})'; }
+# Every server this suite or the verb under test starts, so none outlives the run.
+: > "$W/pids"
+note_pid() { [ -n "${1-}" ] && printf '%s\n' "$1" >> "$W/pids"; }
+kill_all_servers() {
+  while read -r p; do [ -n "$p" ] && { kill -- -"$p" 2>/dev/null; kill -9 "$p" 2>/dev/null; }; done < "$W/pids"
+  : > "$W/pids"
+}
+trap 'kill_all_servers; rm -rf "$W"' EXIT
+# The announcement is what the restart is proven by, so a case that starts a predecessor waits for
+# its line rather than racing it.
+wait_announce() {
+  for _ in $(seq 1 100); do grep -q 'http://localhost:' "$1" && return 0; sleep 0.05; done
+  return 1
+}
+
 export NPX_ARGV="$W/argv" NPX_PRESTATE="$W/prestate" NPX_STDOUT="$W/runner-out" NPX_ENV="$W/env"
 export NPX_TSC_ARGV="$W/tsc-argv" NPX_TSC_STDOUT="$W/tsc-out" NPX_ENV_HAR="$W/env-har"
 : > "$NPX_STDOUT"; : > "$NPX_TSC_STDOUT"; : > "$NPX_TSC_ARGV"
@@ -121,8 +153,14 @@ new_repo() {
 
 run() { ( cd "$R" && PATH="$BIN:$PATH" PWPROVE_LEDGER="$W/ledger.jsonl" \
   FAKE_VIDEO="${FAKE_VIDEO-}" NPX_MAKE_CLIPS="${NPX_MAKE_CLIPS-}" NPX_CLOBBER="${NPX_CLOBBER-}" \
-  NPX_STRAY="${NPX_STRAY-}" \
-  node "$S" "$@" >"$W/out" 2>"$W/err" ); }
+  NPX_STRAY="${NPX_STRAY-}" READY_TIMEOUT="${READY_TIMEOUT-6}" \
+  node "$S" "$@" >"$W/out" 2>"$W/err" )
+  rc=$?
+  # The mutation verb starts a preview server in place of the one it stopped, so every case that
+  # invokes it hands that process to the suite's own cleanup rather than leaking it.
+  [ "${1-}" = mutate ] && note_pid "$(started_pid)"
+  return $rc
+}
 
 env_has() {
   if grep -qxF -- "$2" "$NPX_ENV"; then ok "$1"; else bad "$1 — env lacks '$2': $(tr '\n' ' ' < "$NPX_ENV")"; fi
@@ -853,7 +891,7 @@ NPX_EXIT=0 run film "${FILM_FLAGS[@]}" --written e2e/no-dwell.spec.ts
 [ -s "$NPX_ARGV" ] && bad "the runner filmed over a spec that carries no dwell" \
   || ok "nothing was filmed while the precondition stood"
 [ "$(jq_field 'result')" = refused ] && ok "the summary says refused" || bad "result wrong: $(summary)"
-[ "$(jq_field 'schema')" = 4 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
+[ "$(jq_field 'schema')" = 5 ] && ok "the summary declares its schema" || bad "schema wrong: $(summary)"
 
 echo ""
 echo "-- the precondition does not clear the results directory --"
@@ -1194,9 +1232,27 @@ mutate_repo() {
   printf 'test\n' > "$R/e2e/written.spec.ts"          # this run's own spec: untracked by construction
   printf 'export const hint = "";\n' > "$R/src/app.ts" # the mutation the agent chose
   for c in one two; do mkdir -p "$R/test-results/clip-$c"; printf 'webm\n' > "$R/test-results/clip-$c/video.webm"; done
+  # The preview server the agent started at Step 3, with the two things it recorded about it: the
+  # process id and the log it writes to. The mutation check stops THIS process and proves the one it
+  # starts in its place against a mark taken in this log before the stop.
+  SRV_PORT=$(free_port)
+  SRV_LOG="$W/preview-$1.log"; : > "$SRV_LOG"
+  node "$W/serve.js" "$SRV_PORT" >> "$SRV_LOG" 2>&1 &
+  SRV_PID=$!
+  note_pid "$SRV_PID"
+  wait_announce "$SRV_LOG" || bad "the fixture's preview server never announced"
+  # The build the verb forces. It records every invocation, so "the rebuild was forced" is observed
+  # as the build actually running rather than inferred from a reuse token.
+  BUILD_LOG="$W/builds-$1"; : > "$BUILD_LOG"
+  MUT_FLAGS=(--config playwright.proof.config.ts --test-dir e2e --base main
+    --written e2e/written.spec.ts --grep "saves the profile" --mutated src/app.ts
+    --build-command "printf 'built reuse=%s cmd=%s root=%s\\n' \"\$BUILD_REUSE\" \"\$BUILD_COMMAND\" \"\$PWD\" >> $BUILD_LOG" --app-root .
+    --server-pid "$SRV_PID" --server-log "$SRV_LOG"
+    --serve-command "node $W/serve.js $SRV_PORT" --origin "http://localhost:$SRV_PORT")
 }
-MUT_FLAGS=(--config playwright.proof.config.ts --test-dir e2e --base main
-  --written e2e/written.spec.ts --grep "saves the profile" --mutated src/app.ts)
+builds() { wc -l < "$BUILD_LOG" | tr -d ' '; }
+# The server the verb started in place of the one it stopped, so nothing outlives the case.
+started_pid() { jq_field 'server.pid_after'; }
 
 echo "-- usage: mutate's own required flags, in both directions --"
 mutate_repo mut-usage
@@ -1221,8 +1277,11 @@ echo "-- the mutation must be there, and revertible, BEFORE a run is paid for --
 mutate_repo mut-untracked
 printf 'export const x = 1;\n' > "$R/src/untracked.ts"
 : > "$NPX_ARGV"
-run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
-  --written e2e/written.spec.ts --grep "saves the profile" --mutated src/untracked.ts
+MUT_UNTRACKED=("${MUT_FLAGS[@]}")
+for i in "${!MUT_UNTRACKED[@]}"; do
+  [ "${MUT_UNTRACKED[$i]}" = "src/app.ts" ] && MUT_UNTRACKED[$i]="src/untracked.ts"
+done
+run mutate "${MUT_UNTRACKED[@]}"
 [ "$?" = 2 ] && ok "an untracked --mutated file is exit 2 — it has no pre-state to revert to" \
   || bad "expected exit 2 for an untracked mutated file"
 [ -s "$NPX_ARGV" ] && bad "a run was paid for over a file that could not be reverted" \
@@ -1361,14 +1420,13 @@ NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
 
 echo ""
 echo "-- mutate shares the spec-set resolution and the empty-set stop --"
-new_repo mut-empty
-mkdir -p "$R/src"; printf 'x\n' > "$R/src/app.ts"
-git -C "$R" add -A && git -C "$R" commit -qm src
-printf 'y\n' > "$R/src/app.ts"
-printf 'test\n' > "$R/e2e/written.spec.ts"
+mutate_repo mut-empty
 : > "$NPX_ARGV"
-NPX_EXIT=1 run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
-  --written e2e/nothing.spec.ts --grep t --mutated src/app.ts
+MUT_GHOST=("${MUT_FLAGS[@]}")
+for i in "${!MUT_GHOST[@]}"; do
+  [ "${MUT_GHOST[$i]}" = "e2e/written.spec.ts" ] && MUT_GHOST[$i]="e2e/nothing.spec.ts"
+done
+NPX_EXIT=1 run mutate "${MUT_GHOST[@]}"
 [ "$?" = 2 ] && ok "a --written spec that is not on disk is exit 2 on mutate too" \
   || bad "expected exit 2 for a missing written spec"
 
@@ -1430,6 +1488,255 @@ NPX_EXIT=0 run mutate "${MUT_FLAGS[@]}"
   && ok "a green mutation run carries no signature" || bad "signature not null on green: $(summary)"
 
 echo ""
+echo "-- the mutation lands in the ARTIFACT: the rebuild is forced, never inherited --"
+# The proof target is a BUILD, so a mutated source file changes nothing until it is rebuilt. A
+# mutation check run against the standing artifact is green by construction and proves nothing —
+# the silent-always-pass class this bundle exists to prevent.
+mutate_repo mut-rebuild
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+note_pid "$(started_pid)"
+[ "$?" = 0 ] || bad "the rebuild-and-restart case did not reach a verdict: $(head -3 "$W/err")"
+[ "$(builds)" = 1 ] && ok "the build ran: the mutation is in the artifact, not only in the tree" \
+  || bad "the forced rebuild never ran (builds=$(builds))"
+grep -q 'BUILD_REUSE=miss' "$W/out" && ok "the standing artifact was NOT inherited" \
+  || bad "the rebuild reused an artifact: $(grep -c . "$W/out") lines, no BUILD_REUSE=miss"
+grep -q 'BUILD_REUSE_REASON=forced' "$W/out" \
+  && ok "and it was forced, not merely missed — the one run that must never benefit from reuse" \
+  || bad "the rebuild was not forced"
+# The environment the bring-up module was handed IS the contract here, the way argv is for the
+# runner: it is read off the build the module actually ran, not off a token in its report.
+grep -q 'reuse=never' "$BUILD_LOG" \
+  && ok "BUILD_REUSE=never reached the bring-up module, as the build's own environment" \
+  || bad "the build ran without BUILD_REUSE=never: $(cat "$BUILD_LOG")"
+grep -q "root=$R" "$BUILD_LOG" \
+  && ok "and the build ran in the application root it was given" \
+  || bad "the build ran in the wrong directory: $(cat "$BUILD_LOG")"
+
+# Twice over an unmoved tree: reuse is what makes a batch cheap, and this is the run it must not
+# make cheap. A second invocation pays for the build again.
+mutate_repo mut-rebuild-twice
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"; note_pid "$(started_pid)"
+git -C "$R" checkout -- src/app.ts 2>/dev/null
+printf 'export const hint = "";\n' > "$R/src/app.ts"
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"; note_pid "$(started_pid)"
+[ "$(builds)" = 2 ] && ok "a second mutation check rebuilds again rather than inheriting the first" \
+  || bad "the second run inherited an artifact (builds=$(builds))"
+
+echo ""
+echo ""
+echo "-- an application root that is not the cwd, and a relative --server-log --"
+# The bring-up module resolves a relative SERVER_LOG against APP_ROOT, so a monorepo whose app root
+# is a subdirectory is where a restart poll looks for the log somewhere it never was and reports
+# `no-log` — a gap in the invocation, arriving as a verdict about the server.
+mutate_repo mut-app-root
+mkdir -p "$R/app"
+SRV_LOG="$R/app/preview.log"
+kill "$SRV_PID" 2>/dev/null
+SRV_PORT=$(free_port)
+: > "$SRV_LOG"
+node "$W/serve.js" "$SRV_PORT" >> "$SRV_LOG" 2>&1 &
+SRV_PID=$!
+note_pid "$SRV_PID"
+wait_announce "$SRV_LOG"
+NPX_EXIT=1 run mutate --config playwright.proof.config.ts --test-dir e2e --base main \
+  --written e2e/written.spec.ts --grep "saves the profile" --mutated src/app.ts \
+  --build-command "printf 'built\\n' >> $BUILD_LOG" --app-root app \
+  --server-pid "$SRV_PID" --server-log app/preview.log \
+  --serve-command "node $W/serve.js $SRV_PORT" --origin "http://localhost:$SRV_PORT"
+rc=$?
+[ "$rc" = 0 ] && ok "a relative --server-log is resolved where it was validated, not under the app root" \
+  || bad "expected exit 0 with --app-root app and a relative --server-log, got $rc"
+[ "$(jq_field 'server.restart')" = proven ] \
+  && ok "and the restart is still proven" || bad "restart wrong: $(summary)"
+
+echo "-- the server is stopped by its recorded process id, and confirmed gone --"
+mutate_repo mut-restart
+OLD_PID="$SRV_PID"
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+note_pid "$(started_pid)"
+kill -0 "$OLD_PID" 2>/dev/null \
+  && bad "the predecessor is still running — it may still hold the port and serve the old artifact" \
+  || ok "the recorded process id is gone after the stop"
+[ "$(jq_field 'server.stopped')" = true ] \
+  && ok "the summary says the stop was confirmed" || bad "server.stopped wrong: $(summary)"
+[ "$(jq_field 'server.pid_before')" = "$OLD_PID" ] \
+  && ok "and names the process it stopped" || bad "pid_before wrong: $(summary)"
+[ "$(started_pid)" != "$OLD_PID" ] && [ "$(started_pid)" != "<missing>" ] \
+  && ok "the summary carries the new process id, so a later step can stop the right server" \
+  || bad "pid_after wrong: $(summary)"
+kill -0 "$(started_pid)" 2>/dev/null \
+  && ok "the server was started again" || bad "nothing is running after the restart"
+[ "$(jq_field 'server.restart')" = proven \
+  ] && ok "the restart is PROVEN — against the server's own new announcement" \
+  || bad "restart wrong: $(summary)"
+
+echo ""
+echo "-- an unproven restart has no verdict, under its own exit code, before any run --"
+# The predecessor already announced this port in the log. A restart that answers on it while
+# announcing NOTHING past the mark is exactly the observed failure: the old process kept the port,
+# kept serving the pre-mutation artifact, and the mutation run that followed proved nothing.
+mutate_repo mut-unproven
+: > "$NPX_ARGV"
+SILENT_FLAGS=("${MUT_FLAGS[@]}")
+for i in "${!SILENT_FLAGS[@]}"; do
+  case "${SILENT_FLAGS[$i]}" in "node $W/serve.js "*) SILENT_FLAGS[$i]="SILENT=1 ${SILENT_FLAGS[$i]}";; esac
+done
+NPX_EXIT=1 run mutate "${SILENT_FLAGS[@]}"
+rc=$?
+note_pid "$(started_pid)"
+[ "$rc" = 11 ] && ok "an unproven restart is exit 11, its own code" \
+  || bad "expected exit 11 for an unproven restart, got $rc"
+[ -s "$NPX_ARGV" ] && bad "a mutation run was paid for against a server nothing had proven" \
+  || ok "the stop comes BEFORE any verdict — no run is paid for"
+[ "$(jq_field 'server.restart')" = unproven \
+  ] && ok "the summary says the restart was never proven" || bad "restart wrong: $(summary)"
+[ "$(jq_field 'result')" = restart-unproven ] \
+  && ok "and names the result, so it is never read as a mutation verdict" || bad "result wrong: $(summary)"
+grep -q 'RESTART=unproven' "$W/out" \
+  && ok "the bring-up module's own verdict is forwarded rather than restated" \
+  || bad "the serve poll's verdict is not in the output"
+
+echo ""
+echo "-- a server that ignores SIGTERM is still stopped --"
+mutate_repo mut-stubborn
+kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null
+node -e 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)' & STUBBORN=$!
+note_pid "$STUBBORN"
+STUB_FLAGS=("${MUT_FLAGS[@]}")
+for i in "${!STUB_FLAGS[@]}"; do
+  [ "${STUB_FLAGS[$i]}" = "$SRV_PID" ] && STUB_FLAGS[$i]="$STUBBORN"
+done
+NPX_EXIT=1 run mutate "${STUB_FLAGS[@]}"
+note_pid "$(started_pid)"
+kill -0 "$STUBBORN" 2>/dev/null \
+  && bad "a server that ignored SIGTERM survived the stop" \
+  || ok "the stop escalates until the process is actually gone"
+
+echo ""
+echo "-- the stale-artifact marker: written after the revert, and nothing rebuilt there --"
+mutate_repo mut-marker
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+note_pid "$(started_pid)"
+[ -f "$R/.pw-prove/artifact-stale" ] \
+  && ok "the marker stands after the revert: the artifact still holds the mutation" \
+  || bad "no stale-artifact marker after the revert"
+[ "$(builds)" = 1 ] \
+  && ok "and the rebuild is NOT done there — the marker is what makes laziness safe" \
+  || bad "the verb rebuilt after the revert (builds=$(builds))"
+[ "$(jq_field 'artifact')" = stale ] \
+  && ok "the summary names the artifact state" || bad "artifact wrong: $(summary)"
+git -C "$R" status --porcelain | grep -q '.pw-prove' \
+  && bad "the marker is in the project's index — the delivery step would have to explain it" \
+  || ok "the marker is excluded repo-locally"
+grep -q '.pw-prove' "$R/.git/info/exclude" \
+  && ok "through .git/info/exclude, the convention the HAR bind sets" \
+  || bad "no repo-local exclude entry for the marker"
+[ -f "$R/.gitignore" ] && bad "the project's .gitignore was written to" || ok "and never through .gitignore"
+
+# A proven restart is what clears it: the artifact was just rebuilt from the tree in front of it.
+mutate_repo mut-marker-cleared
+mkdir -p "$R/.pw-prove"; printf 'a marker from an earlier mutation check\n' > "$R/.pw-prove/artifact-stale"
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+note_pid "$(started_pid)"
+grep -q 'an earlier mutation check' "$R/.pw-prove/artifact-stale" \
+  && bad "a standing marker outlived the rebuild that answered it" \
+  || ok "a proven restart clears the standing marker, and the revert writes a fresh one"
+
+echo ""
+echo "-- a rebuild that FAILS stops the check, and leaves the artifact marked --"
+mutate_repo mut-build-failed
+: > "$NPX_ARGV"
+FAIL_FLAGS=("${MUT_FLAGS[@]}")
+for i in "${!FAIL_FLAGS[@]}"; do
+  case "${FAIL_FLAGS[$i]}" in "printf 'built"*) FAIL_FLAGS[$i]="exit 3";; esac
+done
+run mutate "${FAIL_FLAGS[@]}"
+rc=$?
+note_pid "$(started_pid)"
+[ "$rc" = 14 ] && ok "a failed forced rebuild is exit 14, not a verdict" \
+  || bad "expected exit 14 when the rebuild failed, got $rc"
+[ -s "$NPX_ARGV" ] && bad "a mutation run was paid for over an artifact that was never built" \
+  || ok "nothing was run"
+[ -f "$R/.pw-prove/artifact-stale" ] \
+  && ok "the artifact is marked: what stands there is not what the tree says" \
+  || bad "a failed rebuild left the artifact unmarked"
+
+echo ""
+echo "-- the marker refuses the two verbs that need the server, and never self-heals --"
+# A silent self-heal would hide that the mutation check left the machine in this state.
+mutate_repo mut-refuses-audit
+mkdir -p "$R/.pw-prove"; printf 'stale\n' > "$R/.pw-prove/artifact-stale"
+: > "$NPX_ARGV"
+run audit --config playwright.proof.config.ts --test-dir e2e --base main --written e2e/written.spec.ts
+[ "$?" = 15 ] && ok "audit refuses while the stale-artifact marker stands (exit 15)" \
+  || bad "audit ran against an artifact holding a reverted mutation"
+[ -s "$NPX_ARGV" ] && bad "audit paid for a run against deliberately broken software" || ok "nothing was run"
+[ "$(jq_field 'result')" = stale-artifact ] \
+  && ok "the summary names the refusal" || bad "result wrong: $(summary)"
+[ -f "$R/.pw-prove/artifact-stale" ] \
+  && ok "and the marker still stands — a refusal never repairs the machine underneath you" \
+  || bad "the refusal cleared the marker itself"
+grep -q 'BUILD_REUSE=never' "$W/err" \
+  && ok "the refusal names the rebuild that clears it" || bad "the refusal does not say how to clear it"
+[ "$(builds)" = 0 ] && ok "and rebuilt nothing itself" || bad "the refusal rebuilt (builds=$(builds))"
+
+mutate_repo mut-refuses-film
+mkdir -p "$R/.pw-prove"; printf 'stale\n' > "$R/.pw-prove/artifact-stale"
+: > "$NPX_ARGV"
+run film --config playwright.proof.config.ts --test-dir e2e --base main \
+  --project-config playwright.proof.config.ts --verdict deliberate:1600x900 \
+  --written e2e/written.spec.ts
+[ "$?" = 15 ] && ok "film refuses too — the same artifact serves both" \
+  || bad "film recorded evidence off an artifact holding a reverted mutation"
+[ -s "$NPX_ARGV" ] && bad "film paid for a run against deliberately broken software" || ok "nothing was filmed"
+[ -f "$R/test-results/clip-one/video.webm" ] \
+  && ok "and the standing clips are untouched" || bad "a refused filming run touched the evidence"
+
+# mutate itself is not refused by it: it rebuilds by construction, which is what clears the state.
+mutate_repo mut-not-refused
+mkdir -p "$R/.pw-prove"; printf 'stale\n' > "$R/.pw-prove/artifact-stale"
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 0 ] && ok "mutate is not refused by its own marker — it forces a rebuild anyway" \
+  || bad "the mutation check refused itself"
+note_pid "$(started_pid)"
+
+echo ""
+echo "-- usage: the bring-up inputs the verb sequences --"
+mutate_repo mut-usage-bringup
+BASE=(--config playwright.proof.config.ts --test-dir e2e --base main
+  --written e2e/written.spec.ts --grep "saves the profile" --mutated src/app.ts)
+run mutate "${BASE[@]}" --server-pid "$SRV_PID" --server-log "$SRV_LOG" \
+  --serve-command "true" --origin "http://localhost:$SRV_PORT"
+[ "$?" = 1 ] && ok "mutate without --build-command is a usage error — there is no build to force" \
+  || bad "expected exit 1 without --build-command"
+run mutate "${BASE[@]}" --build-command "true" --server-log "$SRV_LOG" \
+  --serve-command "true" --origin "http://localhost:$SRV_PORT"
+[ "$?" = 1 ] && ok "mutate without --server-pid is a usage error — the stop is by recorded pid" \
+  || bad "expected exit 1 without --server-pid"
+run mutate "${BASE[@]}" --build-command "true" --server-pid "$SRV_PID" \
+  --serve-command "true" --origin "http://localhost:$SRV_PORT"
+[ "$?" = 1 ] && ok "mutate without --server-log is a usage error — the restart is proven in it" \
+  || bad "expected exit 1 without --server-log"
+run mutate "${BASE[@]}" --build-command "true" --server-pid "$SRV_PID" --server-log "$SRV_LOG" \
+  --origin "http://localhost:$SRV_PORT"
+[ "$?" = 1 ] && ok "mutate without --serve-command is a usage error — it starts the server again" \
+  || bad "expected exit 1 without --serve-command"
+run mutate "${BASE[@]}" --build-command "true" --server-pid "$SRV_PID" --server-log "$SRV_LOG" \
+  --serve-command "true"
+[ "$?" = 1 ] && ok "mutate without --origin is a usage error — the poll needs an origin" \
+  || bad "expected exit 1 without --origin"
+run mutate "${MUT_FLAGS[@]}" --server-pid notapid
+[ "$?" = 1 ] && ok "a --server-pid that is not a process id is a usage error" || bad "--server-pid took a word"
+run mutate "${MUT_FLAGS[@]}" --server-log "$W/no-such.log"
+[ "$?" = 2 ] && ok "a --server-log that is not on disk is exit 2 — the mark is taken from it" \
+  || bad "a missing server log was accepted"
+run film --config playwright.proof.config.ts --test-dir e2e --base main \
+  --project-config playwright.proof.config.ts --verdict deliberate:1600x900 \
+  --written e2e/written.spec.ts --build-command "true"
+[ "$?" = 1 ] && ok "a mutate-only bring-up flag on film is a usage error, never silently ignored" \
+  || bad "film accepted --build-command"
+
+echo ""
 echo "-- one ledger line, phase mutate --"
 mutate_repo mut-ledger
 NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
@@ -1440,8 +1747,11 @@ else
 fi
 [ "$(grep -c '^PWPROVE_SUMMARY ' "$W/out")" = 1 ] \
   && ok "exactly one JSON summary line from mutate" || bad "mutate summary line count wrong"
-[ -d "$R/.pw-prove" ] && bad "mutate left a state directory behind — it keeps none" \
-  || ok "mutate writes no state of its own"
+[ -f "$R/.pw-prove/artifact-stale" ] \
+  && ok "the one record mutate keeps is the marker the next verb is refused by" \
+  || bad "mutate kept no stale-artifact marker"
+[ -f "$R/.pw-prove/audit-state.json" ] && bad "mutate wrote the heal budget, which is audit's" \
+  || ok "and it writes none of audit's or film's state"
 
 echo ""
 echo "  proof-run: $pass passed, $fail failed"
