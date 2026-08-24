@@ -159,15 +159,27 @@ let nextId = 1;
  *
  * `event:`, `id:`, `retry:` and comment lines are ignored: none of them carries the response. This
  * is not a general SSE reader and must not become one — one JSON-RPC response arrives per POST, so
- * there is no multi-frame accumulation, no `[DONE]` sentinel and no dispatch on event type. A body
- * with no `data:` line is returned untouched, which is every plain-JSON response.
+ * there is no multi-frame accumulation, no `[DONE]` sentinel and no dispatch on event type.
+ *
+ * THE WHOLE BODY DECIDES, not a line in it. A body is treated as a stream only when its first
+ * non-empty line is an SSE field line; anything else is returned byte-for-byte. Without that, a
+ * plain body carrying a line that merely begins `data:` — an error page, a stack trace, a prose
+ * 500 — would be silently reduced to that line's remainder, and this function would destroy the
+ * body it exists to preserve. The shape is what was measured, so the shape is what is read: the
+ * `Content-Type` of the recorded responses is not in evidence, and gating on a header nobody
+ * observed would be a second unverified bet on top of the `Accept` one.
  */
+const SSE_FIELD_LINE = /^(?:event|data|id|retry):|^:/;
 function unwrapSseBody(body) {
+  const lines = body.split(/\r\n|\r|\n/);
+  if (!SSE_FIELD_LINE.test(lines.find((l) => l.trim() !== '') ?? '')) return body;
   const payloads = [];
-  for (const line of body.split(/\r\n|\r|\n/)) {
+  for (const line of lines) {
     if (!line.startsWith('data:')) continue;
     const value = line.slice('data:'.length);
-    // One optional leading space belongs to the field syntax, not to the value.
+    // One optional leading space belongs to the field syntax, not to the value. A payload spanning
+    // several `data:` lines is one value carrying newlines — that is the field's own syntax, not a
+    // second frame.
     payloads.push(value.startsWith(' ') ? value.slice(1) : value);
   }
   return payloads.length ? payloads.join('\n') : body;

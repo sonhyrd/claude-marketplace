@@ -81,7 +81,10 @@ const server = http.createServer((req, res) => {
       const json = typeof payload === 'string' ? payload : JSON.stringify(payload);
       if (ENCODING === 'sse') {
         res.writeHead(status, { 'Content-Type': 'text/event-stream' });
-        res.end(`event: message\ndata: ${json}\n\n`);
+        // One `data:` line per line of the payload — a value carrying newlines is spelled that way
+        // in the field syntax, and a bare newline inside one line would end the frame instead.
+        const data = json.split('\n').map((line) => `data: ${line}`).join('\n');
+        res.end(`event: message\n${data}\n\n`);
         return;
       }
       res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -121,7 +124,11 @@ const server = http.createServer((req, res) => {
       // Prose where a JSON-RPC envelope belongs. Under `sse` it travels as the `data:` payload, so
       // the client unwraps the frame successfully and STILL has nothing it can parse — which is the
       // fallthrough this mode exists to keep reachable.
-      return send(200, 'the destination is having a think about it');
+      //
+      // The second line is deliberately spelled as an SSE field line. Under `json` this body is NOT
+      // a stream and the client must hand back all of it: an unwrap that triggers on any line
+      // beginning `data:` would throw the first line away and report half a body.
+      return send(200, 'the destination is having a think about it\ndata: and this is not JSON either');
     }
     if (MODE === 'unknown-tool') return toolError(`Unknown tool: ${action}`);
     // The same refusal as `unknown-tool`, wearing the `Error: ` prefix this wrapper puts on its

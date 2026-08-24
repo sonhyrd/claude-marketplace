@@ -112,21 +112,6 @@ cat > "$W/m.json" <<'JSON'
 }
 JSON
 
-echo "-- happy path: N clips in, ONE import call plus one comment per chapter --"
-start_stub ok
-publish m.json
-rc=$?
-[ "$rc" = 0 ] && ok "exit 0" || { bad "exit $rc, wanted 0"; sed 's/^/         /' "$W/err" | tail -5; }
-
-reqs=$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')
-[ "$reqs" = 3 ] && ok "one import call plus one comment per chapter (3 calls for 2 chapters)" \
-  || bad "expected 3 requests (1 import + 2 comments), got $reqs"
-
-SHARE="$ORIGIN/share/rec_stub_1"
-marker=$(sed -n 's/^PWPROVE_URL //p' "$W/out" | head -n1)
-[ "$marker" = "$SHARE" ] && ok "the share URL is on the PWPROVE_URL marker line" \
-  || bad "marker line: '$marker' != '$SHARE'"
-
 # The requests as the destination saw them — every assertion below reads this file.
 REQ="$W/cap/requests.jsonl"
 # usage: jassert <name> <JS expression over `r` (the first captured request), `b` (its body),
@@ -143,12 +128,49 @@ jassert() {
   ' "$REQ" 2>"$W/jerr"; then ok "$1"; else bad "$1"; sed 's/^/         /' "$W/jerr" | head -2; fi
 }
 
+# The success shape BOTH wire encodings must produce, identically. Shared rather than restated
+# because the two arms differing by a string prefix is how one of them silently stops asserting what
+# the other does — and the whole defect being fixed here is one encoding behaving unlike the other.
+assert_happy_publish() { # usage: assert_happy_publish <label> <exit code>
+  local label="$1" rc="$2" reqs marker
+  SHARE="$ORIGIN/share/rec_stub_1"
+  [ "$rc" = 0 ] && ok "$label — exit 0" \
+    || { bad "$label — exit $rc, wanted 0"; sed 's/^/         /' "$W/err" | tail -5; }
+  reqs=$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')
+  [ "$reqs" = 3 ] && ok "$label — one import call plus one comment per chapter (3 calls for 2 chapters)" \
+    || bad "$label — expected 3 requests (1 import + 2 comments), got $reqs"
+  marker=$(sed -n 's/^PWPROVE_URL //p' "$W/out" | head -n1)
+  [ "$marker" = "$SHARE" ] && ok "$label — the share URL is on the PWPROVE_URL marker line" \
+    || bad "$label — marker line: '$marker' != '$SHARE'"
+  jassert "$label — the import call is first, and every later call is an add-comment for this recording" \
+    'all.length === 3
+     && all[0].body.params.name === "import-recording-from-url"
+     && all.slice(1).every((x) => x.body.params.name === "add-comment"
+          && x.body.params.arguments.recordingId === "rec_stub_1")'
+  grep -qF "publish-proof: 2 chapter(s) published -> $SHARE" "$W/err" \
+    && ok "$label — the operator is told the chapter count and where the recording is" \
+    || { bad "$label — no chapter count and share URL was reported"; sed 's/^/         /' "$W/err" | tail -3; }
+  grep -q 'publish-proof: 2 timestamped comment(s) attached' "$W/err" \
+    && ok "$label — both comments are reported as attached" \
+    || { bad "$label — the comment outcome was not reported"; sed 's/^/         /' "$W/err" | tail -3; }
+  # The defect's own signature, asserted as an absence: the run reported a failed publish and told
+  # the operator to attach a 55MB webm by hand over a film that was already published and correct.
+  grep -q 'publish-proof: publish failed' "$W/err" \
+    && bad "$label — a successful publish is reported as undelivered" \
+    || ok "$label — the publish is not reported as undelivered"
+}
+
+echo "-- happy path: N clips in, ONE import call plus one comment per chapter --"
+start_stub ok
+publish m.json
+assert_happy_publish JSON $?
+
 jassert "the publish is a JSON-RPC tools/call POSTed to the MCP endpoint" \
   'r.method === "POST" && r.url === "/mcp" && b.jsonrpc === "2.0" && b.method === "tools/call" && typeof b.id !== "undefined"'
 jassert "the call names the import action and wraps the payload in params.arguments" \
   'b.params.name === "import-recording-from-url" && b.params.arguments && typeof b.params.arguments === "object"'
-# Verified against the live deployment: a bare tools/call works and responses are plain JSON. A
-# handshake this transport does not need would be an extra round trip on every publish.
+# Verified against the live deployment: a bare tools/call works. A handshake this transport does not
+# need would be an extra round trip on every publish.
 # The length is part of the assertion, not decoration: `every` over an empty capture is true, so a
 # regression that sent nothing at all would pass this as written without it.
 jassert "no initialize handshake precedes the call" \
@@ -342,33 +364,7 @@ echo "-- the SAME happy path over an SSE-encoded response --"
 start_stub ok sse
 rm -f "$PROOF"
 publish m.json
-rc=$?
-[ "$rc" = 0 ] && ok "SSE — exit 0" || { bad "SSE — exit $rc, wanted 0"; sed 's/^/         /' "$W/err" | tail -5; }
-
-SHARE="$ORIGIN/share/rec_stub_1"
-sse_marker=$(sed -n 's/^PWPROVE_URL //p' "$W/out" | head -n1)
-[ "$sse_marker" = "$SHARE" ] && ok "SSE — the share URL is on the PWPROVE_URL marker line" \
-  || bad "SSE — marker line: '$sse_marker' != '$SHARE'"
-grep -qF "publish-proof: 2 chapter(s) published -> $SHARE" "$W/err" \
-  && ok "SSE — the operator is told the chapter count and where the recording is" \
-  || { bad "SSE — no chapter count and share URL was reported"; sed 's/^/         /' "$W/err" | tail -3; }
-# The defect's own signature, asserted as an absence: the run reported `publish failed` and told the
-# operator to attach a 55MB webm by hand over a film that was already published and correct.
-grep -q 'publish-proof: publish failed' "$W/err" \
-  && bad "SSE — a successful publish is still reported as undelivered" \
-  || ok "SSE — the publish is not reported as undelivered"
-
-sse_reqs=$(wc -l < "$W/cap/requests.jsonl" | tr -d ' ')
-[ "$sse_reqs" = 3 ] && ok "SSE — one import call plus one comment per chapter (3 calls for 2 chapters)" \
-  || bad "SSE — expected 3 requests (1 import + 2 comments), got $sse_reqs"
-jassert "SSE — the import call is first, and every later call is an add-comment for this recording" \
-  'all.length === 3
-   && all[0].body.params.name === "import-recording-from-url"
-   && all.slice(1).every((x) => x.body.params.name === "add-comment"
-        && x.body.params.arguments.recordingId === "rec_stub_1")'
-grep -q 'publish-proof: 2 timestamped comment(s) attached' "$W/err" \
-  && ok "SSE — both comments are reported as attached" \
-  || { bad "SSE — the comment outcome was not reported"; sed 's/^/         /' "$W/err" | tail -3; }
+assert_happy_publish SSE $?
 
 echo ""
 echo "-- configuration and manifest refusals --"
@@ -620,6 +616,20 @@ grep -q '<redacted bearer>' "$W/err" \
   && ok "the redaction is visible in the report, so nothing looks silently dropped" \
   || { bad "the echoed bearer was neither printed nor visibly redacted"; sed 's/^/         /' "$W/err" | tail -3; }
 
+# The same echo, arriving as a stream. Redaction runs downstream of the unwrap, so this is where
+# that ordering is proven: a bearer reassembled by the join and then quoted would be a credential in
+# a run log that the json-only case could never see.
+start_stub error sse
+alive_case "a 500 arriving as a stream"
+if grep -qF "$TOKEN" "$W/err" "$W/out"; then
+  bad "the bearer escaped un-redacted through the unwrapped body"
+else
+  ok "a bearer echoed inside an SSE frame is redacted out of the report too"
+fi
+grep -q '<redacted bearer>' "$W/err" \
+  && ok "the redaction is visible in the streamed report as well" \
+  || { bad "the streamed echo was neither printed nor visibly redacted"; sed 's/^/         /' "$W/err" | tail -3; }
+
 # A refused credential: HTTP 401, and the body is NOT JSON-RPC. A parser that reaches for
 # `result.content[0].text` throws here, and the run dies over a credential problem.
 start_stub unauthorized
@@ -646,13 +656,28 @@ grep -q 'rejected the publish' "$W/err" \
 # in it to classify, so it stays 'unexpected' and the run keeps its exit 0 and its kept file. The
 # `garbled` mode is a 200 whose body is not JSON-RPC at all, which is unparseable under EITHER
 # encoding — so the guard holds the axis down on both sides rather than only on the new one.
+garbled_reported() { # usage: garbled_reported <label>
+  grep -q 'rejected the publish' "$W/err" \
+    && ok "$1 — reported as a failed publish, never as a silent success" \
+    || { bad "$1 — the unparseable body was not reported"; sed 's/^/         /' "$W/err" | tail -3; }
+}
 start_stub garbled
 alive_case "a 200 whose body is not JSON-RPC"
+garbled_reported "a 200 whose body is not JSON-RPC"
+# The whole body must survive the unwrap. This mode's SECOND line begins `data:`, so a client that
+# unwrapped on any such line would quote back that line's remainder and throw the first line — the
+# one an operator reads — away. The report must carry the body's opening words.
+grep -qF 'the destination is having a think about it' "$W/err" \
+  && ok "a plain body is quoted back whole, not mistaken for a stream by one line inside it" \
+  || { bad "a plain body was unwrapped as if it were a stream"; sed 's/^/         /' "$W/err" | tail -3; }
 start_stub garbled sse
 alive_case "an SSE frame whose data payload is not JSON"
-grep -q 'rejected the publish' "$W/err" \
-  && ok "an unparseable SSE payload reports as a failed publish, never as a silent success" \
-  || { bad "the unparseable SSE payload was not reported"; sed 's/^/         /' "$W/err" | tail -3; }
+garbled_reported "an SSE frame whose data payload is not JSON"
+# A payload spanning two `data:` lines is ONE value carrying a newline. The second line's text must
+# reach the report, or the unwrap read the frame and kept only part of what it carried.
+grep -qF 'and this is not JSON either' "$W/err" \
+  && ok "a payload spanning several data: lines is rejoined whole" \
+  || { bad "the unwrap kept only part of the payload"; sed 's/^/         /' "$W/err" | tail -3; }
 
 # A refused connection, not a slow one: port 1 on loopback answers with ECONNREFUSED immediately.
 start_stub ok
