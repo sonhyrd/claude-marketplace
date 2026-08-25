@@ -1,0 +1,5 @@
+`phases.hermetic` on the audit summary reports `undeclared: []`, so nothing is missing a CARVE-OUT
+line. The one live call is the auth bootstrap and the header declares it. The section GET is under
+`mocked`, so it never left the browser.
+
+Green run, clean audit — on to the filming run.

@@ -1,28 +1,37 @@
-**Step 7 — the proof config already exists, so I reuse it verbatim.**
+**Step 7 — I reuse `e2e/playwright.proof.config.ts` exactly as it stands.**
 
-`e2e/playwright.proof.config.ts` was committed by a previous pw-prove run and already spreads the
-project config, sets `video: { mode: 'on', size }` from `PW_PROVE_W`/`PW_PROVE_H` (default
-1600x900) and `trace: 'on'`. That is exactly the file this run wants, so I use it as-is and this
-run's commit carries no diff on it.
+A previous pw-prove run committed it, it already spreads the project config and overrides only `use`
+with `video: { mode: 'on', size }` and `trace: 'on'`, and that is the whole contract. So I do not
+rewrite it, do not regenerate it, do not re-derive it from the current project config and do not
+"refresh" it. A per-run diff on this file is exactly the churn it exists to remove, and this run's
+commit carries no diff on it at all.
 
-What I do **not** do to it:
-
-- Rewrite it.
-- Regenerate it from the template.
-- Refresh or re-derive it against this run's numbers.
-
-A per-run diff on that file is precisely the churn it exists to remove.
+The two Step-7 verbs are simply pointed at it:
 
 ```bash
-rm -rf test-results
-PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
-  npx --no-install playwright test e2e/reports.spec.ts --project=chromium \
-  --config e2e/playwright.proof.config.ts --reporter=html
+node "$SB/scripts/proof-run.mjs" audit \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts
+
+PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har" \
+  node "$SB/scripts/proof-run.mjs" film \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts \
+  --project-config e2e/playwright.config.ts \
+  --verdict pinned:1600x900
 ```
 
-**Step 8 hygiene.** The sweep deletes the `test-results/` and `playwright-report/` litter and
-`/tmp/pw-prove-mutation`, plus any legacy `.pw-prove.proof.config.*` throwaway from an older run.
-The committed proof config is a deliverable, not litter, and it survives the sweep untouched.
+The effective viewport travels as the film verb's `--verdict`, not as clip environment variables I
+set myself. `PW_PROVE_CLIP`, `PW_PROVE_W=1600` and `PW_PROVE_H=900` are the verb's to put on the run
+from that verdict — there is no raw runner invocation here to hang them on, and inventing one would
+be a second copy of the command.
 
-**Completion report.** The `Generated` block does not list the proof config — I omit that line,
-because this run did not create it. Listing a file the run reused would read as a new artifact.
+**Step 8 hygiene — the proof config survives it.**
+
+The sweep is scoped to this run's litter: `test-results/` and `playwright-report/`, plus any legacy
+`.pw-prove.proof.config.*` throwaway an older run left behind. `e2e/playwright.proof.config.ts` is a
+committed file, not litter, so it is not deleted, not swept and not touched.
+
+**The completion report's `Generated` block omits it.** That block lists what *this* run created, and
+this run created the spec and the POM, not the proof config. Listing a file the run only read would
+tell a reviewer to look for a diff that does not exist.

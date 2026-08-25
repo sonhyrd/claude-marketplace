@@ -161,6 +161,75 @@ value, the recording size, arrives as `PW_PROVE_W`/`PW_PROVE_H` rather than as a
 project's own `playwright.config` is never edited. Drops the inherited `webServer` **when nothing answers at that entry's url**, so the spread cannot boot a development server behind a run aimed at the [proof target](#proof-target); keeps it when the proof target answers there, because then that entry is what produces the origin. Either way a one-time committed migration, not a per-run edit. Superseded the throwaway
 `.pw-prove.proof.config.ts` that each run rewrote and deleted. See `docs/adr/0008`, amended by `docs/adr/0016`.
 
+## Audit run
+The first of Step 7's two runs of the spec set: un-clipped and un-dwelled, and the run the heal loop
+works against. It produces the traces the [hermetic audit](#hermetic-audit) classifies, which is why
+it comes first — a hermetic finding is a spec edit, and a spec edit invalidates footage, so auditing
+before the filming run makes the cheap run the one that protects the expensive one. Since #142 it is an
+interface rather than a description: `proof-run.mjs audit` resolves the spec set, clears the results
+directory, runs it with no worker override, and bounds the heal loop through the
+[no-progress checkpoint](#no-progress-checkpoint). Since #143 it also owns the run's two
+preconditions, each refusing under its own exit code before a browser run is spent: a type check
+against the e2e tsconfig when the project has one and the root one otherwise, and the HAR bind that
+points the canonical recording at this run's origin — delegated to `har-scrub.mjs bind`, reaching
+the run through `PW_PROVE_HAR`, and stopping outright when the bind cannot be made safe. Since #146
+it also hands its classification forward: the live calls the run made are persisted under the run's
+dot-directory for the [filming run](#filming-run) to be refused by, dropped at the top of every
+invocation and rewritten only by the classification phase — so an audit that never asked the
+question leaves no clean bill of health behind.
+
+## Filming run
+The second of Step 7's two runs of the same spec set, and the one whose webms are delivered: it
+carries `PW_PROVE_CLIP=1` — which enables the committed spec's payoff dwell — and the
+[effective viewport](#effective-viewport) as `PW_PROVE_W`/`PW_PROVE_H`. It comes second because a
+[hermetic audit](#hermetic-audit) finding is a spec edit and a spec edit invalidates footage, so the
+cheap run protects the expensive one. Since #145 it is an interface rather than a description:
+`proof-run.mjs film` runs the spec-side [clip fidelity](#clip-fidelity-contract) audit as a
+**precondition** — a spec with no reader for the clip variable never reaches a filming run — clears
+the results directory, films the set, extracts one frame per clip for the
+[clip inspection](#clip-inspection), and carries the clip paths and their measured durations in its
+summary so the publish step reads a manifest source rather than globbing for one.
+
+Since #146 it carries two more things it will not let an agent forget. It is **refused while an
+undeclared live call from the audit stands** (exit 13): the [audit run](#audit-run) persists the live
+calls it saw under the run's dot-directory, and this verb recomputes the undeclared list against the
+spec text in front of it — so declaring the carve-out clears the refusal with no second audit, while
+a spec set that has moved under the record is named `stale` rather than read as clearance. And it
+**counts itself**: the body allows exactly one re-film, so the second filming run sets
+`publish_with_warning` in its summary for Step 8 and the completion report to carry, instead of the
+agent recalling across a diagnosis and a re-run which attempt this was. Only a run that produced
+clips spends the re-film; a green audit opens a fresh cycle.
+
+## Proven restart
+The only evidence the mutation check accepts that the preview server now serves the rebuilt
+artifact: the server's **own new announcement in its own log, past a mark taken before the stop was
+issued**. An answer on the port is explicitly not this — a restart that loses the port to its own
+predecessor leaves the *old* process answering, serving the pre-mutation build, and an observed run
+spent 128s reaching a page stuck on its loading splash before it would have reported "the spec
+guards the change" on evidence that proved nothing; killing the survivor gave the genuine RED in
+18.7s. Since #147 `proof-run.mjs mutate` sequences `preflight.mjs`'s `build` and `serve` phases to
+produce it — the stop is confirmed rather than assumed, escalating to SIGKILL — and an unproven
+restart is **exit 11 with no verdict to read**, because the run it would have paid for could only
+describe an artifact nothing rebuilt. Since #148 the mark is taken when the restart is *issued*,
+not before the build: a mark taken earlier includes the build's own output and a predecessor's
+dying words in the window it is meant to exclude. A proven restart is also what clears a standing
+[stale artifact](#stale-artifact) marker.
+
+## Stale artifact
+The state the machine is in between a mutation check's **revert** and the next build: the working
+tree is back to what it was, and the *built artifact the preview server holds still contains the
+reverted mutation*. It is precisely the case the build-reuse check cannot see, because reuse is
+measured against HEAD plus the working-tree difference and the revert restored both — so nothing
+downstream could tell that heal, evidence or a re-film taken from that server describes deliberately
+broken software. Since #147 `proof-run.mjs mutate` records it as a marker file under the run's
+dot-directory (`.pw-prove/artifact-stale`) rather than paying for an unconditional rebuild it may
+not need: the revert is immediate, the rebuild is **lazy**, and the marker is what makes laziness
+safe. `audit` and `film` **refuse while it stands** (exit 15), changing nothing and clearing
+nothing, and print the exact commands that clear it, in order — force the build, prove the restart, then
+remove the marker. They never self-heal, because a silent rebuild would hide that the mutation check
+left the machine in this state. `mutate` is not refused by it: it forces a rebuild by construction,
+and its [proven restart](#proven-restart) clears a standing marker before it writes its own.
+
 ## Hermetic audit
 The Step-7 check that the spec reached nothing it did not declare, run against the traces of the
 **audit run** — the un-clipped, un-dwelled proof run that precedes filming, so a finding costs a
@@ -255,9 +324,10 @@ defect this pipeline exists to prevent — and the stop never emits the [deliver
 so a reported non-delivery can never be mistaken for a proof.
 
 ## No-progress checkpoint
-The Step-7 test that tells a fix apart from a retry. Each failed attempt is reduced to a **failure
-signature** — error class plus failing locator — and two consecutive attempts carrying the same
-signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
+The Step-7 test that tells a fix apart from a retry, owned by `proof-run.mjs audit` and enforced
+across invocations through state it persists under the run's dot-directory. Each failed attempt is
+reduced to a **failure signature** — error class plus failing locator — and two consecutive attempts
+carrying the same signature end the loop immediately, because a third attempt at an unchanged error changes nothing the
 application can see. Attempts whose signatures differ are converging and still consume the full
 budget of three. The bound was always three; a raw count could not distinguish three fixes from three
 retries, and one run spent an hour rewriting the same binding against one unchanging 30-second
@@ -370,3 +440,96 @@ a list** — there is deliberately no fixed fast tier, because a named tier is a
 falls out of sync with the map it was derived from. What this buys is that a re-baseline costs one to
 three cases instead of the whole suite; what it costs is that the registry's section map has to be
 right, which is why it is the registry's load-bearing column.
+
+# Run forensics vocabulary
+
+The third part of this glossary. The first part names part of a proof; the second names part of the
+instrument that measures the skill; this part names the **exercise that reads finished runs** — what
+pw-prove actually cost across a week of real work. Nothing below is a gate: no run passes or fails
+anything defined here, and nothing here describes behaviour pw-prove exhibits while it is running.
+The method and the evidence live in `docs/studies/run-forensics.md`; this is the vocabulary only.
+
+## Run forensics
+The exercise of reading a bounded set of **already-finished** pw-prove sessions for what they cost
+the operator — where runs stalled, what was re-run, where a human had to intervene by hand, and which
+instruction the agent was following at that moment. Distinct from the two per-run gates it is most
+easily confused with: the [hermetic audit](#hermetic-audit) and the [clip fidelity
+contract](#clip-fidelity-contract) each pass or fail **one** run against a rule, whereas run
+forensics is neither a gate nor about one run. Distinct too from [clip
+inspection](#clip-inspection), a beat inside a live run, and from [environment
+facts](#environment-facts), which is what a run derives about a repository in order to proceed. Its
+output is evidence and nothing more; a decision that reads that evidence is a separate document.
+
+## Session distillation
+The fixed-schema record one session yields to [run forensics](#run-forensics), covering that
+session's identity, shape, cost, friction, mistakes, and the instruction each friction and mistake
+item is attributed to. One session, one record, written to disk before it is returned. A **record,
+not prose**: an empty field is a stated gap, and a friction item carrying no attribution is
+incomplete rather than a finding. A no-progress loop noted in one is an *observation* about where a
+run circled, not the [no-progress checkpoint](#no-progress-checkpoint), which is the rule Step 7
+applies live. Distinct too from the [runtime profile](#runtime-profile), which is a file a run writes
+into the target repository for the next run to read; a distillation is written outside every
+repository, after the fact, and no run ever reads one.
+
+## Friction finding
+One ranked item drawn from the [session distillations](#session-distillation): a named cost, carrying
+how many sessions hit it, how severe it is, what it cost in time, the `SKILL.md` section or script it
+is attributed to, the skill version it was observed on, and a citation a reader can verify a month
+later. Marked as pw-prove's fault or the target repository's, or as a boundary case rather than
+dropped when it straddles the line. The word is *finding*, not verdict: it is evidence a reader may
+act on, never a decision that anything will change — which is why a finding whose cause is already
+gone is recorded as confirmed-fixed rather than deleted.
+
+A finding above the ranking cut also carries a **Verdict** field once the HEAD re-check has run:
+`confirmed`, `confirmed-fixed` or `refuted`, in the sense `agents/e2e-finding-verifier.md` already
+uses the word — a judgement about *this finding's* standing against the current body and scripts.
+That is not the sense the paragraph above rules out. The finding is still not a decision; the verdict
+says only whether there is still something there to decide about, and a `refuted` or
+`confirmed-fixed` verdict never deletes the row or frees its ID.
+
+## Span
+The stretch of a session transcript in which pw-prove actually ran. A transcript is a whole work
+session — up to 25 MB of it — and pw-prove is a region inside, bracketed by the first and last run
+ledger record the session left behind. The word matters because the alternative reading, "the
+transcript is the run", is what makes an exercise read 226 MB to answer a question about 9% of it.
+
+## Lead
+The stretch of transcript **before** the [span](#span): from the turn that loaded pw-prove to the
+first shipped script running. Step 1 and Step 2 run no script, so they leave no ledger record and a
+ledger-bracketed span cannot see them — which is 47 to 396 lines of every corpus session, the
+environment work and the whole derivation of the AC table among them. Anchored on a **mark** rather
+than a distance: the slash command, the `Skill` invocation, or the first line of the skill body the
+harness injects, whichever the session happens to have left, and the last one before the span wins.
+Its counterpart at the other end is the [reaction tail](#reaction-tail); together with the span they
+are the whole of what a [session distillation](#session-distillation) reads.
+
+## Reaction tail
+The bounded stretch of transcript **after** the [span](#span): the turns between the last shipped
+script exiting and control returning to the operator, where a failing script is actually handled and
+the final report is written. It exists because the span's upper bound is a script's exit, which is
+the right bound for *when pw-prove ran* and the wrong one for *what it cost*. Emitted by the [span
+index](#span-index) rather than derived per session, and always carrying the reason it stopped — the
+operator's next turn, the end of the transcript, or one of the two caps — because a tail that was cut
+and a tail that ran out are different evidence. The caps are measured, not assumed; the measurement
+is in `docs/studies/session-distillation.md`.
+
+## Span index
+The one computed artifact of [run forensics](#run-forensics): `scripts/forensics/span-index.py`
+takes the run ledger and the local transcript tree and emits one entry per session — repository,
+worktree, transcript path, skill versions, ledger record and non-zero-exit counts, first and last
+ledger timestamp, and the transcript line and byte range those timestamps bracket.
+It emits the [lead](#lead) and the [reaction tail](#reaction-tail) either side of that range too,
+because the ledger's own bounds miss both ends of a run. It is computed
+once and read by everything downstream, so no later step re-derives which sessions matter or where
+inside a transcript to look. It is the exercise's only tested seam because it is the only component
+whose failure is silent: a mis-sliced [span](#span) yields a confident distillation of the wrong
+turns with nothing reporting an error.
+
+## Corpus, control and excluded
+The three classes the [span index](#span-index) sorts sessions into. **Corpus** is the two
+repositories under audit and is what the findings are drawn from. **Control** is this repository's
+own dev and CI sessions, retained rather than deleted: their failures are deliberate, so a taxonomy
+that cannot tell one of them from real struggle is exposed as defective. **Excluded** is everything
+else, and it always carries a stated reason — including the sessions the ledger knows but no
+transcript exists for, which are emitted with an explicit marker because a corpus that silently
+shrinks is worse than one that reports a gap.

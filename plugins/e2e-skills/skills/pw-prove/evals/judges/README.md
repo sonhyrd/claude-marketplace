@@ -238,7 +238,7 @@ nobody re-proposes it from the instance count alone.
 
 | Sub-family | Instances | Where it lives | Already shared? |
 |---|---|---|---|
-| **Negation scope** — a forbidden thing named in order to reject it | #59, #63, #66, #71 (provenance) | `commitments()` / `NEGATED` / `offenders()` | **Yes.** One text across 39 judges, held verbatim by `test-eval-judges.sh`. #66 repaired eight copies at once. |
+| **Negation scope** — a forbidden thing named in order to reject it | #59, #63, #66, #71 (provenance) | `commitments()` / `NEGATED` / `offenders()` | **Yes.** One text across **41** judges, held verbatim by `test-eval-judges.sh`. #66 repaired eight copies at once; #150 repaired all 41, having found the wrapped-list-item form of the same defect. |
 | **Wrong unit** — the judge reads the wrong span | #64 (line wrap), #71 (block vs turn), #77 (title vs table row) | each judge's reader | **No, and it should not be.** The right unit is a property of the case's answer shape. #77's repair was to *stop* widening phrases and parse the table; three instances, three different units, no common one. |
 | **Wrong spelling of the right value** — the value is correct and the characters are not | #72 (×3), #82 (×5) | each judge's `checks[]` | **No — see below.** |
 
@@ -271,18 +271,28 @@ fixtures", the safety condition such a change would have to meet, is satisfied *
 proves nothing. Evidence that a widening is correct only ever arrives as the next transcript, which
 is the same place per-judge repair gets it, at eight times the blast radius.
 
-**What actually finds this family, measured.** 26 of 47 judges carry a must-PASS fixture taken from
-a recorded answer rather than hand-authored. For **25 of those 26**, the commit that added the
-recorded fixture also edited the judge — adding a real answer forced a repair, first time, almost
+**What actually finds this family, measured.** As of #82, 26 of 47 judges carried a must-PASS
+fixture taken from a recorded answer rather than hand-authored. For **25 of those 26**, the commit
+that added the recorded fixture also edited the judge — adding a real answer forced a repair, first time, almost
 every time. That is not a coincidence to note; it is the mechanism. #82's five defects were all
 invisible to a fixture set that had been green for weeks and all five went red the moment three
 recorded answers were dropped in.
 
-So the cheap lever is not a matcher. **It is the recorded must-PASS fixture, and 21 of 47 judges do
-not have one yet** — that is the population where the next instance of this family is, and it is
-findable today, offline, without a run. Prefer a real answer from a retained transcript whenever one
-exists (as *Fixtures* above already says), and when you take a measurement, keep the workspace: its
+So the cheap lever is not a matcher. **It is the recorded must-PASS fixture**, and the judges that
+do not have one are the population where the next instance of this family is — findable today,
+offline, without a run. Prefer a real answer from a retained transcript whenever one exists (as
+*Fixtures* above already says), and when you take a measurement, keep the workspace: its
 `with_skill` responses are next quarter's fixtures.
+
+**That population grew in #150, and the reason is worth stating rather than hiding in a count.** The
+Step-7 rewrite invalidated the premises six recorded fixtures were answers to — a recorded answer
+that runs `hermetic.mjs` by hand is a correct answer to a question the body no longer asks, so it
+cannot certify a judge against the question it now asks. Those six were deleted and replaced with
+hand-authored twins, which is a real loss of exactly the evidence this section says is the cheap
+lever. It is the price of a body rewrite, and the way to pay it back is the next measurement run:
+its `with_skill` responses over the repaired prompts are the recorded fixtures these six judges now
+owe. Read the live figures off the tree rather than off this paragraph — the counts above are #82's
+and are kept as its record, not as a current inventory.
 
 ### An assertion is re-derived from the prompt it is about, never inherited across a repair
 

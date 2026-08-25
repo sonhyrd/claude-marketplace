@@ -26,3 +26,5 @@ results/
 # Marketing collateral (local-only, not part of the public repo)
 marketing/
 .playwright-mcp/
+# pw-prove review handoff artifact — written on every review, never PR content.
+.pw-prove/

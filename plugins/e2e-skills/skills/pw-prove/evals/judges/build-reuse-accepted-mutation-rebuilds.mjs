@@ -15,6 +15,20 @@
 // mutation's own forced rebuild, both unchanged.
 // This closes the Step-7 mutation artifact-isolation gap REGISTRY.md names case-52 as the candidate for.
 //
+// Re-derived by #150 against the prompt the Step-7 rewrite left behind. Before that rewrite the
+// agent assembled the mutation run itself — a `BUILD_REUSE=never` rebuild, a hand-rolled restart,
+// and a runner call carrying `--output=/tmp/pw-prove-mutation`. `proof-run.mjs mutate` now owns all
+// three, and Step 7 fixes the forced-no-reuse build and the isolated output BY CONSTRUCTION rather
+// than by flag. Three assertions were re-derived:
+//   - `BUILD_REUSE=never` and `--output` became UNREACHABLE. Neither appears on the mutate verb's
+//     command line, so demanding them failed every correct answer. They are replaced by the verb
+//     invocation and the four flags only the agent can supply.
+//   - the isolation assertion moved from the flag to the property. What matters is that
+//     `test-results/` is left standing, which the answer can now only say rather than spell.
+//   - the restart is now the verb's, proven before any verdict is read, so `restart` is asserted
+//     against the verb rather than against a stop-and-start the agent describes.
+// The Step-3 half — a reuse accepted on its reason, not distrusted — is unchanged.
+//
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
 
@@ -53,7 +67,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -68,6 +93,10 @@ const bad = offenders(text, [
   /\bI (?:force|trigger|run)\b[^\n]{0,40}rebuild[^\n]{0,40}(?:to be safe|to feel safe|anyway|just in case)/i,
   /\bI (?:treat|read|count)\b[^\n]{0,40}(?:as a )?(?:skipped|failed) build/i,
   /\bI (?:leave|keep)\b[^\n]{0,40}(?:the )?mutation[^\n]{0,30}test-results/i,
+  // The two things the verb fixes by construction. Passing either is a usage error against the
+  // module, and describing it as the agent's step is the prose the rewrite removed.
+  /\bI (?:set|export|pass|force)\b[^\n]{0,30}BUILD_REUSE=never/i,
+  /\bI (?:pass|add|give|set)\b[^\n]{0,30}--output\b/i,
 ]);
 if (bad.length) {
   console.error("FAIL: the answer distrusts a legitimate reuse, or lets the mutation run pollute test-results/:");
@@ -79,12 +108,18 @@ const checks = [
   [/BUILD=reused/, "the answer never reads the reuse verdict it was given"],
   [/commit-and-tree-unchanged|BUILD_REUSE_REASON/, "the answer never uses the reason, which is what makes the reuse legitimate rather than lucky"],
   [/\blegitimate\b|\bvalid\b|\bpass(?:es)?\b|\bsatisfie[sd]\b|\bas (?:good as|by) BUILD=ok\b/i, "the answer never accepts the reuse as a pass"],
-  [/BUILD_REUSE=never/, "the mutation never forces its own rebuild, so it would run against the standing artifact"],
+  [/proof-run\.mjs["']?\s+mutate|\bmutate verb\b/i, "the mutation check never goes through the mutate verb, which is what forces the rebuild and proves the restart"],
+  [/--build-command/, "the verb is never given the build script, so it has nothing to force the rebuild with"],
+  [/--server-pid/, "the verb is never given the recorded PID, so it cannot stop the server holding the pre-mutation artifact"],
+  [/--serve-command/, "the verb is never given how the server is started, so it cannot bring the rebuilt artifact up"],
+  [/--server-log/, "the verb is never given the preview log, so the restart has nothing to be proven against"],
   [/restart/i, "the preview server is never restarted onto the rebuilt artifact"],
+  [/prove[nds]?\b|unproven|\bexit 11\b/i, "the restart is never proven, so a predecessor still holding the port could supply the verdict"],
   [/green by construction|un-?rebuilt|standing artifact|would (?:always )?pass/i, "the answer never says why a mutation against the un-rebuilt artifact is worthless"],
   [/revert|git checkout --|git (?:restore|stash)|undo the mutation/i, "the mutation is never reverted"],
-  [/--output/, "the mutation run's artifacts are never isolated with --output"],
-  [/pw-prove-mutation|\/tmp\//, "the answer never names where the mutation artifacts go"],
+  [/isolat\w*|\bseparate\b|\bown output\b|untouched|left (?:alone|standing|as it stands)|\bnot cleared\b|never clears/i, "the answer never says the mutation run's artifacts are isolated from the delivered clips"],
+  [/test-results/, "the answer never names test-results/, which is the directory the mutation run must leave standing"],
+  [/\bstale\b/i, "the artifact is never marked stale after the revert, so the lazy rebuild has nothing making it safe"],
 ];
 const missing = checks.filter(([re]) => !re.test(text));
 if (missing.length) {
@@ -92,4 +127,4 @@ if (missing.length) {
   process.exit(1);
 }
 
-console.log("PASS: the reuse is accepted on its reason, the mutation rebuilds and restarts, and its artifacts stay out of test-results/");
+console.log("PASS: the reuse is accepted on its reason, the mutate verb rebuilds and proves its restart, and its artifacts stay out of test-results/");

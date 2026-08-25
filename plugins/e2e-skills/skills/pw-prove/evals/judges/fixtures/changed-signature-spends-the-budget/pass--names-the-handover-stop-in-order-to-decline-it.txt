@@ -16,12 +16,19 @@ was written against a count that does not hold for this data. I correct the expe
 Then:
 
 ```bash
-npx playwright test e2e/reports.spec.ts -g "filters the report list" --config playwright.proof.config.ts
+node "$SB/scripts/proof-run.mjs" audit \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts \
+  --har e2e/reports.api.har --origin "$BASE_URL" \
+  --grep "filters the report list"
 ```
 
 Rerun **only** the failing test with `-g` while iterating — the other four passed and re-running them
-each time buys nothing. After the last fix I run the **full spec** once, unfiltered, as the gate: a
-targeted rerun proves the one test, and only the whole spec proves I did not break a sibling.
+each time buys nothing — but through the **same audit verb**, never a raw runner call. The attempt
+bound and the signature comparison only see the attempts that go through the verb, and an attempt
+they cannot see is an attempt that is not bounded. After the last fix I run the **full spec set**
+once, the same command with `--grep` dropped, as the gate: a targeted rerun proves the one test, and
+only the whole set proves I did not break a sibling.
 
 I do **not** invoke the no-progress checkpoint and I do **not** take the handover stop. Those are for
 a signature that stopped moving; this one is still moving, and an attempt remains in the budget. No PR

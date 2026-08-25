@@ -1,0 +1,11 @@
+Run it like this:
+
+```bash
+PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har" \
+  node "$SB/scripts/proof-run.mjs" film \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts \
+  --project-config e2e/playwright.config.ts
+```
+
+No concurrency flag is passed, so Playwright uses its default.

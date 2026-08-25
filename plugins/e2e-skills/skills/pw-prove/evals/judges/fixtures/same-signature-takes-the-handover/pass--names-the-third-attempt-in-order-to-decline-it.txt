@@ -1,7 +1,9 @@
-**I stop the fix loop here.** Attempt 1 and attempt 2 failed with the same error class
-(`TimeoutError`) on the same failing locator (`getByRole('button', { name: 'Apply filter' })`).
-The signature is **unchanged**, so the edit changed nothing the app can see — that is a retry, not a
-fix. A third attempt would be a third retry, so I do not spend it.
+**Exit 7 is the loop ending, and I stop here.** It is not a failure to diagnose harder: the verb
+records and persists each attempt's failure signature and refuses the attempt that repeats an
+unchanged one. Attempt 1 and attempt 2 carry the same error class (`TimeoutError`) on the same
+failing locator (`getByRole('button', { name: 'Apply filter' })`), so the signature is **unchanged**
+and the edit changed nothing the app can see — that is a retry, not a fix. The remaining attempt is
+deliberately unspent, and there is no fourth fix.
 
 In order:
 

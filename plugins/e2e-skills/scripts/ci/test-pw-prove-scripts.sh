@@ -411,6 +411,54 @@ else
   bad "address family fallback — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
 fi
 
+# A wildcard announcement (`[::]`, `0.0.0.0`) names no loopback form, so it defers to the form the
+# caller asked for instead of moving them onto another spelling. `.listen(port)` with no host is the
+# dual-stack bind that produced the report: both forms answer, and the requested origin is one of them.
+printf 'Listening on http://[::]:8742\n' >"$W/wildcard.log"
+node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(8742)' &
+SRV=$!
+for _ in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:8742 && break; sleep 0.1; done
+( cd "$W" && BASE_URL=http://localhost:8742 SERVER_LOG="$W/wildcard.log" READY_TIMEOUT=10 \
+    node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+if [ "$rc" -eq 0 ] && grep -q '^BASE_URL=http://localhost:8742$' "$W/out" \
+   && ! grep -q 'the server is at' "$W/err"; then
+  ok "a dual-stack bind leaves the requested origin alone — no swap, no family claim"
+else
+  bad "dual-stack announcement — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200), stderr: $(grep -m1 'the server is at' "$W/err")"
+fi
+
+# The caller passed the wildcard host the server printed, so NOTHING was preferred and the form that
+# answered is just the first one tried. The old sentence read that accident as the bound family.
+( cd "$W" && BASE_URL=http://0.0.0.0:8742 SERVER_LOG="$W/wildcard.log" READY_TIMEOUT=10 \
+    node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+{ kill $SRV && wait $SRV; } 2>/dev/null
+if [ "$rc" -eq 0 ] && grep -q 'you asked for a wildcard host' "$W/err" \
+   && ! grep -q 'bound loopback family' "$W/err"; then
+  ok "a wildcard BASE_URL is told no form was preferred, not told a bound family"
+else
+  bad "wildcard BASE_URL wording — exit $rc, stderr: $(grep -m1 'the server is at' "$W/err")"
+fi
+
+# The twin: the family claim SURVIVES where it is earned. This log announces a wildcard and the server
+# binds one family only, so the caller's own form leads the poll, is dialled, and refuses — which is
+# the evidence the sentence always needed and never checked.
+node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(8743,"127.0.0.1")' &
+SRV=$!
+for _ in $(seq 1 40); do curl -s -o /dev/null http://127.0.0.1:8743 && break; sleep 0.1; done
+printf 'Listening on http://[::]:8743\n' >"$W/earned.log"
+( cd "$W" && BASE_URL=http://[::1]:8743 SERVER_LOG="$W/earned.log" READY_TIMEOUT=10 \
+    node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+{ kill $SRV && wait $SRV; } 2>/dev/null
+if [ "$rc" -eq 0 ] && grep -q '^BASE_URL=http://127.0.0.1:8743$' "$W/out" \
+   && grep -q '\[::1\] refused, so the bound loopback family is ipv4' "$W/err"; then
+  ok "a refused requested form still earns the family claim"
+else
+  bad "earned family claim — exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160), stderr: $(grep -m1 'the server is at' "$W/err")"
+fi
+
 # A server that genuinely never started still fails — and the cause is not a port mismatch. The
 # marker says what is KNOWN (the log names no origin), because a server that binds quietly reaches
 # this branch too and a confident wrong verdict is the misdiagnosis the phase split exists to end.
