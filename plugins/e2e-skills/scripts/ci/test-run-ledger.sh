@@ -13,7 +13,7 @@
 #   - a ledger WRITE FAILURE never changes the exit code and never suppresses the stdout line
 #   - preflight prints the version banner as its FIRST output line
 #
-# Only shipped scripts are proven here: pw-prove's six executables plus e2e-reviewer's scanner,
+# Only shipped scripts are proven here: pw-prove's seven executables plus e2e-reviewer's scanner,
 # which imports the same helper across the skill boundary. clips.mjs is a library, not an entry
 # point, and leaves no record by design.
 set -uo pipefail
@@ -100,15 +100,17 @@ run_case "clip-fidelity.mjs (no subcommand)" 1 clip-fidelity.mjs "$PW_VERSION" -
   env PWPROVE_LEDGER="$L" node "$REPO_ROOT/$PW/clip-fidelity.mjs"
 run_case "har-scrub.mjs (no HAR file)" 1 har-scrub.mjs "$PW_VERSION" -- \
   env PWPROVE_LEDGER="$L" node "$REPO_ROOT/$PW/har-scrub.mjs"
+run_case "proof-run.mjs (no verb)" 1 proof-run.mjs "$PW_VERSION" -- \
+  env PWPROVE_LEDGER="$L" node "$REPO_ROOT/$PW/proof-run.mjs"
 run_case "scan.mjs (nonexistent path)" 2 scan.mjs "$REV_VERSION" -- \
   env PWPROVE_LEDGER="$L" node "$REPO_ROOT/$SCAN" "$W/does-not-exist"
 
 echo ""
 echo "-- ledger file: override honored, appends accumulate, line matches stdout --"
-if [ "$(wc -l < "$L" | tr -d ' ')" = "7" ]; then
-  ok "\$PWPROVE_LEDGER honored — 7 invocations appended 7 lines"
+if [ "$(wc -l < "$L" | tr -d ' ')" = "8" ]; then
+  ok "\$PWPROVE_LEDGER honored — 8 invocations appended 8 lines"
 else
-  bad "\$PWPROVE_LEDGER — expected 7 accumulated lines, got: $(wc -l < "$L" | tr -d ' ')"
+  bad "\$PWPROVE_LEDGER — expected 8 accumulated lines, got: $(wc -l < "$L" | tr -d ' ')"
 fi
 # The last case's stdout line and the last ledger line must be the SAME record.
 if [ "$(grep '^PWPROVE_RUN ' "$W/out")" = "$(tail -1 "$L")" ]; then

@@ -150,11 +150,53 @@ export function clipsConfig(env = process.env) {
 let nextId = 1;
 
 /**
- * ONE JSON-RPC `tools/call` over a single POST. Returns { status, text } — the raw body, because
- * the outcome lives in it and a status code alone cannot tell success from refusal.
+ * Return the JSON-RPC body an SSE-encoded response carries: the `data:` field values, joined.
+ *
+ * The deployment answers some responses as plain `application/json` and others as a Server-Sent
+ * Events frame (`event: message`, then `data: {…}`) carrying the IDENTICAL body — same endpoint,
+ * same bearer, same session. Which one arrives is not predictable from anything the client knows,
+ * so reading only the first reported a publish that had succeeded as a failure, intermittently.
+ *
+ * `event:`, `id:`, `retry:` and comment lines are ignored: none of them carries the response. This
+ * is not a general SSE reader and must not become one — one JSON-RPC response arrives per POST, so
+ * there is no multi-frame accumulation, no `[DONE]` sentinel and no dispatch on event type.
+ *
+ * THE WHOLE BODY DECIDES, not a line in it. A body is treated as a stream only when its first
+ * non-empty line is an SSE field line; anything else is returned byte-for-byte. Without that, a
+ * plain body carrying a line that merely begins `data:` — an error page, a stack trace, a prose
+ * 500 — would be silently reduced to that line's remainder, and this function would destroy the
+ * body it exists to preserve. The shape is what was measured, so the shape is what is read: the
+ * `Content-Type` of the recorded responses is not in evidence, and gating on a header nobody
+ * observed would be a second unverified bet on top of the `Accept` one.
+ */
+const SSE_FIELD_LINE = /^(?:event|data|id|retry):|^:/;
+function unwrapSseBody(body) {
+  const lines = body.split(/\r\n|\r|\n/);
+  if (!SSE_FIELD_LINE.test(lines.find((l) => l.trim() !== '') ?? '')) return body;
+  const payloads = [];
+  for (const line of lines) {
+    if (!line.startsWith('data:')) continue;
+    const value = line.slice('data:'.length);
+    // One optional leading space belongs to the field syntax, not to the value. A payload spanning
+    // several `data:` lines is one value carrying newlines — that is the field's own syntax, not a
+    // second frame.
+    payloads.push(value.startsWith(' ') ? value.slice(1) : value);
+  }
+  return payloads.length ? payloads.join('\n') : body;
+}
+
+/**
+ * ONE JSON-RPC `tools/call` over a single POST. Returns { status, text } — the response body, with
+ * any SSE `data:` payload UNWRAPPED, because the outcome lives in the body and a status code alone
+ * cannot tell success from refusal. `text` is therefore not the literal wire bytes: a caller
+ * debugging a stream-encoded response sees the JSON it carried, never the frame around it.
+ *
+ * Wire encoding is the transport's business, which is why the unwrap is here. `classifyClipsResponse`
+ * receives one JSON string either way and learns no SSE at all, so the response matrix it documents
+ * stays literally true.
  *
  * No `initialize` handshake precedes it: verified against the live deployment, a bare `tools/call`
- * works, responses are plain application/json, and there is no session header to carry.
+ * works and there is no session header to carry.
  */
 export async function callClipsAction(config, action, args, timeoutMs = 30_000) {
   const res = await fetch(config.endpoint, {
@@ -162,7 +204,10 @@ export async function callClipsAction(config, action, args, timeoutMs = 30_000) 
     headers: {
       Authorization: `Bearer ${config.token}`,
       'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
+      // JSON, and only JSON: the client used to advertise `text/event-stream` while its parser
+      // could not read one. It can now, but what it WANTS is the plain body, and an Accept header
+      // should describe the client rather than everything it could survive.
+      Accept: 'application/json',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -177,7 +222,14 @@ export async function callClipsAction(config, action, args, timeoutMs = 30_000) 
   // Authorization header it was sent — several do, in validation errors — would put the credential
   // in that log without this. The client cannot stop a server echoing; it can refuse to repeat it.
   // The empty guard is not theatre: `''.split()` on an empty needle shreds the body into characters.
-  const text = await res.text();
+  //
+  // Redaction runs over the UNWRAPPED body, because the unwrapped body is what every caller quotes.
+  // Redacting the wire bytes and then unwrapping would leave the replacement to survive the join by
+  // luck rather than by construction — and a value the field syntax splits across two `data:` lines
+  // is rejoined carrying the newline between them, so neither ordering reassembles a token that
+  // arrived in halves. What is guaranteed is the thing that matters: nothing leaves this function
+  // un-redacted.
+  const text = unwrapSseBody(await res.text());
   return {
     status: res.status,
     text: config.token ? text.split(config.token).join('<redacted bearer>') : text,
