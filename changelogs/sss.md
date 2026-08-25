@@ -4,6 +4,12 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.0] - Unreleased
+
+### Changed
+
+- `pr-review` skill: **the review publishes itself now, and a bash test pins the reversal that made it possible.** Step 4e is commit-**and-push** and a new 4f posts the aggregated report to the PR as one issue comment — reproduced verbatim, with 4d's `## Fixes` appended — which overturns the `Never push` rule ([ADR 0012](../docs/adr/0012-pr-review-publishes-its-own-review.md)). The version is a **minor** because the change is outward-facing: the same invocation that used to end in chat now writes to a shared remote and to a PR other people read, so a caller pinned to 1.5.0 got materially different behaviour from one on 1.6.0. No skill description changed, so the routing table is untouched. The old position was stated **five times** across one `SKILL.md` — 4e's `Never push` and its third-pusher rationale, Step 3's *"Posting to GitHub is a separate ask."*, Step 4's opening *"nothing is pushed"*, 4c's *"a push this stage never makes"* and 6a's *"Still never push"* — and prose repeated that emphatically grows back: any one of those sentences re-added by a later edit restores the old behaviour in the only place it lives, and would pass every other test in the suite while doing it. `tests/bash/test-pr-review-publish-cases.sh` (`make test-pr-review-publish`) is what fails instead, asserting the **absences** as hard as the presences. Full detail in the root `CHANGELOG.md`.
+
 ## [1.5.0] - Unreleased
 
 ### Added
