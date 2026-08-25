@@ -37,11 +37,15 @@ judge:
           - '(?i)without asking'
           - '(?i)not a separate ask'
           - '(?i)on its own'
+    # The push has to be described as something the run does, not merely
+    # mentioned: "you'll need to push it yourself" contains the word too, and
+    # is the exact wrong answer this case exists to catch.
     - output_matches:
         any:
-          - '(?i)push(es|ed|ing)?\b'
-          - '(?i)Step 4f'
-          - '(?i)\b4f\b'
+          - "(?i)\\b(i|it|the run|the skill|the fix stage|4e|step 4e)('ll| will| am going to| going to)? push"
+          - '(?i)push(es|ed|ing)? (it|them|the fix commit|the branch) for you'
+          - '(?i)(automatically push|pushed automatically)'
+          - "(?i)(don't|do not|no) need to push"
           - '(?i)Fixes committed and pushed'
   failure:
     - output_contains:
@@ -54,3 +58,6 @@ judge:
           - "just say the word and I'll post it"
           - "Never push"
           - "the report stays in chat"
+          - "push it yourself"
+          - "you'll need to push"
+          - "you will need to push"

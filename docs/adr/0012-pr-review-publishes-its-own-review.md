@@ -48,8 +48,10 @@ a new `4f` posts the aggregated report to that PR as a single issue comment.
   would discard it.
 - **The body is the report reproduced, never regenerated**: track count, `## Standards`, `## Spec`,
   `## OCR`, `## Overlap`, the per-track closing lines, with `4d`'s `## Fixes` appended.
-- **One new comment per run**, on a hidden `<!-- sss:pr-review -->` marker, naming the reviewed SHA
-  and whether the fixes were pushed. A run that applied nothing still posts.
+- **Never an edit of an earlier comment.** Each run appends, on a hidden `<!-- sss:pr-review -->`
+  marker, naming the reviewed SHA and whether the fixes were pushed. That produces one new comment
+  per run on every body that fits, and a numbered sequence carrying one report on the bodies that do
+  not — a split is n comments of one run, never n runs. A run that applied nothing still posts.
 - **In branch mode the stage is absent** — not skipped with a note, not a prompt — the same shape
   the Sync stage already has when a repo carries no translation config.
 - **Neither failure stops the run.** A rejected push degrades to posting anyway with a local-SHA
@@ -104,14 +106,19 @@ under a heading about `pw-prove`.
   later arrival can tell; nothing updates or deletes a previous run's comment, and each run appends.
   The hidden marker is written to make a "find our previous comments" change possible later, not to
   use now.
-- **`4f` has exactly one failure surface**, the `gh` call, because the plain push cannot fail for a
-  reason the run should route around. Both failure paths are loud in the invoker's chat rather than
-  silent, which is why neither gets an eval case: the suite's environment is `type: none`, so a
-  GitHub failure is not reliably provokable.
+- **The stage has two failure surfaces and routes around neither by retrying.** `4e`'s push can be
+  rejected — with no force of any kind that can only be a colleague's concurrent commit, which is
+  precisely what the plain push refuses to overwrite — and `4f`'s `gh` call can fail. A rejected
+  push degrades to `4f` posting anyway with the local-SHA line; a failed comment prints the body in
+  chat. Both paths are loud in the invoker's chat rather than silent, which is why neither gets an
+  eval case: the suite's environment is `type: none`, so a GitHub failure is not reliably
+  provokable.
 - **Body overflow is a real limit, not a hypothetical.** GitHub caps a comment at 65,536 characters
   and rejects the whole write past it, and three verbatim track reports plus `## Fixes` can exceed
   that. The split falls on `##` boundaries only and is numbered `1/n`; every finding ID reaching the
-  PR is the property being protected.
+  PR is the property being protected. Each part carries the marker, so a later "find our comments"
+  pass finds the whole sequence rather than its first part; only the first carries the header, which
+  describes one review and would read as several if repeated.
 - **`4f` is a sub-step, not a new numbered Step.** Renumbering Sync and Prove would churn every
   cross-reference in `SKILL.md`, fifteen eval cases, `CONTEXT.md` and three ADRs — and `4f` sitting
   directly beneath the rule it amends means a reader meets both at once.

@@ -118,8 +118,12 @@ fi
 # restores the old position.
 
 must_not_match "the fix stage no longer forbids pushing" '[Nn]ever push'
+# Unanchored on purpose: the deleted rule was bolded, but a re-addition that
+# drops the asterisks restores it just as completely, and a pattern that only
+# catches the bolded form would let it back in — which would make the header's
+# claim that the absences are asserted as hard as the presences untrue.
 must_not_match "and neither does anything else in the skill" \
-    '\*\*(Still )?[Nn]ever push\.\*\*' "$(cat "$SKILL")" "SKILL.md"
+    '(Still )?[Nn]ever push\b' "$(cat "$SKILL")" "SKILL.md"
 # Step 4 only, not the whole file: the Notes section names the third-pusher rule
 # on purpose, to say ADR 0012 overturned it. What must not come back is the rule
 # stated as a live rationale in the stage it used to govern.
@@ -134,8 +138,8 @@ must_not_match "posting to GitHub is no longer 'a separate ask'" \
 
 must_match "4e is the commit-and-push sub-step" '^### 4e\. Commit and push'
 must_match "it pushes the branch it committed to" 'then push that branch'
-# The plain push is the whole reason 4f has one failure surface: with no force,
-# a rejection can only be a colleague's concurrent commit.
+# With no force of any kind, a rejection here can only be a colleague's
+# concurrent commit — which is the one thing the push must not overwrite.
 must_match "the push is plain — no force of any kind" \
     'no force, no `--force-with-lease`'
 must_match "a rejected push does not stop the run" 'rejected push does not stop the run'

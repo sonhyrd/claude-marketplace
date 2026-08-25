@@ -298,31 +298,37 @@ A rejected push does not stop the run. 4f still posts, saying the fixes are loca
 
 A run that applied nothing commits nothing and says so — an empty commit claims work that did not happen.
 
+Done when every finding ID Step 3 emitted appears exactly once across 4d's three `## Fixes` headings and the working tree is clean — with the applied fixes committed and pushed, or committed and reported as local when the push was rejected, or nothing committed at all because nothing was applied. Count the IDs against Step 3's own numbering before claiming the stage: an ID in none of the three headings is an unfinished stage, not a shorter one. The accounting is what the whole stage is for, so it is checked here rather than in 4f, which a branch-mode run never reaches.
+
 ### 4f. Publish the review on the PR
 
 **Runs when Step 1 resolved a PR number.** In branch mode this sub-step is absent — not skipped-with-a-note, not a prompt — the same shape Step 5 has in a repo with no translation config. There is no PR for the report to reach, and a line announcing that is a line about nothing.
 
-Post one comment with `gh pr comment <NUM> --body-file <file>`. Its body is **the aggregated report Step 3 printed, reproduced verbatim** — the track count, `## Standards`, `## Spec`, `## OCR`, `## Overlap` and the per-track closing lines — with 4d's `## Fixes` section appended, under this header:
+Post one comment with `gh pr comment <NUM> --body-file -`, feeding the body on stdin — a body file written inside the repo would dirty the tree 4e's Done requires clean, and one written outside it is a temp file this stage would then own removing. Its body is **the aggregated report Step 3 printed, reproduced verbatim** — the track count, `## Standards`, `## Spec`, `## OCR`, `## Overlap` and the per-track closing lines — with 4d's `## Fixes` section appended, under this header:
 
 ```
 <!-- sss:pr-review -->
-**`sss:pr-review`** · 3 of 3 tracks · base `origin/main` · reviewed `a1b2c3d`
-Fixes committed and pushed as `e4f5g6h`.
+**`sss:pr-review`** · <tracks that returned> of 3 tracks · base `<baseRef>` · reviewed `<headSha>`
+Fixes committed and pushed as `<fixSha>`.
 ```
+
+Every angle-bracketed name above is a placeholder, filled from what Step 1 resolved and 4e committed — the block is the shape of the header, not text to copy.
 
 - **Reproduced, never regenerated.** Re-writing the tracks' text now that the fixes exist puts hindsight into the one output whose whole value is that nobody got to soften it — the same reason Step 3 prints before Step 4 edits.
 - **The push line says where the fixes are.** It reads `Fixes committed locally as <sha> — not yet pushed.` when 4e's push was rejected, and it is omitted entirely when nothing was applied. `Applied` read against a diff that does not contain the fixes is exactly the misreading this line exists to prevent.
-- **The header's SHAs are abbreviated, and that is the one place they may be.** Step 1 resolves and carries full 40-character SHAs precisely so no ref is ambiguous; these two are display, read by a person scanning a comment header, and GitHub links a short SHA to the same commit. Resolve them full, print them short.
+- **The header's SHAs are abbreviated.** These two are display, read by a person scanning a comment header, and GitHub links a short SHA to the same commit as the full one. Resolve them full, print them short.
 - **The marker comment is written even though nothing reads it back today.** It costs one line, and it is what lets a later change find this skill's own comments without re-deriving which ones were ours.
-- **One new comment per run, never an edit of an earlier one.** 4d's supersede-rather-than-append rule governs one live chat document; a PR thread is an append-only record other people quote and reply to, and rewriting a comment underneath a reply is how the reply stops making sense.
+- **One new comment per run, never an edit of an earlier one.** 4d's supersede-rather-than-append rule governs one live chat document; a PR thread is an append-only record other people quote and reply to, and rewriting a comment underneath a reply is how the reply stops making sense. *Never edit an earlier comment* is the rule; "one comment" is what it produces on every run whose body fits. An oversized body below is still one run's report — one logical report carried across n comments, not n runs — and none of those comments edits anything that was already there.
 - **A run that applied nothing still posts**, its header naming the existing `HEAD` rather than a new SHA. Three tracks agreeing a PR needs nothing is a result, and suppressing it makes a clean review indistinguishable from a review that never ran.
 - **An issue comment, not a formal review and not inline per-finding comments.** The tracks do not all carry reliable line anchors, so inline comments would half-fail on exactly the runs with the most findings.
 
 **Past 65,536 characters GitHub rejects the whole write**, and three verbatim track reports plus `## Fixes` can reach that on a large diff. Split at `##` boundaries only, never mid-finding, across sequential comments each numbered `1/n`. Every finding ID reaching the PR is the property being protected, and a report that failed to post protects none of them.
 
+**Every comment in a split carries the marker; only the first carries the header.** The marker's job is finding this skill's own comments, and a part left unmarked is a part a later "find our previous comments" pass would miss while its siblings are found. The header identifies one review — its track count, base and reviewed SHA describe the whole report, so repeating it on each part would read as several reviews. The `1/n` counter goes on every part instead, which is what tells a reader who landed on part 3 that there are two more.
+
 **A failed comment prints the body in chat and the run carries on** to Steps 5 and 6. A GitHub outage costs the review its publication, not its proof — and that failure, like a rejected push, is loud in the invoker's chat, unlike the silent degradations the Step 1 gate exists to catch.
 
-Done when every finding ID Step 3 emitted appears exactly once across the three `## Fixes` headings, the tree is clean, the branch is one commit ahead of where Step 3 left it and pushed or reported as local, and — in PR mode — the report is on the PR or its body is in chat. Count the IDs against Step 3's own numbering before claiming the stage: an ID in none of the three headings is an unfinished stage, not a shorter one.
+Done when the report is on the PR — as one comment, or as the whole numbered sequence an oversized body needed — or the `gh` call failed and its body is in chat instead.
 
 ## Step 5 — Sync
 
@@ -501,4 +507,5 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
 - **`matt:code-review` calls its smell baseline "always a judgement call", and 4c applies it anyway.** That tension is real and deliberate: the caution is calibrated for a skill that only reports, and `pr-review` cross-checks the same diff against two other tracks before it acts. `docs/adr/0008-pr-review-trusts-its-tracks.md` is where a reader who notices should land. Nothing in `matt:code-review` is edited — it is a verbatim subtree, and what changed is how this skill treats its output.
 - **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.
 - **Three stages push, and none of them pushes for another.** Step 4e pushes its own fix commit, because the invoker asked for the fixes and cannot use them while they sit in one checkout — `docs/adr/0012-pr-review-publishes-its-own-review.md` records that reversal and what it cost. `translation-sync` owns its own empty re-trigger commit and push in Step 5, and pushes only when it actually applied something, on a non-default branch, with a clean index — so a run whose sync changed nothing ends with the fix commit as the last thing on the branch, and that is the correct outcome, not a stage that failed. `pw-prove` owns the third, from the 6c spawn onward. The old rule that a third pusher makes the history unreadable is what ADR 0012 overturns: each stage pushing what it made is legible, and the unreadable history was the one where a stage pushed someone else's work.
+- **Both of the fix stage's outward writes can fail, and neither ends the run.** A push 4e cannot fast-forward is a colleague's commit arriving mid-review — 4f posts anyway, with the header's local-SHA line, because a review nobody can read costs more than a commit one push behind. A `gh pr comment` that fails prints the body in chat for the invoker to post by hand, and the run carries on to Steps 5 and 6: a GitHub outage costs the review its publication, not its proof. Neither path carries an eval case — the suite's environment is `type: none`, so a GitHub failure is not reliably provokable — and neither needs one to be noticed, because both are loud in the invoker's chat rather than silent like the degradations the Step 1 gate exists to catch.
 - **Do not use OCR's fix mode for this.** `sss:ocr-delegate` has its own Step 7; the OCR track finishes at Step 6 and reports. Fixes are applied here, in the parent, from all three tracks at once — one agent fixing what only it found is how the overlap ordering gets bypassed.
