@@ -14,6 +14,16 @@
 > because the built preview compiles nothing and cannot saturate that way. Against the current target
 > that signature has no known cause, and a run showing it is diagnosed on its own evidence.
 
+> **AMENDED by issue #144 (spec #141).** `hermetic.mjs` still renders **no verdict** — that decision
+> is untouched, and the module was not modified. What changed is where the *mechanical* half of the
+> carve-out check sits: the `proof-run.mjs audit` verb now invokes the classifier over its own run's
+> traces and computes **presence** — a live call whose path appears in no `// CARVE-OUT:` line
+> anywhere in the spec set is reported as `undeclared` in the verb's summary. Presence is a string
+> comparison; **legitimacy is not**, so whether a carve-out that IS present earns its place remains
+> the agent's judgement, exactly as this ADR decided. The presence test is deliberately generous
+> where it is unsure, because a false "declared" leaves the agent a judgement it already owes while a
+> false "undeclared" would send it to declare what is already declared.
+
 A transcript audit of one real 5-AC pw-prove run (57.7 min wall, 155k output tokens) put `playwright test` at 39% of the run — for the first time ahead of model time, which every prior audit in this repo had found to be the dominant cost. Two-thirds of that runner time produced nothing:
 
 - **6.2 minutes on a run where all five scenarios timed out in `page.goto`.** Scaffolded configs pin one worker only on CI (`workers: process.env.CI ? 1 : undefined`), so the proof ran five workers against a dev server that compiles routes on demand; five cold compiles of the same route saturated it. Serialized, the same spec passed in 2 minutes. The agent had read that config line in the first minute and had no rule that made it actionable.

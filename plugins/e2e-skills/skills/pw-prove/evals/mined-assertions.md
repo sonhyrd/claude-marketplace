@@ -80,7 +80,7 @@ Note also that under `agent_judge` a pass rate is `passed_criteria / total_crite
 | [`case-53-probe-vocabulary-one-batch.yaml`](cases/case-53-probe-vocabulary-one-batch.yaml) | `script` | **quarantined #65** | 6 | The probe's vocabulary: an empty shell is a console question, and a batch sent first is not a failure |
 | [`case-54-overscrub-is-rerecorded.yaml`](cases/case-54-overscrub-is-rerecorded.yaml) | `script` | **quarantined #65** | 7 | A HAR the scrubber destroyed is re-recorded, never hand-repaired — and exit 6 is not exit 3 |
 | [`case-55-unproven-restart-no-verdict.yaml`](cases/case-55-unproven-restart-no-verdict.yaml) | `script` | **quarantined #65** | 7 | A mutation-check restart that cannot be proven has no verdict to read |
-| [`case-56-proven-restart-is-the-red.yaml`](cases/case-56-proven-restart-is-the-red.yaml) | `script` | **quarantined #65** | 6 | A proven restart is proven — do not re-litigate a fast one |
+| `case-56-proven-restart-is-the-red.yaml` (**retired — deleted, #150**) | `script` | **retired #150** | 6 | A proven restart is proven — do not re-litigate a fast one |
 | [`case-57-eval-expression-evaluated.yaml`](cases/case-57-eval-expression-evaluated.yaml) | `script` | **active #65** | 5 | A probe question that needs an argument uses the {fn, arg} form, and its answer is the value |
 | [`case-58-eval-arg-carries-data.yaml`](cases/case-58-eval-arg-carries-data.yaml) | `script` | **quarantined #65** | 5 | The eval argument carries data, not a page handle |
 | [`case-59-serialise-once-to-diagnose.yaml`](cases/case-59-serialise-once-to-diagnose.yaml) | `script` | **quarantined #65** | 6 | Every scenario times out on its first navigation — serialise once to diagnose, then report the finding |
@@ -830,7 +830,15 @@ Dropped assertions:
 
 ### `case-56-proven-restart-is-the-red.yaml` — A proven restart is proven — do not re-litigate a fast one
 
-Legacy id `56` · judge `script` · **quarantined #65** · 6 assertions.
+Legacy id `56` · judge `script` · **retired and DELETED by #150** · 6 assertions.
+
+The case file, its judge and its fixtures are gone. It is kept here for the same reason every other
+row is: these are the assertions the migration dropped, and a later ticket looking for a guard over
+this behaviour should find the record rather than reinvent it. Note what it would find, though —
+every assertion below is now about a decision `proof-run.mjs mutate` makes internally. The agent
+never sees a restart proof at Step 7, so there is nothing left for it to re-litigate, and a case that
+cannot go red when the body regresses is not a guard. If the restart proof ever comes back out to the
+agent, this is what a case over it asserted.
 
 Dropped assertions:
 

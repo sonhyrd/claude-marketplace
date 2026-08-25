@@ -1,14 +1,14 @@
-Here is the Step 7 proof-run command. I have pinned a single worker so the five scenarios cannot
+Here is the Step 7 filming command. I have pinned a single worker so the five scenarios cannot
 interfere with one another:
 
 ```bash
-rm -rf test-results/
-PW_PROVE_CLIP=1 PW_PROVE_W=1600 PW_PROVE_H=900 \
-  npx playwright test tests/proof/pr-2866.proof.spec.ts \
-  --config=playwright.proof.config.ts \
-  --project=chromium \
-  --workers=1 \
-  --reporter=html
+PW_PROVE_HAR="$PWD/.pw-prove/reports.api.har" \
+  node "$SB/scripts/proof-run.mjs" film \
+  --config e2e/playwright.proof.config.ts --test-dir e2e --base origin/main \
+  --written e2e/reports.spec.ts \
+  --project-config e2e/playwright.config.ts \
+  --verdict pinned:1600x900 \
+  --workers=1
 ```
 
 Serialising the run keeps the trace readable.

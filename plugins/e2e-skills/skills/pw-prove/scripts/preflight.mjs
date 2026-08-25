@@ -720,8 +720,15 @@ if (phases.includes('serve')) {
     `${requestedUrl.protocol}//${host}:${port}` +
     `${requestedUrl.pathname === '/' ? '' : requestedUrl.pathname}${requestedUrl.search}`;
   const requestedOrigin = originFor(requestedUrl.hostname, requestedPort);
+  // A host form is a PREFERENCE only if it is one we would dial. A wildcard names no loopback
+  // form, so it is not one: from a log it means the server told us nothing about which form to use,
+  // and from the caller it means nobody preferred anything.
+  const hostPreference = (h) => (h && !ANY_HOSTS.has(h) && isLoopbackHost(h) ? h : undefined);
+  // The form the CALLER asked for, or nothing. Read twice: the candidate order below leads with it,
+  // and the mismatch warning says which of the two sentences it has the evidence for.
+  const requestedForm = hostPreference(requestedUrl.hostname);
   const formsFor = (preferred) => {
-    const order = preferred && !ANY_HOSTS.has(preferred) && isLoopbackHost(preferred) ? [preferred] : [];
+    const order = hostPreference(preferred) ? [preferred] : [];
     for (const f of LOOPBACK_FORMS) if (!order.includes(f)) order.push(f);
     return order;
   };
@@ -738,7 +745,11 @@ if (phases.includes('serve')) {
     };
     const kept = announced.slice(0, MAX_ANNOUNCED);
     const pushAnnounced = (a) => {
-      for (const h of formsFor(a.host ?? requestedUrl.hostname)) push(h, a.port, 'announced');
+      // A wildcard announcement (`[::]`, `0.0.0.0`) is positive evidence that the caller's own form
+      // answers, so it defers to the caller rather than displacing them onto another spelling. That
+      // swap cost nothing to make and everything to carry: the origin is pasted into the probe, the
+      // HAR binding and every runner invocation by hand.
+      for (const h of formsFor(hostPreference(a.host) ?? requestedUrl.hostname)) push(h, a.port, 'announced');
     };
     if (kept[0]) pushAnnounced(kept[0]);
     for (const h of formsFor(requestedUrl.hostname)) push(h, requestedPort, 'requested');
@@ -967,7 +978,17 @@ if (phases.includes('serve')) {
   if (reached.url !== requestedOrigin) {
     warn(
       `preflight: the server is at ${reached.url}, not ${BASE_URL} — ` +
-        `${shifted ? `the port shifted (${requestedPort} → ${reached.port})` : `the bound loopback family is ${addressFamily(reached.host)}`}` +
+        // Three sentences, one per thing that is actually KNOWN here. The family is claimed only when
+        // the caller's own form was dialled first and refused, which is what a preference buys and the
+        // only evidence that sentence ever had; a caller who passed a wildcard host preferred nothing,
+        // so the form that answered is the first one tried and says nothing about the bind.
+        `${
+          shifted
+            ? `the port shifted (${requestedPort} → ${reached.port})`
+            : requestedForm
+              ? `${requestedForm} refused, so the bound loopback family is ${addressFamily(reached.host)}`
+              : `you asked for a wildcard host, so no loopback form was preferred and ${reached.host} is the one that answered`
+        }` +
         '. Use the origin below EVERYWHERE from here on: the recon probe, the Runner origin, the HAR ' +
         'binding and every runner invocation. Each is a fresh environment; fixing it in one is not ' +
         'fixing it.\n',

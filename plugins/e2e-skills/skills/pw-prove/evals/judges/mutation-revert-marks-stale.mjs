@@ -10,6 +10,17 @@
 // broken software" — is the thing a correct answer NAMES in order to reject, so the negative half
 // reads sentences rather than substrings.
 //
+// Re-derived by #150 against the prompt the Step-7 rewrite left behind. Before that rewrite the
+// agent performed the revert and wrote the marker itself; `proof-run.mjs mutate` now does both, and
+// the revert has already happened whatever the exit code says. Two assertions were re-derived:
+//   - the revert assertion is now satisfied by READING what the verb did rather than by planning
+//     it, so a re-run of the revert by hand became a new negative alongside rebuilding on the spot.
+//   - a new positive: the marker is only worth writing if it is honoured, so the answer has to
+//     reach the exit-15 refusal that `audit` and `film` take while it stands. Without that, "mark
+//     it stale" is a sentence with nothing behind it.
+// The centre — the revert immediate, the rebuild lazy, Step 8 stopping rather than rebuilding — is
+// unchanged.
+//
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
 
@@ -35,7 +46,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -53,6 +75,10 @@ const bad = offenders(text, [
   /\b(?:i (?:will|'ll)|then i|so i)\b[^\n]{0,40}\brestart the preview\b/i,
   // Leaving the tree mutated is the other direction, and it is worse.
   /\b(?:i (?:will|'ll)|then i)\b[^\n]{0,50}\bleave\b[^\n]{0,30}\bmutation\b/i,
+  // The verb already reverted, unconditionally and before the verdict was read. Doing it again by
+  // hand is a step that no longer exists, and on a tree the verb already restored it is a no-op
+  // dressed as diligence.
+  /\bI (?:now |then )?(?:revert|restore|check ?out)\b[^\n]{0,40}(?:the )?(?:file|line|source|mutation)\b/i,
 ]);
 if (bad.length) {
   console.error('FAIL: the answer rebuilds on the spot after the revert, or leaves the tree mutated:');
@@ -61,12 +87,15 @@ if (bad.length) {
 }
 
 const checks = [
-  [/\brevert\w*|git checkout --|git restore|undo the mutation/i,
-    'the source is never reverted, which is the one unconditional half of this step'],
-  [/\bstale\b/i,
-    'the artifact is never marked stale, so the laziness has nothing making it safe'],
+  // NOT bare `revert` / `stale` — the prompt reports `reverted: true` and `artifact: "stale"`, so
+  // repeating them is not contact. What is earned is that the revert was UNCONDITIONAL and already
+  // done, which is what makes re-running it by hand the mistake this case is about.
+  [/unconditional\w*|already (?:reverted|happened|done)|before the verdict|whatever the (?:code|exit)/i,
+    'the answer never says the revert was unconditional and already done, so it cannot tell doing it again from doing it'],
   [/\blaz(?:y|ily)\b|\bonly when\b|\bnext (?:step|run)\b|\bdefer\w*|\bwhichever\b/i,
     'the answer never says the rebuild is deferred to whatever next needs the server'],
+  [/exit\s*15\b|\brefus\w*/i,
+    'the marker is never honoured — audit and film refuse with exit 15 while it stands, and an unread marker changes nothing'],
   [/step ?8|hygiene/i,
     'the answer never reaches Step 8, where stopping a stale server is what makes the common case free'],
   [/\bstops?\b|\bstopped\b|\bkill\b/i,

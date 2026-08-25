@@ -9,6 +9,21 @@
 // The repair is artifact-shaped for the positive half — the emitted command block must carry the
 // bind and the exported HAR path — and negation-anchored for the negative half.
 //
+// Re-derived by #150 against the prompt the Step-7 rewrite left behind. Before that rewrite the
+// agent ran `har-scrub.mjs bind` by hand and exported PW_PROVE_HAR itself; the bind is now a PHASE
+// of `proof-run.mjs audit`, reached with --har/--origin/--bindings, and Step 7 says there is no
+// documented raw fallback for it. Three assertions were re-derived:
+//   - the required `har-scrub.mjs bind` block became a FORBIDDEN one, and the required command is
+//     now the audit verb carrying --har and --origin. Demanding the old shape demanded a defect.
+//   - the exit codes moved. The old `exit 4` / `exit 5` were har-scrub's own; the audit verb exits
+//     5 for a bind that cannot be made safe and says which kind in `phases.har_bind.reason`, so the
+//     assertion is on the reason rather than on a code the answer never sees.
+//   - the PW_PROVE_HAR assignment stays, but its justification moved: the audit verb sets it for
+//     its own run, and the agent carries it inline on film and mutate, which have no bind phase.
+//     The path comes from `phases.har_bind.out`, so a reconstructed one is the new near-miss.
+// The negative half — never re-record, never hand-mock, never relax notFound:'abort' — is unchanged
+// and is still the case's centre.
+//
 // Reads $EVAL_FINAL_MESSAGE, or a path argument when triaging one captured answer by hand.
 import { readFileSync } from 'node:fs';
 
@@ -63,7 +78,18 @@ function offenders(t, phrases) {
     const line = raw.trim();
     if (!line) continue;
     const isItem = /^(?:[-*+]|\d+[.)])\s+/.test(line);
-    if (!isItem) underRejectionHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    const isHeader = /:[*_~\s]*$/.test(line) && REJECTION_HEADER.test(line);
+    // An INDENTED non-item line is a wrapped continuation of the item above it, not a new scope.
+    // Re-deriving three of these judges under #150 found a must-PASS twin failing because the
+    // second line of a wrapped bullet under "What I explicitly do **not** do:" reset the header, so
+    // the NEXT bullet's refusal read as the answer's plan. That is the #59 defect one level deeper
+    // again: the list form was fixed by #66, the wrapped-item form was not.
+    //
+    // A header is never a continuation, however indented. Without that clause the fix would also
+    // stop an INDENTED "things I will not do:" from OPENING a scope — narrowing what counts as a
+    // refusal, when the whole point of this change is that it can only widen it.
+    const isContinuation = /^\s/.test(raw) && !isItem && !isHeader;
+    if (!isItem && !isContinuation) underRejectionHeader = isHeader;
     else if (underRejectionHeader) continue;
     for (const s of line.split(/(?<=[.!?;])\s+/)) {
       const sentence = s.trim();
@@ -81,15 +107,25 @@ if (blocks.length === 0) {
 }
 const need = [
   // The optional closing quote is load-bearing. A recorded 2026-08-14 answer put the skill base in a
-  // variable and wrote `node "$SB/scripts/har-scrub.mjs" bind …` — the correct invocation, quoted the
-  // way a path in a variable has to be — and `\.mjs\s+bind` did not match across the quote. Judging
-  // the shell quoting rather than the subcommand is the same wrong-unit family as #71.
-  [/har-scrub\.mjs["']?\s+bind/, 'the emitted command never runs `har-scrub.mjs bind`'],
+  // variable and wrote `node "$SB/scripts/proof-run.mjs" audit …` — the correct invocation, quoted
+  // the way a path in a variable has to be — and `\.mjs\s+audit` did not match across the quote.
+  // Judging the shell quoting rather than the subcommand is the same wrong-unit family as #71.
+  [/proof-run\.mjs["']?\s+audit/, 'the emitted command never re-invokes `proof-run.mjs audit`, which is where the bind phase lives'],
+  [/--har\b/, 'the audit verb is invoked without --har, so the bind phase is skipped again and every read aborts again'],
   [/--origin/, 'the bind never passes --origin, so the HAR stays unbound to the running server'],
 ];
 const missing = need.filter(([re]) => !re.test(emitted));
 if (missing.length) {
   console.error('FAIL: ' + missing.map(([, why]) => why).join('; '));
+  process.exit(1);
+}
+// The bind has no raw fallback. Running the scrubber by hand is the second copy Step 7 deleted, and
+// like every other negative here it is judged on the EMITTED COMMAND — prose naming the module to
+// explain that the verb delegates to it is correct and must pass.
+const byHand = emitted.split('\n').filter((l) => /har-scrub\.mjs["']?\s+bind/.test(l));
+if (byHand.length) {
+  console.error('FAIL: the emitted command runs the bind by hand — it is a phase of the audit verb, and Step 7 keeps no raw fallback for it:');
+  for (const l of [...new Set(byHand)].slice(0, 2)) console.error('   ' + l.trim());
   process.exit(1);
 }
 // The export is a COMMITMENT, not a second artifact, so it is read from the whole answer rather
@@ -128,4 +164,4 @@ if (bad.length) {
   process.exit(1);
 }
 
-console.log('PASS: the HAR is bound to the running origin and carried on PW_PROVE_HAR; nothing re-recorded');
+console.log('PASS: the HAR is bound through the audit verb and carried on PW_PROVE_HAR; nothing re-recorded');

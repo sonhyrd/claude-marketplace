@@ -46,9 +46,20 @@ finished at 13:24:33 and Step 8 stopped the server at 13:26:55: 82 seconds of bu
 minutes, killed.
 
 The revert stays unconditional and immediate — the tree is never left mutated. What became lazy is
-the rebuild: the artifact is marked **stale**, and any step that needs the server rebuilds first if
-the marker is set, forcing the build and proving the restart exactly as before. Step 8 hygiene stops
-a stale server rather than rebuilding it.
+the rebuild: the artifact is marked **stale**, and any step that needs the server must rebuild
+first, forcing the build and proving the restart exactly as before. Step 8 hygiene stops a stale
+server rather than rebuilding it.
+
+**Amended when the mutation check became a verb (#148): the later step is REFUSED, it does not
+rebuild for itself.** This ADR originally read "rebuilds first if the marker is set", which is a
+silent self-heal: the step that needed the server would quietly repair the machine and the run's
+transcript would never say that a mutation check had left it in that state — and a repair that
+happens without being asked for is exactly what makes an artifact nobody can place. So `proof-run.mjs`
+writes the marker after the revert and its `audit` and `film` verbs stop under exit 15 while it
+stands, naming the three commands that clear it. The agent clears it by running the rebuild; the
+`mutate` verb needs no clearing, since it forces one by construction and a proven restart answers the
+standing marker before it writes its own. The decision this section actually made — lazy rather than
+unconditional — is unchanged; only who performs the rebuild, and whether it is announced, moved.
 
 The marker exists because the *artifact* is out of step with a tree that looks unchanged, which is
 precisely the case the build-reuse check cannot see: reuse is measured against HEAD plus the

@@ -1,21 +1,27 @@
-RED is the verdict I wanted, so the mutation check is done. What happens to the source, the artifact
-and the server:
+Exit 0 is RED — the verdict I wanted — so the mutation check is done. What already stands, and what
+I do about it:
 
-1. **Revert the source exactly**, now and unconditionally: `git checkout -- <file>`, then
-   `diff <(git status --porcelain) /tmp/pre.status && diff <(git diff) /tmp/pre.patch`. Real residue
-   is a hard stop — I never continue on a polluted tree. This half is not deferred by anything.
+1. **The source is already reverted.** The verb's revert is unconditional and ran before the verdict
+   was read; `reverted: true` and `residue: none` say the tree came back and nothing is left behind.
+   I do not run `git checkout --` again over a file the verb already restored, and I do not go
+   looking for a tree to clean. Real residue would have been exit 9 and a hard stop.
 
-2. **Mark the artifact stale** rather than rebuilding it here. `.output/` still holds the mutation;
-   the source no longer does. Whichever step next needs the server rebuilds first — checking the
-   marker, forcing the build, proving the restart with a fresh `MARK` and `SERVE_RESTART=1` — and
-   clears the marker. Nothing else changes.
+2. **The artifact is marked stale**, and nothing rebuilds it here. `.output/` still holds the
+   mutation; the source no longer does. Whichever step next needs the server pays that rebuild.
 
-3. **Nothing needs the server**, as it happens: the clips are filmed and inspected and the hermetic
-   audit is clean, so Step 8 is next. Hygiene **stops** the preview server by its recorded PID and
-   deletes the marker. The stale artifact is disposed of rather than rebuilt.
+3. **The marker is honoured rather than worked around.** `audit` and `film` **refuse with exit 15**
+   while `.pw-prove/artifact-stale` stands — they never silently rebuild, because a self-heal would
+   hide that the mutation check left the machine in this state. Clearing it means running the exact
+   commands the refusal prints, in the order it prints them; they are the only copy. A further
+   `mutate` needs no clearing at all: it forces a rebuild by construction.
+
+4. **Nothing needs the server, as it happens**: the clips are filmed and inspected and the audit
+   run's hermetic phase was clean, so Step 8 is next. Hygiene **stops** the preview server by its
+   recorded PID. The stale artifact is disposed of rather than rebuilt, so a mutation check that is
+   the run's last step pays nothing.
 
 The old rule here was to rebuild and restart once more so that nothing downstream ran against
-deliberately broken software. That hazard is real and the marker closes it — every step that touches
+deliberately broken software. That hazard is real and the marker closes it — every verb that touches
 the server checks it — but paying the rebuild unconditionally means paying it for a downstream that
 usually does not exist. I do not rebuild on the spot, and I do not restart the preview.
 
