@@ -27,6 +27,8 @@ cases:
     - evals/cases/proof-spawns-a-fresh-session.yaml
     - evals/cases/orca-missing-stops-at-preflight.yaml
     - evals/cases/orca-resolves-to-the-app-launcher.yaml
+    - evals/cases/review-lands-on-the-pr.yaml
+    - evals/cases/nothing-applied-still-posts.yaml
   defaults:
     timeout_seconds: 300
     max_turns: 6
