@@ -1,0 +1,61 @@
+id: nothing-applied-still-posts
+title: A run that applied nothing still posts, naming the existing HEAD
+description: |
+  Step 4f, the clean-review path. Three tracks agreeing a PR needs nothing is a
+  result, and suppressing the comment makes a clean review indistinguishable
+  from a review that never ran. The header names the existing HEAD rather than a
+  new SHA, and the push line — which reports a fix commit — is omitted, because
+  there is no fix commit. "Nothing to say, so say nothing" is the natural wrong
+  answer, which is why this is the case most likely to regress: an agent that
+  suppresses the comment reads as tidy rather than as broken.
+
+  Distinct from `sync-stage-absent-silently.yaml`, where an absent stage is
+  correct. Here the stage ran, found nothing to apply, and must still write.
+
+input:
+  prompt: |
+    Walking through the tail end of a review on PR #204. Suppose all three
+    tracks come back and between them there is nothing above Low — no Critical,
+    no High, nothing worth applying, so Step 4 commits nothing and there is no
+    new SHA. At that point there's no fix commit to announce and no findings to
+    report as applied. Does the run still write anything to the PR, or does it
+    just finish quietly in my terminal?
+
+judge:
+  type: rule_based
+  success:
+    - output_matches:
+        any:
+          - '(?i)still post'
+          - '(?i)posts anyway'
+          - '(?i)post(s|ed|ing)? (it |the report |the review )?(as |to )?(a )?comment'
+          - '(?i)gh pr comment'
+          - '(?i)comment (still )?goes (up|on)'
+          - '(?i)yes.{0,40}post'
+    - output_matches:
+        any:
+          - '(?i)\bHEAD\b'
+          - '(?i)existing (commit|sha)'
+          - '(?i)current (commit|sha|head)'
+          - '(?i)no new (sha|commit)'
+          - '(?i)unchanged (sha|commit|head)'
+    - output_matches:
+        any:
+          - '(?i)never ran'
+          - '(?i)didn''t run'
+          - '(?i)did not run'
+          - '(?i)clean review'
+          - '(?i)found nothing'
+          - '(?i)nothing to fix'
+          - '(?i)is a result'
+  failure:
+    - output_contains:
+        any:
+          - "nothing to say, so nothing is posted"
+          - "there's nothing to post"
+          - "there is nothing to post"
+          - "no comment is posted"
+          - "skips the comment"
+          - "skip the comment"
+          - "no reason to comment"
+          - "finishes quietly"

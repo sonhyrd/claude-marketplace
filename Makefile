@@ -1,4 +1,4 @@
-.PHONY: help sync sync-codex-plugins check-codex-plugins check-e2e-subtree test-e2e-subtree-check check-delegate-cli test-delegate-cli-check test-pr-review-handoff-parity validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
+.PHONY: help sync sync-codex-plugins check-codex-plugins check-e2e-subtree test-e2e-subtree-check check-delegate-cli test-delegate-cli-check test-pr-review-handoff-parity test-pr-review-publish validate validate-strict validate-yaml validate-json validate-structure clean test test-codex-skills test-codex-installer lint-codex-skills lint-codex-installer typecheck-codex-skills typecheck-codex-installer format-codex-skills format-codex-installer format-codex-skills-check format-codex-installer-check manage-codex-skills test-playwright-build test-playwright test-playwright-local test-playwright-shell lint lint-python lint-python-fix lint-shellcheck lint-shellcheck-strict lint-fix type-check format format-check format-playwright format-playwright-check lint-playwright setup-linear lint-typescript typecheck-typescript format-typescript format-check-typescript test-linear test-chrome-cdp lint-chrome-cdp format-chrome-cdp format-chrome-cdp-check typecheck-chrome-cdp build-react-bp validate-react-bp test-react-bp lint-react-bp format-react-bp format-react-bp-check typecheck-react-bp test-sequential-thinking test-file-search test-fuzzy-search test-sqlite
 
 # Default target
 .DEFAULT_GOAL := help
@@ -344,6 +344,11 @@ test-pr-review-step1: ## Check pr-review Step 1 acquires the tree behind its gua
 	@echo "$(CYAN)Running pr-review Step 1 ref-resolution tests...$(NC)"
 	@./tests/bash/test-pr-review-step1-cases.sh
 	@echo "$(GREEN)✓ pr-review Step 1 tests passed$(NC)"
+
+test-pr-review-publish: ## Check pr-review still pushes its fixes and publishes its review on the PR
+	@echo "$(CYAN)Running pr-review publish-the-review tests...$(NC)"
+	@./tests/bash/test-pr-review-publish-cases.sh
+	@echo "$(GREEN)✓ pr-review publish tests passed$(NC)"
 
 SEQ_THINKING_DIR := plugins/sequential-thinking
 
