@@ -4,7 +4,56 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [1.6.0] - Unreleased
+## [1.6.1] - Unreleased
+
+### Changed
+
+- `claude-settings` skill: **`sss-marketplace` is registered from GitHub, not from a directory.** The
+  source moves from `{"source": "directory", "path": "/Users/.../claude-marketplace"}` to
+  `{"source": "github", "repo": "sonhyrd/claude-marketplace"}`, which takes it out of
+  `localMarketplaces` and into the portable `marketplaces` block of `baseline/plugins.json` —
+  leaving `localMarketplaces` empty. That is the point: a host with no checkout of this repo, the
+  `cursor-5` and `contabo` Orca environments among them, can now install `sss`, `e2e`, `matt` and
+  `web-search` from the baseline alone, where before it resolved a path that did not exist there and
+  skipped all four. **The version is 1.6.1 rather than a second pass at 1.6.0 because the plugin
+  cache is keyed on the version**: `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` is
+  never re-fetched while the number is unchanged, and 1.6.0's content is already published on the
+  default branch, so shipping different files under it would reach exactly the machines that had
+  never installed it. The `localMarketplaces` machinery stays in the scripts — a directory source is
+  still supported, nothing in the roster uses one.
+- `claude-settings` skill: **`watch@claude-video` leaves the roster**, along with its
+  `bradautomates/claude-video` marketplace. It was `enabledPlugins: false` on the capture machine and
+  the roster follows what is enabled, so keeping it meant every other machine cloning a third-party
+  repo to install nothing from it.
+
+### Fixed
+
+- `claude-settings` skill: **capture dropped `PONYTAIL_DEFAULT_MODE` from the baseline every time it
+  ran.** The `env` clause named a single key, `CLAUDE_CODE_DISABLE_AUTO_MEMORY`, and rebuilt the
+  `env` object from that name alone — so the key added to `baseline/settings.base.json` one commit
+  earlier was deleted by the next capture from any machine, silently reverting ponytail to its `full`
+  default everywhere on the following apply. A capture that loses a setting is worse than one that
+  never ran, because the baseline still looks authoritative. The clause is now an explicit
+  `IN(...)` allow-list of both names, which also makes the omission visible: the list is the only
+  record of which `env` keys travel, and the section documenting it now says in as many words that
+  adding a third key is two edits. `.env // {}` plus the `if .env == {} then {} else . end` guard
+  keeps the old behaviour on a machine with no `env` at all — no `"env": {}` is written into the
+  baseline.
+
+### Added
+
+- `claude-settings` skill: **a section on updating the marketplace from another host**, with the
+  prompt to paste into a session there. Now that the source is GitHub, a change reaches another
+  machine only after three gates — pushed to the default branch, published under a *new* version
+  number, and `claude plugin marketplace update` run on that host — and each one fails silently and
+  identically, as though the change had never been made. The section names them, gives the two
+  commands, says why `update` beats `remove` + `add` (`remove` drops every plugin of that marketplace
+  from `enabledPlugins`), and carries a ready-to-paste prompt that ends by asking the other host to
+  report its clone commit and cached versions rather than to assert success. The capture epilogue's
+  old reminder — *"on this laptop the marketplace is a directory source pointed at the working
+  tree"* — was true and is now the opposite of true, so it is rewritten rather than left to mislead.
+
+## [1.6.0] - superseded by 1.6.1, never tagged
 
 ### Added
 

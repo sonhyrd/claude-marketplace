@@ -29,7 +29,7 @@ each machine. Two directions: **apply** (baseline → machine) and **capture** (
 | `permissions` | Yes | `defaultMode` and `deny` list are portable |
 | `attribution`, `includeCoAuthoredBy` | Yes | Plain booleans/strings |
 | `outputStyle` | Yes | A style name, no path — see below |
-| `env` | **One key** | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` only — see below. Everything else (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`) is machine-specific |
+| `env` | **Two keys** | `CLAUDE_CODE_DISABLE_AUTO_MEMORY` and `PONYTAIL_DEFAULT_MODE` only — see below. Everything else (`PYENV_VERSION`, `CLAUDE_HOST_LABEL`, `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`) is machine-specific |
 | `hooks` | **No** | Contains absolute paths (`~/.orca/agent-hooks/`, `~/.claude/hooks/`) |
 | `~/.claude/CLAUDE.md` + its imports | Yes | Not a settings key — a file set, copied. See below |
 | `enabledPlugins`, `extraKnownMarketplaces` | **Partly** | Non-directory sources sync via `baseline/plugins.json`; directory sources carry a per-machine path and do not |
@@ -38,7 +38,7 @@ Writing `hooks`, or the rest of `env`, from a shared baseline would break the ma
 on. Do not add them without changing the paths to be `$HOME`-relative first — that is a
 separate change.
 
-### The one `env` key that syncs
+### The two `env` keys that sync
 
 `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` turns off Claude Code's automatic memory — the persistent
 file-based store under `~/.claude/projects/<project>/memory/` that a session reads at start and
@@ -54,9 +54,20 @@ Two mechanisms are *not* this one, and neither belongs in the baseline:
 - `autoMemoryEnabled` is a global-config key in `~/.claude.json`, a file this skill does not
   manage at all. The env var is the setting this skill can reach.
 
-Because apply is a **deep merge** (`jq -s '.[0] * .[1]'`), landing this key adds it to whatever
+`PONYTAIL_DEFAULT_MODE=ultra` is the second, and it is in the baseline for the same reason: it
+names an intensity, not a path, so one value is correct everywhere. It is first in ponytail's own
+resolution order, ahead of `~/.config/ponytail/config.json`, so the shared key settles the question
+on every machine the baseline reaches.
+
+**Both keys must appear in the capture `jq` below, and a key the capture does not name is a key
+capture silently deletes.** Capture rebuilds the `env` object from the names it lists rather than
+editing what is there, so an `env` key added to `baseline/settings.base.json` by hand — or by a
+commit — vanishes from the baseline on the next capture run from any machine. Adding a third key is
+therefore two edits, not one: the capture clause and this section.
+
+Because apply is a **deep merge** (`jq -s '.[0] * .[1]'`), landing these keys adds them to whatever
 `env` the machine already has — `CLAUDE_HOST_LABEL` and friends survive untouched. That is the
-property that makes syncing a single `env` key safe, and it is why the merge must stay a deep
+property that makes syncing named `env` keys safe, and it is why the merge must stay a deep
 merge and never become a whole-object replace.
 
 ### `outputStyle`
@@ -88,16 +99,25 @@ The portable/local split is computed, not hand-maintained:
   identical on every machine. `claude-plugins-official` ships with Claude Code and never
   appears in `extraKnownMarketplaces` at all, so its plugins have no marketplace entry to
   filter on and are portable by definition.
-- **Machine-local — the path only.** This repo is added as a directory source pointing at the
-  working tree, so its path (`/home/orca/work/claude-marketplace` on one box, something else
-  on another) is exactly what cannot be shared. The plugin *names* behind it can be, so they
-  are captured under `localMarketplaces` (`{"sss-marketplace": ["e2e", "matt", "sss",
-  "web-search"]}`) and apply installs them like any other. Only the path is resolved per
-  machine, in this order: `$SSS_MARKETPLACE_PATH`, then the `extraKnownMarketplaces` entry
-  already in settings, then **the repo containing the script itself** — running apply out of a
-  fresh clone needs no path typed anywhere, because that clone *is* the marketplace. If none
-  of the three answer, those plugins are listed and skipped with the command to finish; a
-  machine that has never had this repo is not an error.
+- **Machine-local — the path only.** A marketplace added as a directory source carries a path
+  (`/home/orca/work/claude-marketplace` on one box, something else on another) and that path is
+  exactly what cannot be shared. The plugin *names* behind it can be, so they are captured under
+  `localMarketplaces` (`{"sss-marketplace": ["e2e", "matt", "sss", "web-search"]}`) and apply
+  installs them like any other. Only the path is resolved per machine, in this order:
+  `$SSS_MARKETPLACE_PATH`, then the `extraKnownMarketplaces` entry already in settings, then
+  **the repo containing the script itself** — running apply out of a fresh clone needs no path
+  typed anywhere, because that clone *is* the marketplace. If none of the three answer, those
+  plugins are listed and skipped with the command to finish; a machine that has never had this
+  repo is not an error.
+
+**`sss-marketplace` itself is no longer one of those.** It is registered from
+`sonhyrd/claude-marketplace` as a plain `github` source, so it captures like `cloudflare` or
+`ponytail` and `localMarketplaces` is empty. That is what lets a host with no checkout — the
+`cursor-5` and `contabo` Orca environments among them — install `sss`, `e2e`, `matt` and
+`web-search` from the baseline alone. The `localMarketplaces` machinery above stays because the
+scripts still support a directory source; nothing in the roster uses it today. Switching a machine
+back is `claude plugin marketplace remove sss-marketplace` then `add <path>`, at the cost of
+re-installing the four plugins, which `remove` drops from `enabledPlugins`.
 
 A registered marketplace with nothing enabled from it is **not** captured. Otherwise every
 other machine clones a third-party repo to install nothing from it — the roster follows
@@ -112,6 +132,61 @@ re-run.
 
 `references/external-plugins.md` remains the human-readable roster — what each plugin is for,
 and the rationale for the ones whose packaging is a decision rather than an accident.
+
+## Updating the marketplace on another host
+
+`sss-marketplace` resolves from `sonhyrd/claude-marketplace`, so a change reaches another machine
+only after it clears **three** gates, and skipping any one of them looks exactly like the change
+never happened:
+
+1. **Committed and pushed to the default branch.** A GitHub source clones the default branch. Work
+   sitting on a feature branch — merged in a PR that is still open, or squash-merged but not yet
+   fetched — is not there.
+2. **The version in `.claude-plugin/marketplace.json` moved.** The plugin cache is keyed on it
+   (`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`), so a host already holding
+   `sss@1.6.0` will not re-fetch different content published under `1.6.0`. This is the same trap
+   `CLAUDE.md` documents for the `matt` subtree, and it is silent: the host reports the plugin
+   installed and at the right version while running the old files.
+3. **The host ran `marketplace update`.** Registration is not a subscription; nothing polls.
+
+On the target host, that is:
+
+```bash
+claude plugin marketplace update sss-marketplace
+claude plugin update sss@sss-marketplace     # repeat per plugin, or reinstall
+```
+
+Then restart Claude Code there — a refreshed plugin's skills do not appear in the session that
+refreshed them.
+
+**Prefer `update` over `remove` + `add`.** `remove` drops every plugin of that marketplace from
+`enabledPlugins`, so the re-add has to be followed by an install per plugin; that is the recovery
+path for a corrupt clone, not the routine one.
+
+### The prompt to hand another host
+
+Orca-managed hosts (`orca host list` names them — `cursor-5` and `contabo` here) each run their own
+Claude Code with their own `~/.claude/settings.json`. Nothing in this skill reaches across; the
+update runs *there*. Paste this into a session on that host:
+
+> Update the `sss-marketplace` plugins from GitHub and verify the update actually landed.
+>
+> 1. `claude plugin marketplace update sss-marketplace`
+> 2. `claude plugin update` for each of `sss`, `e2e`, `matt`, `web-search` at `@sss-marketplace`
+> 3. Confirm the marketplace clone is at the current default-branch tip:
+>    `git -C ~/.claude/plugins/marketplaces/sss-marketplace log --oneline -1`
+> 4. Confirm the cache holds the version `.claude-plugin/marketplace.json` names for each plugin:
+>    `ls ~/.claude/plugins/cache/sss-marketplace/*/`
+> 5. If a plugin ships a `package.json` with no `node_modules` — `web-search` does — run
+>    `npm install` in its cache directory, or its first call fails on a missing `playwright`.
+>
+> Report the clone's commit and each plugin's cached version. If a cached version matches the
+> manifest but the content looks stale, say so rather than assuming the update worked: an unchanged
+> version number never re-fetches.
+
+A host that has never had this marketplace needs `claude plugin marketplace add
+sonhyrd/claude-marketplace` first, and then the four installs — which is what running **apply** out
+of `baseline/plugins.json` does for it, with no path typed anywhere.
 
 ## User-level memory travels as a set
 
@@ -372,8 +447,9 @@ Pull the synced regions out of the live settings and write them back to `baselin
 ```bash
 jq '({statusLine, skillOverrides, permissions, attribution, includeCoAuthoredBy, outputStyle}
      | with_entries(select(.value != null)))
-    + (.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY
-       | if . then {env: {CLAUDE_CODE_DISABLE_AUTO_MEMORY: .}} else {} end)
+    + ({env: (.env // {} | with_entries(select(.key |
+         IN("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "PONYTAIL_DEFAULT_MODE"))))}
+       | if .env == {} then {} else . end)
     | .statusLine.command = "~/.claude/statusline-native.sh"' \
   ~/.claude/settings.json > "$SKILL_DIR/baseline/settings.base.json"
 ```
@@ -387,12 +463,15 @@ capture additive in the same way apply already is.
 The `.statusLine.command` rewrite is required — the live file holds an absolute path
 (`/Users/<you>/.claude/...`) that is wrong on every other machine.
 
-The `env` clause takes **one named key**, never `.env` whole — capturing the whole object would
-push this machine's `CLAUDE_HOST_LABEL` and `PYENV_VERSION` onto every other box. Note the
-asymmetry it creates: capturing on a machine where auto-memory is *on* drops the key from the
-baseline, but apply only ever adds keys, so the machines that already have it keep it. Turning
-memory back on everywhere is therefore a deliberate edit to `baseline/settings.base.json` plus
-an `unset`/removal on each machine, not something a capture can do by accident.
+The `env` clause takes **an explicit allow-list of names**, never `.env` whole — capturing the whole
+object would push this machine's `CLAUDE_HOST_LABEL`, `PYENV_VERSION` and
+`CLAUDE_CODE_PLUGIN_PREFER_HTTPS` onto every other box. The list is the *only* record of which keys
+travel, so extending the baseline's `env` means extending it here in the same commit; see the two
+`env` keys section above. Note the asymmetry it creates: capturing on a machine where auto-memory is
+*on* drops the key from the baseline, but apply only ever adds keys, so the machines that already
+have it keep it. Turning memory back on everywhere is therefore a deliberate edit to
+`baseline/settings.base.json` plus an `unset`/removal on each machine, not something a capture can
+do by accident.
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 `scripts/statusline.sh` too, so the repo is the source of truth again. Same for
@@ -445,9 +524,10 @@ live settings, so an override naming a plugin skill will be picked up even thoug
 nothing. Check new entries against the plugin list before committing: pin a plugin skill with
 `disable-model-invocation: true` in its frontmatter instead.
 
-Then remind them: **the VPS only sees what is committed and pushed.** On this laptop the
-marketplace is a directory source pointed at the working tree, so uncommitted edits are live
-locally and invisible everywhere else.
+Then remind them: **other hosts only see what is committed and pushed to the default branch.**
+`sss-marketplace` is a `github` source on every machine now, so nothing in a working tree is live
+anywhere — not even locally. See *Updating the marketplace on another host* below for what a change
+has to clear before another box runs it.
 
 ## Statusline segments
 
