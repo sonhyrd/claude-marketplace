@@ -4,6 +4,41 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.2] - Unreleased
+
+### Added
+
+- `claude-settings` skill: **`scripts/update-hosts.sh`, which runs the marketplace update on every
+  Orca-managed host and reports what landed.** 1.6.1 documented the pass and left it manual, one
+  terminal per host; this drives it. Marketplace, repo and plugin list all come from the roster, so
+  adding a plugin to `baseline/plugins.json` is the only edit needed for every host to pick it up. A
+  host still on a directory source is swapped once, one already on GitHub takes
+  `marketplace update` + `plugin update`, and re-running is a no-op that re-prints the evidence.
+  **It reports the clone commit and the cached versions rather than the CLI's success lines** —
+  `claude plugin update` prints success for a plugin whose version did not move, so the gate that
+  1.6.1 named (an unchanged version never re-fetches) is precisely the failure that looks like
+  success from the exit code alone; the commit and the version list are what tell them apart.
+
+  Three Orca behaviours it works around, each found by a failed run rather than by reading:
+  **`terminal wait --for exit` never fires**, because the remote command finishing does not exit the
+  pty — the shell returns to its prompt and stays alive, so a wait on `exit` burns its whole timeout
+  on a run that succeeded in seconds and the script reads as hung; the payload prints its own
+  `---DONE---` and the script polls for it. **The payload crosses base64-encoded**, because it is
+  multi-line and `--command` takes one string: `printf %q` and every other newline-preserving scheme
+  hand the CLI something it word-splits into an unrunnable command and then block on, with no
+  terminal created and no handle returned. **A remote `terminal create` requires `--worktree`** and
+  cannot infer one from the client cwd, so the script takes the first non-archived worktree on the
+  host — every command it runs is host-global, so no checkout of this repo is needed there.
+
+  Node dependencies are installed for any skill with a `package.json` and no `node_modules`.
+  `web-search`'s manifest is at `skills/web-search/package.json`, **not** the plugin cache root;
+  pointing npm at the root fails `ENOENT` on one host and with npm's `Tracker "idealTree" already
+  exists` on another, which reads as a broken npm rather than a wrong path. `npm_config_*` is unset
+  first, since an Orca terminal inherits those and a nested `npm install` dies on that same error.
+
+  Verified against both live hosts: `contabo` and `cursor-5` each report clone `ca68d2e` and
+  `sss/1.6.1` cached, exit 0.
+
 ## [1.6.1] - Unreleased
 
 ### Changed
