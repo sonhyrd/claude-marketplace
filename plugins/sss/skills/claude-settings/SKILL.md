@@ -163,6 +163,48 @@ refreshed them.
 `enabledPlugins`, so the re-add has to be followed by an install per plugin; that is the recovery
 path for a corrupt clone, not the routine one.
 
+### Driving every host from here
+
+`scripts/update-hosts.sh` runs the pass above on every Orca-managed host and reports what landed:
+
+```bash
+DRY_RUN=1 ./scripts/update-hosts.sh baseline/plugins.json     # preview which hosts it would touch
+./scripts/update-hosts.sh baseline/plugins.json               # all environments
+./scripts/update-hosts.sh baseline/plugins.json cursor-5      # named hosts only
+```
+
+The marketplace, its repo and its plugin list all come from the roster, so adding a plugin to
+`baseline/plugins.json` is the only edit needed for every host to pick it up. A host still on a
+directory source is swapped once (`remove` + `add` + install each plugin); one already on GitHub
+takes `marketplace update` + `plugin update`. Re-running is a no-op that re-prints the evidence.
+
+**It reports the clone commit and the cached versions, not the CLI's success lines.** `claude
+plugin update` prints success for a plugin whose version did not move, so "updated" and "re-read
+the same files" are indistinguishable from the exit code — gate 2 above is exactly the failure that
+looks like success. The commit and the version list are what separate them, which is why they are
+the output rather than a tick.
+
+Three things it has to work around, each of which cost a debugging pass:
+
+- **`terminal wait --for exit` never fires.** The remote command finishing does not exit the pty —
+  the shell returns to its prompt and stays alive — so a wait on `exit` burns its entire timeout on
+  a run that succeeded in seconds, and the script reads as hung rather than slow. The payload prints
+  its own `---DONE---` marker and the script polls for that.
+- **The payload crosses the wire base64-encoded.** It is a multi-line script and `--command` takes
+  one string; every scheme that tries to preserve the newlines, `printf %q` included, hands the CLI
+  something it word-splits into an unrunnable command and then blocks on, with no terminal created
+  and no handle returned.
+- **A remote `terminal create` requires `--worktree`** — it cannot infer one from the client's cwd.
+  Any non-archived worktree on that host will do, because every command here is host-global rather
+  than repo-scoped, so the script takes the first one rather than requiring a checkout of this repo.
+
+Node dependencies are installed for any skill shipping a `package.json` with no `node_modules`.
+`web-search` is the one in this roster and **its manifest is at `skills/web-search/package.json`,
+not at the plugin cache root** — pointing npm at the root fails `ENOENT` on one host and with npm's
+`Tracker "idealTree" already exists` on another, which reads as a broken npm rather than a wrong
+directory. `npm_config_*` is unset first for the same reason: an Orca terminal inherits those, and a
+nested `npm install` dies on that same `idealTree` error.
+
 ### The prompt to hand another host
 
 Orca-managed hosts (`orca host list` names them — `cursor-5` and `contabo` here) each run their own
