@@ -119,6 +119,10 @@ skill does not install it, and never asks for a pasted token:
 Subcommands (single-language):
 - `node $CLI check-auth`
 - `node $CLI get   --project <p> --language <lang> [--scope <s>] [--sub-project <sp>]`
+  **Diagnostic only — never use it to verify that a sync landed.** `get --scope` is a legacy
+  single-context read and reports **ABSENT for keys that are present**, including ones `apply`
+  wrote seconds earlier. To confirm a write, re-run `diff` for that language: a landed key stops
+  appearing as a pending add and `serverKeyCount` rises. Only the diff is authoritative.
 - `node $CLI diff  --project <p> --language <lang> --local-path <file> [--scope <s>] [--sub-project <sp>] [--no-gate] [--base-ref <ref>]`
 - `printf '%s' '<json>' | node $CLI apply --project <p> --language <lang> [--sub-project <sp>] [--dry-run]`
   where `<json>` is `{"adds":{…},"updates":{…},"deletes":[…]}` (any subset). Keys are dot-notation

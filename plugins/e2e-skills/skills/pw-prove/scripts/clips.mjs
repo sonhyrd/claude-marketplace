@@ -207,7 +207,10 @@ export async function callClipsAction(config, action, args, timeoutMs = 30_000) 
       // JSON, and only JSON: the client used to advertise `text/event-stream` while its parser
       // could not read one. It can now, but what it WANTS is the plain body, and an Accept header
       // should describe the client rather than everything it could survive.
-      Accept: 'application/json',
+      // BOTH: the deployment refuses a POST that does not advertise the stream too (HTTP 406
+      // 'Client must accept both application/json and text/event-stream'). `unwrapSseBody` above
+      // already reads either encoding, so this describes the client accurately.
+      Accept: 'application/json, text/event-stream',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
