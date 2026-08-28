@@ -1,12 +1,12 @@
 ---
 name: pr-review
-description: Carry a PR or branch from review to proof — three tracks at once (Standards and Spec from matt:code-review, plus a rule-driven file-by-file pass from sss:ocr-delegate) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, and OCR's down to Medium — then pushed and the whole report published as a comment on the PR, then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result, which e2e:pw-prove runs in a fresh session spawned into an Orca terminal rather than inline in this one. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
+description: Carry a PR or branch from review to proof — four tracks at once (Standards and Spec from matt:code-review, a rule-driven file-by-file pass from sss:ocr-delegate, and an over-engineering pass from ponytail:ponytail-review) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, OCR's down to Medium, and every Complexity cut that stays inside the diff's own hunks — then pushed and the whole report published as a comment on the PR, then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result, which e2e:pw-prove runs in a fresh session spawned into an Orca terminal rather than inline in this one. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
-  Requires the `matt`, `sss` and `e2e` plugins from this marketplace, and four
-  CLIs on PATH: `gh` for PR mode, `ocr` for the OCR track, the `orca` CLI for
-  the session that runs the proof, and `git`. No JSON parser: it reads the few
-  keys it needs directly. Step 1 preflights all of them and stops the run naming
+  Requires the `matt`, `sss` and `e2e` plugins from this marketplace, the
+  `ponytail` plugin from `DietrichGebert/ponytail`, and four CLIs on PATH: `gh`
+  for PR mode, `ocr` for the OCR track, the `orca` CLI for the session that runs
+  the proof, and `git`. Step 1 preflights all of them and stops the run naming
   the one command that installs whichever is missing, so a run that starts can
   finish at full strength.
   `/sss:claude-settings` provisions the whole set in one pass.
@@ -17,30 +17,31 @@ metadata:
 
 # PR Review
 
-Four **stages** over one diff — a read stage that reports, then write stages that fix, sync and prove. The first runs three **tracks**, each in its own context, each scored on its own:
+Four **stages** over one diff — a read stage that reports, then write stages that fix, sync and prove. The first runs four **tracks**, each in its own context, each scored on its own:
 
 | Track | Source | Asks |
 |-------|--------|------|
 | Standards | `matt:code-review` | Does the code follow this repo's documented standards and avoid the smell baseline? |
 | Spec | `matt:code-review` | Does the code do what the issue or PR body asked for? |
 | OCR | `sss:ocr-delegate` | File by file, against resolved rules, with mandatory coverage — what's wrong here? |
+| Complexity | `ponytail:ponytail-review` | What can be deleted? Reinvented stdlib, unneeded dependency, abstraction with one implementation. |
 
-A track that never sees another track's findings cannot be talked out of its own. Where two land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
+A track that never sees another track's findings cannot be talked out of its own. Where two or more land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
 
 Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage; every step after them writes — Step 4 fixes, Step 5 syncs, Step 6 proves. **Step 1 moves the tree to the PR head**, so every stage after it reads and writes the same files the tracks read. Where it cannot, it stops the run there rather than reporting on a tree the fixes could never reach. Step 5 is conditional on top of that, and in a repo with no translation config is simply not there. One `BASE`, resolved in Step 1, holds from the first step to the last. See `CONTEXT.md`.
 
 ## Step 1 — Prep
 
-Run this in the parent, before anything spawns. Its output is a set of **findings** the two skills verify on arrival rather than rediscover — one resolved `BASE` shared by all three tracks is what makes their reports comparable.
+Run this in the parent, before anything spawns. Its output is a set of **findings** the two skills verify on arrival rather than rediscover — one resolved `BASE` shared by all four tracks is what makes their reports comparable.
 
 ### Preflight — what this run needs to finish
 
-**Every prerequisite is checked here, before the tree moves and before a track spawns, and a missing one stops the run.** Two of the four stages are only as strong as the tools underneath them: without `ocr` the review loses a third of its axes, and without a working `orca` CLI the proof never runs. A run that degrades around either still closes looking complete — a two-track report and an unspawned proof read exactly like a finished review — and that is the outcome this gate exists to prevent.
+**Every prerequisite is checked here, before the tree moves and before a track spawns, and a missing one stops the run.** Two of the four stages are only as strong as the tools underneath them: without `ocr` the review loses one of its axes, and without a working `orca` CLI the proof never runs. A run that degrades around either still closes looking complete — a three-track report and an unspawned proof read exactly like a finished review — and that is the outcome this gate exists to prevent.
 
 ```bash
 command -v gh git
 ocr --version          # OCR track — any version
-claude plugin list     # matt, sss and e2e, all enabled
+claude plugin list     # matt, sss, e2e and ponytail, all enabled
 ```
 
 Then resolve the Orca CLI. **Preference orders the candidates; evidence selects one.**
@@ -68,7 +69,7 @@ done
 "$ORCA" worktree current --json    # proof spawn — must print JSON
 ```
 
-**`ocr` reports its version, and presence is the gate.** Below v1.9.3 `sss:ocr-delegate` parses text where it would otherwise parse JSON, and that still produces a full OCR track — a different path to the same three axes, not a degraded review. So an old `ocr` passes preflight and the report says which path ran; only an absent one stops the run.
+**`ocr` reports its version, and presence is the gate.** Below v1.9.3 `sss:ocr-delegate` parses text where it would otherwise parse JSON, and that still produces a full OCR track — a different path to the same axes, not a degraded review. So an old `ocr` passes preflight and the report says which path ran; only an absent one stops the run.
 
 **An empty `$ORCA` stops the run**, naming which of the two were on `PATH`. Where Orca ships as an AppImage, `orca` on `PATH` is the desktop launcher (`.../squashfs-root/AppRun`) and `orca-ide` beside it is the CLI; the launcher accepts every subcommand, prints Electron startup noise, and answers nothing — so a run that calls it concludes Orca is unavailable on a machine where Orca is running fine, loses the proof stage, and blames the box. `orca-ide --help` prints its own usage as `orca <command>`: the two names are one tool.
 
@@ -84,6 +85,7 @@ done
 | the Orca CLI | `/sss:claude-settings` — it deploys the shim that makes `orca` resolve |
 | `gh` or `git` | this platform's package manager |
 | the `matt`, `sss` or `e2e` plugin | `claude plugin install <name>@sss-marketplace`, then restart Claude Code |
+| the `ponytail` plugin | `claude plugin marketplace add DietrichGebert/ponytail` then `claude plugin install ponytail@ponytail`, then restart Claude Code |
 
 `/sss:claude-settings` provisions the whole set in one pass, and is the answer to give when more than one line is missing.
 
@@ -128,7 +130,7 @@ git diff "$BASE...$HEAD_SHA" --stat
 BASE=<40-char> (merge-base of origin/MAMAS-9316 ← stacked on open PR 3140) · HEAD=<40-char> (origin/mamas-9299-x) · TREE=<40-char> = HEAD → tree at PR head
 ```
 
-Four fields in PR mode, and **every SHA is the full 40 characters, never abbreviated** — a 40-character string gets copied where a 9-character one gets retyped, and one transposition survived into a track prompt and cost that track its base. `TREE` is whatever `git rev-parse HEAD` returned, so the verdict `tree at PR head` is a conclusion the reader draws from two printed SHAs rather than a claim to take on trust. The stack clause appears only where the probe found an open parent PR. Branch mode fills the same slots with what it has: `BASE=<40-char> (user-named fixed point 'main') · HEAD=<40-char> · branch mode`. One line, printed before the fan-out, is the point: three tracks reading a base nobody printed is how a wrong one survives to the end of a run.
+Four fields in PR mode, and **every SHA is the full 40 characters, never abbreviated** — a 40-character string gets copied where a 9-character one gets retyped, and one transposition survived into a track prompt and cost that track its base. `TREE` is whatever `git rev-parse HEAD` returned, so the verdict `tree at PR head` is a conclusion the reader draws from two printed SHAs rather than a claim to take on trust. The stack clause appears only where the probe found an open parent PR. Branch mode fills the same slots with what it has: `BASE=<40-char> (user-named fixed point 'main') · HEAD=<40-char> · branch mode`. One line, printed before the fan-out, is the point: four tracks reading a base nobody printed is how a wrong one survives to the end of a run.
 
 **Then resolve the two sync findings** — both of them here, off the one `BASE` the tracks share, so Step 5 decides from settled facts rather than re-reading the tree after the fixes have moved it:
 
@@ -149,16 +151,19 @@ Done when preflight has passed, the tree is acquired, seven findings are in hand
 
 **Preflight is a gate and the sync checks are findings, and the difference is what each one decides.** A gate decides whether the run happens at all; a finding decides the shape of a later stage. `ocr` and the Orca CLI moved from the second kind to the first because a run without them cannot reach full strength — and the two of them used to be findings, which is exactly how a run once lost the OCR track and the proof and closed as though it had neither.
 
-## Step 2 — Load `matt:code-review`, fan out three
+## Step 2 — Load `matt:code-review`, fan out four
 
 Invoke the Skill tool with `matt:code-review` **inline, in this context**. It loads its own two-axis briefs and the twelve-smell baseline, and hands you the fixed point it needs — which Step 1 already resolved, so give it the `BASE` SHA and the spec source as settled facts.
 
-Then send **one** message with **three** `general-purpose` `Agent` calls. The loaded skill's step 4, *Spawn both sub-agents in parallel*, defines two briefs — **Standards** and **Spec**; you send those two plus OCR, so all three tracks run concurrently at the same depth. This is the one instruction `pr-review` overrides in a skill it does not own.
+Then send **one** message with **four** `general-purpose` `Agent` calls. The loaded skill's step 4, *Spawn both sub-agents in parallel*, defines two briefs — **Standards** and **Spec**; you send those two plus OCR and Complexity, so all four tracks run concurrently at the same depth. This is the one instruction `pr-review` overrides in a skill it does not own.
 
 **The anchor is the two named briefs, not a sentence about tool calls.** That step used to end with "send a single message with two `Agent` tool calls", and this skill used to point at it by saying the loaded skill "says two". Upstream deleted that sentence in 1.2.3, deliberately, so the step reads on Codex and other harnesses instead of naming Claude Code's tools — and the override broke, pointing at words that were no longer there. Counting briefs survives that rewrite; counting calls did not.
 
 - **Standards** and **Spec** — the two prompts `matt:code-review` step 4 specifies, verbatim, including the smell baseline it says to paste in full.
 - **OCR** — invoke the Skill tool with `sss:ocr-delegate` in range mode (`--from`/`--to`), passing the PR title and body as `--background`. Review only: finish at its Step 6 and report. Return the structured comments plus the coverage summary — total, reviewable, reviewed and skipped file counts, the coverage rate over the reviewable set, and a reason for every skipped file.
+- **Complexity** — invoke the Skill tool with `ponytail:ponytail-review` over `git diff <BASE>...<HEAD_SHA>`. Its output format is its own and is returned unedited: one line per finding, `<file>:L<line>: <tag> <what to cut>. <replacement>.` over the five tags `delete`, `stdlib`, `native`, `yagni`, `shrink`, closing on its `net: -<N> lines possible.` — or `Lean already. Ship.` when there is nothing to cut. Do not ask it for severities, and do not ask it to widen: correctness, security and performance are explicitly out of its scope, and three other tracks are already on them.
+
+**The Complexity track reviews the diff, not the repo.** Bound it to the changed hunks in its brief. `ponytail-review` will happily name deletable code anywhere it is pointed, and a track that returns cuts to files this PR never touched produces findings 4c can only describe, at the cost of a full agent.
 
 **Every track prompt names the tree it reads**, in one clause — *this tree is at the PR head; read files directly.* Left unsaid, a track invents the opposite and routes every read through `git show`.
 
@@ -172,15 +177,15 @@ A spawned track can come back `<status>stopped</status>` carrying a summary that
 
 **Resume it by id; a fresh launch pays for the same review twice.** Send the track's agent id a message restating its brief and closing with *if you already have findings, report those — do not restart*. The observed recovery came back complete at `tool_uses: 0`, which is what a resumed write-up of finished work looks like. `SendMessage` is a deferred tool in most sessions, so load it first with `ToolSearch("select:SendMessage")`.
 
-**A track that will not come back is counted, not absorbed.** Carry it into Step 3's count and name the axis that is missing. A review that quietly drops an axis is the same defect as a review that quietly drops a tool, and three unmerged tracks exist precisely so that no one of them can go missing unnoticed.
+**A track that will not come back is counted, not absorbed.** Carry it into Step 3's count and name the axis that is missing. A review that quietly drops an axis is the same defect as a review that quietly drops a tool, and four unmerged tracks exist precisely so that no one of them can go missing unnoticed.
 
 Done when every launched track has returned, or the ones that did not are named for Step 3 to count.
 
 ## Step 3 — Aggregate
 
-**Open with the track count — `3 of 3 tracks reported`, or the shortfall and which axis it cost.** One line, first thing, before any section. Preflight makes the full count the ordinary case, so the line is usually a formality; it is written every time because the run where it is not a formality is the run that would otherwise read as complete while an axis is missing. A count is legible at a glance where a missing `## OCR` section is not.
+**Open with the track count — `4 of 4 tracks reported`, or the shortfall and which axis it cost.** One line, first thing, before any section. Preflight makes the full count the ordinary case, so the line is usually a formality; it is written every time because the run where it is not a formality is the run that would otherwise read as complete while an axis is missing. A count is legible at a glance where a missing `## OCR` or `## Complexity` section is not.
 
-`## Standards`, `## Spec`, `## OCR` — each verbatim, in that order. **Number every finding as you emit it** — `S1, S2…` for Standards, `P1, P2…` for Spec, `O1, O2…` for OCR. The IDs are how Step 4 accounts for the whole set and how the user points at one in conversation; an unnumbered finding is one that can go missing between the report and the fixes. Then:
+`## Standards`, `## Spec`, `## OCR`, `## Complexity` — each verbatim, in that order. **Number every finding as you emit it** — `S1, S2…` for Standards, `P1, P2…` for Spec, `O1, O2…` for OCR, `X1, X2…` for Complexity. The IDs are how Step 4 accounts for the whole set and how the user points at one in conversation; an unnumbered finding is one that can go missing between the report and the fixes. Then:
 
 ```markdown
 ## Overlap
@@ -190,11 +195,11 @@ Findings unique to one track, by ID.
 
 Compare the full text here in the parent: this is the one judgement in the skill that wants the verbatim reports present rather than a paraphrase.
 
-Close with one line per track — finding count, worst issue within that track. Each track is scored on its own; a cross-track ranking is the merge the separation exists to prevent.
+Close with one line per track — finding count, worst issue within that track. **The Complexity track's closing line carries its `net: -N lines possible.` verbatim**, because that number is the score `ponytail-review` gives itself, and this is the slot the report already has for a track's own score. It is the number the track reported, not a number the run achieved: only contained cuts land, so 4d's `Applied` list is what says how much of it the fix stage took. Each track is scored on its own; a cross-track ranking is the merge the separation exists to prevent.
 
 Report in chat. Step 4f publishes this same text on the PR once the fixes have landed, reproduced rather than rewritten.
 
-Done when the track count and all four sections are on screen, every finding carries an ID, and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of three unmerged tracks is output nobody got to soften.
+Done when the track count and all five sections are on screen, every finding carries an ID, and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of four unmerged tracks is output nobody got to soften.
 
 **This boundary orders the work and asks nothing.** Nothing is edited before the report prints, and no confirmation is asked once it has — Step 4 begins immediately, on the report's own terms. The user who invoked this skill asked for the fixes, so an offer to stop here spends their turn re-typing a policy this skill already holds. Nothing later asks either: Step 6 spawns the proof unprompted, so this run has no human checkpoint anywhere — deliberately, and `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md` is where the trade is recorded.
 
@@ -202,13 +207,13 @@ Done when the track count and all four sections are on screen, every finding car
 
 The stage that writes. Findings become edits, the edits get committed and pushed, and the report Step 3 printed gets published on the PR.
 
-**Step 1 already guaranteed the tree.** Its three guards stop the run rather than letting it reach here on a tree that is not the PR head, so this stage edits the same files all three tracks read. Fixes applied to files the tracks never read are not fixes, and a handoff artifact built off them is worse — `pw-prove` would prove a tree nobody reviewed.
+**Step 1 already guaranteed the tree.** Its three guards stop the run rather than letting it reach here on a tree that is not the PR head, so this stage edits the same files all four tracks read. Fixes applied to files the tracks never read are not fixes, and a handoff artifact built off them is worse — `pw-prove` would prove a tree nobody reviewed.
 
 ### 4a. Grade for order, not for admission
 
 Severity sets the fix queue's order and the grade the handoff artifact carries. **It does not decide what gets applied** — 4c's per-track table does.
 
-Three tracks speak three vocabularies. This is the mapping between them, written once:
+Four tracks speak four vocabularies. This is the mapping between them, written once:
 
 | Track | Native output | Our severity |
 |-------|---------------|--------------|
@@ -218,6 +223,9 @@ Three tracks speak three vocabularies. This is the mapping between them, written
 | Standards | a baseline smell — a labelled heuristic | Medium |
 | Spec | a requirement missing, partial, or implemented wrongly | High |
 | Spec | scope creep, behaviour nobody asked for | Medium |
+| Complexity | any of the five tags — `delete`, `stdlib`, `native`, `yagni`, `shrink` | Medium |
+
+**A Complexity tag is not a grade either, and there is no tier above Medium here.** `ponytail-review` grades nothing; the tag says what kind of cut it is. Every one of them is Medium — over-engineering is a maintainability finding, and a track that is explicitly not looking at correctness cannot produce a Critical. Its `net: -<N> lines` line is a summary, not a finding: it gets no ID and it is never queued. **It is not dropped either** — Step 3's closing line for the track carries it, which is where a track's own score belongs.
 
 **`bug` is OCR's category, not its severity.** A finding reading `severity: medium, category: bug` is Medium, and Medium is applied — the category says what kind of defect it is, and OCR already graded it. Reading the category as a grade is what promoted such findings to Critical and produced hybrids like `medium·bug`.
 
@@ -243,6 +251,9 @@ Two rules:
 | Standards | every finding — hard violations and baseline smells alike | the fix reaches outside the diff's own hunks |
 | Spec | requirements missing, partial, or implemented wrongly | scope creep — behaviour nobody asked for |
 | OCR | `critical`, `high`, `medium` | `low` |
+| Complexity | a cut contained in the diff's own hunks | a cut that reaches outside them |
+
+**Complexity is gated by containment, on the same boundary Standards uses and for a sharper reason.** A `delete` or `yagni` cut is the removal of working code, so a cut reaching outside the diff deletes a colleague's code in a review commit — the one act 4c's Spec row already refuses. Inside the hunks it is this PR's own code and this PR's own review, which is what makes it applicable. A `shrink` that rewrites a hunk the PR added lands; a `yagni` that inlines an abstraction with callers elsewhere in the repo is described.
 
 **Standards is gated by containment, not by the smell's name.** Four of the twelve baseline smells document fixes that restructure modules or inheritance, so the boundary is the diff's own hunks: a contained instance of any smell lands, and a fix that splits a module is described. That is what keeps a review commit a review commit rather than a module restructure.
 
@@ -265,7 +276,7 @@ Then re-run whatever the repo documents as its own gate — its validation targe
 
 ### 4d. Report the boundary
 
-A fifth section, underneath the four. **`## Fixes` is the run's accounting of its findings, and it has exactly three `###` headings, verbatim:**
+A sixth section, underneath the five. **`## Fixes` is the run's accounting of its findings, and it has exactly three `###` headings, verbatim:**
 
 1. `Applied`
 2. `Described, not applied`
@@ -304,11 +315,11 @@ Done when every finding ID Step 3 emitted appears exactly once across 4d's three
 
 **Runs when Step 1 resolved a PR number.** In branch mode this sub-step is absent — not skipped-with-a-note, not a prompt — the same shape Step 5 has in a repo with no translation config. There is no PR for the report to reach, and a line announcing that is a line about nothing.
 
-Post one comment with `gh pr comment <NUM> --body-file -`, feeding the body on stdin — a body file written inside the repo would dirty the tree 4e's Done requires clean, and one written outside it is a temp file this stage would then own removing. Its body is **the aggregated report Step 3 printed, reproduced verbatim** — the track count, `## Standards`, `## Spec`, `## OCR`, `## Overlap` and the per-track closing lines — with 4d's `## Fixes` section appended, under this header:
+Post one comment with `gh pr comment <NUM> --body-file -`, feeding the body on stdin — a body file written inside the repo would dirty the tree 4e's Done requires clean, and one written outside it is a temp file this stage would then own removing. Its body is **the aggregated report Step 3 printed, reproduced verbatim** — the track count, `## Standards`, `## Spec`, `## OCR`, `## Complexity`, `## Overlap` and the per-track closing lines — with 4d's `## Fixes` section appended, under this header:
 
 ```
 <!-- sss:pr-review -->
-**`sss:pr-review`** · <tracks that returned> of 3 tracks · base `<baseRef>` · reviewed `<headSha>`
+**`sss:pr-review`** · <tracks that returned> of 4 tracks · base `<baseRef>` · reviewed `<headSha>`
 Fixes committed and pushed as `<fixSha>`.
 ```
 
@@ -319,10 +330,10 @@ Every angle-bracketed name above is a placeholder, filled from what Step 1 resol
 - **The header's SHAs are abbreviated.** These two are display, read by a person scanning a comment header, and GitHub links a short SHA to the same commit as the full one. Resolve them full, print them short.
 - **The marker comment is written even though nothing reads it back today.** It costs one line, and it is what lets a later change find this skill's own comments without re-deriving which ones were ours.
 - **One new comment per run, never an edit of an earlier one.** 4d's supersede-rather-than-append rule governs one live chat document; a PR thread is an append-only record other people quote and reply to, and rewriting a comment underneath a reply is how the reply stops making sense. *Never edit an earlier comment* is the rule; "one comment" is what it produces on every run whose body fits. An oversized body below is still one run's report — one logical report carried across n comments, not n runs — and none of those comments edits anything that was already there.
-- **A run that applied nothing still posts**, its header naming the existing `HEAD` rather than a new SHA. Three tracks agreeing a PR needs nothing is a result, and suppressing it makes a clean review indistinguishable from a review that never ran.
+- **A run that applied nothing still posts**, its header naming the existing `HEAD` rather than a new SHA. Four tracks agreeing a PR needs nothing is a result, and suppressing it makes a clean review indistinguishable from a review that never ran.
 - **An issue comment, not a formal review and not inline per-finding comments.** The tracks do not all carry reliable line anchors, so inline comments would half-fail on exactly the runs with the most findings.
 
-**Past 65,536 characters GitHub rejects the whole write**, and three verbatim track reports plus `## Fixes` can reach that on a large diff. Split at `##` boundaries only, never mid-finding, across sequential comments each numbered `1/n`. Every finding ID reaching the PR is the property being protected, and a report that failed to post protects none of them.
+**Past 65,536 characters GitHub rejects the whole write**, and four verbatim track reports plus `## Fixes` can reach that on a large diff. Split at `##` boundaries only, never mid-finding, across sequential comments each numbered `1/n`. Every finding ID reaching the PR is the property being protected, and a report that failed to post protects none of them.
 
 **Every comment in a split carries the marker; only the first carries the header.** The marker's job is finding this skill's own comments, and a part left unmarked is a part a later "find our previous comments" pass would miss while its siblings are found. The header identifies one review — its track count, base and reviewed SHA describe the whole report, so repeating it on each part would read as several reviews. The `1/n` counter goes on every part instead, which is what tells a reader who landed on part 3 that there are two more.
 
@@ -399,7 +410,7 @@ one line and finish the run.
 
 ```jsonc
 {
-  "base":      "origin/main",   // the BASE Step 1 resolved — the same one all three tracks saw
+  "base":      "origin/main",   // the BASE Step 1 resolved — the same one all four tracks saw
   "head_sha":  "<40-hex sha>",  // REQUIRED — `git rev-parse HEAD` read as you write this file
   "pr":        123,             // the PR number, or null in branch mode
   "findings":  [                // confirmed findings, highest confidence first
@@ -431,7 +442,7 @@ own business.
 ### 6c. Spawn a fresh session to run `pw-prove`
 
 `pw-prove` opens with a context gate and refuses above 100k tokens. By here this run is reliably
-past it — three tracks, an aggregate report and a fix stage — so the proof runs in a **fresh
+past it — four tracks, an aggregate report and a fix stage — so the proof runs in a **fresh
 session**, in this same checkout:
 
 ```bash
@@ -487,12 +498,12 @@ something else is the paste-line branch.
 
 `matt:code-review` fans out on its own. Running it inside an agent of ours would put its two tracks a level below OCR's, betting that a spawned agent may itself spawn — a bet whose loss is silent, degrading a two-axis review to one context with nothing in the output saying so. Loading it here instead makes the bet unnecessary.
 
-The rejected alternative was pasting its Standards and Spec briefs into this file to get three flat peers. That buys the same shape at the price of a second copy of the smell baseline, owned forever — the duplication this composition exists to avoid.
+The rejected alternative was pasting its Standards and Spec briefs into this file to get four flat peers. That buys the same shape at the price of a second copy of the smell baseline, owned forever — the duplication this composition exists to avoid.
 
 ## Gotchas
 
 - **Coverage is the OCR track's contract.** A report without a coverage rate and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on. A high rate over a handful of reviewable files is not coverage either — OCR excludes Markdown, so a skills or docs repo can report 100% having seen almost none of the diff.
-- **Overlap is additive.** It names the agreements underneath three intact verbatim sections.
+- **Overlap is additive.** It names the agreements underneath four intact verbatim sections.
 - **Step 1 checks out the PR head, and the *guards* are the load-bearing half.** Three of them stand between `switch -C` and work the user cannot get back — a dirty tree, the branch live in another worktree (the ordinary Orca case), unpushed commits. A guard that fails prints the provenance line and stops the run naming the worktree to re-run from; it does not carry on with a report. Revision four of one decision, the first two legible only from commit messages: `docs/adr/0007-pr-review-acquires-the-tree-in-step-1.md`. `tests/bash/test-pr-review-step1-cases.sh` is what notices.
 - **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
   renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`
@@ -502,10 +513,11 @@ The rejected alternative was pasting its Standards and Spec briefs into this fil
   the schema**: an eval trial asked for one field and got the field, plus this Gotcha rewritten to
   permit it. A rule that yields to the first request it refuses was never a rule.
 - **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
-- **Report before you write — and then write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the four sections stop being evidence. Asking permission after it has printed costs the user a turn to re-state a policy 4c already holds; the two rules are separate and both hold.
-- **The fix stage edits the tree in place, exactly as Step 1 left it.** Step 1 owns every move the run makes, and by Step 4 the tree is already the one all three tracks read — including for the gate re-run, which runs against the fixes where they sit. Tidying it first would fix files nobody reviewed.
-- **`matt:code-review` calls its smell baseline "always a judgement call", and 4c applies it anyway.** That tension is real and deliberate: the caution is calibrated for a skill that only reports, and `pr-review` cross-checks the same diff against two other tracks before it acts. `docs/adr/0008-pr-review-trusts-its-tracks.md` is where a reader who notices should land. Nothing in `matt:code-review` is edited — it is a verbatim subtree, and what changed is how this skill treats its output.
+- **Report before you write — and then write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the five sections stop being evidence. Asking permission after it has printed costs the user a turn to re-state a policy 4c already holds; the two rules are separate and both hold.
+- **The fix stage edits the tree in place, exactly as Step 1 left it.** Step 1 owns every move the run makes, and by Step 4 the tree is already the one all four tracks read — including for the gate re-run, which runs against the fixes where they sit. Tidying it first would fix files nobody reviewed.
+- **`matt:code-review` calls its smell baseline "always a judgement call", and 4c applies it anyway.** That tension is real and deliberate: the caution is calibrated for a skill that only reports, and `pr-review` cross-checks the same diff against three other tracks before it acts. `docs/adr/0008-pr-review-trusts-its-tracks.md` is where a reader who notices should land. Nothing in `matt:code-review` is edited — it is a verbatim subtree, and what changed is how this skill treats its output.
 - **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.
 - **Three stages push, and none of them pushes for another.** Step 4e pushes its own fix commit, because the invoker asked for the fixes and cannot use them while they sit in one checkout — `docs/adr/0012-pr-review-publishes-its-own-review.md` records that reversal and what it cost. `translation-sync` owns its own empty re-trigger commit and push in Step 5, and pushes only when it actually applied something, on a non-default branch, with a clean index — so a run whose sync changed nothing ends with the fix commit as the last thing on the branch, and that is the correct outcome, not a stage that failed. `pw-prove` owns the third, from the 6c spawn onward. The old rule that a third pusher makes the history unreadable is what ADR 0012 overturns: each stage pushing what it made is legible, and the unreadable history was the one where a stage pushed someone else's work.
 - **Both of the fix stage's outward writes can fail, and neither ends the run.** A push 4e cannot fast-forward is a colleague's commit arriving mid-review — 4f posts anyway, with the header's local-SHA line, because a review nobody can read costs more than a commit one push behind. A `gh pr comment` that fails prints the body in chat for the invoker to post by hand, and the run carries on to Steps 5 and 6: a GitHub outage costs the review its publication, not its proof. Neither path carries an eval case — the suite's environment is `type: none`, so a GitHub failure is not reliably provokable — and neither needs one to be noticed, because both are loud in the invoker's chat rather than silent like the degradations the Step 1 gate exists to catch.
-- **Do not use OCR's fix mode for this.** `sss:ocr-delegate` has its own Step 7; the OCR track finishes at Step 6 and reports. Fixes are applied here, in the parent, from all three tracks at once — one agent fixing what only it found is how the overlap ordering gets bypassed.
+- **The Complexity track is the only one that argues for deleting code, and containment is the whole guard.** `ponytail-review` is scoped to over-engineering and says so — correctness, security and performance are out of its scope — so a Complexity finding never contradicts the other three tracks about whether code *works*, only about whether it needs to exist. Inside the diff's hunks that is this PR's own code and 4c applies it; outside them it is a colleague's, and it is described. A run that returns cuts across the whole repo is a track that was briefed wrong in Step 2, not a large finding set.
+- **Do not use OCR's fix mode for this.** `sss:ocr-delegate` has its own Step 7; the OCR track finishes at Step 6 and reports. Fixes are applied here, in the parent, from all four tracks at once — one agent fixing what only it found is how the overlap ordering gets bypassed.

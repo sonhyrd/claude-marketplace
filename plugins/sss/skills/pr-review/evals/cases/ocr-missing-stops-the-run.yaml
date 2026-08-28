@@ -5,7 +5,7 @@ description: |
   with a skip note; it now stops the run before anything spawns and names the one
   command that installs it. The replaced case was `ocr-missing-degrades`, and the
   reason it was replaced is the whole point of this one: a two-track report reads
-  exactly like a three-track report, so a run that degraded quietly closed looking
+  exactly like a four-track report, so a run that degraded quietly closed looking
   complete. `docs/adr/` holds no entry — this is a correction, not a trade.
 
   **A correct answer names two tracks in order to rule them out**, so the failure

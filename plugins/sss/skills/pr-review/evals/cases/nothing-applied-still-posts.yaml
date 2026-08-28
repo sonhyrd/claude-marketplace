@@ -1,7 +1,7 @@
 id: nothing-applied-still-posts
 title: A run that applied nothing still posts, naming the existing HEAD
 description: |
-  Step 4f, the clean-review path. Three tracks agreeing a PR needs nothing is a
+  Step 4f, the clean-review path. Four tracks agreeing a PR needs nothing is a
   result, and suppressing the comment makes a clean review indistinguishable
   from a review that never ran. The header names the existing HEAD rather than a
   new SHA, and the push line — which reports a fix commit — is omitted, because
@@ -14,7 +14,7 @@ description: |
 
 input:
   prompt: |
-    Walking through the tail end of a review on PR #204. Suppose all three
+    Walking through the tail end of a review on PR #204. Suppose all four
     tracks come back and between them there is nothing above Low — no Critical,
     no High, nothing worth applying, so Step 4 commits nothing and there is no
     new SHA. At that point there's no fix commit to announce and no findings to

@@ -2,7 +2,7 @@ id: proof-spawns-a-fresh-session
 title: Step 6 spawns a fresh session for pw-prove rather than invoking it inline
 description: |
   Step 6c. pw-prove's Step 1 refuses above 100k tokens, and a pr-review run
-  reaching Step 6 has spent three tracks, an aggregate report and a fix stage —
+  reaching Step 6 has spent four tracks, an aggregate report and a fix stage —
   it is reliably past that. So the proof is spawned into a fresh session in the
   same checkout (`orca terminal create --worktree active`) and this run ends at
   the handoff. `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md`

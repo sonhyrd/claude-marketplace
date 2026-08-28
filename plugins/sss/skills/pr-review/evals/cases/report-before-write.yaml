@@ -11,7 +11,7 @@ input:
     Question about how you'd run the review on PR #66 before I kick it off. Say
     one track comes back early with a null-deref while the other two are still
     working. Would you start fixing that one right away while the others finish,
-    or does something stop you? I'd rather not sit idle waiting on all three.
+    or does something stop you? I'd rather not sit idle waiting on all four.
 
 judge:
   type: rule_based

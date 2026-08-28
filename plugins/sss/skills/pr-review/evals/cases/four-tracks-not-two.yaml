@@ -1,10 +1,10 @@
-id: three-tracks-not-two
-title: Three concurrent tracks, overriding matt:code-review's two
+id: four-tracks-not-two
+title: Four concurrent tracks, overriding matt:code-review's two
 description: |
   Step 2. The skill loads matt:code-review inline and then sends one message with
-  three agent calls — its two axes plus OCR — so all three run concurrently at the
-  same depth. This is the one instruction pr-review overrides in a skill it does
-  not own.
+  four agent calls — its two axes plus OCR and Complexity — so all four run
+  concurrently at the same depth. This is the one instruction pr-review overrides
+  in a skill it does not own.
 
 input:
   prompt: |
@@ -18,7 +18,9 @@ judge:
     - output_matches:
         all: ['(?i)\bOCR\b']
     - output_matches:
-        any: ['(?i)\bthree\b', '\b3\b']
+        any: ['(?i)ponytail', '(?i)complexity', '(?i)over-engineering']
+    - output_matches:
+        any: ['(?i)\bfour\b', '\b4\b']
     - output_matches:
         all: ['(?i)Standards', '(?i)Spec']
     - output_matches:
@@ -30,4 +32,4 @@ judge:
           - '(?i)at once'
   failure:
     - output_contains:
-        any: ["only two agents", "two tracks in total"]
+        any: ["only two agents", "two tracks in total", "three tracks in total"]
