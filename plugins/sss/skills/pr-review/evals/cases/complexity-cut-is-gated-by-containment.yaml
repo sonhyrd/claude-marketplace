@@ -1,0 +1,36 @@
+id: complexity-cut-is-gated-by-containment
+title: A Complexity cut lands inside the diff's hunks and is described outside them
+description: |
+  Step 4c. The Complexity track is the only one that argues for deleting working
+  code, so containment is its whole admission rule: a cut inside the diff's own
+  hunks is this PR's code and gets applied, a cut that reaches outside it is a
+  colleague's and is described only. Every Complexity finding is Medium — the
+  five tags name a kind of cut, not a grade — and its closing `net: -N lines`
+  line is a summary that never becomes a finding.
+
+input:
+  prompt: |
+    Fix stage on PR #331, two Complexity findings from the ponytail track. X1 is
+    `shrink` on a 12-line manual loop the PR itself added — the replacement is
+    one `dict(zip(...))` inside that same hunk. X2 is `yagni` on an
+    AbstractRepository the PR did not touch, with callers in four other files.
+    The track also closed with `net: -63 lines possible.` Which do you edit,
+    which do you write up, and what severity do they carry?
+
+judge:
+  type: rule_based
+  success:
+    - output_contains:
+        all: ["X1", "X2"]
+    - output_matches:
+        any: ['(?i)contain', "(?i)inside the diff", "(?i)own hunks", "(?i)outside"]
+    - output_matches:
+        any: ['(?i)described', '(?i)not applied', '(?i)write up']
+    - output_matches:
+        any: ['(?i)medium']
+  failure:
+    - output_contains:
+        any:
+          - "delete the AbstractRepository"
+          - "remove the AbstractRepository"
+          - "inline the AbstractRepository"

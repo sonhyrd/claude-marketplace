@@ -23,6 +23,12 @@
         "source": "github",
         "repo": "ayghri/i-have-adhd"
       }
+    },
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
     }
   },
   "enabledPlugins": {
@@ -33,7 +39,8 @@
     "skill-creator@claude-plugins-official": true,
     "watch@claude-video": true,
     "plannotator-effective-html@effective-html": true,
-    "atlassian@claude-plugins-official": true
+    "atlassian@claude-plugins-official": true,
+    "ponytail@ponytail": true
   },
   "localMarketplaces": {
     "sss-marketplace": [

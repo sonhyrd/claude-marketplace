@@ -19,7 +19,7 @@ description: |
 
 input:
   prompt: |
-    Mid-review on PR #412. All three tracks are back, the four sections are on
+    Mid-review on PR #412. All four tracks are back, the five sections are on
     screen — Standards, Spec, OCR, Overlap — and there are nine findings between
     them, two of them Critical. The tree is at the PR head and clean. What
     happens next?

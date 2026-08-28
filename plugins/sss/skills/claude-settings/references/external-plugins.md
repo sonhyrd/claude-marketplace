@@ -23,6 +23,7 @@ Handled by `apply-plugins.sh`. The equivalent by hand:
 /plugin marketplace add ayghri/i-have-adhd
 /plugin marketplace add plannotator/effective-html
 /plugin marketplace add bradautomates/claude-video
+/plugin marketplace add DietrichGebert/ponytail
 ```
 
 | Marketplace | Source | Plugin to enable | What it gives you |
@@ -31,6 +32,21 @@ Handled by `apply-plugins.sh`. The equivalent by hand:
 | `i-have-adhd` | `ayghri/i-have-adhd` | `i-have-adhd` | ADHD-shaped output; `/i-have-adhd:i-have-adhd` |
 | `effective-html` | `plannotator/effective-html` | `plannotator-effective-html` | Plan/prototype MCP tooling |
 | `claude-video` | `bradautomates/claude-video` | `watch` | `/watch` — video → frames + transcript |
+| `ponytail` | `DietrichGebert/ponytail` | `ponytail` | Lazy-senior-dev mode; `/ponytail:ponytail-review`, the over-engineering track `sss:pr-review` spawns |
+
+**`ponytail` is the one entry here that changes every session's behaviour, not just the sessions
+that invoke it.** Its `plugin.json` registers three hooks — `SessionStart`, `SubagentStart` and
+`UserPromptSubmit` — and the first two inject its `AGENTS.md` (YAGNI, stdlib first, deletion over
+addition) into the context of every session and every subagent on the machine. That is the plugin
+working as designed and it is worth knowing before enabling it, because a machine that has it and a
+machine that does not will answer the same prompt differently. The hooks shell out to `node`, so a
+box with no Node on `PATH` gets a failing `SessionStart` hook rather than a quiet no-op. Mode is
+tracked per session by `ponytail-mode-tracker.js`; `/ponytail:ponytail` turns it on and off in
+conversation.
+
+`sss:pr-review` depends on this one: its Complexity track invokes the `ponytail:ponytail-review`
+skill, and its Step 1 preflight stops the run when the plugin is not enabled. So it is a roster
+entry with a hard consumer, not an optional extra.
 
 ## 2. Built-in marketplace — enable only, no add
 

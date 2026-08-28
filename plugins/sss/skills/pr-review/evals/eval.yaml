@@ -18,7 +18,8 @@ cases:
     - evals/cases/sync-stage-absent-silently.yaml
     - evals/cases/overlap-orders-does-not-filter.yaml
     - evals/cases/handoff-schema-is-pw-proves.yaml
-    - evals/cases/three-tracks-not-two.yaml
+    - evals/cases/four-tracks-not-two.yaml
+    - evals/cases/complexity-cut-is-gated-by-containment.yaml
     - evals/cases/report-before-write.yaml
     - evals/cases/fix-stage-starts-unasked.yaml
     - evals/cases/per-track-admission.yaml

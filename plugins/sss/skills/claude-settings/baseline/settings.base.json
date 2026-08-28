@@ -63,7 +63,8 @@
   },
   "includeCoAuthoredBy": false,
   "env": {
-    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+    "PONYTAIL_DEFAULT_MODE": "ultra"
   },
   "outputStyle": "Concise"
 }
