@@ -1,11 +1,5 @@
 {
   "marketplaces": {
-    "claude-video": {
-      "source": {
-        "source": "github",
-        "repo": "bradautomates/claude-video"
-      }
-    },
     "cloudflare": {
       "source": {
         "source": "github",
@@ -29,6 +23,12 @@
         "source": "github",
         "repo": "DietrichGebert/ponytail"
       }
+    },
+    "sss-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "sonhyrd/claude-marketplace"
+      }
     }
   },
   "enabledPlugins": {
@@ -36,18 +36,14 @@
     "commit-commands@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
     "i-have-adhd@i-have-adhd": true,
-    "skill-creator@claude-plugins-official": true,
-    "watch@claude-video": true,
     "plannotator-effective-html@effective-html": true,
+    "skill-creator@claude-plugins-official": true,
     "atlassian@claude-plugins-official": true,
-    "ponytail@ponytail": true
+    "ponytail@ponytail": true,
+    "sss@sss-marketplace": true,
+    "e2e@sss-marketplace": true,
+    "matt@sss-marketplace": true,
+    "web-search@sss-marketplace": true
   },
-  "localMarketplaces": {
-    "sss-marketplace": [
-      "e2e",
-      "matt",
-      "sss",
-      "web-search"
-    ]
-  }
+  "localMarketplaces": {}
 }
