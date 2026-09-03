@@ -1378,6 +1378,67 @@ grep -q 'unguardable' "$W/err" \
   && ok "the refusal hands back the judgement the agent owes" || bad "exit 8 says nothing about what to do next"
 
 echo ""
+echo "-- the recorded pid is a WRAPPER: the real listener is still resolved and stopped --"
+# THE REGRESSION. `--server-pid` is whatever the agent could record, and pw-prove's own Step 3 tells
+# it to record `$$` of the background shell. That is the listener only when the preview command
+# execs into it; for any pnpm/npm script it is a WRAPPER whose child holds the port. Killing the
+# wrapper leaves the port held while `kill -0 <wrapper>` reads "gone", so a stop-by-pid reports
+# success, the successor dies of EADDRINUSE, and the predecessor goes on serving the OLD artifact
+# under a verdict that claims a restart. This fixture is that shape and nothing else.
+mutate_repo mut-wrapper
+kill "$SRV_PID" 2>/dev/null; sleep 0.3
+: > "$SRV_LOG"
+setsid sh -c "node $W/serve.js $SRV_PORT >> $SRV_LOG 2>&1 & wait" &
+WRAP_PID=$!
+note_pid "$WRAP_PID"
+wait_announce "$SRV_LOG" || bad "the wrapped preview server never announced"
+port_pids() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u; }
+LISTENER=$(port_pids "$SRV_PORT" | head -1)
+if [ -n "$LISTENER" ] && [ "$LISTENER" != "$WRAP_PID" ]; then
+  ok "the fixture is the shape under test: recorded pid $WRAP_PID is not the listener $LISTENER"
+else
+  bad "the wrapper fixture did not separate the recorded pid from the listener (got '$LISTENER')"
+fi
+# The only edit to the invocation: the agent hands over the pid it could see, which is the wrapper's.
+for i in "${!MUT_FLAGS[@]}"; do [ "${MUT_FLAGS[$i]}" = "$SRV_PID" ] && MUT_FLAGS[$i]="$WRAP_PID"; done
+NPX_EXIT=1 run mutate "${MUT_FLAGS[@]}"
+rc=$?
+kill -0 "$LISTENER" 2>/dev/null \
+  && bad "the real listener ($LISTENER) survived the stop — the mutation ran against the OLD build" \
+  || ok "the real listener was resolved by port and stopped, though the recorded pid was a wrapper"
+case "$(jq_field 'server.listeners_before')" in
+  *"$LISTENER"*) ok "the summary records the listener the KERNEL named, not the pid the agent claimed" ;;
+  *) bad "listeners_before does not name $LISTENER: $(summary)" ;;
+esac
+[ "$(jq_field 'server.restart')" = proven ] \
+  && ok "the restart is proven behind a wrapper, on an observation rather than an absence of error" \
+  || bad "restart wrong behind a wrapper: $(summary)"
+NEWLISTENER=$(port_pids "$SRV_PORT" | head -1)
+[ -n "$NEWLISTENER" ] && [ "$NEWLISTENER" != "$LISTENER" ] \
+  && ok "the port is held by a FRESH process ($NEWLISTENER), which is what makes the restart an observation" \
+  || bad "the port is held by $NEWLISTENER, which is not a restart"
+[ "$rc" = 0 ] && ok "the run's own verdict is reached — a red run over the mutation is guarded, exit 0" \
+  || bad "expected the mutation verdict to be reached, got exit $rc"
+
+echo ""
+echo "-- neither ss nor lsof: the listener is UNKNOWABLE, and that is fatal, never a fallback --"
+# The fault this whole block replaces was an inference from the absence of an error. Refusing to
+# resolve the port must therefore not degrade to trusting the pid: silence about who holds the port
+# is not evidence that nobody does.
+mutate_repo mut-noresolver
+: > "$NPX_ARGV"
+for t in ss lsof; do printf '#!/bin/sh\nexit 2\n' > "$BIN/$t"; chmod +x "$BIN/$t"; done
+NPX_EXIT=0 run mutate "${MUT_FLAGS[@]}"
+[ "$?" = 11 ] && ok "an unresolvable listener is exit 11, the restart code" \
+  || bad "expected exit 11 when neither resolver answers"
+[ "$(jq_field 'server.restart')" = unresolvable ] \
+  && ok "the summary says unresolvable rather than proven" || bad "restart wrong: $(summary)"
+[ -s "$NPX_ARGV" ] && bad "a mutation run was paid for over a server nobody could account for" \
+  || ok "no run happens when who holds the port is unknown"
+grep -q 'ss' "$W/err" && ok "the refusal names the tools it needs" || bad "the refusal does not say what is missing"
+rm -f "$BIN/ss" "$BIN/lsof"
+
+echo ""
 echo "-- residue after the revert is a HARD STOP under its own code --"
 # The run itself left something in the tree that the revert of the declared file cannot take back
 # out. The verdict is not read at all on this path: a proof never continues on a polluted tree, and
