@@ -786,6 +786,10 @@ let summarize = () => {};
 const serverState = {
   pid_before: opts.serverPid === null ? null : Number(opts.serverPid),
   pid_after: null,
+  // What the KERNEL said held the port, either side of the stop. `pid_before` is a claim the agent
+  // made and these two are observations, which is why a reader can tell a restart from a survivor.
+  listeners_before: null,
+  listeners_after: null,
   stopped: null,
   restart: PHASE.NOT_REACHED,
   mark: null,
@@ -1270,6 +1274,12 @@ if (verb === 'mutate') {
   // root is a subdirectory would otherwise have the poll look for the log somewhere it never was
   // and report `no-log` — a gap in the invocation reported as a verdict about the server.
   const serverLog = path.resolve(cwd, opts.serverLog);
+  // The port under test, taken from the origin the agent gave rather than from any pid. A URL with
+  // no explicit port is its scheme's default, which is what the kernel will have bound.
+  const originPort = (() => {
+    const u = new URL(opts.origin);
+    return Number(u.port || (u.protocol === 'https:' ? 443 : 80));
+  })();
   const preflight = (phase, env) => {
     const r = spawnSync(process.execPath, [PREFLIGHT, phase], {
       encoding: 'utf8',
@@ -1313,57 +1323,113 @@ if (verb === 'mutate') {
   // process's own announcement and call an unproven restart proven.
   serverState.mark = fs.statSync(serverLog).size;
 
-  // THE STOP, by the process id the agent recorded when it started the server. Confirmed gone
-  // rather than assumed: a predecessor that survives keeps the port and keeps serving the artifact
-  // this rebuild just replaced, which is the failure the restart proof exists to catch one step
-  // later and this one avoids paying for at all.
-  const pid = Number(opts.serverPid);
-  // EPERM is a process this run may not signal, which is still a process holding the port — the one
-  // reading of "alive" that matters here.
-  const alive = () => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (e) {
-      return e.code === 'EPERM';
+  // THE LISTENER, asked of the kernel rather than taken on trust. `--server-pid` is whatever the
+  // agent started, and for any pnpm/npm preview script that is a WRAPPER whose child holds the
+  // port. Killing the wrapper leaves the port held while `kill -0` on it reads "gone", which is the
+  // whole of the fault this block exists to make impossible: the stop reported success, the
+  // successor died of EADDRINUSE, the predecessor went on answering, and `RESTART=proven` came back
+  // over an artifact nothing had replaced. A pid is a claim about a process; the port is the thing
+  // actually under test, so the port is what is resolved, killed and re-observed here.
+  const listenerPids = () => {
+    const ss = spawnSync('ss', ['-ltnpH', `sport = :${originPort}`], { encoding: 'utf8' });
+    if (ss.status === 0)
+      return [...new Set([...(ss.stdout ?? '').matchAll(/pid=(\d+)/g)].map((m) => Number(m[1])))];
+    const lsof = spawnSync('lsof', ['-ti', `tcp:${originPort}`, '-sTCP:LISTEN'], {
+      encoding: 'utf8',
+    });
+    // lsof exits 1 for "nothing matched", which is an answer — an empty one — and not a failure.
+    if (lsof.status === 0 || lsof.status === 1)
+      return [...new Set((lsof.stdout ?? '').split('\n').map(Number).filter(Boolean))];
+    return null;
+  };
+  // Neither tool answered, so who holds the port is UNKNOWABLE on this machine. That is fatal and
+  // it is loud: the alternative is falling back to the pid, which is the exact inference this verb
+  // must never make. Absence of a listener reading is not absence of a listener.
+  const listenersOrStop = (when) => {
+    const l = listenerPids();
+    if (l !== null) return l;
+    serverState.restart = 'unresolvable';
+    writeStale(`the listener on port ${originPort} could not be resolved ${when}`);
+    summarize('restart-unproven', EXIT.RESTART, { artifact: 'stale' });
+    stop(
+      EXIT.RESTART,
+      `neither \`ss\` nor \`lsof\` could name what listens on port ${originPort} ${when}, so this ` +
+        'verb cannot tell the server it started from the one it was meant to replace. NOTHING was ' +
+        'run and there is no verdict. Install either tool and invoke this verb again; your ' +
+        'mutation is still in the tree.',
+    );
+    return [];
+  };
+
+  // THE STOP, of every process listening on the port, plus the pid the agent recorded in case it is
+  // a parent whose death is what stops the child. Confirmed gone by re-reading the port rather than
+  // by signalling a pid: a predecessor that survives keeps the port and keeps serving the artifact
+  // this rebuild just replaced.
+  const before = listenersOrStop('before the stop');
+  serverState.listeners_before = before;
+  const recorded = Number(opts.serverPid);
+  const targets = [...new Set([...before, ...(Number.isInteger(recorded) ? [recorded] : [])])];
+  const signal = (sig) => {
+    for (const t of targets) {
+      // The negative pid takes the process group, which is what a shell wrapper leaves behind; the
+      // plain pid is the fallback for a process that leads no group of its own.
+      try {
+        process.kill(-t, sig);
+      } catch {
+        /* not a group leader, or already gone */
+      }
+      try {
+        process.kill(t, sig);
+      } catch {
+        /* it died between the read and the signal, which is the outcome asked for */
+      }
     }
   };
-  const goneWithin = (ms) => {
+  // EPERM is a process this run may not signal, which is still a process running — the one reading
+  // of "alive" that matters here.
+  const targetAlive = () =>
+    targets.some((t) => {
+      try {
+        process.kill(t, 0);
+        return true;
+      } catch (e) {
+        return e.code === 'EPERM';
+      }
+    });
+  // Settled means BOTH: the port is free, and nothing this verb set out to stop is still running.
+  // The port is what the restart proof turns on, and the pids are what the agent handed over and is
+  // owed the stopping of — a recorded process that traps SIGTERM and holds no port is still this
+  // verb's to kill, and a port held by a process nobody recorded is still this verb's to clear.
+  const settledWithin = (ms) => {
     const until = Date.now() + ms;
-    while (Date.now() < until) {
-      if (!alive()) return true;
+    for (;;) {
+      if (listenersOrStop('during the stop').length === 0 && !targetAlive()) return true;
+      if (Date.now() >= until) return false;
       sleep(100);
     }
-    return !alive();
   };
-  if (alive()) {
-    try {
-      process.kill(pid, 'SIGTERM');
-    } catch {
-      /* it died between the check and the signal, which is the outcome asked for */
-    }
+  if (targets.length) {
+    signal('SIGTERM');
     // A preview server that traps SIGTERM and takes its time is ordinary; one that ignores it is
     // not, and a stop that gave up there would hand this verb a port it does not own.
-    if (!goneWithin(5000)) {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        /* likewise */
-      }
-      goneWithin(5000);
+    if (!settledWithin(5000)) {
+      signal('SIGKILL');
+      settledWithin(5000);
     }
   }
-  serverState.stopped = !alive();
+  const survivors = listenersOrStop('after the stop');
+  serverState.stopped = survivors.length === 0;
   if (!serverState.stopped) {
     writeStale('the preview server could not be stopped after the forced rebuild');
     serverState.restart = 'not-stopped';
     summarize('restart-unproven', EXIT.RESTART, { artifact: 'stale' });
     stop(
       EXIT.RESTART,
-      `the preview server (pid ${pid}) is still running after SIGTERM and SIGKILL, so the port it ` +
-        'holds is still serving the artifact the rebuild replaced. NOTHING was run and there is no ' +
-        'verdict. Your mutation is still in the tree: stop whatever holds that port by hand and ' +
-        'invoke this verb again, or revert the mutation yourself to abandon the check.',
+      `port ${originPort} is still held by pid(s) ${survivors.join(', ')} after SIGTERM and ` +
+        `SIGKILL (the recorded --server-pid was ${opts.serverPid}), so the port is still serving ` +
+        'the artifact the rebuild replaced. NOTHING was run and there is no verdict. Your mutation ' +
+        'is still in the tree: stop whatever holds that port by hand and invoke this verb again, ' +
+        'or revert the mutation yourself to abandon the check.',
     );
   }
 
@@ -1390,9 +1456,12 @@ if (verb === 'mutate') {
   }
   serverState.pid_after = started?.pid ?? null;
 
-  // THE PROOF. Delegated whole: the bring-up module owns what an announcement looks like, which
-  // loopback forms are dialled, and what each failure cause means. Its verdict is forwarded rather
-  // than restated.
+  // THE PROOF, in two parts that answer two different questions and neither of which is sufficient.
+  // The bring-up module owns the announcement: it dials the origin and requires the server's own
+  // startup line past the mark. What it cannot see is WHICH process wrote that line — a framework
+  // that prints its banner before it binds prints one, then dies of EADDRINUSE, and the poll reads
+  // a 200 from the predecessor. So the second part re-reads the port and requires the pid holding
+  // it to be one that was not holding it before the stop.
   const serve =
     serverState.pid_after === null
       ? null
@@ -1416,6 +1485,35 @@ if (verb === 'mutate') {
         'a mutation run against it proves nothing whichever way it goes. Your mutation is still in ' +
         'the tree: stop whatever holds the port and invoke this verb again, or revert it yourself ' +
         'to abandon the check.',
+    );
+  }
+
+  // The second part. A restart is OBSERVED here or it is not proven at all.
+  const after = listenersOrStop('after the restart');
+  serverState.listeners_after = after;
+  const stale = after.filter((p) => before.includes(p));
+  if (after.length === 0 || stale.length) {
+    // The log past the mark is where a bind failure says its name, and naming it is the difference
+    // between "the restart is unproven" and a message the agent can act on in one read.
+    const tail = fs.readFileSync(serverLog, 'utf8').slice(serverState.mark);
+    const bind = /EADDRINUSE|address already in use/i.test(tail);
+    serverState.cause = after.length === 0 ? 'no-listener' : bind ? 'eaddrinuse' : 'predecessor';
+    serverState.restart = 'unproven';
+    writeStale('the restart after the forced rebuild was never observed');
+    summarize('restart-unproven', EXIT.RESTART, { artifact: 'stale' });
+    stop(
+      EXIT.RESTART,
+      `the restart is UNPROVEN (${serverState.cause}) — the announcement past the mark was read, ` +
+        `but port ${originPort} is ` +
+        (after.length === 0
+          ? 'held by nothing at all, so whatever announced itself is already gone. '
+          : `still held by pid(s) ${stale.join(', ')}, which held it BEFORE the stop — the ` +
+            'predecessor, still serving the artifact this rebuild replaced' +
+            (bind ? ', and the successor died of EADDRINUSE. ' : '. ')) +
+        'A banner printed before a failed bind looks exactly like a successful start, which is why ' +
+        'the port is read and not only the log. NOTHING was run and there is no verdict. Your ' +
+        'mutation is still in the tree: stop whatever holds the port and invoke this verb again, ' +
+        'or revert it yourself to abandon the check.',
     );
   }
   serverState.restart = 'proven';
