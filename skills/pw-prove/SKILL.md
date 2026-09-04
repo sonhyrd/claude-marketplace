@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.37.0"
+  version: "0.38.0"
 ---
 
 # pw-prove
@@ -1029,7 +1029,7 @@ Proving the spec *guards* the change is **required in PR-mode**, via ONE bounded
 
 **The mutation run must not touch the clips**, and the verb is what makes that true by construction: it sends the run to an isolated output, leaves `test-results/` exactly as it stands — the one verb that does not clear it — and counts the clips afterwards against the PR spec set, carried scenarios included.
 
-**The mutation must be in the artifact under test, and the verb is what puts it there.** The proof target is a *build*, so the verb forces the rebuild, stops the preview server by the PID you recorded at Step 3, starts it again with the command you give it, and **proves** the restart against the server's own new announcement past a mark it takes before the stop. You pass the four things only you know — the build script, the recorded PID, the preview task's log, and how the server is started. An unproven restart is **exit 11** and there is no verdict to read: kill whatever holds the port and invoke the verb again. Budget for it: this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
+**The mutation must be in the artifact under test, and the verb is what puts it there.** The proof target is a *build*, so the verb forces the rebuild, stops **whatever is listening on the origin's port** — resolved from the kernel with `ss`/`lsof`, together with the PID you recorded at Step 3 — starts it again with the command you give it, and **proves** the restart against two things: the server's own new announcement past a mark it takes before the stop, *and* a fresh pid holding the port. The PID you recorded is a hint here and never the authority: where your preview command is a `pnpm`/`npm` script, that PID is a wrapper and the listener is its child, so a stop by PID alone leaves the old build serving under a restart that reports proven. You pass the four things only you know — the build script, the recorded PID, the preview task's log, and how the server is started. An unproven restart is **exit 11** and there is no verdict to read: kill whatever holds the port and invoke the verb again. Budget for it: this is the step the built target made expensive (~635s against ~40s under hot reload), and it is the accepted price of a mutation verdict that still names a *source* behaviour.
 
 1. **Mutate the changed behavior** — one line is enough, in a file git already tracks, left **unstaged**. Choosing which line is yours: pick the one the AC is actually about, not a nearby constant a stronger layer would restore.
 2. **Run the verb.** It forces the rebuild, restarts the preview server and proves the restart, captures the tree's pre-state, runs the guarding test into an isolated output with `test-results/` untouched, reverts the file you named, marks the artifact stale, checks the tree came back, and counts the clips.
