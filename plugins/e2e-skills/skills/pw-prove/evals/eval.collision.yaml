@@ -33,7 +33,7 @@ environment:
 skills:
     - source: local_path
       path: .
-      include: [SKILL.md, "*.md", "scripts/**"]
+      include: [SKILL.md, "*.md", "references/**", "scripts/**"]
     # The neighbour. `references/**` comes along because e2e-reviewer's body reads its pattern
     # reference on demand, and a skill installed without the files its body opens is a skill that
     # behaves differently here than it does in the bundle.

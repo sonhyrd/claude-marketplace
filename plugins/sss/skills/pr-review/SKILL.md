@@ -26,27 +26,17 @@ Four **stages** over one diff — a read stage that reports, then write stages t
 | OCR | `sss:ocr-delegate` | File by file, against resolved rules, with mandatory coverage — what's wrong here? |
 | Complexity | `ponytail:ponytail-review` | What can be deleted? Reinvented stdlib, unneeded dependency, abstraction with one implementation. |
 
-A track that never sees another track's findings cannot be talked out of its own. Where two or more land on the same defect, that agreement is the strongest signal in the report — and in Step 4 it is what decides which fix lands first.
-
-Tracks are concurrent and never merged; stages are serial and share one context and one working tree. Steps 1-3 are the read stage; every step after them writes — Step 4 fixes, Step 5 syncs, Step 6 proves. **Step 1 moves the tree to the PR head**, so every stage after it reads and writes the same files the tracks read. Where it cannot, it stops the run there rather than reporting on a tree the fixes could never reach. Step 5 is conditional on top of that, and in a repo with no translation config is simply not there. One `BASE`, resolved in Step 1, holds from the first step to the last. See `CONTEXT.md`.
-
 ## Step 1 — Prep
 
-Run this in the parent, before anything spawns. Its output is a set of **findings** the two skills verify on arrival rather than rediscover — one resolved `BASE` shared by all four tracks is what makes their reports comparable.
+Read `references/step-1-prep.md` before this step.
 
 ### Preflight — what this run needs to finish
-
-**Every prerequisite is checked here, before the tree moves and before a track spawns, and a missing one stops the run.** Two of the four stages are only as strong as the tools underneath them: without `ocr` the review loses one of its axes, and without a working `orca` CLI the proof never runs. A run that degrades around either still closes looking complete — a three-track report and an unspawned proof read exactly like a finished review — and that is the outcome this gate exists to prevent.
 
 ```bash
 command -v gh git
 ocr --version          # OCR track — any version
 claude plugin list     # matt, sss, e2e and ponytail, all enabled
 ```
-
-Then resolve the Orca CLI. **Preference orders the candidates; evidence selects one.**
-`sss:delegate-tickets` step 0 owns this idiom and `scripts/check-delegate-cli.sh` in the marketplace
-repo asserts it — this is the same resolution against the command this skill actually calls:
 
 ```bash
 ORCA=""
@@ -69,29 +59,7 @@ done
 "$ORCA" worktree current --json    # proof spawn — must print JSON
 ```
 
-**`ocr` reports its version, and presence is the gate.** Below v1.9.3 `sss:ocr-delegate` parses text where it would otherwise parse JSON, and that still produces a full OCR track — a different path to the same axes, not a degraded review. So an old `ocr` passes preflight and the report says which path ran; only an absent one stops the run.
-
-**An empty `$ORCA` stops the run**, naming which of the two were on `PATH`. Where Orca ships as an AppImage, `orca` on `PATH` is the desktop launcher (`.../squashfs-root/AppRun`) and `orca-ide` beside it is the CLI; the launcher accepts every subcommand, prints Electron startup noise, and answers nothing — so a run that calls it concludes Orca is unavailable on a machine where Orca is running fine, loses the proof stage, and blames the box. `orca-ide --help` prints its own usage as `orca <command>`: the two names are one tool.
-
-**A name that answers is the only evidence that counts.** Preference is a guess about which name is the CLI — inverted inside an Orca-managed pane, where `orca` is — and the launcher's exit 0 is exactly what makes a guess unfalsifiable. Requiring `worktree --help` to print its usage line is what settles it. Use `$ORCA` at every later Orca call in this skill, Step 6c's spawn included.
-
-**The Orca probe passes on parsed JSON, never on an exit code.** Read `ok` and `result.worktree` out of what it printed. Anything else — empty output, Electron noise, an HTML error page — is a failed preflight whatever the exit status was. Exit codes are what made this class of failure invisible: the launcher exits non-zero for reasons of its own, and a wrapper can exit zero having done nothing, so neither value separates a working CLI from a silent one. The JSON does.
-
 **A failed preflight names the tool and the one command that fixes it, then stops the run:**
-
-| Missing | Command |
-|---|---|
-| `ocr` | `npm install -g @alibaba-group/open-code-review@latest` |
-| the Orca CLI | `/sss:claude-settings` — it deploys the shim that makes `orca` resolve |
-| `gh` or `git` | this platform's package manager |
-| the `matt`, `sss` or `e2e` plugin | `claude plugin install <name>@sss-marketplace`, then restart Claude Code |
-| the `ponytail` plugin | `claude plugin marketplace add DietrichGebert/ponytail` then `claude plugin install ponytail@ponytail`, then restart Claude Code |
-
-`/sss:claude-settings` provisions the whole set in one pass, and is the answer to give when more than one line is missing.
-
-**Preflight reports, and provisioning is `/sss:claude-settings`'s job.** The stop names the fix and routes there; this skill runs no `npm install`, and no `orca repo add`. A review that reconfigures the machine on its way to reviewing a PR owns every side effect of that repair for the rest of the run — which is a larger promise than a review should make, and the reason repair lives in a skill the user invokes on purpose.
-
-**Preflight runs ahead of the tree acquisition** so a stop costs a message and leaves the checkout exactly where the user left it. Everything below needs `gh` and `git` in its first line anyway; a run that cannot finish should never have moved the tree to find out.
 
 **PR mode. Run this block top to bottom** — everything unconditional in the stage is in it, in the order it has to happen:
 
@@ -110,18 +78,6 @@ TREE_SHA=$(git rev-parse HEAD)                             # read after the acqu
 git diff "$BASE...$HEAD_SHA" --stat
 ```
 
-**Both ends resolve to SHAs before the tree moves**, so a bad ref stops the run with the tree where the user left it. There is no `git pull` in this stage: `fetch` plus a SHA is the whole resolution.
-
-**The stacked probe is conditional on the default branch.** `baseRefName` may itself be an open PR, and then `BASE` sits off the default branch. Look that branch up — it is not always `main` — and run `gh pr list --head <baseRefName>` only when `baseRefName` differs from it. Aimed at the default branch the probe returns nothing and reads as *not stacked* by accident. An open parent PR goes in the provenance line's stack clause; the merge-base arithmetic is unchanged either way.
-
-**Each guard names one thing `switch -C` would destroy**, which is why there are three: `-C` resets an existing local branch of that name.
-
-- **Guard 1 — a dirty tree.** Uncommitted work stays exactly where the user left it: never stashed, never reset, never carried across into a review of files the PR does not contain. **The stop names the two routes back** — stash or commit the edits and re-run, or review the PR from a separate worktree so this checkout is never touched. Whose hands the stash is in is the whole distinction: the user popping their own costs them one command, where this skill holding it would own restoring that state across four stages and `pw-prove`'s push.
-- **Guard 2 — `fatal: '…' is already used by worktree at '…'`, caught before it fires.** The ordinary Orca case, a review in a fresh worktree while the branch is live in the main clone. Only *another* worktree counts; the branch already being current here is the success path.
-- **Guard 3 — unpushed commits.** A non-zero count is work `-C` would strand. The command failing means no such branch, which has nothing to lose.
-
-**A failed guard prints the provenance line, then stops the run** — naming the guard and the corrective action, `re-run from <that worktree>`. No track spawns, no file is written, the tree does not move. The guards sit ahead of the Step 2 fan-out, so the stop costs a message and nothing else, and the write stages are never reached. The cost is stated rather than softened: on a guard failure there is no report at all until the user re-runs from a usable tree.
-
 **Branch mode:** take the fixed point the user named (`main`, a tag, a SHA) and set `BASE` to it. `HEAD_SHA` is `HEAD`, so the tree is trivially at it and there is nothing to acquire — no guards, no `switch`.
 
 **Echo one provenance line**, before any track is spawned:
@@ -130,8 +86,6 @@ git diff "$BASE...$HEAD_SHA" --stat
 BASE=<40-char> (merge-base of origin/MAMAS-9316 ← stacked on open PR 3140) · HEAD=<40-char> (origin/mamas-9299-x) · TREE=<40-char> = HEAD → tree at PR head
 ```
 
-Four fields in PR mode, and **every SHA is the full 40 characters, never abbreviated** — a 40-character string gets copied where a 9-character one gets retyped, and one transposition survived into a track prompt and cost that track its base. `TREE` is whatever `git rev-parse HEAD` returned, so the verdict `tree at PR head` is a conclusion the reader draws from two printed SHAs rather than a claim to take on trust. The stack clause appears only where the probe found an open parent PR. Branch mode fills the same slots with what it has: `BASE=<40-char> (user-named fixed point 'main') · HEAD=<40-char> · branch mode`. One line, printed before the fan-out, is the point: four tracks reading a base nobody printed is how a wrong one survives to the end of a run.
-
 **Then resolve the two sync findings** — both of them here, off the one `BASE` the tracks share, so Step 5 decides from settled facts rather than re-reading the tree after the fixes have moved it:
 
 ```bash
@@ -139,51 +93,25 @@ CFG=.github/hyrd-trans-bot.json
 [ -f "$CFG" ] && cat "$CFG"
 ```
 
-No file, and the first finding is false and the second does not need asking. Otherwise read `localesDir` out of what it printed — the config is a handful of keys, so read it rather than shelling out to a JSON parser this skill would then depend on — and resolve the directory the way `translation-sync` Step 2 does: `localesDir` if it is set **and exists on disk**, else the first of `i18n/locales`, `app/locales`, `locales` that does. Only once that resolved to a real directory:
-
 ```bash
 git diff --name-only "$BASE"..."$HEAD_SHA" -- "$DIR" | grep '\.json$'
 ```
 
-Any output at all and the second finding is true. Do not run it with `$DIR` unset: git rejects an empty pathspec outright, and this line failing would be indistinguishable from the failures that are meant to stop the run. A config present but naming no resolvable directory is simply the second finding false — the sync has nowhere to read from.
-
-Done when preflight has passed, the tree is acquired, seven findings are in hand, and the provenance line has been printed: the resolved `BASE` SHA, `HEAD_SHA` and the `TREE_SHA` read against it, a non-empty diff, the spec source (the PR body plus any issue it closes, fetched with `gh` — or "none" in branch mode), whether `.github/hyrd-trans-bot.json` exists at the repo root, and whether the diff touched locale JSON under the directory it resolves to. A missing prerequisite, a bad ref, an empty diff or a failed guard stops here, naming which one failed. Neither sync finding stops the run; the two of them decide whether Step 5 exists.
-
-**Preflight is a gate and the sync checks are findings, and the difference is what each one decides.** A gate decides whether the run happens at all; a finding decides the shape of a later stage. `ocr` and the Orca CLI moved from the second kind to the first because a run without them cannot reach full strength — and the two of them used to be findings, which is exactly how a run once lost the OCR track and the proof and closed as though it had neither.
-
 ## Step 2 — Load `matt:code-review`, fan out four
+
+Read `references/step-2-fan-out.md` before this step.
 
 Invoke the Skill tool with `matt:code-review` **inline, in this context**. It loads its own two-axis briefs and the twelve-smell baseline, and hands you the fixed point it needs — which Step 1 already resolved, so give it the `BASE` SHA and the spec source as settled facts.
 
 Then send **one** message with **four** `general-purpose` `Agent` calls. The loaded skill's step 4, *Spawn both sub-agents in parallel*, defines two briefs — **Standards** and **Spec**; you send those two plus OCR and Complexity, so all four tracks run concurrently at the same depth. This is the one instruction `pr-review` overrides in a skill it does not own.
 
-**The anchor is the two named briefs, not a sentence about tool calls.** That step used to end with "send a single message with two `Agent` tool calls", and this skill used to point at it by saying the loaded skill "says two". Upstream deleted that sentence in 1.2.3, deliberately, so the step reads on Codex and other harnesses instead of naming Claude Code's tools — and the override broke, pointing at words that were no longer there. Counting briefs survives that rewrite; counting calls did not.
-
 - **Standards** and **Spec** — the two prompts `matt:code-review` step 4 specifies, verbatim, including the smell baseline it says to paste in full.
 - **OCR** — invoke the Skill tool with `sss:ocr-delegate` in range mode (`--from`/`--to`), passing the PR title and body as `--background`. Review only: finish at its Step 6 and report. Return the structured comments plus the coverage summary — total, reviewable, reviewed and skipped file counts, the coverage rate over the reviewable set, and a reason for every skipped file.
 - **Complexity** — invoke the Skill tool with `ponytail:ponytail-review` over `git diff <BASE>...<HEAD_SHA>`. Its output format is its own and is returned unedited: one line per finding, `<file>:L<line>: <tag> <what to cut>. <replacement>.` over the five tags `delete`, `stdlib`, `native`, `yagni`, `shrink`, closing on its `net: -<N> lines possible.` — or `Lean already. Ship.` when there is nothing to cut. Do not ask it for severities, and do not ask it to widen: correctness, security and performance are explicitly out of its scope, and three other tracks are already on them.
 
-**The Complexity track reviews the diff, not the repo.** Bound it to the changed hunks in its brief. `ponytail-review` will happily name deletable code anywhere it is pointed, and a track that returns cuts to files this PR never touched produces findings 4c can only describe, at the cost of a full agent.
-
-**Every track prompt names the tree it reads**, in one clause — *this tree is at the PR head; read files directly.* Left unsaid, a track invents the opposite and routes every read through `git show`.
-
-**Preflight proved `ocr` is installed, so the missing-tool branch is gone from this step.** What remains is the broken one: an `ocr` present enough to answer `--version` whose `delegate` sub-commands then reject the skill's invocation. Quote the failing command, send the other two, and open the report with the count Step 3 emits — a broken tool is a track that had something to say and could not, and the report says so in its first line. A rejected `--format json` is **not** that case: `sss:ocr-delegate` falls back to the text output on its own and the track runs in full, so degrading on it would throw away a working review.
-
-### A track that stops without returning
-
-A spawned track can come back `<status>stopped</status>` carrying a summary that opens *No completion record was found for background agent "<name>" from the previous session* and closes by saying the transcript is on disk and its progress is not lost. Read that closing clause literally, because it is both the truth and the instruction: **the work exists, and only the write-up was lost.**
-
-**"From the previous session" describes the transcript, not the agent.** The phrase reads like a crashed process from some earlier run and sends the reader looking for wreckage; the agent is addressable right now, by id, and that is the whole recovery.
-
-**Resume it by id; a fresh launch pays for the same review twice.** Send the track's agent id a message restating its brief and closing with *if you already have findings, report those — do not restart*. The observed recovery came back complete at `tool_uses: 0`, which is what a resumed write-up of finished work looks like. `SendMessage` is a deferred tool in most sessions, so load it first with `ToolSearch("select:SendMessage")`.
-
-**A track that will not come back is counted, not absorbed.** Carry it into Step 3's count and name the axis that is missing. A review that quietly drops an axis is the same defect as a review that quietly drops a tool, and four unmerged tracks exist precisely so that no one of them can go missing unnoticed.
-
-Done when every launched track has returned, or the ones that did not are named for Step 3 to count.
-
 ## Step 3 — Aggregate
 
-**Open with the track count — `4 of 4 tracks reported`, or the shortfall and which axis it cost.** One line, first thing, before any section. Preflight makes the full count the ordinary case, so the line is usually a formality; it is written every time because the run where it is not a formality is the run that would otherwise read as complete while an axis is missing. A count is legible at a glance where a missing `## OCR` or `## Complexity` section is not.
+Read `references/step-3-aggregate.md` before this step.
 
 `## Standards`, `## Spec`, `## OCR`, `## Complexity` — each verbatim, in that order. **Number every finding as you emit it** — `S1, S2…` for Standards, `P1, P2…` for Spec, `O1, O2…` for OCR, `X1, X2…` for Complexity. The IDs are how Step 4 accounts for the whole set and how the user points at one in conversation; an unnumbered finding is one that can go missing between the report and the fixes. Then:
 
@@ -193,45 +121,11 @@ Findings two or more tracks share, by ID (same file+line, or the same defect des
 Findings unique to one track, by ID.
 ```
 
-Compare the full text here in the parent: this is the one judgement in the skill that wants the verbatim reports present rather than a paraphrase.
-
-Close with one line per track — finding count, worst issue within that track. **The Complexity track's closing line carries its `net: -N lines possible.` verbatim**, because that number is the score `ponytail-review` gives itself, and this is the slot the report already has for a track's own score. It is the number the track reported, not a number the run achieved: only contained cuts land, so 4d's `Applied` list is what says how much of it the fix stage took. Each track is scored on its own; a cross-track ranking is the merge the separation exists to prevent.
-
-Report in chat. Step 4f publishes this same text on the PR once the fixes have landed, reproduced rather than rewritten.
-
-Done when the track count and all five sections are on screen, every finding carries an ID, and no file in the working tree has been modified. Step 4 starts from there and not before: a report written after the fixes exist is a report with hindsight in it, and the whole point of four unmerged tracks is output nobody got to soften.
-
-**This boundary orders the work and asks nothing.** Nothing is edited before the report prints, and no confirmation is asked once it has — Step 4 begins immediately, on the report's own terms. The user who invoked this skill asked for the fixes, so an offer to stop here spends their turn re-typing a policy this skill already holds. Nothing later asks either: Step 6 spawns the proof unprompted, so this run has no human checkpoint anywhere — deliberately, and `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md` is where the trade is recorded.
-
 ## Step 4 — Fix
 
-The stage that writes. Findings become edits, the edits get committed and pushed, and the report Step 3 printed gets published on the PR.
-
-**Step 1 already guaranteed the tree.** Its three guards stop the run rather than letting it reach here on a tree that is not the PR head, so this stage edits the same files all four tracks read. Fixes applied to files the tracks never read are not fixes, and a handoff artifact built off them is worse — `pw-prove` would prove a tree nobody reviewed.
+Read `references/step-4-fix.md` before this step.
 
 ### 4a. Grade for order, not for admission
-
-Severity sets the fix queue's order and the grade the handoff artifact carries. **It does not decide what gets applied** — 4c's per-track table does.
-
-Four tracks speak four vocabularies. This is the mapping between them, written once:
-
-| Track | Native output | Our severity |
-|-------|---------------|--------------|
-| OCR | `critical`, `high`, `medium`, `low` | taken verbatim, never re-graded |
-| OCR | `category`: `bug`, `security`, `performance`, `maintainability`, `test`, `style`, `documentation`, `other` | none — a category is not a grade |
-| Standards | a hard violation of a documented repo standard | High |
-| Standards | a baseline smell — a labelled heuristic | Medium |
-| Spec | a requirement missing, partial, or implemented wrongly | High |
-| Spec | scope creep, behaviour nobody asked for | Medium |
-| Complexity | any of the five tags — `delete`, `stdlib`, `native`, `yagni`, `shrink` | Medium |
-
-**A Complexity tag is not a grade either, and there is no tier above Medium here.** `ponytail-review` grades nothing; the tag says what kind of cut it is. Every one of them is Medium — over-engineering is a maintainability finding, and a track that is explicitly not looking at correctness cannot produce a Critical. Its `net: -<N> lines` line is a summary, not a finding: it gets no ID and it is never queued. **It is not dropped either** — Step 3's closing line for the track carries it, which is where a track's own score belongs.
-
-**`bug` is OCR's category, not its severity.** A finding reading `severity: medium, category: bug` is Medium, and Medium is applied — the category says what kind of defect it is, and OCR already graded it. Reading the category as a grade is what promoted such findings to Critical and produced hybrids like `medium·bug`.
-
-**Blocker means Critical** — one tier, two words for it. The handoff artifact's `severity` enum is `pw-prove`'s, and adding a tier to it is a cross-plugin change this skill routes rather than makes.
-
-This grades findings, never tracks. Each track's report stays verbatim above and scored only against itself; ranking the tracks against each other is the merge the separation exists to prevent.
 
 ### 4b. Order the work
 
@@ -240,11 +134,7 @@ Two rules:
 1. **Overlap-confirmed findings first** — a defect two or more tracks landed on.
 2. **Then severity descending** — Critical, then High, then Medium.
 
-**Overlap orders the work; it does not filter it and it does not promote it.** A Critical only the OCR track caught is applied like any other Critical, and a finding two tracks agree on keeps the severity it arrived with. Agreement buys position in the queue — not admission to it, and not a grade.
-
 ### 4c. Admit, then apply
-
-**Admission is per track.** A track we invoked on purpose, whose brief we wrote, is trusted at the level it reports — `docs/adr/0008-pr-review-trusts-its-tracks.md` is why:
 
 | Track | Applied | Described only |
 |-------|---------|----------------|
@@ -253,12 +143,6 @@ Two rules:
 | OCR | `critical`, `high`, `medium` | `low` |
 | Complexity | a cut contained in the diff's own hunks | a cut that reaches outside them |
 
-**Complexity is gated by containment, on the same boundary Standards uses and for a sharper reason.** A `delete` or `yagni` cut is the removal of working code, so a cut reaching outside the diff deletes a colleague's code in a review commit — the one act 4c's Spec row already refuses. Inside the hunks it is this PR's own code and this PR's own review, which is what makes it applicable. A `shrink` that rewrites a hunk the PR added lands; a `yagni` that inlines an abstraction with callers elsewhere in the repo is described.
-
-**Standards is gated by containment, not by the smell's name.** Four of the twelve baseline smells document fixes that restructure modules or inheritance, so the boundary is the diff's own hunks: a contained instance of any smell lands, and a fix that splits a module is described. That is what keeps a review commit a review commit rather than a module restructure.
-
-**Spec scope creep is described and never applied.** Deleting working code a colleague wrote, on a heuristic, is a larger act than anything else in this stage.
-
 Every admitted finding is then **applied or explained**. There is no third outcome and silence is not one of them. Apply it in the working tree; where you cannot, the reason comes from this list and nowhere else:
 
 1. The fix reaches outside the diff's own hunks.
@@ -266,25 +150,13 @@ Every admitted finding is then **applied or explained**. There is no third outco
 3. Two findings contradict each other.
 4. The finding targets PR metadata — the title or body — rather than the tree.
 
-**A reason off that list is not available.** "An outward-facing write you haven't authorized" and "ran out of turns" are the two observed inventions — the first is answered by the invocation itself, which authorizes 4e's push and 4f's comment along with the fixes, and the second describes the run rather than the finding. Neither admits a finding to *Described*: a finding closed on either one is a finding to apply.
-
-A finding the table above never admitted carries the table's own wording instead — *scope creep* for Spec, `low` for OCR. The four reasons are for findings that were admitted and still could not land.
-
-**Reason 4 is a recorded disposition, not a refusal.** A comment adds text; editing the PR description overwrites words the author wrote — and that difference, not loudness, is why the tree is this stage's to change and the description is not. So a PR-body finding is listed under *Described* with that reason and its suggested rewrite inline, and 4f carries that rewrite to the author on the PR itself rather than leaving it in the invoker's chat.
-
 Then re-run whatever the repo documents as its own gate — its validation target, typecheck, or test command — **once, after every fix has landed**. A fix that breaks the build is a finding of its own: fix it, or revert that one fix and describe it instead.
 
 ### 4d. Report the boundary
 
 A sixth section, underneath the five. **`## Fixes` is the run's accounting of its findings, and it has exactly three `###` headings, verbatim:**
 
-1. `Applied`
-2. `Described, not applied`
-3. `OCR Low — described only`
-
 Emit all three every time, empty ones included, and place every finding ID Step 3 emitted under exactly one of them.
-
-**`Described, not applied` is where a finding the commit does not carry belongs** — the misreading, the fix that reaches beyond the hunks, the PR-body finding under reason 4 carrying its suggested rewrite inline. That is the heading that keeps `Applied` an honest list of what landed while the accounting still adds up to Step 3's own count.
 
 ```markdown
 ## Fixes
@@ -299,17 +171,11 @@ Emit all three every time, empty ones included, and place every finding ID Step 
 - <ID> · <severity> · <tracks> · <file:line> — the finding
 ```
 
-**A later fix pass re-emits all three headings in full**, superseding this section rather than appending a delta to it. Step 6b builds `fixes_applied` from the Applied list, so a partial section ships a stale artifact.
-
 ### 4e. Commit and push
 
 Commit the applied fixes to the current branch in the repo's own subject-line style, naming the PR, then push that branch. **A plain push** — no force, no `--force-with-lease`, no `-u`. Step 1's third guard already proved the branch had nothing unpushed when the run started, so a non-fast-forward rejection here is a colleague's commit arriving mid-review, and forcing over it would discard their work to save a re-run. The fixes are pushed because the invoker asked for them and cannot use them while they sit in one checkout; `docs/adr/0012-pr-review-publishes-its-own-review.md` is where the reversal of this stage's old no-push rule is recorded.
 
-A rejected push does not stop the run. 4f still posts, saying the fixes are local — a review nobody can read is a worse outcome than a review whose commit is one push behind.
-
 A run that applied nothing commits nothing and says so — an empty commit claims work that did not happen.
-
-Done when every finding ID Step 3 emitted appears exactly once across 4d's three `## Fixes` headings and the working tree is clean — with the applied fixes committed and pushed, or committed and reported as local when the push was rejected, or nothing committed at all because nothing was applied. Count the IDs against Step 3's own numbering before claiming the stage: an ID in none of the three headings is an unfinished stage, not a shorter one. The accounting is what the whole stage is for, so it is checked here rather than in 4f, which a branch-mode run never reaches.
 
 ### 4f. Publish the review on the PR
 
@@ -323,51 +189,21 @@ Post one comment with `gh pr comment <NUM> --body-file -`, feeding the body on s
 Fixes committed and pushed as `<fixSha>`.
 ```
 
-Every angle-bracketed name above is a placeholder, filled from what Step 1 resolved and 4e committed — the block is the shape of the header, not text to copy.
-
-- **Reproduced, never regenerated.** Re-writing the tracks' text now that the fixes exist puts hindsight into the one output whose whole value is that nobody got to soften it — the same reason Step 3 prints before Step 4 edits.
-- **The push line says where the fixes are.** It reads `Fixes committed locally as <sha> — not yet pushed.` when 4e's push was rejected, and it is omitted entirely when nothing was applied. `Applied` read against a diff that does not contain the fixes is exactly the misreading this line exists to prevent.
-- **The header's SHAs are abbreviated.** These two are display, read by a person scanning a comment header, and GitHub links a short SHA to the same commit as the full one. Resolve them full, print them short.
-- **The marker comment is written even though nothing reads it back today.** It costs one line, and it is what lets a later change find this skill's own comments without re-deriving which ones were ours.
-- **One new comment per run, never an edit of an earlier one.** 4d's supersede-rather-than-append rule governs one live chat document; a PR thread is an append-only record other people quote and reply to, and rewriting a comment underneath a reply is how the reply stops making sense. *Never edit an earlier comment* is the rule; "one comment" is what it produces on every run whose body fits. An oversized body below is still one run's report — one logical report carried across n comments, not n runs — and none of those comments edits anything that was already there.
-- **A run that applied nothing still posts**, its header naming the existing `HEAD` rather than a new SHA. Four tracks agreeing a PR needs nothing is a result, and suppressing it makes a clean review indistinguishable from a review that never ran.
-- **An issue comment, not a formal review and not inline per-finding comments.** The tracks do not all carry reliable line anchors, so inline comments would half-fail on exactly the runs with the most findings.
-
-**Past 65,536 characters GitHub rejects the whole write**, and four verbatim track reports plus `## Fixes` can reach that on a large diff. Split at `##` boundaries only, never mid-finding, across sequential comments each numbered `1/n`. Every finding ID reaching the PR is the property being protected, and a report that failed to post protects none of them.
-
-**Every comment in a split carries the marker; only the first carries the header.** The marker's job is finding this skill's own comments, and a part left unmarked is a part a later "find our previous comments" pass would miss while its siblings are found. The header identifies one review — its track count, base and reviewed SHA describe the whole report, so repeating it on each part would read as several reviews. The `1/n` counter goes on every part instead, which is what tells a reader who landed on part 3 that there are two more.
-
-**A failed comment prints the body in chat and the run carries on** to Steps 5 and 6. A GitHub outage costs the review its publication, not its proof — and that failure, like a rejected push, is loud in the invoker's chat, unlike the silent degradations the Step 1 gate exists to catch.
-
 Done when the report is on the PR — as one comment, or as the whole numbered sequence an oversized body needed — or the `gh` call failed and its body is in chat instead.
 
 ## Step 5 — Sync
 
-Conditional. It runs after the fix commit and before any proof, because an unsynced key renders as its raw dot-path — a browser pointed at a pre-sync server photographs `board.title` instead of the string the PR added.
+Read `references/step-5-sync.md` before this step.
 
 Take both sync findings from Step 1. **Both true** — the repo has `.github/hyrd-trans-bot.json` and the diff touched locale JSON under the directory it resolves to — and the stage runs: invoke the Skill tool with `sss:translation-sync` and let it run its own steps end to end. It resolves its own config, validates its own token, and owns its own confirmation prompt and its own push; nothing here re-derives any of that.
 
 **Either false and the stage is absent.** Not skipped-with-a-note, not a prompt asking whether to sync anyway — absent. No line in the report says it did not run. Almost every repo in reach of this skill has no translation config, so a stage that announced its own irrelevance would announce it on nearly every run.
 
-Both conditions are load-bearing and neither implies the other:
-
-| Config | Locale diff | Why |
-|--------|-------------|-----|
-| present | touched | Sync. There is a server, and this PR changed what should be on it. |
-| present | untouched | No sync. Otherwise every PR in the two repos that have a config talks to the translation server, including the ones that touch no locale at all. |
-| absent | touched | No sync. Locale JSON with no config is a repo with no server to sync to. |
-| absent | absent | No sync — and this is every other repo, which is the point. |
-
-Requiring both is also what makes the stage self-disabling everywhere else: the config is the repo saying it has a server, so nothing here maintains a list of repo names.
-
-Run it even when Step 4 applied nothing and committed nothing. The findings are properties of the diff, not of the fixes, and a review that changed no code can still be reviewing a PR whose locale keys are not on the server yet.
-
 Done when either `sss:translation-sync` has reported its own closing status line, or one of the two findings was false and nothing was said.
 
 ## Step 6 — Prove
 
-The last stage. What the review concluded gets written down where `e2e:pw-prove` reads it, and then
-a fresh session runs `pw-prove` against it. Nothing here re-reviews and nothing here re-fixes.
+Read `references/step-6-prove.md` before this step.
 
 ### 6a. Ignore the artifact path first
 
@@ -383,30 +219,7 @@ and 4f's comment names the SHA it left behind; `pw-prove` owns the pushing from 
 so a push here would move the branch past the commit the published review describes, for the sake of
 one ignore line.
 
-The commit is deliberate: the artifact is written on every review this repo ever gets, so ignoring
-it once for everyone beats each contributor's checkout carrying an untracked directory nobody
-recognises. `.git/info/exclude` hides it with no commit at all and is the fallback where the repo's
-policy forbids touching `.gitignore` — say in `## Fixes` which of the two you used.
-
-Do this **before** 6b, not after. Review findings are not PR content, and an artifact written into
-an un-ignored path sits in someone's `git status` from then on — `pw-prove` stages only the spec,
-the POM and the HAR, so nothing downstream ever cleans it up.
-
 ### 6b. Write the handoff artifact
-
-`.pw-prove/handoff.json` at the repo root. **`pw-prove` owns this schema** — it is the only reader,
-and its `SKILL.md` (`plugins/e2e-skills/skills/pw-prove/SKILL.md` in this marketplace, Step 2 step 0)
-is where the shape is defined. Write to it; do not
-extend it. A key it does not read is a key nobody reads.
-
-**What the schema carries is `pw-prove`'s call, whatever a new key would or would not disturb in
-this run.** The reader is the only party that can say what a field means, so routing the request
-there is the answer with the information in it.
-
-**Asked mid-run for a field this schema does not have, name the owner and carry on** — the answer is
-where the change belongs, not the change. It is two files in two plugins plus a parity test and a
-targeted push to the fork, which is a decision of its own and not a step of this review. Say so in
-one line and finish the run.
 
 ```jsonc
 {
@@ -422,16 +235,6 @@ one line and finish the run.
 }
 ```
 
-- **`findings` is ordered, and the order is Step 4b's**: overlap-confirmed before single-track,
-  Critical before High. "Highest confidence first" is what agreement between tracks bought.
-- **Every severity ships**, including the findings Step 4 described rather than applied — OCR Low
-  and Spec scope creep among them.
-  `pw-prove` decides for itself which findings name a user-observable behaviour worth a scenario,
-  and a finding withheld here is one it cannot weigh.
-- **`fixes_applied` is the Applied list from 4d**, carrying the commit SHA from 4e.
-- A run that applied nothing writes `"fixes_applied": []`. It does not skip the artifact — the
-  findings are the payload, and a review that fixed nothing still has them.
-
 **`head_sha` is `HEAD` at the moment this file is written — run `git rev-parse HEAD` here, last, once
 every commit this run makes has landed** (Step 4e's, and 6a's `.gitignore` commit if there was one).
 `pw-prove` compares it to `HEAD` and drops the whole file when they differ, so a SHA captured one
@@ -441,83 +244,20 @@ own business.
 
 ### 6c. Spawn a fresh session to run `pw-prove`
 
-`pw-prove` opens with a context gate and refuses above 100k tokens. By here this run is reliably
-past it — four tracks, an aggregate report and a fix stage — so the proof runs in a **fresh
-session**, in this same checkout:
-
 ```bash
 "$ORCA" terminal create --worktree active --command "claude '/e2e:pw-prove <NUM>'" --json
 ```
-
-- **`<NUM>` is the PR number, or the branch name in branch mode, and that is the whole prompt.**
-  `BASE` and the findings are in the artifact, which `pw-prove` reads itself in its own Step 2 — the
-  handoff is the file, not the prompt. So the spawned line is byte-identical to the one a user
-  pastes by hand, and there is one place a run's base comes from.
-- **`--worktree active` keeps the proof in the tree Step 1 acquired** and Step 4 committed to, which
-  is what makes it a proof of the reviewed code. Not a child worktree: `pw-prove` commits, pushes
-  and comments on the PR, and from a child that becomes a merge-back this skill would then own.
-- **The prompt rides on `--command`**, so the session boots with it already sent. Creating a bare
-  `claude` and sending the slash command afterwards is three calls with a boot race in the middle.
-- **The spawn asks nothing.** The user who invoked this skill asked for the proof, and
-  `/e2e:pw-prove` arriving as first user input is the *user-invoked* path, so `pw-prove`'s own
-  confirmation gate does not fire there either. This run therefore stops for a person nowhere at
-  all: `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md` is where that trade is
-  recorded rather than left to be discovered.
-- **`pw-prove` owns everything from the spawn onward**, including the push. Do not run its steps
-  ahead of it, and do not push to make its job smaller.
-- **Then end the run.** Nothing here waits on that terminal. Holding a session this heavy open
-  through a full bring-up and verify loop buys nothing — being too heavy to be useful is the reason
-  the fresh session exists — so the proof's outcome is not this run's to report, and saying so is
-  part of the close.
 
 **Close on four things**: the artifact path, the terminal handle `terminal create` returned, the
 `$ORCA terminal read --terminal <handle>` line that shows the proof's output, and one sentence saying
 plainly that the proof is running there and is not verified here. A "Done" a reader takes for a
 passed proof is the silent always-pass that `pw-prove` exists to prevent.
 
-**`$ORCA` is the CLI preflight resolved**, not the bare name. On an AppImage machine `orca` is the
-desktop launcher, which accepts this command, prints Electron noise and creates nothing — the one
-failure that looks from here exactly like a spawn.
-
-**A spawn is claimed on the handle it returned.** Read the terminal handle out of the `--json`;
-without one, no session is running whatever the command printed. Preflight proved the CLI answers,
-so a spawn that still fails here is a run-time failure rather than an unprovisioned machine, and the
-stage prints three things and stops: `.pw-prove/handoff.json`'s path, the exact `/e2e:pw-prove <NUM>`
-line, and the working directory to run it from. The artifact is on disk and a fresh
-`/e2e:pw-prove <NUM>` picks up the same findings — that standalone path is why the file is written at
-all, and taking it is not a failure of this run. **Invoking `pw-prove` inline is never the answer
-here**, on any branch: this context is exactly the one its gate turns away, so an inline attempt
-spends a turn to arrive at the same paste line.
-
 Done when `.pw-prove/handoff.json` is on disk with a `head_sha` equal to `HEAD`, the path is
 gitignored, and either `terminal create` returned a handle that is on screen, or the paste line and
 its working directory are. A handle is the evidence a session exists; a command that printed
 something else is the paste-line branch.
 
-## Why inline
-
-`matt:code-review` fans out on its own. Running it inside an agent of ours would put its two tracks a level below OCR's, betting that a spawned agent may itself spawn — a bet whose loss is silent, degrading a two-axis review to one context with nothing in the output saying so. Loading it here instead makes the bet unnecessary.
-
-The rejected alternative was pasting its Standards and Spec briefs into this file to get four flat peers. That buys the same shape at the price of a second copy of the smell baseline, owned forever — the duplication this composition exists to avoid.
-
 ## Gotchas
 
-- **Coverage is the OCR track's contract.** A report without a coverage rate and a reason per skipped file means that agent stopped short; send it back rather than passing the gap on. A high rate over a handful of reviewable files is not coverage either — OCR excludes Markdown, so a skills or docs repo can report 100% having seen almost none of the diff.
-- **Overlap is additive.** It names the agreements underneath four intact verbatim sections.
-- **Step 1 checks out the PR head, and the *guards* are the load-bearing half.** Three of them stand between `switch -C` and work the user cannot get back — a dirty tree, the branch live in another worktree (the ordinary Orca case), unpushed commits. A guard that fails prints the provenance line and stops the run naming the worktree to re-run from; it does not carry on with a report. Revision four of one decision, the first two legible only from commit messages: `docs/adr/0007-pr-review-acquires-the-tree-in-step-1.md`. `tests/bash/test-pr-review-step1-cases.sh` is what notices.
-- **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
-  renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`
-  is told to ignore without complaint. `tests/bash/test-pr-review-handoff-parity.sh` is what
-  notices. If the contract is wrong, that is a change in `pw-prove` and a push to the fork — which
-  this run routes and does not make. **Neither half of that is edited away by a request to extend
-  the schema**: an eval trial asked for one field and got the field, plus this Gotcha rewritten to
-  permit it. A rule that yields to the first request it refuses was never a rule.
-- **`track`, `axis` and `stage` are distinct** — see `CONTEXT.md`. An axis is a question `matt:code-review` asks; a track is who ran it; a stage is one serial phase of the run.
-- **Report before you write — and then write.** Editing a file before Step 3 has printed puts the fixes into the tracks' own reports and the five sections stop being evidence. Asking permission after it has printed costs the user a turn to re-state a policy 4c already holds; the two rules are separate and both hold.
-- **The fix stage edits the tree in place, exactly as Step 1 left it.** Step 1 owns every move the run makes, and by Step 4 the tree is already the one all four tracks read — including for the gate re-run, which runs against the fixes where they sit. Tidying it first would fix files nobody reviewed.
-- **`matt:code-review` calls its smell baseline "always a judgement call", and 4c applies it anyway.** That tension is real and deliberate: the caution is calibrated for a skill that only reports, and `pr-review` cross-checks the same diff against three other tracks before it acts. `docs/adr/0008-pr-review-trusts-its-tracks.md` is where a reader who notices should land. Nothing in `matt:code-review` is edited — it is a verbatim subtree, and what changed is how this skill treats its output.
-- **The sync gate is directory-level, and deliberately.** `hyrd-trans-bot.json`'s `path` and `exclude` scope *namespaces inside* the locale file, not paths on disk, and `translation-sync` applies them itself when it diffs. Re-implementing that scoping here would mean parsing the changed JSON to decide whether to invoke the skill that parses it — a second, staler copy of the one rule. A touched `{lang}.json` under the resolved directory is the whole condition; what actually moves is the sync's call.
-- **Three stages push, and none of them pushes for another.** Step 4e pushes its own fix commit, because the invoker asked for the fixes and cannot use them while they sit in one checkout — `docs/adr/0012-pr-review-publishes-its-own-review.md` records that reversal and what it cost. `translation-sync` owns its own empty re-trigger commit and push in Step 5, and pushes only when it actually applied something, on a non-default branch, with a clean index — so a run whose sync changed nothing ends with the fix commit as the last thing on the branch, and that is the correct outcome, not a stage that failed. `pw-prove` owns the third, from the 6c spawn onward. The old rule that a third pusher makes the history unreadable is what ADR 0012 overturns: each stage pushing what it made is legible, and the unreadable history was the one where a stage pushed someone else's work.
-- **Both of the fix stage's outward writes can fail, and neither ends the run.** A push 4e cannot fast-forward is a colleague's commit arriving mid-review — 4f posts anyway, with the header's local-SHA line, because a review nobody can read costs more than a commit one push behind. A `gh pr comment` that fails prints the body in chat for the invoker to post by hand, and the run carries on to Steps 5 and 6: a GitHub outage costs the review its publication, not its proof. Neither path carries an eval case — the suite's environment is `type: none`, so a GitHub failure is not reliably provokable — and neither needs one to be noticed, because both are loud in the invoker's chat rather than silent like the degradations the Step 1 gate exists to catch.
-- **The Complexity track is the only one that argues for deleting code, and containment is the whole guard.** `ponytail-review` is scoped to over-engineering and says so — correctness, security and performance are out of its scope — so a Complexity finding never contradicts the other three tracks about whether code *works*, only about whether it needs to exist. Inside the diff's hunks that is this PR's own code and 4c applies it; outside them it is a colleague's, and it is described. A run that returns cuts across the whole repo is a track that was briefed wrong in Step 2, not a large finding set.
-- **Do not use OCR's fix mode for this.** `sss:ocr-delegate` has its own Step 7; the OCR track finishes at Step 6 and reports. Fixes are applied here, in the parent, from all four tracks at once — one agent fixing what only it found is how the overlap ordering gets bypassed.
+Read `references/gotchas.md` before Step 1 — every entry names the step it constrains.

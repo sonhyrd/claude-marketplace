@@ -12,6 +12,12 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.9.2] - Unreleased
+
+### Changed
+
+- `pw-prove` skill: **`SKILL.md` split into a 15.8 KB procedure plus `references/step-1-dispatch.md` … `references/step-8-deliver.md`** (#97); skill version 0.38.0 → 0.39.0. 146,529 → 15,797 bytes at the top of every prove session, with the procedure unchanged — every moved paragraph is verbatim in the reference its step names. Marketplace-side edit to the subtree, not yet pushed to the fork. Full entry in the root `CHANGELOG.md`.
+
 ## [1.9.0] - Unreleased
 
 ### Added

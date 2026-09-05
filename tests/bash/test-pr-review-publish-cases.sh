@@ -30,6 +30,12 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SKILL="${REPO_ROOT}/plugins/sss/skills/pr-review/SKILL.md"
+# Step 4's rationale moved to a reference the step names (#97); it is the same
+# prose, read at the same step, so it is judged together with the section. The
+# whole-file absences below read every reference too, so the deleted rule cannot
+# grow back in a file the section extractor never sees.
+STEP4_REF="${REPO_ROOT}/plugins/sss/skills/pr-review/references/step-4-fix.md"
+REFS_DIR="${REPO_ROOT}/plugins/sss/skills/pr-review/references"
 ADR='docs/adr/0012-pr-review-publishes-its-own-review.md'
 
 PASS=0
@@ -59,11 +65,14 @@ nope() {
 # a race under `set -o pipefail`, because grep exits at the first match and
 # SIGPIPEs the awk still writing behind it, so the pipeline reports 141 and a
 # match reads as a miss.
-STEP4="$(awk '/^## Step 4 /{s=1; next} /^## Step 5 /{s=0} s' "$SKILL")"
+STEP4="$(awk '/^## Step 4 /{s=1; next} /^## Step 5 /{s=0} s' "$SKILL"; cat "$STEP4_REF")"
 
 # The 4f sub-step alone, for the assertions that are about the comment rather
 # than about the stage around it.
-SUB4F="$(awk '/^### 4f\./{s=1; next} /^## Step 5 /{s=0} s' "$SKILL")"
+SUB4F="$(awk '/^### 4f\./{s=1; next} /^## Step 5 /{s=0} s' "$SKILL" "$STEP4_REF")"
+
+# Every file the skill reads, for the assertions that must hold anywhere in it.
+WHOLE="$(cat "$SKILL" "$REFS_DIR"/*.md)"
 
 must_match() {
     local label="$1" pattern="$2" hay="${3:-$STEP4}" where="${4:-Step 4}"
@@ -123,7 +132,7 @@ must_not_match "the fix stage no longer forbids pushing" '[Nn]ever push'
 # catches the bolded form would let it back in — which would make the header's
 # claim that the absences are asserted as hard as the presences untrue.
 must_not_match "and neither does anything else in the skill" \
-    '(Still )?[Nn]ever push\b' "$(cat "$SKILL")" "SKILL.md"
+    '(Still )?[Nn]ever push\b' "$WHOLE" "SKILL.md or references/"
 # Step 4 only, not the whole file: the Notes section names the third-pusher rule
 # on purpose, to say ADR 0012 overturned it. What must not come back is the rule
 # stated as a live rationale in the stage it used to govern.
@@ -132,7 +141,7 @@ must_not_match "Step 4 no longer opens on 'nothing is pushed'" 'nothing is pushe
 must_not_match "4c no longer rests on a push this stage does not make" \
     'push this stage never makes'
 must_not_match "posting to GitHub is no longer 'a separate ask'" \
-    'a separate ask' "$(cat "$SKILL")" "SKILL.md"
+    'a separate ask' "$WHOLE" "SKILL.md or references/"
 
 # --- 4e: commit AND push -----------------------------------------------------
 

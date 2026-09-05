@@ -25,6 +25,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SKILL="${REPO_ROOT}/plugins/sss/skills/pr-review/SKILL.md"
+# Step 1's rationale moved to a reference the step names (#97); it is the same
+# prose, read at the same step, so it is judged together with the section.
+STEP1_REF="${REPO_ROOT}/plugins/sss/skills/pr-review/references/step-1-prep.md"
 
 PASS=0
 FAIL=0
@@ -52,7 +55,7 @@ nope() {
 # exits at the first match and SIGPIPEs the awk still writing behind it, so the
 # pipeline reports 141 and a match reads as a miss — intermittently, and only for
 # patterns that hit early in the section.
-STEP1="$(awk '/^## Step 1 /{s=1; next} /^## Step 2 /{s=0} s' "$SKILL")"
+STEP1="$(awk '/^## Step 1 /{s=1; next} /^## Step 2 /{s=0} s' "$SKILL"; cat "$STEP1_REF")"
 
 must_match() {
     local label="$1" pattern="$2"
