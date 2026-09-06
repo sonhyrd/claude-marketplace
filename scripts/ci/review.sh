@@ -353,7 +353,7 @@ import sys
 # fails differently when it goes missing, so each is asserted on its own — a check that only goes
 # red when the whole paragraph vanishes cannot see the failure that actually threatens this rule,
 # which is one clause being dropped as redundant while the rest survives.
-body = pathlib.Path('skills/pw-prove/SKILL.md').read_text(encoding='utf-8')
+body = pathlib.Path('skills/pw-prove/references/step-7-verify.md').read_text(encoding='utf-8')
 
 clauses = [
     (
@@ -374,7 +374,7 @@ clauses = [
     ),
 ]
 
-errors = [f'skills/pw-prove/SKILL.md: {why}' for clause, why in clauses if clause not in body]
+errors = [f'skills/pw-prove/references/step-7-verify.md: {why}' for clause, why in clauses if clause not in body]
 
 # The fourth clause: the prose above turns into a runnable command only here, and this is the one
 # part of the rule nothing else asserts. test-invocation-parity.sh's check_body validates the SHAPE
@@ -386,13 +386,13 @@ errors = [f'skills/pw-prove/SKILL.md: {why}' for clause, why in clauses if claus
 smoke_cmd = body.find('# SMOKE RUN')
 if smoke_cmd < 0:
     errors.append(
-        'skills/pw-prove/SKILL.md: Step 7 no longer carries a SMOKE RUN COMMAND BLOCK. The prose '
+        'skills/pw-prove/references/step-7-verify.md: Step 7 no longer carries a SMOKE RUN COMMAND BLOCK. The prose '
         'tells the agent to run one scenario first and no fenced command says how; invocation '
         'parity checks that command\'s shape but never its presence'
     )
 elif '--grep' not in body[smoke_cmd:body.find('```', smoke_cmd)]:
     errors.append(
-        'skills/pw-prove/SKILL.md: the SMOKE RUN command block no longer narrows the run with '
+        'skills/pw-prove/references/step-7-verify.md: the SMOKE RUN command block no longer narrows the run with '
         '--grep. Without it the smoke command IS the full audit and the rule costs a whole run '
         'to prove nothing'
     )
@@ -411,13 +411,13 @@ heal = body.find('### Failure handling')
 for anchor, where in (('# AUDIT RUN', fence), ('### Failure handling', heal)):
     if where < 0:
         errors.append(
-            f'skills/pw-prove/SKILL.md: the placement anchor {anchor!r} is gone, so the smoke '
+            f'skills/pw-prove/references/step-7-verify.md: the placement anchor {anchor!r} is gone, so the smoke '
             'rule\'s placement cannot be checked at all. Restore the anchor or re-point this check '
             'at whatever replaced it'
         )
 if smoke >= 0 and fence >= 0 and smoke > fence:
     errors.append(
-        'skills/pw-prove/SKILL.md: the smoke rule must sit immediately BEFORE the AUDIT RUN '
+        'skills/pw-prove/references/step-7-verify.md: the smoke rule must sit immediately BEFORE the AUDIT RUN '
         'command block — an agent reads it in the moment before it types that command'
     )
 # DOMINATED, deliberately: `### Failure handling` sits AFTER `# AUDIT RUN` in the body, so any drift
@@ -426,7 +426,7 @@ if smoke >= 0 and fence >= 0 and smoke > fence:
 # rule it must not widen — and its parity case reads it as the second of two errors, never alone.
 if smoke >= 0 and heal >= 0 and smoke > heal:
     errors.append(
-        'skills/pw-prove/SKILL.md: the smoke rule has drifted into the Failure handling section, '
+        'skills/pw-prove/references/step-7-verify.md: the smoke rule has drifted into the Failure handling section, '
         'next to the attempt-2-and-3 rule it must not widen'
     )
 

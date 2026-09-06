@@ -91,6 +91,18 @@ The **only** legitimate reason to edit an existing proof config is a structural 
 | **Payoff hold** | `PW_PROVE_CLIP=1` on this run only | Enables the spec's `// JUSTIFIED:` dwell. Under the **filming law** the variable may only add time, and the dwell sits outside every race window, so it cannot move pass/fail; CI never sets the variable and pays nothing. |
 | **Framing** | Ungated `scrollIntoView({ block: 'center' })` in the committed spec, at the moment of the hold | A held payoff jammed against the screen edge, or pushed off-frame by a later re-render, is an unwatchable clip that passes every gate. Centring is a scroll, not a wait, so it is unconditional and CI renders identically. |
 
+**Smoke one scenario before the first full audit of a spec this run just wrote.** A generated spec is usually wrong in bulk — one wrong root selector, one unbound HAR — so the full set spends every scenario's timeout to report one cause. Run the scenario traversing the most of the Locator Mapping Table (the primary happy path): it proves bring-up, auth, the HAR bind and the core locators for one scenario's price.
+
+**Green → run the full set**, budget intact: a green run resets the attempt count. **Red → attempt 1: fix first.** Never re-run the full set unchanged — it spends attempt 2 of 3 to learn what the smoke run already said, and a repeated failure signature stalls the loop into refusing even the green run that would clear it. **Attempt 1 only**: from attempt 2 on, the rerun rule under *Failure handling* governs.
+
+```bash
+# SMOKE RUN — the first execution of a newly generated spec: one scenario, the same verb.
+node <skill-base>/scripts/proof-run.mjs audit \
+  --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base> \
+  --written <the spec this run wrote> --grep "<the scenario that traverses the most of the table>" \
+  --har <testDir>/<feature>.api.har --origin "$BASE_URL"     # both omitted when there is no recording
+```
+
 ```bash
 # AUDIT RUN — one command. It resolves the spec set, clears test-results/, invokes the runner with
 # no PW_PROVE_CLIP (so no dwell is paid) and no worker override, and bounds the heal loop. trace:'on'

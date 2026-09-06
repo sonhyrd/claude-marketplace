@@ -4,7 +4,7 @@ description: "Prove a PR/branch/ticket/diff with a Playwright E2E test, fast —
 license: Apache-2.0
 metadata:
   author: sondh0127
-  version: "0.40.0"
+  version: "0.41.0"
 ---
 
 # pw-prove
@@ -217,18 +217,6 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 ## Step 7: Verify
 
 Read `references/step-7-verify.md` before this step.
-
-**Smoke one scenario before the first full audit of a spec this run just wrote.** A generated spec is usually wrong in bulk — one wrong root selector, one unbound HAR — so the full set spends every scenario's timeout to report one cause. Run the scenario traversing the most of the Locator Mapping Table (the primary happy path): it proves bring-up, auth, the HAR bind and the core locators for one scenario's price.
-
-**Green → run the full set**, budget intact: a green run resets the attempt count. **Red → attempt 1: fix first.** Never re-run the full set unchanged — it spends attempt 2 of 3 to learn what the smoke run already said, and a repeated failure signature stalls the loop into refusing even the green run that would clear it. **Attempt 1 only**: from attempt 2 on, the rerun rule under *Failure handling* governs.
-
-```bash
-# SMOKE RUN — the first execution of a newly generated spec: one scenario, the same verb.
-node <skill-base>/scripts/proof-run.mjs audit \
-  --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base> \
-  --written <the spec this run wrote> --grep "<the scenario that traverses the most of the table>" \
-  --har <testDir>/<feature>.api.har --origin "$BASE_URL"     # both omitted when there is no recording
-```
 
 ```bash
 node <skill-base>/scripts/proof-run.mjs audit \

@@ -285,7 +285,7 @@ rm -f "$file"
 
 # Case 22: the smoke clause itself is gone — the front half of the rule, and with it the whole
 # reason the ticket exists. The scoping and hazard clauses stay in place.
-file="skills/pw-prove/SKILL.md"
+file="skills/pw-prove/references/step-7-verify.md"
 backup "$file"
 mutate "$file" "Smoke one scenario before the first full audit" \
   "Run the full spec set"
@@ -296,7 +296,7 @@ restore "$file"
 # Case 23: the attempt-1 scoping is gone, everything else intact. This is the leak the ticket is
 # most likely to suffer: unscoped, the rule reads as a licence to narrow every attempt and quietly
 # widens the heal loop's attempt-2-and-3 rule, which is correct as it stands.
-file="skills/pw-prove/SKILL.md"
+file="skills/pw-prove/references/step-7-verify.md"
 backup "$file"
 mutate "$file" "**Attempt 1 only**" \
   "**From attempt 1 on**"
@@ -307,7 +307,7 @@ restore "$file"
 # Case 24: the hazard clause is gone, everything else intact. It is the clause that makes the rest
 # safe: without it the obvious next move after a red smoke run is to re-run the full set to see the
 # rest, which spends attempt 2 of 3 for nothing and can repeat the failure signature into a stall.
-file="skills/pw-prove/SKILL.md"
+file="skills/pw-prove/references/step-7-verify.md"
 backup "$file"
 mutate "$file" "Never re-run the full set unchanged" \
   "Then run the full set unchanged"
@@ -320,7 +320,7 @@ restore "$file"
 # the attempt-2-and-3 rule it must not widen — so placement is asserted, and an assertion nothing
 # can make fail is exactly the thing this suite exists to refuse. One mutation MOVES the rule to the
 # end of the file, which puts it after both anchors at once; the two cases read the two errors.
-file="skills/pw-prove/SKILL.md"
+file="skills/pw-prove/references/step-7-verify.md"
 backup "$file"
 python3 - "$file" <<'PY'
 import pathlib, sys
@@ -350,7 +350,7 @@ restore "$file"
 # later reader would call it. test-invocation-parity.sh does not notice: its per-verb extraction
 # loop is already satisfied by the AUDIT RUN fence, so the prose would be left telling the agent to
 # run one scenario with no command saying how.
-file="skills/pw-prove/SKILL.md"
+file="skills/pw-prove/references/step-7-verify.md"
 backup "$file"
 mutate "$file" "# SMOKE RUN" "# (removed)"
 assert_fails "First-run smoke — the SMOKE RUN command block is gone" \
@@ -359,7 +359,7 @@ restore "$file"
 
 # Case 28: the block survives but stops narrowing the run. Without --grep the smoke command IS the
 # full audit, and the rule costs a whole run to prove nothing -- green, and silently pointless.
-file="skills/pw-prove/SKILL.md"
+file="skills/pw-prove/references/step-7-verify.md"
 backup "$file"
 mutate "$file" ' --grep "<the scenario that traverses the most of the table>"' ''
 assert_fails "First-run smoke — the SMOKE RUN block no longer narrows with --grep" \
@@ -370,7 +370,7 @@ restore "$file"
 # `find()` returned -1, the comparison was skipped, and review.sh reported the placement assertion
 # as passed. A check that cannot tell "the rule moved" from "I could not find what I navigate by"
 # is a gate that looks like it gates.
-file="skills/pw-prove/SKILL.md"
+file="skills/pw-prove/references/step-7-verify.md"
 backup "$file"
 mutate "$file" "# AUDIT RUN" "# THE AUDIT"
 assert_fails "First-run smoke — the AUDIT RUN placement anchor was renamed" \
