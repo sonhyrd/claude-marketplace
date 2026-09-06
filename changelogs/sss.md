@@ -4,6 +4,12 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.3] - Unreleased
+
+### Changed
+
+- `pr-review` skill: **`SKILL.md` split into a 15.7 KB procedure plus `references/step-1-prep.md` … `references/step-6-prove.md` and `references/gotchas.md`** (#97). 53,987 → 15,674 bytes at the top of every review session, with the procedure unchanged — every moved paragraph is verbatim in the reference its step names. The two prose-asserting bash tests read each step's reference alongside its section. Full entry in the root `CHANGELOG.md`.
+
 ## [1.6.2] - Unreleased
 
 ### Added

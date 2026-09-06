@@ -10,7 +10,7 @@ environment:
 skills:
     - source: local_path
       path: .
-      include: [SKILL.md, "*.md", "scripts/**"]
+      include: [SKILL.md, "*.md", "references/**", "scripts/**"]
 
 engine:
     name: claude_code

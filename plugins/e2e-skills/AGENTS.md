@@ -84,6 +84,7 @@ docs orphan check, language,
 │   │   ├── SKILL.md        # Required: skill frontmatter + body
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
+│   │   ├── references/     # SHIPPED — step-1-dispatch.md … step-8-deliver.md: each step's reference material, read when SKILL.md names it
 │   │   ├── evals/          # NOT shipped — skill-up suite: eval.yaml + cases/*.yaml
 │   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
 │   │   ├── evals/files/    # NOT shipped — repo fixtures the wet cases run pw-prove against
