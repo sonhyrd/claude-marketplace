@@ -783,6 +783,18 @@ if (phases.includes('serve')) {
     if (at === -1 || newAnnounced.some((a) => a.at > at)) return undefined;
     return text.slice(at, text.indexOf('\n', at) === -1 ? undefined : text.indexOf('\n', at)).trim();
   }
+  // The poll's read and the post-answer re-read below ask the log the same question, so they share
+  // one shape: read bytes, decode, derive the character-index mark, then run `failedToBind` over the
+  // announcements past it. Two copies of this drifted apart is a gate that fires in one place only.
+  const readLog = () => {
+    const bytes = fs.readFileSync(SERVER_LOG);
+    return {
+      text: bytes.toString('utf8'),
+      mark: bytes.subarray(0, Math.min(RESTART_LOG_OFFSET, bytes.length)).toString('utf8').length,
+    };
+  };
+  const bindFailureIn = ({ text, mark }) =>
+    failedToBind(text, mark, announcedPorts(text).filter((a) => a.at >= mark));
   // One summary for every way this phase ends badly, so a cause added here cannot ship with a
   // summary that names a different set of keys than the one the timeout path prints.
   const serveFailed = (cause, ports = []) => {
@@ -845,9 +857,9 @@ if (phases.includes('serve')) {
   for (;;) {
     if (SERVER_LOG) {
       try {
-        const bytes = fs.readFileSync(SERVER_LOG);
-        logText = bytes.toString('utf8');
-        restartMark = bytes.subarray(0, Math.min(RESTART_LOG_OFFSET, bytes.length)).toString('utf8').length;
+        const read = readLog();
+        logText = read.text;
+        restartMark = read.mark;
         announced = announcedPorts(logText);
       } catch {
         /* not there yet, or unreadable — neither is a verdict; the poll below still answers */
@@ -876,7 +888,7 @@ if (phases.includes('serve')) {
       announced = [...fresh, ...announced.filter((a) => !fresh.includes(a))];
       // Stop the moment the new process says it could not bind. Waiting out the budget here buys
       // nothing — the restart is over — and the run has a stale server to kill before it can retry.
-      const bindLine = failedToBind(logText ?? '', restartMark, fresh);
+      const bindLine = bindFailureIn({ text: logText ?? '', mark: restartMark });
       if (bindLine) {
         restartStop('restart-port-in-use', [
           `the restarted server never bound — its own log says: ${bindLine}`,
@@ -919,10 +931,7 @@ if (phases.includes('serve')) {
       // not a downgraded verdict.
       const lateBind = () => {
         try {
-          const bytes = fs.readFileSync(SERVER_LOG);
-          const text = bytes.toString('utf8');
-          const mark = bytes.subarray(0, Math.min(RESTART_LOG_OFFSET, bytes.length)).toString('utf8').length;
-          return failedToBind(text, mark, announcedPorts(text).filter((a) => a.at >= mark));
+          return bindFailureIn(readLog());
         } catch {
           return undefined; // an unreadable log is not a contradiction, and silence is what today does
         }
@@ -996,18 +1005,34 @@ if (phases.includes('serve')) {
         };
         // Ancestry, not equality: `echo PWPROVE_PREVIEW_PID=$$; exec pnpm preview` makes `$$` the
         // wrapper, so the socket's owner is frequently a DESCENDANT of the pid we expect. Walk the
-        // parent chain to pid 1, capped at ten hops.
+        // parent chain to pid 1, capped at 64 hops. The cap is only a cycle belt-and-braces — a /proc
+        // chain always terminates at 1 — so it is set well above any real tree: a shell inside an
+        // agent inside a container is routinely ten deep, and a cap that trips there makes every
+        // stranger UNDECIDABLE and the gate permanently blind on the hosts that need it.
+        // THREE outcomes, not two — true (ours), false (definitely a stranger), undefined (UNDECIDABLE).
+        // The third state is the whole point of this function and a later simplification back to a
+        // boolean silently reintroduces the bug it exists to prevent: a walk that stops because
+        // `/proc` went unreadable or because the process vanished has NOT proved the pid is a
+        // stranger, it has only run out of evidence, and so has a walk that hit the hop cap. Only a
+        // walk that reaches pid 1 without seeing the expected pid has actually completed and found
+        // nothing. Collapse undecidable into false and one blind holder row refuses a healthy
+        // restart — blind must be silent on EVERY path, not merely on the ones with no rows.
         const isOurs = (pid) => {
           let cur = pid;
-          for (let hop = 0; hop < 10 && cur && cur !== '1'; hop += 1) {
+          for (let hop = 0; hop < 64; hop += 1) {
             if (cur === expectedPid) return true;
-            cur = ppidOf(cur);
+            if (cur === '1') return false; // walk COMPLETED at init and never saw it: a stranger
+            const next = ppidOf(cur);
+            if (!next) return undefined; // /proc unreadable, or the process is gone: undecidable
+            cur = next;
           }
-          return cur === expectedPid;
+          return undefined; // hop cap: the walk never completed, so it decided nothing
         };
-        // Refuse only when at least one pid parsed AND none of them passes. All-unparseable, pid-less
-        // rows, no rows at all: blind, silent. A mixed read accepts.
-        if (holders.length && !holders.some(isOurs)) {
+        // Refuse only when at least one holder is DECIDABLE and none of them is ours. No rows,
+        // pid-less rows, all-unparseable rows, an undecidable ancestry walk: blind, silent. A mixed
+        // read accepts — an undecidable holder never contributes to a refusal.
+        const verdicts = holders.map(isOurs);
+        if (verdicts.includes(false) && !verdicts.includes(true)) {
           restartStop('restart-port-in-use', [
             `pid ${[...new Set(holders)].join(',')} holds :${reached.port}; expected ${expectedPid}`,
             ...(preMarkPid ? [`The log's pre-mark pid was ${preMarkPid}.`] : []),

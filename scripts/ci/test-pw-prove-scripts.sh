@@ -615,24 +615,79 @@ fi
 # ancestors — so take a pid that does not exist at all.
 FAKEPID=""
 for cand in $(seq 60000 60200); do [ -e "/proc/$cand" ] || { FAKEPID=$cand; break; }; done
-printf 'PWPROVE_PREVIEW_PID=999999\nListening on http://127.0.0.1:8751\n' >"$W/pid.log"
-MARK=$(wc -c <"$W/pid.log" | tr -d ' ')
-printf 'PWPROVE_PREVIEW_PID=%s\nListening on http://127.0.0.1:8751\n' "$FAKEPID" >>"$W/pid.log"
-( cd "$W" && env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/pid.log" RESTART_LOG_OFFSET="$MARK" \
-    SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
-rc=$?
-# Inert, never skipped: where socket inspection is blind the gate is silent BY DESIGN and this case
-# cannot decide. Say which of green / red / inert was got, out loud.
-if ss -ltnp 2>/dev/null | grep -qE "[:.]8751(\s|$)" && ss -ltnp 2>/dev/null | grep -E "[:.]8751(\s|$)" | grep -q 'pid='; then
-  if [ "$rc" -eq 3 ] && grep -q '^SERVE_CAUSE=restart-port-in-use$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out" \
-     && ! grep -q '^SERVE=ok$' "$W/out" && grep -qF "holds :8751; expected $FAKEPID" "$W/err" \
-     && grep -qF 'pre-mark pid was 999999' "$W/err"; then
-    ok "GREEN — a listener that is neither the restarted pid nor its descendant refuses, with no bind line anywhere"
-  else
-    bad "RED — pid-identity gate: exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160), stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
-  fi
+# Inert, never skipped, and inert for BOTH of its blind conditions: a case that could not build its
+# own fixture has proved nothing, and neither has one run where socket inspection cannot see a pid.
+# Reporting either as red would be an instrument reading its own blindness as a defect.
+pid_visible() { ss -ltnp 2>/dev/null | grep -E "[:.]$1(\s|$)" | grep -q 'pid='; }
+if [ -z "$FAKEPID" ]; then
+  echo "  [INERT] pid-identity gate — no unused pid in 60000-60200 on this Host, so the fixture cannot be built and the case cannot decide"
+elif ! pid_visible 8751; then
+  echo "  [INERT] pid-identity gate — socket inspection is blind on this Host (ss shows no pid for :8751), so this case cannot decide; the gate is silent by design"
 else
-  echo "  [INERT] pid-identity gate — socket inspection is blind on this Host (ss shows no pid for :8751), so this case cannot decide; the gate is silent by design and the run got exit $rc"
+  printf 'PWPROVE_PREVIEW_PID=999999\nListening on http://127.0.0.1:8751\n' >"$W/pid.log"
+  MARK=$(wc -c <"$W/pid.log" | tr -d ' ')
+  printf 'PWPROVE_PREVIEW_PID=%s\nListening on http://127.0.0.1:8751\n' "$FAKEPID" >>"$W/pid.log"
+  expect_exit 3 "GREEN — a listener that is neither the restarted pid nor its descendant refuses, with no bind line anywhere" -- \
+    env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/pid.log" RESTART_LOG_OFFSET="$MARK" \
+        SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve
+  if grep -q '^SERVE_CAUSE=restart-port-in-use$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out" \
+     && ! grep -q '^SERVE=ok$' "$W/out"; then
+    ok "the pid refusal names its own cause — SERVE_CAUSE=restart-port-in-use, RESTART=unproven, never SERVE=ok"
+  else
+    bad "pid-identity gate cause — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160)"
+  fi
+  stderr_has "the refusal names the holder and the pid it expected" "holds :8751; expected $FAKEPID"
+  stderr_has "the refusal names the pre-mark pid it also saw" "pre-mark pid was 999999"
+fi
+
+# 1d. FALSE-POSITIVE GUARD for the same gate, and the one that matters more: the socket's owner IS a
+# DESCENDANT of the announced pid. `echo PWPROVE_PREVIEW_PID=$$` names the wrapper shell, which then
+# starts the server as its child, so an equality test would refuse this — a healthy restart — every
+# time. Its own port, verified free first, so the block's 8751 listener is not disturbed.
+DPORT=8752
+DESCWRAP=""
+kill_desc() {
+  [ -s "$W/desc.node.pid" ] && kill "$(cat "$W/desc.node.pid")" 2>/dev/null
+  [ -n "$DESCWRAP" ] && { kill "$DESCWRAP" && wait "$DESCWRAP"; } 2>/dev/null
+  DESCWRAP=""
+}
+trap 'kill_desc; kill_stale; rm -rf "$W"' EXIT
+if curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT" || pid_visible "$DPORT"; then
+  echo "  [INERT] descendant guard — :$DPORT is already held on this Host, and this case must not take a port it did not start"
+else
+  cat >"$W/desc.sh" <<EOF
+node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen($DPORT,"127.0.0.1")' &
+echo \$! >"$W/desc.node.pid"
+wait
+EOF
+  bash "$W/desc.sh" & DESCWRAP=$!
+  for _ in $(seq 1 50); do curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT" && break; sleep 0.2; done
+  printf 'Listening on http://127.0.0.1:%s\n' "$DPORT" >"$W/desc.log"
+  MARK=$(wc -c <"$W/desc.log" | tr -d ' ')
+  # The announced pid is the WRAPPER's, exactly as SKILL.md Step 3 has the agent write it; the pid
+  # holding the socket is its child.
+  printf 'PWPROVE_PREVIEW_PID=%s\nListening on http://127.0.0.1:%s\n' "$DESCWRAP" "$DPORT" >>"$W/desc.log"
+  if ! curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT"; then
+    echo "  [INERT] descendant guard — the listener on :$DPORT never came up, so the case cannot decide"
+  elif ! pid_visible "$DPORT"; then
+    echo "  [INERT] descendant guard — socket inspection is blind on this Host (ss shows no pid for :$DPORT), so the gate is silent by design and this case cannot decide"
+  else
+    expect_exit 0 "a listener that is a DESCENDANT of the announced pid is accepted, not refused" -- \
+      env BASE_URL="http://127.0.0.1:$DPORT" SERVER_LOG="$W/desc.log" RESTART_LOG_OFFSET="$MARK" \
+          SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve
+    if grep -q '^RESTART=proven$' "$W/out" && grep -q '^SERVE=ok$' "$W/out"; then
+      ok "the descendant restart is proven — RESTART=proven, SERVE=ok"
+    else
+      bad "descendant guard — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200), stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+    fi
+  fi
+fi
+kill_desc
+trap 'kill_stale; rm -rf "$W"' EXIT
+if curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT"; then
+  bad "descendant guard left :$DPORT held — the case must release every port it took"
+else
+  ok "descendant guard released :$DPORT"
 fi
 
 # 2. Stale process answers with a quiet log — no bind error, just nothing new. The old announcement

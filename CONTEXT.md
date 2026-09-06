@@ -235,9 +235,8 @@ nothing, or what it printed does not carry the field the question needed. Distin
 failed to run, and distinct again from one that answered *no*: blind is an absence of evidence, never evidence
 of absence. The rule wherever it applies is **blind ⇒ silent** — a blind [corroborating
 read](#corroborating-read) leaves the verdict exactly where it stood without it, so a sandboxed Host behaves as
-it always did rather than being refused for want of a tool it does not have. A check that runs blind reports
-*inert*, not green and not red, for the same reason: an instrument that saw nothing must not read as one that
-saw agreement.
+it always did rather than being refused for want of a tool it does not have. An instrument that saw nothing
+must never read as one that saw agreement.
 
 ## Stale artifact
 The state the machine is in between a mutation check's **revert** and the next build: the working
