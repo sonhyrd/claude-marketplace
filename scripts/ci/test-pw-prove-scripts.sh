@@ -581,6 +581,30 @@ else
 fi
 if [ "$elapsed" -le 8 ]; then ok "a bind failure stops at once (${elapsed}s), it is not waited out"; else bad "port-in-use waited ${elapsed}s of a 20s budget"; fi
 
+# 1b. The same failure, but the log has not caught up yet — the shape the pre-poll check above cannot
+# see. The restarted process announced the port, the stale predecessor answers it in milliseconds, so
+# the FIRST poll round accepts and breaks out; the `EADDRINUSE` only reaches the log afterwards. There
+# is no second round for the pre-poll check to fire in, so the verdict has to be re-checked at the
+# moment of acceptance, before RESTART=proven is recorded.
+printf 'Listening on http://127.0.0.1:8751\n' >"$W/late.log"
+MARK=$(wc -c <"$W/late.log" | tr -d ' ')
+printf 'Listening on http://127.0.0.1:8751\n' >>"$W/late.log"
+: >"$W/err"   # the watcher below reads this file; a previous case's line would trip it early
+( for _ in $(seq 1 200); do grep -qF 'preflight: waiting for' "$W/err" 2>/dev/null && break; sleep 0.05; done
+  sleep 0.1   # the first round has accepted by now; the bind line lands inside the settle window
+  printf 'Error: listen EADDRINUSE: address already in use :::8751\n' >>"$W/late.log" ) &
+LATEBIND=$!
+expect_exit 3 "a bind failure that reaches the log after the first round has accepted is still a SERVE failure" -- \
+  env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/late.log" RESTART_LOG_OFFSET="$MARK" \
+      SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve
+wait $LATEBIND 2>/dev/null
+if grep -q '^SERVE_CAUSE=restart-port-in-use$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out" \
+   && ! grep -q '^SERVE=ok$' "$W/out"; then
+  ok "a late bind failure is caught at acceptance — SERVE_CAUSE=restart-port-in-use, RESTART=unproven, never SERVE=ok"
+else
+  bad "late-bind-after-accept — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+fi
+
 # 2. Stale process answers with a quiet log — no bind error, just nothing new. The old announcement
 # is BEFORE the mark, so it is not evidence about this restart, and an answer on the port is not
 # either. Distinct cause: something answered, its identity could not be proven.

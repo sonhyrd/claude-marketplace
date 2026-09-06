@@ -769,6 +769,9 @@ if (phases.includes('serve')) {
   // process said it could not bind (kill the one holding the port), or it simply never announced
   // while something answered anyway (the answer is unidentified — do not trust it either way).
   const BIND_FAILURE = /EADDRINUSE|already in use/gi;
+  // How long the post-answer re-read below settles for before its one extra look. Fixed and small:
+  // it is paid once, only in restart mode, and only when a candidate has already answered.
+  const RESTART_SETTLE_MS = 300;
   // A bind failure followed by an announcement is a port SHIFT, not a failed restart — the framework
   // said it could not have the port and then told us the one it took. Only an unanswered bind
   // failure is terminal.
@@ -902,6 +905,39 @@ if (phases.includes('serve')) {
         }
         reached = c;
         break;
+      }
+    }
+    if (reached && SERVE_RESTART) {
+      // The check above runs once per round BEFORE the poll, and a stale predecessor answers in
+      // milliseconds — so round one accepts and breaks out before the new process's EADDRINUSE has
+      // necessarily reached the log, and there is no second round for that check to fire in. The
+      // evidence is interesting exactly here: a candidate answered, and RESTART=proven has not been
+      // recorded yet. So re-read the log, and if it is still quiet settle a fixed interval and read
+      // ONCE more. One extra read, capped — deliberately not a re-poll, not a second restart, and
+      // not a downgraded verdict.
+      const lateBind = () => {
+        try {
+          const bytes = fs.readFileSync(SERVER_LOG);
+          const text = bytes.toString('utf8');
+          const mark = bytes.subarray(0, Math.min(RESTART_LOG_OFFSET, bytes.length)).toString('utf8').length;
+          return failedToBind(text, mark, announcedPorts(text).filter((a) => a.at >= mark));
+        } catch {
+          return undefined; // an unreadable log is not a contradiction, and silence is what today does
+        }
+      };
+      let lateLine = lateBind();
+      if (!lateLine) {
+        sleep(RESTART_SETTLE_MS);
+        lateLine = lateBind();
+      }
+      if (lateLine) {
+        restartStop('restart-port-in-use', [
+          `the restarted server never bound — its own log says: ${lateLine}`,
+          'It answered on that port before saying so, which is the PREVIOUS process still serving ' +
+            'the artifact it started with. Kill it (the port is held by something you did not just ' +
+            'start) and restart, then poll again. Any verdict taken against this server is a ' +
+            'verdict about the old build.',
+        ]);
       }
     }
     if (reached) {
