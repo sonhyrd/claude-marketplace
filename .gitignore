@@ -49,3 +49,5 @@ tests/**/.pytest_cache/
 
 # skill-up eval run artifacts
 plugins/*/skills/*-workspace/
+
+.pw-prove/
