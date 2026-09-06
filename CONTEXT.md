@@ -212,8 +212,31 @@ produce it — the stop is confirmed rather than assumed, escalating to SIGKILL 
 restart is **exit 11 with no verdict to read**, because the run it would have paid for could only
 describe an artifact nothing rebuilt. Since #148 the mark is taken when the restart is *issued*,
 not before the build: a mark taken earlier includes the build's own output and a predecessor's
-dying words in the window it is meant to exclude. A proven restart is also what clears a standing
-[stale artifact](#stale-artifact) marker.
+dying words in the window it is meant to exclude. Since #121 the announcement remains the only
+thing that can *prove* the restart, but it is no longer the only thing that can *refuse* one: at the
+moment a candidate answers, two [corroborating reads](#corroborating-read) run — the log re-read for
+a bind failure the predecessor's answer outran, and the owner of the listening socket checked
+against the process this restart started — and either may refuse. Neither can authorise, and where
+either is [blind](#blind) it says nothing, so a Host that cannot look is no worse off than before.
+A proven restart is also what clears a standing [stale artifact](#stale-artifact) marker.
+
+## Corroborating read
+An independent local observation of the machine — not the subject's own output — taken to check a claim the
+subject has already made. It can only ever **refuse**: a corroborating read that agrees changes nothing, one
+that cannot see is [blind](#blind) and says nothing, and only a positive contradiction becomes a verdict.
+Nothing may be made to depend on one succeeding, because the Hosts this runs on differ in what they are allowed
+to see, and a read that is a precondition anywhere is a precondition everywhere. The [proven
+restart](#proven-restart) is the case that named the term: the announcement proves, the corroborating reads
+only refuse.
+
+## Blind
+An inspection that **ran and established nothing** — the tool is absent, it exited non-zero, it printed
+nothing, or what it printed does not carry the field the question needed. Distinct from an inspection that
+failed to run, and distinct again from one that answered *no*: blind is an absence of evidence, never evidence
+of absence. The rule wherever it applies is **blind ⇒ silent** — a blind [corroborating
+read](#corroborating-read) leaves the verdict exactly where it stood without it, so a sandboxed Host behaves as
+it always did rather than being refused for want of a tool it does not have. An instrument that saw nothing
+must never read as one that saw agreement.
 
 ## Stale artifact
 The state the machine is in between a mutation check's **revert** and the next build: the working
