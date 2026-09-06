@@ -1,11 +1,11 @@
 # Delegation profile
 
-Read by any agent or delegated session working in this repo — today `run-matt` and `sss:autoship`.
-Amended by the coordinator when a merge-back reveals a new baseline, known-noise test, or
-environment trap.
+Read by any agent or delegated session working in this repo. Amended by the coordinator when a
+merge-back reveals a new baseline, known-noise test, or environment trap.
 
 `/sss:delegate-tickets`, which used to read this file at step 1, was retired by
-`sonhyrd/claude-marketplace#99` / PR #107; this file outlived it and is now this repo's own profile.
+`sonhyrd/claude-marketplace#99` / PR `sonhyrd/claude-marketplace#107`; this file outlived it and is
+now this repo's own profile.
 `sonhyrd/claude-marketplace#106` archives an **older** central-list snapshot of this entry that this
 file has since contradicted — on the branch prefix, on pw-prove's eval format, and on the plugin
 manifests. **This file is current; #106 is not.**
