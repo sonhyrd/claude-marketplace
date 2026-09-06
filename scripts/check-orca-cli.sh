@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 #
-# check-delegate-cli.sh -- ask the live Orca binary whether every command the
-# delegate-tickets skill names actually exists.
+# check-orca-cli.sh -- ask the live Orca binary whether every command the
+# scanned skill names actually exists.
 #
-# Why this exists: the defect class behind the skill's rewrite is "the skill
-# documents a CLI the binary does not have" -- a bare `orca` that exits 0
+# Was check-delegate-cli.sh, pointed at the retired delegate-tickets skill
+# (#99). It now scans `sss:autoship`, the successor carrying the same idiom;
+# the rename and the coverage it cost are recorded in docs/adr/0013.
+#
+# Why this exists: the defect class is "the skill documents a CLI the binary
+# does not have" -- a bare `orca` that exits 0
 # without orchestrating anything, a verb that was renamed, a flag that never
 # existed. Text review cannot catch any of it, and `make validate` is static and
 # offline by design.
@@ -32,13 +36,13 @@
 #   2  setup error -- skill directory missing, a binary that answers nothing, or
 #      a skill directory in which no orca command was found to check
 #
-# Overrides (used by tests/bash/test-delegate-cli.sh):
-#   DELEGATE_CLI_SKILL_DIR  skill to scan (default: the delegate-tickets skill)
+# Overrides (used by tests/bash/test-orca-cli.sh):
+#   ORCA_CLI_SKILL_DIR  skill to scan (default: the autoship skill)
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SKILL_DIR="${DELEGATE_CLI_SKILL_DIR:-${REPO_ROOT}/plugins/sss/skills/delegate-tickets}"
+SKILL_DIR="${ORCA_CLI_SKILL_DIR:-${REPO_ROOT}/plugins/sss/skills/autoship}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -49,7 +53,7 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [--help]
 
-Ask the live Orca CLI whether every command the delegate-tickets skill names
+Ask the live Orca CLI whether every command the scanned skill names
 actually exists: the top-level verb, or the group and its verb, and each flag
 the skill passes to it.
 
@@ -196,15 +200,34 @@ has_flag() {
 # inline code spans (where it can wrap across lines with no marker at all --
 # `orca worktree\ncreate` is one span, and a line-by-line scan would miss it).
 # Prose outside a code span is deliberately not scanned: a sentence mentioning a
-# verb is not an instruction to run it.
+# verb is not an instruction to run it -- and a fence whose info string is not a
+# shell language is prose too. A ```markdown PR-body template or a ```text
+# example is quoted output, not an instruction, so it is scanned as neither a
+# command block nor a span. Only an empty, bash, sh, shell or console fence is a
+# command block.
 
 # One fence walker, asked twice: `--inside` joins each fenced block's
 # backslash-continued lines into whole commands, `--outside` hands back the
 # prose for the span scan below.
 fence_scan() {
     awk -v want="$2" '
-        BEGIN { fence = 0; buf = "" }
-        /^[[:space:]]*```/ { fence = !fence; next }
+        BEGIN { fence = 0; shell = 0; buf = "" }
+        /^[[:space:]]*```/ {
+            if (fence) { fence = 0; shell = 0 }
+            else {
+                fence = 1
+                info = $0
+                sub(/^[[:space:]]*`+/, "", info)
+                sub(/^[[:space:]]+/, "", info)
+                sub(/[[:space:]].*$/, "", info)
+                sub(/[[:space:]]+$/, "", info)
+                shell = (info == "" || info == "bash" || info == "sh" || \
+                         info == "shell" || info == "console")
+            }
+            buf = ""
+            next
+        }
+        fence && !shell { next }
         (fence ? 1 : 0) != want { next }
         want == 0 { print; next }
         {

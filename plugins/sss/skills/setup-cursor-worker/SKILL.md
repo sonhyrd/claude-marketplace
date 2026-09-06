@@ -1,16 +1,16 @@
 ---
 name: setup-cursor-worker
-description: One-time machine setup that makes cursor-agent usable as an Orca worker engine for /autoship and /delegate-tickets. Verifies PATH, auth, permissions, model, and workspace trust, then proves the dispatch round-trip with a live smoke test.
+description: One-time machine setup that makes cursor-agent usable as an Orca worker engine for /autoship. Verifies PATH, auth, permissions, model, and workspace trust, then proves the dispatch round-trip with a live smoke test.
 ---
 
 # Setup Cursor Worker
 
-`/autoship` and `/delegate-tickets` can run their workers on `cursor-agent` instead of `claude` via `--engine cursor`. That swap is only a launch-argv change — everything else (task DAG, `--inject` dispatch, `ask`/`reply`, `worker_done`) is engine-agnostic Orca machinery. This skill makes the swap safe on **this machine**, once.
+`/autoship` can run its workers on `cursor-agent` instead of `claude` via `--engine cursor`. That swap is only a launch-argv change — everything else (task DAG, `--inject` dispatch, `ask`/`reply`, `worker_done`) is engine-agnostic Orca machinery. This skill makes the swap safe on **this machine**, once.
 
 It is machine-scoped, not repo-scoped. Run it once; re-run it after a Cursor upgrade, after changing your Cursor model, or whenever a cursor worker fails to start.
 
 > **Prerequisites.** `cursor-agent` on `PATH` and authenticated, plus an Orca install. Only useful
-> alongside `/autoship` and `/delegate-tickets` (also in this plugin), which in turn need the
+> alongside `/autoship` (also in this plugin), which in turn needs the
 > `matt` plugin from this marketplace.
 
 Its output is a verdict, not a config dump: either **ready** (the smoke test received `worker_done`) or **not ready** plus exactly what is missing.
@@ -74,8 +74,9 @@ So trust the **worktree base directories** once and every future worktree under 
 
 Derive the bases rather than assuming them — they differ per repo, and some repos are registered such that their Orca workspaces sit on the repo path itself rather than under a shared root:
 
-Resolve the CLI first — **preference orders the candidates, evidence selects one** — using
-`sss:delegate-tickets` step 0's idiom, which `scripts/check-delegate-cli.sh` asserts:
+Resolve the CLI first — **preference orders the candidates, evidence selects one** — using the
+idiom `sss:autoship` owns (`reference.md`, section "Orca orchestration"), which
+`scripts/check-orca-cli.sh` asserts:
 
 ```bash
 ORCA=""

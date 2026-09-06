@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Tests for scripts/check-delegate-cli.sh.
+# Tests for scripts/check-orca-cli.sh.
 #
-# The check asks a live Orca binary whether every command delegate-tickets names
+# The check asks a live Orca binary whether every command the scanned skill names
 # actually exists. So the thing under test is a conversation with a binary, and
 # the seam is the check's own CLI: a stub `orca`/`orca-ide` on PATH plus a
 # fixture skill directory in, an exit code and a named finding out.
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CHECK="${REPO_ROOT}/scripts/check-delegate-cli.sh"
+CHECK="${REPO_ROOT}/scripts/check-orca-cli.sh"
 
 PASS=0
 FAIL=0
@@ -32,7 +32,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/delegate-cli-check.XXXXXX")"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/orca-cli-check.XXXXXX")"
 
 ok() {
     PASS=$((PASS + 1))
@@ -145,12 +145,12 @@ run_check() {
     shift 2
     env -u ORCA_PANE_KEY -u ORCA_TERMINAL_HANDLE -u TERM_PROGRAM \
         PATH="${bindir}:/usr/bin:/bin" \
-        DELEGATE_CLI_SKILL_DIR="$skilldir" \
+        ORCA_CLI_SKILL_DIR="$skilldir" \
         "$CHECK" "$@" 2>&1
 }
 
 echo ""
-echo -e "${YELLOW}Running check-delegate-cli.sh tests...${NC}"
+echo -e "${YELLOW}Running check-orca-cli.sh tests...${NC}"
 echo ""
 
 if [ ! -x "$CHECK" ]; then
@@ -478,6 +478,39 @@ if [ "$rc" -eq 0 ]; then
     ok "a verb owned by more than one group is not resolved by guessing"
 else
     nope "a verb owned by more than one group is not resolved by guessing" "rc=$rc: $out"
+fi
+
+# A fence is a command block only when its info string says shell. A prose
+# template inside a ```markdown fence is quoted output, not an instruction --
+# `autoship/reference.md`'s PR-body template is the real case that made this
+# fire ("...from its last worker_done or terminal evidence" matched as a bare
+# verb). Both directions, or the test does not describe the boundary.
+SKILL_MD_FENCE="${TMPROOT}/skill-md-fence"
+write_skill "$SKILL_MD_FENCE" 'Probe with `orca orchestration task-create --json`.
+
+```markdown
+Issue <id> failed: <reason, from its last worker_done or orca orchestration task-delete>.
+```'
+
+out="$(run_check "$CLI_BIN" "$SKILL_MD_FENCE")" && rc=0 || rc=$?
+if [ "$rc" -eq 0 ]; then
+    ok "a command inside a \`\`\`markdown fence is prose and is not scanned"
+else
+    nope "a command inside a \`\`\`markdown fence is prose and is not scanned" "rc=$rc: $out"
+fi
+
+SKILL_BASH_FENCE="${TMPROOT}/skill-bash-fence"
+write_skill "$SKILL_BASH_FENCE" 'Probe with `orca orchestration task-create --json`.
+
+```bash
+orca orchestration task-delete --json
+```'
+
+out="$(run_check "$CLI_BIN" "$SKILL_BASH_FENCE")" && rc=0 || rc=$?
+if [ "$rc" -eq 1 ] && grep -q "task-delete" <<<"$out"; then
+    ok "the same command inside a \`\`\`bash fence is still scanned and still fails"
+else
+    nope "the same command inside a \`\`\`bash fence is still scanned and still fails" "rc=$rc: $out"
 fi
 
 # --- Summary ------------------------------------------------------------------

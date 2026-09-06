@@ -8,8 +8,9 @@ Run both. Either failing ends the run with a stop-and-report naming the missing 
 
 ### Orca orchestration
 
-Resolve the CLI first — **preference orders the candidates, evidence selects one** — using
-`sss:delegate-tickets` step 0's idiom, which `scripts/check-delegate-cli.sh` asserts:
+Resolve the CLI first — **preference orders the candidates, evidence selects one**. This is the
+canonical idiom, and `scripts/check-orca-cli.sh` in the marketplace repo asserts it against this
+file:
 
 ```bash
 ORCA=""

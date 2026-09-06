@@ -13,8 +13,8 @@ Run this in the parent, before anything spawns. Its output is a set of **finding
 **Every prerequisite is checked here, before the tree moves and before a track spawns, and a missing one stops the run.** Two of the four stages are only as strong as the tools underneath them: without `ocr` the review loses one of its axes, and without a working `orca` CLI the proof never runs. A run that degrades around either still closes looking complete — a three-track report and an unspawned proof read exactly like a finished review — and that is the outcome this gate exists to prevent.
 
 Then resolve the Orca CLI. **Preference orders the candidates; evidence selects one.**
-`sss:delegate-tickets` step 0 owns this idiom and `scripts/check-delegate-cli.sh` in the marketplace
-repo asserts it — this is the same resolution against the command this skill actually calls:
+`sss:autoship` owns this idiom (`reference.md`, section "Orca orchestration") and
+`scripts/check-orca-cli.sh` in the marketplace repo asserts it — this is the same resolution against the command this skill actually calls:
 
 **`ocr` reports its version, and presence is the gate.** Below v1.9.3 `sss:ocr-delegate` parses text where it would otherwise parse JSON, and that still produces a full OCR track — a different path to the same axes, not a degraded review. So an old `ocr` passes preflight and the report says which path ran; only an absent one stops the run.
 

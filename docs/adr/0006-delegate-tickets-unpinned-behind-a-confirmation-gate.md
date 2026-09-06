@@ -1,8 +1,9 @@
 # 6. `delegate-tickets` is unpinned, behind a confirmation gate
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-08-14
 - **Follows:** [ADR-0005](./0005-pw-prove-unpinned-behind-a-confirmation-gate.md)
+- **Superseded:** 2026-09-06 by [ADR-0013](./0013-delegate-tickets-retired-for-a-run-coordinator.md) and [#99](https://github.com/sonhyrd/claude-marketplace/issues/99) — `/sss:delegate-tickets` retired; `run-matt` and `sss:autoship` succeed it.
 
 ## Context
 

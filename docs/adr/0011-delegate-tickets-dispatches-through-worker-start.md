@@ -1,8 +1,10 @@
 # 11. `delegate-tickets` dispatches through `worker-start`
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-08-22
 - **Follows:** [ADR-0010](./0010-delegate-tickets-gates-merge-back-on-a-review-receipt.md)
+- **Superseded:** 2026-09-06 by [ADR-0013](./0013-delegate-tickets-retired-for-a-run-coordinator.md) and [#99](https://github.com/sonhyrd/claude-marketplace/issues/99) — `/sss:delegate-tickets` retired; `run-matt` and `sss:autoship` succeed it.
+- **Note:** the instrument this ADR's body names, `scripts/check-delegate-cli.sh`, was renamed to `scripts/check-orca-cli.sh` and repointed at `sss:autoship` by the same change. The body is left as written — it is an accurate record of the name the script had on the day.
 
 ## Context
 

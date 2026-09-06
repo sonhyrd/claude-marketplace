@@ -4,6 +4,18 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.7.0] - Unreleased
+
+### Removed
+
+- **`delegate-tickets` skill: retired entirely** (#99, spec #100, [ADR-0013](../docs/adr/0013-delegate-tickets-retired-for-a-run-coordinator.md)). A run coordinator — one issue, one branch, one pull request, one gate — replaces per-ticket fan-out, and `run-matt` plus this plugin's own `autoship` cover it. The forcing move: step 1 read the target repo's `docs/agents/delegate-profile.md` and fell to an **Absent** branch that interviews the user to *write the file back*, and two live repos are deleting that file — a skill that recreates the artefact being retired cannot stay. All four files go (`SKILL.md`, `references/profile-template.md`, `references/worker-launch.md`, `agents/openai.yaml`); the five parked repo profiles from the archive are preserved verbatim in #106, filed before the deletion. Anyone typing `/sss:delegate-tickets` after this update gets nothing, which is why this is a minor bump and not a patch.
+
+### Changed
+
+- **`autoship` owns the Orca binary-resolution idiom.** `reference.md`'s "Orca orchestration" section is now the canonical statement of it, and `scripts/check-orca-cli.sh` in the marketplace repo asserts it against that file. It previously cited `sss:delegate-tickets` step 0 as the owner, as did `setup-cursor-worker`, `pr-review` and `claude-settings` — four skills pointing at a skill that is being deleted. Each of the other three now points at `sss:autoship`'s `reference.md` by name and by file. Note the file is `reference.md` at the skill root, not `references/reference.md`; `autoship` ships both a root `reference.md` and a `references/` directory.
+- **`setup-cursor-worker` serves one skill, not two.** Its frontmatter description and its opening two paragraphs said `cursor-agent` could back the workers of `/autoship` **and** `/delegate-tickets`; only `/autoship` remains, so the plural is corrected wherever this retirement made it false and nowhere else.
+- `claude-settings` and `pr-review`: the sentence naming the marketplace's CLI check now names `scripts/check-orca-cli.sh`.
+
 ## [1.6.3] - Unreleased
 
 ### Changed
