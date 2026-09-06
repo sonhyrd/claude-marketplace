@@ -1,8 +1,9 @@
 # 10. `delegate-tickets` gates merge-back on a review receipt
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-08-21
 - **Follows:** [ADR-0006](./0006-delegate-tickets-unpinned-behind-a-confirmation-gate.md)
+- **Superseded:** 2026-09-06 by [ADR-0013](./0013-delegate-tickets-retired-for-a-run-coordinator.md) and [#99](https://github.com/sonhyrd/claude-marketplace/issues/99) — `/sss:delegate-tickets` retired; `run-matt` and `sss:autoship` succeed it.
 
 ## Context
 

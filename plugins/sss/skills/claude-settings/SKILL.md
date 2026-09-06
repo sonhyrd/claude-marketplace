@@ -347,8 +347,8 @@ and the first two are the browser shim's:
   why apply re-checks rather than assuming a shim it once deployed is still there.
 
 **The shim is for the callers this repo cannot edit.** Every `sss` skill that shells Orca resolves
-the binary itself — `delegate-tickets` step 0 owns that idiom and `scripts/check-delegate-cli.sh`
-asserts it — so those already work on a machine this skill has never touched. The bundled `orca-cli`
+the binary itself — `sss:autoship` owns that idiom (`reference.md`, section "Orca
+orchestration") and `scripts/check-orca-cli.sh` asserts it — so those already work on a machine this skill has never touched. The bundled `orca-cli`
 and `orchestration` skills are not ours, and they keep calling `orca`; the shim is what makes those
 land. Deploying it and resolving in-skill answer two different callers rather than being two
 attempts at one.

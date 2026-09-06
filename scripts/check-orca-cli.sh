@@ -1,10 +1,23 @@
 #!/usr/bin/env bash
 #
-# check-delegate-cli.sh -- ask the live Orca binary whether every command the
-# delegate-tickets skill names actually exists.
+# check-orca-cli.sh -- ask the live Orca binary whether every command the
+# scanned skill names actually exists.
 #
-# Why this exists: the defect class behind the skill's rewrite is "the skill
-# documents a CLI the binary does not have" -- a bare `orca` that exits 0
+# Was check-delegate-cli.sh, pointed at the delegate-tickets skill, until that
+# skill was retired (issue #99). The scanning logic never knew which skill it
+# was reading, so the rename is a new default and nothing else. It now scans
+# `sss:autoship`, the successor that carries the same CLI-resolution idiom and
+# spells the same orchestration commands.
+#
+# Five worker-lifecycle verbs -- worker-start, worker-stop, worker-release,
+# worker-show, worker-read -- lost their only assertion in this repo when
+# delegate-tickets went, because no surviving skill names them. That is a
+# measured coverage reduction, recorded in docs/adr/0013. Pointing this script
+# at more skills would not recover it: the only two files that ever named those
+# verbs are the two that were deleted.
+#
+# Why this exists: the defect class is "the skill documents a CLI the binary
+# does not have" -- a bare `orca` that exits 0
 # without orchestrating anything, a verb that was renamed, a flag that never
 # existed. Text review cannot catch any of it, and `make validate` is static and
 # offline by design.
@@ -32,13 +45,13 @@
 #   2  setup error -- skill directory missing, a binary that answers nothing, or
 #      a skill directory in which no orca command was found to check
 #
-# Overrides (used by tests/bash/test-delegate-cli.sh):
-#   DELEGATE_CLI_SKILL_DIR  skill to scan (default: the delegate-tickets skill)
+# Overrides (used by tests/bash/test-orca-cli.sh):
+#   ORCA_CLI_SKILL_DIR  skill to scan (default: the autoship skill)
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SKILL_DIR="${DELEGATE_CLI_SKILL_DIR:-${REPO_ROOT}/plugins/sss/skills/delegate-tickets}"
+SKILL_DIR="${ORCA_CLI_SKILL_DIR:-${REPO_ROOT}/plugins/sss/skills/autoship}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -49,7 +62,7 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [--help]
 
-Ask the live Orca CLI whether every command the delegate-tickets skill names
+Ask the live Orca CLI whether every command the scanned skill names
 actually exists: the top-level verb, or the group and its verb, and each flag
 the skill passes to it.
 

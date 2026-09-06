@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Tests for scripts/check-delegate-cli.sh.
+# Tests for scripts/check-orca-cli.sh.
 #
-# The check asks a live Orca binary whether every command delegate-tickets names
+# The check asks a live Orca binary whether every command the scanned skill names
 # actually exists. So the thing under test is a conversation with a binary, and
 # the seam is the check's own CLI: a stub `orca`/`orca-ide` on PATH plus a
 # fixture skill directory in, an exit code and a named finding out.
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CHECK="${REPO_ROOT}/scripts/check-delegate-cli.sh"
+CHECK="${REPO_ROOT}/scripts/check-orca-cli.sh"
 
 PASS=0
 FAIL=0
@@ -32,7 +32,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/delegate-cli-check.XXXXXX")"
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/orca-cli-check.XXXXXX")"
 
 ok() {
     PASS=$((PASS + 1))
@@ -145,12 +145,12 @@ run_check() {
     shift 2
     env -u ORCA_PANE_KEY -u ORCA_TERMINAL_HANDLE -u TERM_PROGRAM \
         PATH="${bindir}:/usr/bin:/bin" \
-        DELEGATE_CLI_SKILL_DIR="$skilldir" \
+        ORCA_CLI_SKILL_DIR="$skilldir" \
         "$CHECK" "$@" 2>&1
 }
 
 echo ""
-echo -e "${YELLOW}Running check-delegate-cli.sh tests...${NC}"
+echo -e "${YELLOW}Running check-orca-cli.sh tests...${NC}"
 echo ""
 
 if [ ! -x "$CHECK" ]; then

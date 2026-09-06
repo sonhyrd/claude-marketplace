@@ -65,11 +65,6 @@ The branch a run merges every worker's slice back into, and the base its worktre
 Distinct from the repo's default base, which is what a worktree gets when nobody names one.
 _Avoid_: target branch, parent branch, base branch (which names a flag, not this)
 
-**Delegation profile**:
-A repo's `docs/agents/delegate-profile.md` — the facts a delegated run needs about that repo. A
-**snapshot** of what is true now, not a ledger of what was.
-_Avoid_: repo profile, worker config
-
 **Baseline**:
 A recorded measurement of a check on a known-good tree: the counts, the commit, the date. Names the
 measurement, never the tree it was measured on.
