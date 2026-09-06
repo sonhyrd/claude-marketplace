@@ -6,8 +6,7 @@ A glossary and nothing else: rules live in `CLAUDE.md`, decisions in [`docs/adr/
 ## Delegation
 
 **Coordinator**:
-The invoking Claude Code session in a delegated run. Owns the DAG, dispatch, merge-back, and every
-write to the delegation profile.
+The invoking Claude Code session in a delegated run. Owns the DAG, dispatch, and merge-back.
 _Avoid_: orchestrator, parent agent
 
 **Worker**:

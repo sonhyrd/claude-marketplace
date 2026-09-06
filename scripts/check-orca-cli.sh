@@ -3,18 +3,9 @@
 # check-orca-cli.sh -- ask the live Orca binary whether every command the
 # scanned skill names actually exists.
 #
-# Was check-delegate-cli.sh, pointed at the delegate-tickets skill, until that
-# skill was retired (issue #99). The scanning logic never knew which skill it
-# was reading, so the rename is a new default and nothing else. It now scans
-# `sss:autoship`, the successor that carries the same CLI-resolution idiom and
-# spells the same orchestration commands.
-#
-# Five worker-lifecycle verbs -- worker-start, worker-stop, worker-release,
-# worker-show, worker-read -- lost their only assertion in this repo when
-# delegate-tickets went, because no surviving skill names them. That is a
-# measured coverage reduction, recorded in docs/adr/0013. Pointing this script
-# at more skills would not recover it: the only two files that ever named those
-# verbs are the two that were deleted.
+# Was check-delegate-cli.sh, pointed at the retired delegate-tickets skill
+# (#99). It now scans `sss:autoship`, the successor carrying the same idiom;
+# the rename and the coverage it cost are recorded in docs/adr/0013.
 #
 # Why this exists: the defect class is "the skill documents a CLI the binary
 # does not have" -- a bare `orca` that exits 0
