@@ -1,11 +1,19 @@
 # Delegation profile
 
-Read by `/delegate-tickets` (step 1). Amended by the coordinator when a merge-back reveals a new
-baseline, known-noise test, or environment trap.
+Read by any agent or delegated session working in this repo — today `run-matt` and `sss:autoship`.
+Amended by the coordinator when a merge-back reveals a new baseline, known-noise test, or
+environment trap.
+
+`/sss:delegate-tickets`, which used to read this file at step 1, was retired by
+`sonhyrd/claude-marketplace#99` / PR #107; this file outlived it and is now this repo's own profile.
+`sonhyrd/claude-marketplace#106` archives an **older** central-list snapshot of this entry that this
+file has since contradicted — on the branch prefix, on pw-prove's eval format, and on the plugin
+manifests. **This file is current; #106 is not.**
 
 - **Remote**: `sonhyrd/e2e-skills` — the origin this profile describes, and the only remote the repo
-  carries. Step 1 compares it against `git remote get-url origin` and warns on mismatch. If a second
-  remote is ever present, it is never a push target.
+  carries. Check it against `git remote get-url origin` before your first push; a mismatch means you
+  are not in the checkout you think you are. If a second remote is ever present, it is never a push
+  target.
 
 - **Branch prefix**: `sonhyrd/` — Orca prefixes worktree branches with the GitHub account, so a
   worktree named `ticket-34-dwell-region` produces branch `sonhyrd/ticket-34-dwell-region`. Do not
