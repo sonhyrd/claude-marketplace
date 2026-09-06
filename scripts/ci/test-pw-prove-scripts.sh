@@ -605,6 +605,36 @@ else
   bad "late-bind-after-accept — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
 fi
 
+# 1c. The structural half: no bind line ANYWHERE, ever — a process killed by a supervisor, or a log
+# truncated per start, writes none. The log announces the port past the mark and names the pid the
+# restart started, the block's existing listener on 8751 answers, and that listener is neither that
+# pid nor a descendant of it. `restartPorts.has(port)` cannot see this: the dying process announced
+# the same port before it tried to bind, so the two are identical by that test. Only who owns the
+# socket separates them.
+# The fake pid must be genuinely off the listener's parent chain — this very script is one of its
+# ancestors — so take a pid that does not exist at all.
+FAKEPID=""
+for cand in $(seq 60000 60200); do [ -e "/proc/$cand" ] || { FAKEPID=$cand; break; }; done
+printf 'PWPROVE_PREVIEW_PID=999999\nListening on http://127.0.0.1:8751\n' >"$W/pid.log"
+MARK=$(wc -c <"$W/pid.log" | tr -d ' ')
+printf 'PWPROVE_PREVIEW_PID=%s\nListening on http://127.0.0.1:8751\n' "$FAKEPID" >>"$W/pid.log"
+( cd "$W" && env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/pid.log" RESTART_LOG_OFFSET="$MARK" \
+    SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve >"$W/out" 2>"$W/err" )
+rc=$?
+# Inert, never skipped: where socket inspection is blind the gate is silent BY DESIGN and this case
+# cannot decide. Say which of green / red / inert was got, out loud.
+if ss -ltnp 2>/dev/null | grep -qE "[:.]8751(\s|$)" && ss -ltnp 2>/dev/null | grep -E "[:.]8751(\s|$)" | grep -q 'pid='; then
+  if [ "$rc" -eq 3 ] && grep -q '^SERVE_CAUSE=restart-port-in-use$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out" \
+     && ! grep -q '^SERVE=ok$' "$W/out" && grep -qF "holds :8751; expected $FAKEPID" "$W/err" \
+     && grep -qF 'pre-mark pid was 999999' "$W/err"; then
+    ok "GREEN — a listener that is neither the restarted pid nor its descendant refuses, with no bind line anywhere"
+  else
+    bad "RED — pid-identity gate: exit $rc, stdout: $(tr '\n' ' ' <"$W/out" | tail -c 160), stderr: $(tr '\n' ' ' <"$W/err" | tail -c 200)"
+  fi
+else
+  echo "  [INERT] pid-identity gate — socket inspection is blind on this Host (ss shows no pid for :8751), so this case cannot decide; the gate is silent by design and the run got exit $rc"
+fi
+
 # 2. Stale process answers with a quiet log — no bind error, just nothing new. The old announcement
 # is BEFORE the mark, so it is not evidence about this restart, and an answer on the port is not
 # either. Distinct cause: something answered, its identity could not be proven.

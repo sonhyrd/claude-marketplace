@@ -651,6 +651,8 @@ if (phases.includes('build')) {
 // server absent — and one was a server bound to a single loopback family while the agent dialled the
 // other. Both are announcements. Process and socket inspection stay a fallback only: `lsof`/`ps` are
 // blind under sandboxing, so neither can establish that a port is free or that a listener is ours.
+// That stance is not overturned by the pid corroboration further down: inspection CORROBORATES and
+// may refuse, it never authorises, and it stays silent wherever it is blind.
 
 // Loopback forms, in the order they are tried. The NUMERIC ipv4 form leads deliberately: `localhost`
 // resolves per-process, so an origin recorded as `localhost` can reach a different family in the
@@ -938,6 +940,82 @@ if (phases.includes('serve')) {
             'start) and restart, then poll again. Any verdict taken against this server is a ' +
             'verdict about the old build.',
         ]);
+      }
+
+      // Second gate at the same acceptance point, structural rather than temporal. `restartPorts` is a
+      // set of PORTS announced past the mark, and the dying process announced its port before it ever
+      // attempted the bind — so `restartPorts.has(c.port)` cannot tell the two processes apart even in
+      // principle: the thing it identifies them by is the thing they share. Where the machine can see
+      // who owns the listening socket, ask it.
+      //
+      // Corroboration only, never a precondition: every blind condition below leaves the verdict
+      // exactly as it is without this gate. It refuses on positive contradiction and on nothing else.
+      //
+      // ACCEPTED CEILING, deliberately not closed: a wrapper that EXITS leaves the server reparented,
+      // the ppid walk then completes without finding the expected pid, and a healthy restart is
+      // conservatively refused. `exec`ing the serve command keeps the wrapper alive as the server's
+      // parent for its lifetime, so the case is narrow — and a re-run is the right side of the trade
+      // against today's wrong verdict. Do not add machinery to close it.
+      const pidLines = [...(logText || '').matchAll(/PWPROVE_PREVIEW_PID=(\d+)/g)];
+      const expectedPid = pidLines.filter((m) => m.index >= restartMark).pop()?.[1];
+      const preMarkPid = pidLines.filter((m) => m.index < restartMark).pop()?.[1];
+      if (expectedPid) {
+        // `ss` first, `lsof` as the fallback; short timeout, stderr discarded. A missing binary, a
+        // non-zero exit or empty output all read as "no rows", which is blind, which is silent.
+        const rows = (argv) => {
+          const r = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] });
+          return r.status === 0 ? (r.stdout || '') : '';
+        };
+        const forPort = (text, re) => text
+          .split('\n')
+          .filter((l) => new RegExp(`[:.]${reached.port}(\\s|$)`).test(l))
+          .flatMap((l) => [...l.matchAll(re)].map((m) => m[1]));
+        let holders = forPort(rows(['ss', '-ltnp']), /pid=(\d+)/g);
+        if (!holders.length) {
+          // UNEXERCISED on the Host this was written against: `lsof` is not installed there.
+          holders = rows(['lsof', '-nP', `-iTCP:${reached.port}`, '-sTCP:LISTEN'])
+            .split('\n')
+            .slice(1)
+            .map((l) => l.trim().split(/\s+/)[1])
+            .filter((v) => /^\d+$/.test(v || ''));
+        }
+        // ppid is the FIRST field after the LAST `)` on the /proc/<pid>/stat line. Never a whitespace
+        // split: field 2 is `comm`, parenthesised, and may itself contain spaces and parentheses — a
+        // process named `(my app)` makes a naive split yield a wrong ppid silently, which turns this
+        // gate into a random refusal. This is the kind of thing a later simplification deletes.
+        const ppidOf = (pid) => {
+          try {
+            const line = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+            const close = line.lastIndexOf(')');
+            if (close === -1) return undefined;
+            const ppid = line.slice(close + 1).trim().split(/\s+/)[1];
+            return /^\d+$/.test(ppid || '') ? ppid : undefined;
+          } catch {
+            return undefined; // /proc unreadable — blind, not a contradiction
+          }
+        };
+        // Ancestry, not equality: `echo PWPROVE_PREVIEW_PID=$$; exec pnpm preview` makes `$$` the
+        // wrapper, so the socket's owner is frequently a DESCENDANT of the pid we expect. Walk the
+        // parent chain to pid 1, capped at ten hops.
+        const isOurs = (pid) => {
+          let cur = pid;
+          for (let hop = 0; hop < 10 && cur && cur !== '1'; hop += 1) {
+            if (cur === expectedPid) return true;
+            cur = ppidOf(cur);
+          }
+          return cur === expectedPid;
+        };
+        // Refuse only when at least one pid parsed AND none of them passes. All-unparseable, pid-less
+        // rows, no rows at all: blind, silent. A mixed read accepts.
+        if (holders.length && !holders.some(isOurs)) {
+          restartStop('restart-port-in-use', [
+            `pid ${[...new Set(holders)].join(',')} holds :${reached.port}; expected ${expectedPid}`,
+            ...(preMarkPid ? [`The log's pre-mark pid was ${preMarkPid}.`] : []),
+            'The socket is owned by a process that is neither the one this restart started nor a ' +
+              'descendant of it, so the server answering is the PREVIOUS one, still serving the ' +
+              'artifact it started with. Kill it and restart, then poll again.',
+          ]);
+        }
       }
     }
     if (reached) {
