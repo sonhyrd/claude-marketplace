@@ -37,6 +37,16 @@ stderr_has() {
   if grep -qF -- "$2" "$W/err"; then ok "$1"; else bad "$1 — stderr lacks '$2'"; fi
 }
 
+# THE BODY AN AGENT READS is SKILL.md together with the reference files beside it, not SKILL.md
+# alone — the same definition review.sh's skill-version-bump check uses ("sibling and reference .md
+# files count in full"). A step's own reference is read on demand, so a string an agent must be able
+# to reach counts as reachable wherever in that set it lives. A missing references/ is a broken
+# checkout and grep says so loudly (exit 2, red) rather than narrowing the search in silence.
+# usage: body_has <fixed-string>
+body_has() {
+  grep -qFr -- "$1" "$REPO_ROOT/skills/pw-prove/SKILL.md" "$REPO_ROOT/skills/pw-prove/references"
+}
+
 echo "-- preflight: three bring-up phases that fail distinctly --"
 # The whole point of the phase split is that these three failures are three answers, not one
 # not-ready verdict: a missing configuration key (exit 4), a broken build (exit 5) and an absent
@@ -701,13 +711,14 @@ done
 case " $VERBS " in *" viewport "*) bad "a viewport verb exists — it is deliberately not part of the DSL" ;;
   *) ok "no viewport verb is published" ;; esac
 # The skill's cheat-sheet is the other surface an agent reads. It must name the SAME verbs — an
-# agent that learns the vocabulary from SKILL.md must not be able to learn a verb that is not there.
+# agent that learns the vocabulary from the body must not be able to learn a verb that is not there.
+# The cheat-sheet lives in the Step 3 reference, so this is asserted over the whole body.
 missing=""
-for verb in $VERBS; do grep -qF -- "\`$verb\`" skills/pw-prove/SKILL.md || missing="$missing $verb"; done
+for verb in $VERBS; do body_has "\`$verb\`" || missing="$missing $verb"; done
 if [ -z "$missing" ]; then
   ok "the skill's command cheat-sheet lists every verb the probe accepts"
 else
-  bad "SKILL.md's cheat-sheet omits:$missing"
+  bad "the skill body's cheat-sheet omits:$missing"
 fi
 expect_exit 2 "browserless env: start refuses cleanly (no pinned Playwright from cwd)" -- \
   node "$REPO_ROOT/$S/probe.mjs" start
@@ -871,14 +882,15 @@ else
 fi
 
 # The form above must be the form an agent READS — a documented shape the suite does not run is how
-# the {fn, arg} form stayed inert through three releases (#52).
+# the {fn, arg} form stayed inert through three releases (#52). These forms sit in the Step 3
+# reference, so this is asserted over the whole body.
 for form in '{"cmd":"eval","expression":"location.href"}' \
             '{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}}' \
             '{"cmd":"eval","expression":{"url":"location.href","t":"document.title"}}'; do
-  if grep -qF "$form" skills/pw-prove/SKILL.md; then
-    ok "  SKILL.md prints the eval form this suite runs: $form"
+  if body_has "$form"; then
+    ok "  the skill body prints the eval form this suite runs: $form"
   else
-    bad "  SKILL.md prints a different eval form than the suite runs: $form"
+    bad "  the skill body prints a different eval form than the suite runs: $form"
   fi
 done
 

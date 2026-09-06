@@ -31,9 +31,12 @@ environment:
     type: none
 
 skills:
+    # `references/**` is required, not decorative: `"*.md"` does not descend, and pw-prove's body
+    # is SKILL.md plus the eight step references a step reads on demand. Installed without them the
+    # skill behaves differently here than it does in the bundle.
     - source: local_path
       path: .
-      include: [SKILL.md, "*.md", "scripts/**"]
+      include: [SKILL.md, "*.md", "references/**", "scripts/**"]
     # The neighbour. `references/**` comes along because e2e-reviewer's body reads its pattern
     # reference on demand, and a skill installed without the files its body opens is a skill that
     # behaves differently here than it does in the bundle.

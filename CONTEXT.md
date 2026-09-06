@@ -533,3 +533,18 @@ that cannot tell one of them from real struggle is exposed as defective. **Exclu
 else, and it always carries a stated reason — including the sessions the ledger knows but no
 transcript exists for, which are emitted with an explicit marker because a corpus that silently
 shrinks is worse than one that reports a gap.
+
+## Marketplace subtree
+The private local marketplace's `plugins/e2e-skills/` prefix, which carries this repository's skill
+content and is where it is published from. The flow is **bidirectional**, and the marketplace is a
+real authoring side: content committed there reaches this repository as well as the other way about.
+Its own `check-e2e-subtree.sh` is what makes that concrete — the prefix must differ from this
+repository by exactly the two plugin manifests this repository does not ship, everything else
+byte-identical, which is a contract only satisfiable if work authored on either side reaches the
+other. Inbound here is a subtree pull from the marketplace, or a verbatim copy of the differing paths
+when this repository is the one catching up; outbound is a **targeted** `git push e2e-fork <sha>:main`
+built from the paths the fork owns, never `git subtree push`, which splits the whole prefix and lands
+those two manifests here. `AGENTS.md`'s *Distribution: subtree out, nothing in* section is superseded
+on this point: it says propagation is one-directional, and the split body this repository now carries
+was authored on the marketplace side, so a rule that admits no inbound path cannot describe what
+actually happens.
