@@ -31,6 +31,9 @@ environment:
     type: none
 
 skills:
+    # `references/**` is required, not decorative: `"*.md"` does not descend, and pw-prove's body
+    # is SKILL.md plus the eight step references a step reads on demand. Installed without them the
+    # skill behaves differently here than it does in the bundle.
     - source: local_path
       path: .
       include: [SKILL.md, "*.md", "references/**", "scripts/**"]

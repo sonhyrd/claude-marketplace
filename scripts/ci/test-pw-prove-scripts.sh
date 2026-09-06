@@ -38,20 +38,13 @@ stderr_has() {
 }
 
 # THE BODY AN AGENT READS is SKILL.md together with the reference files beside it, not SKILL.md
-# alone. pw-prove's body is split — SKILL.md carries the procedure and `references/*.md` carry the
-# material a step names — and a step's own reference is read on demand, so a string an agent must be
-# able to reach counts as reachable wherever in that set it lives. This is the same definition
-# review.sh's skill-version-bump check already uses ("sibling and reference .md files count in
-# full"); the two checks below used to grep SKILL.md alone and would have gone red on a pure move.
-# It resolves to exactly SKILL.md when no references/ directory exists.
+# alone — the same definition review.sh's skill-version-bump check uses ("sibling and reference .md
+# files count in full"). A step's own reference is read on demand, so a string an agent must be able
+# to reach counts as reachable wherever in that set it lives. A missing references/ is a broken
+# checkout and grep says so loudly (exit 2, red) rather than narrowing the search in silence.
 # usage: body_has <fixed-string>
 body_has() {
-  local b="$REPO_ROOT/skills/pw-prove"
-  if [ -d "$b/references" ]; then
-    grep -qFr -- "$1" "$b/SKILL.md" "$b/references"
-  else
-    grep -qF -- "$1" "$b/SKILL.md"
-  fi
+  grep -qFr -- "$1" "$REPO_ROOT/skills/pw-prove/SKILL.md" "$REPO_ROOT/skills/pw-prove/references"
 }
 
 echo "-- preflight: three bring-up phases that fail distinctly --"
@@ -719,9 +712,7 @@ case " $VERBS " in *" viewport "*) bad "a viewport verb exists — it is deliber
   *) ok "no viewport verb is published" ;; esac
 # The skill's cheat-sheet is the other surface an agent reads. It must name the SAME verbs — an
 # agent that learns the vocabulary from the body must not be able to learn a verb that is not there.
-# Asserted over the WHOLE body (SKILL.md + references/), because the cheat-sheet lives in the Step 3
-# reference the step names: what matters is that the agent can reach the verb, not which file holds
-# it. A verb absent from every one of those files still fails here.
+# The cheat-sheet lives in the Step 3 reference, so this is asserted over the whole body.
 missing=""
 for verb in $VERBS; do body_has "\`$verb\`" || missing="$missing $verb"; done
 if [ -z "$missing" ]; then
@@ -891,9 +882,8 @@ else
 fi
 
 # The form above must be the form an agent READS — a documented shape the suite does not run is how
-# the {fn, arg} form stayed inert through three releases (#52). Read over the whole body: these forms
-# sit in the Step 3 reference, and a form reachable from the step that needs it is a form the agent
-# reads. Absent from SKILL.md AND every reference, it still fails.
+# the {fn, arg} form stayed inert through three releases (#52). These forms sit in the Step 3
+# reference, so this is asserted over the whole body.
 for form in '{"cmd":"eval","expression":"location.href"}' \
             '{"cmd":"eval","expression":{"fn":"a => a.id","arg":{"id":7}}}' \
             '{"cmd":"eval","expression":{"url":"location.href","t":"document.title"}}'; do
