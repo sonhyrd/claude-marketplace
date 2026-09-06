@@ -46,8 +46,12 @@ stderr_has() {
 # It resolves to exactly SKILL.md when no references/ directory exists.
 # usage: body_has <fixed-string>
 body_has() {
-  grep -qFr -- "$1" "$REPO_ROOT/skills/pw-prove/SKILL.md" \
-    $([ -d "$REPO_ROOT/skills/pw-prove/references" ] && echo "$REPO_ROOT/skills/pw-prove/references")
+  local b="$REPO_ROOT/skills/pw-prove"
+  if [ -d "$b/references" ]; then
+    grep -qFr -- "$1" "$b/SKILL.md" "$b/references"
+  else
+    grep -qF -- "$1" "$b/SKILL.md"
+  fi
 }
 
 echo "-- preflight: three bring-up phases that fail distinctly --"
