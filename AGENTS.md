@@ -378,8 +378,8 @@ marketplace subtree) — a plain skill copy never sees them. So any skill that d
 
 ### Delegation profile
 
-Branch prefix, post-merge check, commit policy, and worker constraints for `/delegate-tickets`.
-See `docs/agents/delegate-profile.md`.
+Branch prefix, post-merge check, commit policy, and worker constraints for any agent or delegated
+session working in this repo. See `docs/agents/delegate-profile.md`.
 
 ### Issue tracker
 
