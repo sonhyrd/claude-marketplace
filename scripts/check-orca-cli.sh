@@ -200,15 +200,34 @@ has_flag() {
 # inline code spans (where it can wrap across lines with no marker at all --
 # `orca worktree\ncreate` is one span, and a line-by-line scan would miss it).
 # Prose outside a code span is deliberately not scanned: a sentence mentioning a
-# verb is not an instruction to run it.
+# verb is not an instruction to run it -- and a fence whose info string is not a
+# shell language is prose too. A ```markdown PR-body template or a ```text
+# example is quoted output, not an instruction, so it is scanned as neither a
+# command block nor a span. Only an empty, bash, sh, shell or console fence is a
+# command block.
 
 # One fence walker, asked twice: `--inside` joins each fenced block's
 # backslash-continued lines into whole commands, `--outside` hands back the
 # prose for the span scan below.
 fence_scan() {
     awk -v want="$2" '
-        BEGIN { fence = 0; buf = "" }
-        /^[[:space:]]*```/ { fence = !fence; next }
+        BEGIN { fence = 0; shell = 0; buf = "" }
+        /^[[:space:]]*```/ {
+            if (fence) { fence = 0; shell = 0 }
+            else {
+                fence = 1
+                info = $0
+                sub(/^[[:space:]]*`+/, "", info)
+                sub(/^[[:space:]]+/, "", info)
+                sub(/[[:space:]].*$/, "", info)
+                sub(/[[:space:]]+$/, "", info)
+                shell = (info == "" || info == "bash" || info == "sh" || \
+                         info == "shell" || info == "console")
+            }
+            buf = ""
+            next
+        }
+        fence && !shell { next }
         (fence ? 1 : 0) != want { next }
         want == 0 { print; next }
         {

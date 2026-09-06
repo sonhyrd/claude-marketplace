@@ -480,6 +480,39 @@ else
     nope "a verb owned by more than one group is not resolved by guessing" "rc=$rc: $out"
 fi
 
+# A fence is a command block only when its info string says shell. A prose
+# template inside a ```markdown fence is quoted output, not an instruction --
+# `autoship/reference.md`'s PR-body template is the real case that made this
+# fire ("...from its last worker_done or terminal evidence" matched as a bare
+# verb). Both directions, or the test does not describe the boundary.
+SKILL_MD_FENCE="${TMPROOT}/skill-md-fence"
+write_skill "$SKILL_MD_FENCE" 'Probe with `orca orchestration task-create --json`.
+
+```markdown
+Issue <id> failed: <reason, from its last worker_done or orca orchestration task-delete>.
+```'
+
+out="$(run_check "$CLI_BIN" "$SKILL_MD_FENCE")" && rc=0 || rc=$?
+if [ "$rc" -eq 0 ]; then
+    ok "a command inside a \`\`\`markdown fence is prose and is not scanned"
+else
+    nope "a command inside a \`\`\`markdown fence is prose and is not scanned" "rc=$rc: $out"
+fi
+
+SKILL_BASH_FENCE="${TMPROOT}/skill-bash-fence"
+write_skill "$SKILL_BASH_FENCE" 'Probe with `orca orchestration task-create --json`.
+
+```bash
+orca orchestration task-delete --json
+```'
+
+out="$(run_check "$CLI_BIN" "$SKILL_BASH_FENCE")" && rc=0 || rc=$?
+if [ "$rc" -eq 1 ] && grep -q "task-delete" <<<"$out"; then
+    ok "the same command inside a \`\`\`bash fence is still scanned and still fails"
+else
+    nope "the same command inside a \`\`\`bash fence is still scanned and still fails" "rc=$rc: $out"
+fi
+
 # --- Summary ------------------------------------------------------------------
 
 echo ""
