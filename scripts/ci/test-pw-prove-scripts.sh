@@ -665,6 +665,43 @@ else
   stderr_has "the refusal names the pre-mark pid it also saw" "pre-mark pid was 999999"
 fi
 
+# 1e. The two gates share ONE read, and this is what pins that. Gate B's expected pid used to come
+# from the round's log read — taken BEFORE the poll and before Gate A's settle — while Gate A re-read
+# the file twice and threw the text away. So a `PWPROVE_PREVIEW_PID=` line landing in exactly the
+# window Gate A exists for left the expected pid undefined and the STRUCTURAL gate silent: the same
+# wrong RESTART=proven, reached through the timing hole instead of around it. Same fixture as 1c and
+# the same inert conditions; the one difference is WHEN the pid line is written.
+if [ -z "$FAKEPID" ]; then
+  echo "  [INERT] late-pid gate — no unused pid in 60000-60200 on this Host, so the fixture cannot be built and the case cannot decide"
+elif ! pid_visible 8751; then
+  echo "  [INERT] late-pid gate — socket inspection is blind on this Host (ss shows no pid for :8751), so this case cannot decide; the gate is silent by design"
+elif ! holder_walkable 8751; then
+  echo "  [INERT] late-pid gate — the holder's /proc ancestry does not walk to pid 1 on this Host, so the gate is undecidable and silent by design; this case cannot decide"
+else
+  printf 'Listening on http://127.0.0.1:8751\n' >"$W/latepid.log"
+  MARK=$(wc -c <"$W/latepid.log" | tr -d ' ')
+  printf 'Listening on http://127.0.0.1:8751\n' >>"$W/latepid.log"
+  : >"$W/err"   # the watcher below reads this file; a previous case's line would trip it early
+  # Written AFTER the round's read and inside the 300ms settle, the same budget and the same 20ms/60ms
+  # margins case 1b uses. Earlier than the round's read and the case passes vacuously; later than the
+  # settle and it cannot pass at all.
+  ( for _ in $(seq 1 500); do grep -qF 'preflight: waiting for' "$W/err" 2>/dev/null && break; sleep 0.02; done
+    sleep 0.06
+    printf 'PWPROVE_PREVIEW_PID=%s\n' "$FAKEPID" >>"$W/latepid.log" ) &
+  LATEPID=$!
+  expect_exit 3 "a pid line that reaches the log only after the round's read still refuses — the gates share one read" -- \
+    env BASE_URL=http://127.0.0.1:8751 SERVER_LOG="$W/latepid.log" RESTART_LOG_OFFSET="$MARK" \
+        SERVE_RESTART=1 READY_TIMEOUT=20 node "$REPO_ROOT/$S/preflight.mjs" serve
+  wait $LATEPID 2>/dev/null
+  if grep -q '^SERVE_CAUSE=restart-port-in-use$' "$W/out" && grep -q '^RESTART=unproven$' "$W/out" \
+     && ! grep -q '^SERVE=ok$' "$W/out"; then
+    ok "the late pid line is read by the gate that needs it — SERVE_CAUSE=restart-port-in-use, RESTART=unproven, never SERVE=ok"
+  else
+    bad "late-pid gate — stdout: $(tr '\n' ' ' <"$W/out" | tail -c 200)"
+  fi
+  stderr_has "the late-pid refusal names the holder and the pid it expected" "holds :8751; expected $FAKEPID"
+fi
+
 # 1d. FALSE-POSITIVE GUARD for the same gate, and the one that matters more: the socket's owner IS a
 # DESCENDANT of the announced pid. `echo PWPROVE_PREVIEW_PID=$$` names the wrapper shell, which then
 # starts the server as its child, so an equality test would refuse this — a healthy restart — every

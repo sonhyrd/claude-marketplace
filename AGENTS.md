@@ -114,7 +114,8 @@ someone else's project**. Node is already a hard dependency there (they all invo
 Invoke them with `node <path>.mjs`, never `bash`.
 
 They orchestrate; they do not match. `rg` (PCRE2), `eslint`, `ast-grep`, `ffmpeg`, `ffprobe`, `git`,
-`gh`, `curl` and `npx playwright` stay subprocesses. One deliberate exception: `probe.mjs` imports
+`gh`, `curl`, `npx playwright` and — since #121, and only ever as a corroborating read that stays
+silent when it is blind — `ss` and `lsof` stay subprocesses. One deliberate exception: `probe.mjs` imports
 the **target project's own pinned** Playwright in-process (resolved from the app root — still nothing
 installed anywhere), because a persistent browser context cannot live across `npx playwright`
 subprocess invocations. **Do not rewrite the Tier-3 PCRE2 patterns as JS RegExp** — at least one is
