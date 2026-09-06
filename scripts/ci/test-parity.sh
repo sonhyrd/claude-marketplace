@@ -270,6 +270,45 @@ assert_absent "Version bump — an eval-config change demands no bump" \
 rm -f "$file"
 
 # ---------------------------------------------------------------------------
+# Cases 22-24: Step 7's first-run smoke rule (#125). Three clauses carry it and each fails
+# differently when it goes missing, so each is mutated ON ITS OWN with the other two intact. A
+# check that only goes red when the whole paragraph vanishes cannot see the failure that actually
+# threatens a prose rule, which is one clause being dropped as redundant while the rest survives.
+# ---------------------------------------------------------------------------
+
+# Case 22: the smoke clause itself is gone — the front half of the rule, and with it the whole
+# reason the ticket exists. The scoping and hazard clauses stay in place.
+file="skills/pw-prove/SKILL.md"
+backup "$file"
+mutate "$file" "**Smoke one scenario before the first full audit of a spec this run just wrote.**" \
+  "**Run the full spec set.**"
+assert_fails "First-run smoke — the smoke clause is gone" \
+  "no longer tells the agent to smoke ONE scenario"
+restore "$file"
+
+# Case 23: the attempt-1 scoping is gone, everything else intact. This is the leak the ticket is
+# most likely to suffer: unscoped, the rule reads as a licence to narrow every attempt and quietly
+# widens the heal loop's attempt-2-and-3 rule, which is correct as it stands.
+file="skills/pw-prove/SKILL.md"
+backup "$file"
+mutate "$file" "**Attempt 1 only**: from attempt 2 on, the rerun rule under *Failure handling* governs." \
+  "The rerun rule under *Failure handling* governs from here."
+assert_fails "First-run smoke — the attempt-1 scoping is gone" \
+  "no longer says it is ATTEMPT 1 ONLY"
+restore "$file"
+
+# Case 24: the hazard clause is gone, everything else intact. It is the clause that makes the rest
+# safe: without it the obvious next move after a red smoke run is to re-run the full set to see the
+# rest, which spends attempt 2 of 3 for nothing and can repeat the failure signature into a stall.
+file="skills/pw-prove/SKILL.md"
+backup "$file"
+mutate "$file" "Never re-run the full set unchanged to see the rest" \
+  "Then run the full set to see the rest"
+assert_fails "First-run smoke — the fix-before-full-set hazard clause is gone" \
+  "no longer forbids re-running the full set UNCHANGED"
+restore "$file"
+
+# ---------------------------------------------------------------------------
 # Scanner detection smoke — fixture-based and offline: eslint auto-download is
 # disabled via E2E_SMELL_NO_ESLINT_DOWNLOAD=1 (so counts come from the Tier-3
 # regex path) and ast-grep download via E2E_SMELL_NO_AST_GREP_DOWNLOAD=1. A

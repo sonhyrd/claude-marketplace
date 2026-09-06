@@ -218,6 +218,18 @@ Invoke `e2e-reviewer` (Skill tool) on the generated spec + POM.
 
 Read `references/step-7-verify.md` before this step.
 
+**Smoke one scenario before the first full audit of a spec this run just wrote.** A generated spec is wrong in bulk — one wrong root selector, an unbound HAR, an auth rung that did not take — and each wrong locator sits out its own timeout before saying so, so the full set spends every deadline to report one cause. Run the scenario whose steps traverse the most of the Locator Mapping Table (in practice the primary happy path) first: it proves bring-up, auth, the HAR bind and the core locators for the price of one scenario.
+
+**Green → run the full set**; the green run reset the attempt count, so it cost no budget. **Red → that is attempt 1: fix, then run the full set.** Never re-run the full set unchanged to see the rest — it spends attempt 2 of 3 to learn what the smoke run already said, and should the same failure land first in the runner output again, the checkpoint records a stall and refuses every later invocation, the green run that would clear it included. **Attempt 1 only**: from attempt 2 on, the rerun rule under *Failure handling* governs.
+
+```bash
+# SMOKE RUN — the first execution of a newly generated spec: one scenario, the same verb.
+node <skill-base>/scripts/proof-run.mjs audit \
+  --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base> \
+  --written <the spec this run wrote> --grep "<the scenario that traverses the most of the table>" \
+  --har <testDir>/<feature>.api.har --origin "$BASE_URL"     # both omitted when there is no recording
+```
+
 ```bash
 node <skill-base>/scripts/proof-run.mjs audit \
   --config <configDir>/playwright.proof.config.ts --test-dir <testDir> --base <base> \

@@ -341,6 +341,72 @@ else
   warn "python3 not available; skipped canonical dwell check"
 fi
 
+section "First-run smoke rule"
+if command -v python3 >/dev/null 2>&1; then
+  if python3 - <<'PY'
+import pathlib
+import sys
+
+# Step 7's front half (#125). The heal loop's "rerun only what failed" rule presupposes you know
+# what failed; on the FIRST execution of a newly generated spec you do not, and the full-set run
+# that tells you is the one that spends every deadline. Three clauses carry that rule and each one
+# fails differently when it goes missing, so each is asserted on its own — a check that only goes
+# red when the whole paragraph vanishes cannot see the failure that actually threatens this rule,
+# which is one clause being dropped as redundant while the rest survives.
+body = pathlib.Path('skills/pw-prove/SKILL.md').read_text(encoding='utf-8')
+
+clauses = [
+    (
+        'Smoke one scenario before the first full audit',
+        'Step 7 no longer tells the agent to smoke ONE scenario before the first full audit of a '
+        'spec this run wrote. That is the whole front half of the rule',
+    ),
+    (
+        '**Attempt 1 only**',
+        'the smoke rule no longer says it is ATTEMPT 1 ONLY. Unscoped, it reads as a licence to '
+        "narrow every attempt and widens the heal loop's attempt-2-and-3 rule, which is correct",
+    ),
+    (
+        'Never re-run the full set unchanged',
+        'the smoke rule no longer forbids re-running the full set UNCHANGED after a red smoke run. '
+        'That re-run spends attempt 2 of 3 to learn what the smoke run already said, and can repeat '
+        'the failure signature into a stall the loop cannot clear',
+    ),
+]
+
+errors = [f'skills/pw-prove/SKILL.md: {why}' for clause, why in clauses if clause not in body]
+
+# Placement is load-bearing, not cosmetic: the rule belongs where an agent reads it in the moment
+# before typing the audit command, and NOT beside the attempt-2-and-3 rule, where adjacency is what
+# invites a later edit to fold the two into one.
+smoke = body.find('Smoke one scenario before the first full audit')
+fence = body.find('# AUDIT RUN')
+heal = body.find('### Failure handling')
+if smoke >= 0 and fence >= 0 and smoke > fence:
+    errors.append(
+        'skills/pw-prove/SKILL.md: the smoke rule must sit immediately BEFORE the AUDIT RUN '
+        'command block — an agent reads it in the moment before it types that command'
+    )
+if smoke >= 0 and heal >= 0 and smoke > heal:
+    errors.append(
+        'skills/pw-prove/SKILL.md: the smoke rule has drifted into the Failure handling section, '
+        'next to the attempt-2-and-3 rule it must not widen'
+    )
+
+if errors:
+    for error in errors:
+        print(error, file=sys.stderr)
+    sys.exit(1)
+PY
+  then
+    ok "Step 7 carries the first-run smoke rule: the smoke clause, its attempt-1 scoping and its hazard clause, placed before the audit command"
+  else
+    err "first-run smoke rule check failed"
+  fi
+else
+  warn "python3 not available; skipped first-run smoke rule check"
+fi
+
 section "Skill version bump"
 if command -v python3 >/dev/null 2>&1; then
   if python3 - <<'PY'

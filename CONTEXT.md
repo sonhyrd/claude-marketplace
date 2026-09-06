@@ -178,6 +178,22 @@ dot-directory for the [filming run](#filming-run) to be refused by, dropped at t
 invocation and rewritten only by the classification phase — so an audit that never asked the
 question leaves no clean bill of health behind.
 
+## Smoke run
+The first execution of a newly generated spec, narrowed to one scenario. It is the same
+[audit run](#audit-run) invocation — `proof-run.mjs audit --grep "<title>"` — aimed at the front half
+of the heal loop rather than the back: the existing "rerun only what failed" rule presupposes you
+know what failed, and on the first execution you do not. One scenario end to end proves bring-up,
+auth, the HAR bind and the page object's core locators, which is where a generated spec is wrong in
+bulk, so it surfaces the shape at the cost of one scenario instead of every scenario's timeout. The
+scenario is chosen by what it traverses — the one covering the most of the Locator Mapping Table, in
+practice the primary happy path — never by position. Scoped to the first execution of a spec this run
+wrote, and to nothing else: it is not a widening of the heal loop's attempt-2-and-3 rule, which is
+correct as it stands. A green smoke run costs no budget, since a green audit resets the attempt
+count; a red one is attempt 1, and the rule that makes it safe is that you fix before running the
+full set — an unchanged full-set re-run spends a second attempt to learn what the smoke run already
+said, and can trip the [no-progress checkpoint](#no-progress-checkpoint) into a stall that only a
+green run could clear.
+
 ## Filming run
 The second of Step 7's two runs of the same spec set, and the one whose webms are delivered: it
 carries `PW_PROVE_CLIP=1` — which enables the committed spec's payoff dwell — and the
