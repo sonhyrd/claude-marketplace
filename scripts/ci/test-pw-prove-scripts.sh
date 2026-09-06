@@ -590,8 +590,12 @@ printf 'Listening on http://127.0.0.1:8751\n' >"$W/late.log"
 MARK=$(wc -c <"$W/late.log" | tr -d ' ')
 printf 'Listening on http://127.0.0.1:8751\n' >>"$W/late.log"
 : >"$W/err"   # the watcher below reads this file; a previous case's line would trip it early
-( for _ in $(seq 1 200); do grep -qF 'preflight: waiting for' "$W/err" 2>/dev/null && break; sleep 0.05; done
-  sleep 0.1   # the first round has accepted by now; the bind line lands inside the settle window
+# The line must land AFTER the acceptance re-read and BEFORE the second one — a 300ms window
+# (RESTART_SETTLE_MS in preflight.mjs). Detect the poll at 20ms granularity and lead by 60ms, so the
+# whole budget spent before the write is ~80ms of 300 and a loaded box still has room. Widening the
+# lead is what makes this flake; shortening it below the first read is what makes it pass vacuously.
+( for _ in $(seq 1 500); do grep -qF 'preflight: waiting for' "$W/err" 2>/dev/null && break; sleep 0.02; done
+  sleep 0.06
   printf 'Error: listen EADDRINUSE: address already in use :::8751\n' >>"$W/late.log" ) &
 LATEBIND=$!
 expect_exit 3 "a bind failure that reaches the log after the first round has accepted is still a SERVE failure" -- \
@@ -618,11 +622,32 @@ for cand in $(seq 60000 60200); do [ -e "/proc/$cand" ] || { FAKEPID=$cand; brea
 # Inert, never skipped, and inert for BOTH of its blind conditions: a case that could not build its
 # own fixture has proved nothing, and neither has one run where socket inspection cannot see a pid.
 # Reporting either as red would be an instrument reading its own blindness as a defect.
-pid_visible() { ss -ltnp 2>/dev/null | grep -E "[:.]$1(\s|$)" | grep -q 'pid='; }
+# `[[:space:]]`, not `\s`: `\s` is a GNU grep extension and matches a literal `s` under BSD grep, so
+# the probe would answer "blind" everywhere else and both cases would stop measuring in silence.
+pid_visible() { ss -ltnp 2>/dev/null | grep -E "[:.]$1([[:space:]]|$)" | grep -q 'pid='; }
+# The gate is blind on TWO reads, not one: `ss` may show no pid, and the ppid walk may not complete.
+# The second matters since the fix made an undecidable walk silent — a Host whose /proc chain cannot
+# be read makes the gate accept, and a case that called that RED would be reading its own blindness
+# as a defect. Walk the holder's chain here the way the gate does, and report inert if it stalls.
+holder_walkable() {
+  local pid cur next hop
+  pid=$(ss -ltnp 2>/dev/null | grep -E "[:.]$1([[:space:]]|$)" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
+  [ -n "$pid" ] || return 1
+  cur=$pid
+  for hop in $(seq 1 64); do
+    [ "$cur" = 1 ] && return 0
+    next=$(sed -n 's/.*) [^ ]* \([0-9]*\).*/\1/p' "/proc/$cur/stat" 2>/dev/null)
+    [ -n "$next" ] || return 1
+    cur=$next
+  done
+  return 1
+}
 if [ -z "$FAKEPID" ]; then
   echo "  [INERT] pid-identity gate — no unused pid in 60000-60200 on this Host, so the fixture cannot be built and the case cannot decide"
 elif ! pid_visible 8751; then
   echo "  [INERT] pid-identity gate — socket inspection is blind on this Host (ss shows no pid for :8751), so this case cannot decide; the gate is silent by design"
+elif ! holder_walkable 8751; then
+  echo "  [INERT] pid-identity gate — the holder's /proc ancestry does not walk to pid 1 on this Host, so the gate is undecidable and silent by design; this case cannot decide"
 else
   printf 'PWPROVE_PREVIEW_PID=999999\nListening on http://127.0.0.1:8751\n' >"$W/pid.log"
   MARK=$(wc -c <"$W/pid.log" | tr -d ' ')
@@ -646,10 +671,13 @@ fi
 # time. Its own port, verified free first, so the block's 8751 listener is not disturbed.
 DPORT=8752
 DESCWRAP=""
+TOOK_DPORT=0   # only a case that STARTED the listener may assert it was released
 kill_desc() {
   [ -s "$W/desc.node.pid" ] && kill "$(cat "$W/desc.node.pid")" 2>/dev/null
   [ -n "$DESCWRAP" ] && { kill "$DESCWRAP" && wait "$DESCWRAP"; } 2>/dev/null
   DESCWRAP=""
+  # Cleared, not left behind: a second call would otherwise signal whatever now owns that recycled pid.
+  : >"$W/desc.node.pid"
 }
 trap 'kill_desc; kill_stale; rm -rf "$W"' EXIT
 if curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT" || pid_visible "$DPORT"; then
@@ -660,7 +688,7 @@ node -e 'require("http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).lis
 echo \$! >"$W/desc.node.pid"
 wait
 EOF
-  bash "$W/desc.sh" & DESCWRAP=$!
+  bash "$W/desc.sh" & DESCWRAP=$!; TOOK_DPORT=1
   for _ in $(seq 1 50); do curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT" && break; sleep 0.2; done
   printf 'Listening on http://127.0.0.1:%s\n' "$DPORT" >"$W/desc.log"
   MARK=$(wc -c <"$W/desc.log" | tr -d ' ')
@@ -684,10 +712,16 @@ EOF
 fi
 kill_desc
 trap 'kill_stale; rm -rf "$W"' EXIT
-if curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT"; then
-  bad "descendant guard left :$DPORT held — the case must release every port it took"
-else
-  ok "descendant guard released :$DPORT"
+# Only asserted when this case actually took the port. On the inert path :$DPORT is a stranger's, and
+# curling it would report a FAIL for a listener the case never started — the very thing the inert
+# branch above refuses to do.
+if [ "$TOOK_DPORT" = 1 ]; then
+  for _ in $(seq 1 25); do curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT" || break; sleep 0.2; done
+  if curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$DPORT"; then
+    bad "descendant guard left :$DPORT held — the case must release every port it took"
+  else
+    ok "descendant guard released :$DPORT"
+  fi
 fi
 
 # 2. Stale process answers with a quiet log — no bind error, just nothing new. The old announcement

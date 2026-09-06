@@ -929,17 +929,24 @@ if (phases.includes('serve')) {
       // recorded yet. So re-read the log, and if it is still quiet settle a fixed interval and read
       // ONCE more. One extra read, capped — deliberately not a re-poll, not a second restart, and
       // not a downgraded verdict.
-      const lateBind = () => {
+      // The re-read is kept, not thrown away: it is the freshest view of the log there is, and the
+      // pid gate below reads its expected pid out of THIS text rather than out of the round's. The
+      // round read the log BEFORE the poll, so `PWPROVE_PREVIEW_PID=` can land in exactly the window
+      // this gate exists for — and reading it from there would leave the structural gate blind
+      // precisely where the timing one was.
+      let late = { text: logText ?? '', mark: restartMark };
+      const reread = () => {
         try {
-          return bindFailureIn(readLog());
+          late = readLog();
         } catch {
-          return undefined; // an unreadable log is not a contradiction, and silence is what today does
+          /* unreadable — keep the text we had; it is what the pre-poll check already cleared */
         }
+        return bindFailureIn(late);
       };
-      let lateLine = lateBind();
+      let lateLine = reread();
       if (!lateLine) {
         sleep(RESTART_SETTLE_MS);
-        lateLine = lateBind();
+        lateLine = reread();
       }
       if (lateLine) {
         restartStop('restart-port-in-use', [
@@ -965,9 +972,9 @@ if (phases.includes('serve')) {
       // conservatively refused. `exec`ing the serve command keeps the wrapper alive as the server's
       // parent for its lifetime, so the case is narrow — and a re-run is the right side of the trade
       // against today's wrong verdict. Do not add machinery to close it.
-      const pidLines = [...(logText || '').matchAll(/PWPROVE_PREVIEW_PID=(\d+)/g)];
-      const expectedPid = pidLines.filter((m) => m.index >= restartMark).pop()?.[1];
-      const preMarkPid = pidLines.filter((m) => m.index < restartMark).pop()?.[1];
+      const pidLines = [...late.text.matchAll(/PWPROVE_PREVIEW_PID=(\d+)/g)];
+      const expectedPid = pidLines.filter((m) => m.index >= late.mark).pop()?.[1];
+      const preMarkPid = pidLines.filter((m) => m.index < late.mark).pop()?.[1];
       if (expectedPid) {
         // `ss` first, `lsof` as the fallback; short timeout, stderr discarded. A missing binary, a
         // non-zero exit or empty output all read as "no rows", which is blind, which is silent.
@@ -975,11 +982,11 @@ if (phases.includes('serve')) {
           const r = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] });
           return r.status === 0 ? (r.stdout || '') : '';
         };
-        const forPort = (text, re) => text
+        const portRe = new RegExp(`[:.]${reached.port}(\\s|$)`);
+        let holders = rows(['ss', '-ltnp'])
           .split('\n')
-          .filter((l) => new RegExp(`[:.]${reached.port}(\\s|$)`).test(l))
-          .flatMap((l) => [...l.matchAll(re)].map((m) => m[1]));
-        let holders = forPort(rows(['ss', '-ltnp']), /pid=(\d+)/g);
+          .filter((l) => portRe.test(l))
+          .flatMap((l) => [...l.matchAll(/pid=(\d+)/g)].map((m) => m[1]));
         if (!holders.length) {
           // UNEXERCISED on the Host this was written against: `lsof` is not installed there.
           holders = rows(['lsof', '-nP', `-iTCP:${reached.port}`, '-sTCP:LISTEN'])
