@@ -12,6 +12,21 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.10.0] - Unreleased
+
+### Changed
+
+- **The subtree is synced to `e2e-fork/main` at `31b31ea` (`pw-prove` 0.39.0 → 0.42.0)**, bringing four fork PRs down: **#178** (the `SKILL.md` body split into `references/step-*.md` — a file-layout change), **#187** (0.40.0 — `RESTART=proven` no longer names a dead server; it refuses in 2.4s), **#188** (0.41.0 — the first-run smoke rule moved into the split `step-7-verify.md` with its guard repointed) and **#195** (0.42.0 — see below). `e2e-reviewer` and `playwright-debugger` are unchanged. **A minor, not a patch**: #178 changed the file layout and a runtime behaviour was retired. **Not a major**: no skill description changed on any of the three skills, so the routing table is untouched and nothing re-routes on install.
+- **This repo's own `references/step-*.md` split (#97/#98, shipped as 1.9.2) is superseded wholesale by the fork's #178.** The two are the same eight-file shape done twice, on both sides of the subtree boundary; the fork's contents win. Eight reference files replaced at once is the sync working, not a reverted layout change.
+
+### Removed
+
+- **`pw-prove`'s runtime profile is retired** (fork #195, and the fork's own `docs/adr/0021-no-durable-runtime-profile.md` arrives with this sync). The Step 1 read, the Step 8 write and the `git add -f .pw-prove/profile.md` are gone; durable findings now travel as a `Learned:` line in the completion report. This is the reason the sync was time-sensitive rather than merely overdue: hosts on 1.9.x carry a skill that writes `.pw-prove/profile.md` into every repo it proves, and two repos had already deleted that file (`hyrdrocks/nuxt-hyrd-chrysus#3703`, `hyrdrocks/hyrd-widget#1356`). Until the hosts pull 1.10.0, the next proof run puts it back. Nothing under the prefix now writes or force-adds the path — the 23 surviving mentions are all historical prose in `README.md` and `docs/`, which is the record of the retirement rather than the writer.
+
+### Fixed
+
+- **The subtree split chain is repaired.** The newest commit carrying `git-subtree-split` was `bcd6b25c` (split `e8ddfd3`); the five syncs after it were squash-merged on GitHub, which drops the trailers, so `git subtree pull` diffed against a merge base ~90 commits stale. One attempt was made here for the evidence and produced add/add conflicts across the prefix exactly as predicted. The sync was done instead as `git merge -s ours` with the prefix replaced wholesale from the fork's tree, the two marketplace-only manifests written back, and every other blob verified byte-identical to the fork **by object hash** (660/660) before committing — with all three trailers (`git-subtree-dir`, `git-subtree-mainline`, `git-subtree-split`) recorded, so the next pull diffs against this sync.
+
 ## [1.9.2] - Unreleased
 
 ### Changed
