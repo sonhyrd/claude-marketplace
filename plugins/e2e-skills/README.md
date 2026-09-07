@@ -212,7 +212,8 @@ Architecture decisions: [0001 PR-mode is zero-input](docs/adr/0001-pr-mode-zero-
 [0018 the eval runtime is `none`](docs/adr/0018-eval-runtime-is-none.md) (and unsandboxed — read it
 before running the suite) ·
 [0019 pw-prove refuses a heavy session](docs/adr/0019-pw-prove-refuses-a-heavy-session.md) ·
-[0020 audit before filming, rebuild when needed](docs/adr/0020-audit-before-filming-rebuild-when-needed.md).
+[0020 audit before filming, rebuild when needed](docs/adr/0020-audit-before-filming-rebuild-when-needed.md) ·
+[0021 no durable runtime profile](docs/adr/0021-no-durable-runtime-profile.md).
 
 ## License
 

@@ -651,6 +651,8 @@ if (phases.includes('build')) {
 // server absent — and one was a server bound to a single loopback family while the agent dialled the
 // other. Both are announcements. Process and socket inspection stay a fallback only: `lsof`/`ps` are
 // blind under sandboxing, so neither can establish that a port is free or that a listener is ours.
+// That stance is not overturned by the pid corroboration further down: inspection CORROBORATES and
+// may refuse, it never authorises, and it stays silent wherever it is blind.
 
 // Loopback forms, in the order they are tried. The NUMERIC ipv4 form leads deliberately: `localhost`
 // resolves per-process, so an origin recorded as `localhost` can reach a different family in the
@@ -769,6 +771,9 @@ if (phases.includes('serve')) {
   // process said it could not bind (kill the one holding the port), or it simply never announced
   // while something answered anyway (the answer is unidentified — do not trust it either way).
   const BIND_FAILURE = /EADDRINUSE|already in use/gi;
+  // How long the post-answer re-read below settles for before its one extra look. Fixed and small:
+  // it is paid once, only in restart mode, and only when a candidate has already answered.
+  const RESTART_SETTLE_MS = 300;
   // A bind failure followed by an announcement is a port SHIFT, not a failed restart — the framework
   // said it could not have the port and then told us the one it took. Only an unanswered bind
   // failure is terminal.
@@ -778,6 +783,18 @@ if (phases.includes('serve')) {
     if (at === -1 || newAnnounced.some((a) => a.at > at)) return undefined;
     return text.slice(at, text.indexOf('\n', at) === -1 ? undefined : text.indexOf('\n', at)).trim();
   }
+  // The poll's read and the post-answer re-read below ask the log the same question, so they share
+  // one shape: read bytes, decode, derive the character-index mark, then run `failedToBind` over the
+  // announcements past it. Two copies of this drifted apart is a gate that fires in one place only.
+  const readLog = () => {
+    const bytes = fs.readFileSync(SERVER_LOG);
+    return {
+      text: bytes.toString('utf8'),
+      mark: bytes.subarray(0, Math.min(RESTART_LOG_OFFSET, bytes.length)).toString('utf8').length,
+    };
+  };
+  const bindFailureIn = ({ text, mark }) =>
+    failedToBind(text, mark, announcedPorts(text).filter((a) => a.at >= mark));
   // One summary for every way this phase ends badly, so a cause added here cannot ship with a
   // summary that names a different set of keys than the one the timeout path prints.
   const serveFailed = (cause, ports = []) => {
@@ -840,9 +857,9 @@ if (phases.includes('serve')) {
   for (;;) {
     if (SERVER_LOG) {
       try {
-        const bytes = fs.readFileSync(SERVER_LOG);
-        logText = bytes.toString('utf8');
-        restartMark = bytes.subarray(0, Math.min(RESTART_LOG_OFFSET, bytes.length)).toString('utf8').length;
+        const read = readLog();
+        logText = read.text;
+        restartMark = read.mark;
         announced = announcedPorts(logText);
       } catch {
         /* not there yet, or unreadable — neither is a verdict; the poll below still answers */
@@ -871,7 +888,7 @@ if (phases.includes('serve')) {
       announced = [...fresh, ...announced.filter((a) => !fresh.includes(a))];
       // Stop the moment the new process says it could not bind. Waiting out the budget here buys
       // nothing — the restart is over — and the run has a stale server to kill before it can retry.
-      const bindLine = failedToBind(logText ?? '', restartMark, fresh);
+      const bindLine = bindFailureIn({ text: logText ?? '', mark: restartMark });
       if (bindLine) {
         restartStop('restart-port-in-use', [
           `the restarted server never bound — its own log says: ${bindLine}`,
@@ -902,6 +919,135 @@ if (phases.includes('serve')) {
         }
         reached = c;
         break;
+      }
+    }
+    if (reached && SERVE_RESTART) {
+      // The check above runs once per round BEFORE the poll, and a stale predecessor answers in
+      // milliseconds — so round one accepts and breaks out before the new process's EADDRINUSE has
+      // necessarily reached the log, and there is no second round for that check to fire in. The
+      // evidence is interesting exactly here: a candidate answered, and RESTART=proven has not been
+      // recorded yet. So re-read the log, and if it is still quiet settle a fixed interval and read
+      // ONCE more. One extra read, capped — deliberately not a re-poll, not a second restart, and
+      // not a downgraded verdict.
+      // The re-read is kept, not thrown away: it is the freshest view of the log there is, and the
+      // pid gate below reads its expected pid out of THIS text rather than out of the round's. The
+      // round read the log BEFORE the poll, so `PWPROVE_PREVIEW_PID=` can land in exactly the window
+      // this gate exists for — and reading it from there would leave the structural gate blind
+      // precisely where the timing one was.
+      let late = { text: logText ?? '', mark: restartMark };
+      const reread = () => {
+        try {
+          late = readLog();
+        } catch {
+          /* unreadable — keep the text we had; it is what the pre-poll check already cleared */
+        }
+        return bindFailureIn(late);
+      };
+      let lateLine = reread();
+      if (!lateLine) {
+        sleep(RESTART_SETTLE_MS);
+        lateLine = reread();
+      }
+      if (lateLine) {
+        restartStop('restart-port-in-use', [
+          `the restarted server never bound — its own log says: ${lateLine}`,
+          'It answered on that port before saying so, which is the PREVIOUS process still serving ' +
+            'the artifact it started with. Kill it (the port is held by something you did not just ' +
+            'start) and restart, then poll again. Any verdict taken against this server is a ' +
+            'verdict about the old build.',
+        ]);
+      }
+
+      // Second gate at the same acceptance point, structural rather than temporal. `restartPorts` is a
+      // set of PORTS announced past the mark, and the dying process announced its port before it ever
+      // attempted the bind — so `restartPorts.has(c.port)` cannot tell the two processes apart even in
+      // principle: the thing it identifies them by is the thing they share. Where the machine can see
+      // who owns the listening socket, ask it.
+      //
+      // Corroboration only, never a precondition: every blind condition below leaves the verdict
+      // exactly as it is without this gate. It refuses on positive contradiction and on nothing else.
+      //
+      // ACCEPTED CEILING, deliberately not closed: a wrapper that EXITS leaves the server reparented,
+      // the ppid walk then completes without finding the expected pid, and a healthy restart is
+      // conservatively refused. `exec`ing the serve command keeps the wrapper alive as the server's
+      // parent for its lifetime, so the case is narrow — and a re-run is the right side of the trade
+      // against today's wrong verdict. Do not add machinery to close it.
+      const pidLines = [...late.text.matchAll(/PWPROVE_PREVIEW_PID=(\d+)/g)];
+      const expectedPid = pidLines.filter((m) => m.index >= late.mark).pop()?.[1];
+      const preMarkPid = pidLines.filter((m) => m.index < late.mark).pop()?.[1];
+      if (expectedPid) {
+        // `ss` first, `lsof` as the fallback; short timeout, stderr discarded. A missing binary, a
+        // non-zero exit or empty output all read as "no rows", which is blind, which is silent.
+        const rows = (argv) => {
+          const r = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] });
+          return r.status === 0 ? (r.stdout || '') : '';
+        };
+        const portRe = new RegExp(`[:.]${reached.port}(\\s|$)`);
+        let holders = rows(['ss', '-ltnp'])
+          .split('\n')
+          .filter((l) => portRe.test(l))
+          .flatMap((l) => [...l.matchAll(/pid=(\d+)/g)].map((m) => m[1]));
+        if (!holders.length) {
+          // UNEXERCISED on the Host this was written against: `lsof` is not installed there.
+          holders = rows(['lsof', '-nP', `-iTCP:${reached.port}`, '-sTCP:LISTEN'])
+            .split('\n')
+            .slice(1)
+            .map((l) => l.trim().split(/\s+/)[1])
+            .filter((v) => /^\d+$/.test(v || ''));
+        }
+        // ppid is the FIRST field after the LAST `)` on the /proc/<pid>/stat line. Never a whitespace
+        // split: field 2 is `comm`, parenthesised, and may itself contain spaces and parentheses — a
+        // process named `(my app)` makes a naive split yield a wrong ppid silently, which turns this
+        // gate into a random refusal. This is the kind of thing a later simplification deletes.
+        const ppidOf = (pid) => {
+          try {
+            const line = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+            const close = line.lastIndexOf(')');
+            if (close === -1) return undefined;
+            const ppid = line.slice(close + 1).trim().split(/\s+/)[1];
+            return /^\d+$/.test(ppid || '') ? ppid : undefined;
+          } catch {
+            return undefined; // /proc unreadable — blind, not a contradiction
+          }
+        };
+        // Ancestry, not equality: `echo PWPROVE_PREVIEW_PID=$$; exec pnpm preview` makes `$$` the
+        // wrapper, so the socket's owner is frequently a DESCENDANT of the pid we expect. Walk the
+        // parent chain to pid 1, capped at 64 hops. The cap is only a cycle belt-and-braces — a /proc
+        // chain always terminates at 1 — so it is set well above any real tree: a shell inside an
+        // agent inside a container is routinely ten deep, and a cap that trips there makes every
+        // stranger UNDECIDABLE and the gate permanently blind on the hosts that need it.
+        // THREE outcomes, not two — true (ours), false (definitely a stranger), undefined (UNDECIDABLE).
+        // The third state is the whole point of this function and a later simplification back to a
+        // boolean silently reintroduces the bug it exists to prevent: a walk that stops because
+        // `/proc` went unreadable or because the process vanished has NOT proved the pid is a
+        // stranger, it has only run out of evidence, and so has a walk that hit the hop cap. Only a
+        // walk that reaches pid 1 without seeing the expected pid has actually completed and found
+        // nothing. Collapse undecidable into false and one blind holder row refuses a healthy
+        // restart — blind must be silent on EVERY path, not merely on the ones with no rows.
+        const isOurs = (pid) => {
+          let cur = pid;
+          for (let hop = 0; hop < 64; hop += 1) {
+            if (cur === expectedPid) return true;
+            if (cur === '1') return false; // walk COMPLETED at init and never saw it: a stranger
+            const next = ppidOf(cur);
+            if (!next) return undefined; // /proc unreadable, or the process is gone: undecidable
+            cur = next;
+          }
+          return undefined; // hop cap: the walk never completed, so it decided nothing
+        };
+        // Refuse only when at least one holder is DECIDABLE and none of them is ours. No rows,
+        // pid-less rows, all-unparseable rows, an undecidable ancestry walk: blind, silent. A mixed
+        // read accepts — an undecidable holder never contributes to a refusal.
+        const verdicts = holders.map(isOurs);
+        if (verdicts.includes(false) && !verdicts.includes(true)) {
+          restartStop('restart-port-in-use', [
+            `pid ${[...new Set(holders)].join(',')} holds :${reached.port}; expected ${expectedPid}`,
+            ...(preMarkPid ? [`The log's pre-mark pid was ${preMarkPid}.`] : []),
+            'The socket is owned by a process that is neither the one this restart started nor a ' +
+              'descendant of it, so the server answering is the PREVIOUS one, still serving the ' +
+              'artifact it started with. Kill it and restart, then poll again.',
+          ]);
+        }
       }
     }
     if (reached) {

@@ -159,6 +159,23 @@ else
   printf '%s\n' "$out"
 fi
 
+# The body an agent reads is SKILL.md TOGETHER WITH the references beside it, the same definition
+# test-pw-prove-scripts.sh's body_has and review.sh's version-bump check already use. Step 7's
+# invocations live in references/step-7-verify.md as well as in SKILL.md, so checking SKILL.md alone
+# audits one of two copies and a verb or flag that drifts in the reference passes. Any reference that
+# names the module is checked; one that does not is not a body file for this purpose.
+for ref in "$REPO_ROOT"/skills/pw-prove/references/*.md; do
+  [ -e "$ref" ] || continue
+  grep -qF 'proof-run.mjs' "$ref" || continue
+  rel="${ref#"$REPO_ROOT"/}"
+  if out=$(check_body "$ref"); then
+    ok "every verb and flag in $rel is one $MODULE accepts"
+  else
+    bad "$rel invokes something $MODULE does not accept"
+    printf '%s\n' "$out"
+  fi
+done
+
 # Extraction is load-bearing: a check that silently found nothing would be green forever. Every
 # fenced command block for the three verbs must be reached.
 for v in audit film mutate; do

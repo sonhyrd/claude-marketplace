@@ -178,6 +178,22 @@ dot-directory for the [filming run](#filming-run) to be refused by, dropped at t
 invocation and rewritten only by the classification phase — so an audit that never asked the
 question leaves no clean bill of health behind.
 
+## Smoke run
+The first execution of a newly generated spec, narrowed to one scenario. It is the same
+[audit run](#audit-run) invocation — `proof-run.mjs audit --grep "<title>"` — aimed at the front half
+of the heal loop rather than the back: the existing "rerun only what failed" rule presupposes you
+know what failed, and on the first execution you do not. One scenario end to end proves bring-up,
+auth, the HAR bind and the page object's core locators, which is where a generated spec is wrong in
+bulk, so it surfaces the shape at the cost of one scenario instead of every scenario's timeout. The
+scenario is chosen by what it traverses — the one covering the most of the Locator Mapping Table, in
+practice the primary happy path — never by position. Scoped to the first execution of a spec this run
+wrote, and to nothing else: it is not a widening of the heal loop's attempt-2-and-3 rule, which is
+correct as it stands. A green smoke run costs no budget, since a green audit resets the attempt
+count; a red one is attempt 1, and the rule that makes it safe is that you fix before running the
+full set — an unchanged full-set re-run spends a second attempt to learn what the smoke run already
+said, and can trip the [no-progress checkpoint](#no-progress-checkpoint) into a stall that only a
+green run could clear.
+
 ## Filming run
 The second of Step 7's two runs of the same spec set, and the one whose webms are delivered: it
 carries `PW_PROVE_CLIP=1` — which enables the committed spec's payoff dwell — and the
@@ -212,8 +228,31 @@ produce it — the stop is confirmed rather than assumed, escalating to SIGKILL 
 restart is **exit 11 with no verdict to read**, because the run it would have paid for could only
 describe an artifact nothing rebuilt. Since #148 the mark is taken when the restart is *issued*,
 not before the build: a mark taken earlier includes the build's own output and a predecessor's
-dying words in the window it is meant to exclude. A proven restart is also what clears a standing
-[stale artifact](#stale-artifact) marker.
+dying words in the window it is meant to exclude. Since #121 the announcement remains the only
+thing that can *prove* the restart, but it is no longer the only thing that can *refuse* one: at the
+moment a candidate answers, two [corroborating reads](#corroborating-read) run — the log re-read for
+a bind failure the predecessor's answer outran, and the owner of the listening socket checked
+against the process this restart started — and either may refuse. Neither can authorise, and where
+either is [blind](#blind) it says nothing, so a Host that cannot look is no worse off than before.
+A proven restart is also what clears a standing [stale artifact](#stale-artifact) marker.
+
+## Corroborating read
+An independent local observation of the machine — not the subject's own output — taken to check a claim the
+subject has already made. It can only ever **refuse**: a corroborating read that agrees changes nothing, one
+that cannot see is [blind](#blind) and says nothing, and only a positive contradiction becomes a verdict.
+Nothing may be made to depend on one succeeding, because the Hosts this runs on differ in what they are allowed
+to see, and a read that is a precondition anywhere is a precondition everywhere. The [proven
+restart](#proven-restart) is the case that named the term: the announcement proves, the corroborating reads
+only refuse.
+
+## Blind
+An inspection that **ran and established nothing** — the tool is absent, it exited non-zero, it printed
+nothing, or what it printed does not carry the field the question needed. Distinct from an inspection that
+failed to run, and distinct again from one that answered *no*: blind is an absence of evidence, never evidence
+of absence. The rule wherever it applies is **blind ⇒ silent** — a blind [corroborating
+read](#corroborating-read) leaves the verdict exactly where it stood without it, so a sandboxed Host behaves as
+it always did rather than being refused for want of a tool it does not have. An instrument that saw nothing
+must never read as one that saw agreement.
 
 ## Stale artifact
 The state the machine is in between a mutation check's **revert** and the next build: the working
@@ -281,20 +320,8 @@ the approval gate.
 ## Environment facts
 What Step 1 derives about the repository it is about to prove in — base URL, config path, test
 directory, POM inventory, existing specs, runner presence. In-memory, re-derived every run, and the
-input to every later step. Distinct from the [runtime profile](#runtime-profile), which is a file:
-the facts are what this run worked out, the profile is what an earlier run wrote down.
-
-## Runtime profile
-`.pw-prove/profile.md` in the **target** repository — the durable record of what a repository costs a
-run to learn: how a tenant resolves, which auth rung works against the [proof target](#proof-target),
-which declared env keys are actually required. Read at Step 1 as advisory context that never overrides
-a live observation, and written back at Step 3 and Step 8. An entry is admitted only if it is about
-the repository rather than the change, cost a live pass to learn, and will still be true next month.
-Two halves: a `KEY=value` header a later run **substitutes into its commands**, and prose beneath it
-carrying the reasoning a run weighs before overriding a value. Subject headings are the prose's merge
-keys, so a re-learned fact rewrites its entry rather than stacking a near-duplicate; the header is one
-block with one merge key per line. Untrusted data on the way in, and never a credential's value —
-including in the header, whose shape is exactly that of a real `.env` line.
+input to every later step. Nothing persists them between runs: a fact worth keeping is reported, not
+filed.
 
 ## Recon probe
 The persistent browser context (`scripts/probe.mjs`) that answers batched recon questions during
@@ -467,9 +494,8 @@ item is attributed to. One session, one record, written to disk before it is ret
 not prose**: an empty field is a stated gap, and a friction item carrying no attribution is
 incomplete rather than a finding. A no-progress loop noted in one is an *observation* about where a
 run circled, not the [no-progress checkpoint](#no-progress-checkpoint), which is the rule Step 7
-applies live. Distinct too from the [runtime profile](#runtime-profile), which is a file a run writes
-into the target repository for the next run to read; a distillation is written outside every
-repository, after the fact, and no run ever reads one.
+applies live. A distillation is written outside every repository, after the fact, and no run ever
+reads one.
 
 ## Friction finding
 One ranked item drawn from the [session distillations](#session-distillation): a named cost, carrying
@@ -533,3 +559,18 @@ that cannot tell one of them from real struggle is exposed as defective. **Exclu
 else, and it always carries a stated reason — including the sessions the ledger knows but no
 transcript exists for, which are emitted with an explicit marker because a corpus that silently
 shrinks is worse than one that reports a gap.
+
+## Marketplace subtree
+The private local marketplace's `plugins/e2e-skills/` prefix, which carries this repository's skill
+content and is where it is published from. The flow is **bidirectional**, and the marketplace is a
+real authoring side: content committed there reaches this repository as well as the other way about.
+Its own `check-e2e-subtree.sh` is what makes that concrete — the prefix must differ from this
+repository by exactly the two plugin manifests this repository does not ship, everything else
+byte-identical, which is a contract only satisfiable if work authored on either side reaches the
+other. Inbound here is a subtree pull from the marketplace, or a verbatim copy of the differing paths
+when this repository is the one catching up; outbound is a **targeted** `git push e2e-fork <sha>:main`
+built from the paths the fork owns, never `git subtree push`, which splits the whole prefix and lands
+those two manifests here. `AGENTS.md`'s *Distribution: subtree out, nothing in* section is superseded
+on this point: it says propagation is one-directional, and the split body this repository now carries
+was authored on the marketplace side, so a rule that admits no inbound path cannot describe what
+actually happens.

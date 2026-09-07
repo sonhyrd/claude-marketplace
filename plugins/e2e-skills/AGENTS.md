@@ -84,7 +84,6 @@ docs orphan check, language,
 │   │   ├── SKILL.md        # Required: skill frontmatter + body
 │   │   ├── best-practices.md
 │   │   ├── code-rules.md
-│   │   ├── references/     # SHIPPED — step-1-dispatch.md … step-8-deliver.md: each step's reference material, read when SKILL.md names it
 │   │   ├── evals/          # NOT shipped — skill-up suite: eval.yaml + cases/*.yaml
 │   │   ├── evals/judges/   # NOT shipped — judge scripts + fixtures/<judge>/{pass,fail}--*.txt
 │   │   ├── evals/files/    # NOT shipped — repo fixtures the wet cases run pw-prove against
@@ -115,7 +114,8 @@ someone else's project**. Node is already a hard dependency there (they all invo
 Invoke them with `node <path>.mjs`, never `bash`.
 
 They orchestrate; they do not match. `rg` (PCRE2), `eslint`, `ast-grep`, `ffmpeg`, `ffprobe`, `git`,
-`gh`, `curl` and `npx playwright` stay subprocesses. One deliberate exception: `probe.mjs` imports
+`gh`, `curl`, `npx playwright` and — since #121, and only ever as a corroborating read that stays
+silent when it is blind — `ss` and `lsof` stay subprocesses. One deliberate exception: `probe.mjs` imports
 the **target project's own pinned** Playwright in-process (resolved from the app root — still nothing
 installed anywhere), because a persistent browser context cannot live across `npx playwright`
 subprocess invocations. **Do not rewrite the Tier-3 PCRE2 patterns as JS RegExp** — at least one is
@@ -379,8 +379,8 @@ marketplace subtree) — a plain skill copy never sees them. So any skill that d
 
 ### Delegation profile
 
-Branch prefix, post-merge check, commit policy, and worker constraints for `/delegate-tickets`.
-See `docs/agents/delegate-profile.md`.
+Branch prefix, post-merge check, commit policy, and worker constraints for any agent or delegated
+session working in this repo. See `docs/agents/delegate-profile.md`.
 
 ### Issue tracker
 

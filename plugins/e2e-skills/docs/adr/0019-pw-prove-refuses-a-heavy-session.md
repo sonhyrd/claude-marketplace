@@ -20,8 +20,9 @@ present**:
   cap. `SKILL.md` said, in bold, three lines above the command it copied: start it in the background,
   never a trailing `&`.
 - At 12:56:20 it passed `ENV_CONTRACT=.env.example` to preflight and was stopped on all eleven keys.
-  The repository's own [runtime profile](../../CONTEXT.md#runtime-profile) said, in plain English,
-  not to. The run had read that profile and cited its other facts one turn later.
+  The repository's own runtime profile said, in plain English, not to. The run had read that profile
+  and cited its other facts one turn later. (That mechanism was retired in
+  [0021](0021-no-durable-runtime-profile.md); this record is left as it was observed.)
 
 Both landed in the 200–250k band. Neither is a documentation defect — writing either rule more loudly
 is writing it a fourth time.
