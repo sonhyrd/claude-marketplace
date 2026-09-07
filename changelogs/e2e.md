@@ -8,7 +8,10 @@ All notable changes to the e2e plugin in this marketplace will be documented in 
 > it would break both `git subtree pull` and `git subtree push`.
 >
 > Unlike `plugins/mattpocock-skills/`, **this subtree is editable in place.** Author changes here,
-> then `git subtree push --prefix=plugins/e2e-skills e2e-fork main`.
+> then push them back with a **targeted push** — build a commit on `e2e-fork/main` carrying only the
+> paths the fork owns and `git push e2e-fork <sha>:main`. Never `git subtree push`, which splits the
+> whole prefix and lands the two marketplace-only plugin manifests on a fork that deliberately ships
+> none (`docs/adr/0005`).
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
