@@ -1444,7 +1444,7 @@ and move the row into the batch table above with its numbers when you do.
 
 | Case | Shape | Guards (SKILL.md section) | Pass rate | Uplift | Status |
 |---|---|---|:--:|:--:|---|
-| `b06-profile-contradicted-written-back` | behavior | Step 1 › *Runtime profile* › **the write-back** — a contradicted entry is rewritten in `.pw-prove/profile.md`, not merely reported | not run | not measured | quarantined — uncharacterized (authored with the write loop) |
+| `b06-profile-contradicted-written-back` | behavior | *(removed)* — guarded the runtime-profile write-back | not run | not measured | **retired** — the behavior it guarded no longer exists; the write-back was removed by #189, so the case, its judge and its fixtures were deleted rather than left dormant |
 | `case-62-mutation-revert-marks-stale` | behavior | Step 7 › *Mutation check* — the revert marks the artifact **stale** and the rebuild is lazy (ADR 0020) | not run; premise re-routed to the verb by #150, which also gave it the exit-15 refusal | not measured | quarantined — uncharacterized (authored with #98's lazy rebuild) |
 
 Why this rule and not another part of the write loop: the `CONTRADICTED` Assumptions line predates

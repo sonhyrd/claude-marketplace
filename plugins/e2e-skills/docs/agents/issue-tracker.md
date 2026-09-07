@@ -1,6 +1,7 @@
 # Issue tracker
 
-Read by `/to-tickets` (step 5) and `/delegate-tickets` (step 2) to learn where tickets live.
+Read by any agent or delegated session that needs to learn where tickets live — today `/to-tickets`
+(step 5) and `sss:autoship`.
 
 - **Tracker**: GitHub
 - **Repo**: `sonhyrd/e2e-skills` — the same repo the code lives in.

@@ -306,6 +306,9 @@ deny_rules() {
         # touch. Only the agent is denied, and only the instruction surface — the fixtures under
         # evals/files/ stay readable, because a wet case is pointed at them on purpose.
         printf 'Read(/%s/skills/pw-prove/*.md)\n' "$repo"
+        # references/ carries most of the body since the split, and a single-* glob does not cross a
+        # slash — without this line the instruction surface this rule exists to deny is readable.
+        printf 'Read(/%s/skills/pw-prove/references/**)\n' "$repo"
         printf 'Read(/%s/skills/pw-prove/scripts/**)\n' "$repo"
         ;;
       *)

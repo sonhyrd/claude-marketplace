@@ -43,13 +43,6 @@ Cover at minimum one happy path + one error/edge case. **PR-mode:** at minimum o
 
 ### Assumptions (required block in the PR-mode plan)
 
-**Profile** is the Step-1 verdict, and it is **one line, never zero** when a `.pw-prove/profile.md` was read:
-
-- `Profile: .pw-prove/profile.md — N entries applied (<the ones that steered a decision>)`
-- `Profile: .pw-prove/profile.md — read, nothing applicable to this change`
-- `Profile: .pw-prove/profile.md — CONTRADICTED on <what>: profile says <x>, Step 3 observed <y>; ran on the observation`
-
-No file found → no line. **A contradiction must produce its line**: it is the signal that the profile has rotted, and it is the only thing that will make anyone go and fix it.
 
 **Handoff** is the Step-2 verdict, and it is **one line, never zero** when a `.pw-prove/handoff.json` was found:
 

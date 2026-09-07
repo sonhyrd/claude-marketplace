@@ -270,6 +270,114 @@ assert_absent "Version bump — an eval-config change demands no bump" \
 rm -f "$file"
 
 # ---------------------------------------------------------------------------
+# Cases 22-24: Step 7's first-run smoke rule (#125). Three clauses carry it and each fails
+# differently when it goes missing, so each is mutated ON ITS OWN with the other two intact. A
+# check that only goes red when the whole paragraph vanishes cannot see the failure that actually
+# threatens a prose rule, which is one clause being dropped as redundant while the rest survives.
+#
+# EVERY search string below is EXACTLY the substring review.sh asserts, and never a longer sentence
+# containing it. `mutate` exits non-zero when its substring is absent and this file runs under
+# `set -euo pipefail`, so a mutation pinned to surrounding wording turns an ordinary copy-edit of
+# that sentence into an ABORT of the whole suite -- every later case included -- while review.sh
+# stays green. A check that fails by disappearing is worse than no check. Pin the assertion, not
+# the prose around it.
+# ---------------------------------------------------------------------------
+
+# Case 22: the smoke clause itself is gone — the front half of the rule, and with it the whole
+# reason the ticket exists. The scoping and hazard clauses stay in place.
+file="skills/pw-prove/references/step-7-verify.md"
+backup "$file"
+mutate "$file" "Smoke one scenario before the first full audit" \
+  "Run the full spec set"
+assert_fails "First-run smoke — the smoke clause is gone" \
+  "no longer tells the agent to smoke ONE scenario"
+restore "$file"
+
+# Case 23: the attempt-1 scoping is gone, everything else intact. This is the leak the ticket is
+# most likely to suffer: unscoped, the rule reads as a licence to narrow every attempt and quietly
+# widens the heal loop's attempt-2-and-3 rule, which is correct as it stands.
+file="skills/pw-prove/references/step-7-verify.md"
+backup "$file"
+mutate "$file" "**Attempt 1 only**" \
+  "**From attempt 1 on**"
+assert_fails "First-run smoke — the attempt-1 scoping is gone" \
+  "no longer says it is ATTEMPT 1 ONLY"
+restore "$file"
+
+# Case 24: the hazard clause is gone, everything else intact. It is the clause that makes the rest
+# safe: without it the obvious next move after a red smoke run is to re-run the full set to see the
+# rest, which spends attempt 2 of 3 for nothing and can repeat the failure signature into a stall.
+file="skills/pw-prove/references/step-7-verify.md"
+backup "$file"
+mutate "$file" "Never re-run the full set unchanged" \
+  "Then run the full set unchanged"
+assert_fails "First-run smoke — the fix-before-full-set hazard clause is gone" \
+  "no longer forbids re-running the full set UNCHANGED"
+restore "$file"
+
+# Cases 25-26: the placement assertions. The rule's value is that an agent reads it in the moment
+# before it types the audit command, and the risk the whole ticket carries is it drifting next to
+# the attempt-2-and-3 rule it must not widen — so placement is asserted, and an assertion nothing
+# can make fail is exactly the thing this suite exists to refuse. One mutation MOVES the rule to the
+# end of the file, which puts it after both anchors at once; the two cases read the two errors.
+file="skills/pw-prove/references/step-7-verify.md"
+backup "$file"
+python3 - "$file" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+start = t.index('**Smoke one scenario before the first full audit')
+end = t.index('```\n\n', t.index('# SMOKE RUN', start)) + len('```\n\n')
+p.write_text(t[:start] + t[end:] + '\n' + t[start:end])
+PY
+assert_fails "First-run smoke — the rule has drifted after the AUDIT RUN command" \
+  "must sit immediately BEFORE the AUDIT RUN"
+# The second error is DOMINATED by the first and is asserted here as the second of two, never
+# alone: `### Failure handling` sits after `# AUDIT RUN` in the body, so nothing can put the rule
+# past it without putting it past the AUDIT RUN fence first. It is kept, labelled, and not reached
+# by a contorted mutation -- an honestly-labelled dominated assertion is fine; an unlabelled one is
+# what rots.
+assert_fails "First-run smoke — the rule has drifted into Failure handling (dominated: second of two errors)" \
+  "drifted into the Failure handling section"
+restore "$file"
+
+# ---------------------------------------------------------------------------
+# Cases 27-29: the SMOKE RUN command block, and the anchors the placement assertions navigate by.
+# ---------------------------------------------------------------------------
+
+# Case 27: the command block itself is gone. This is the likeliest edit of the lot -- it sits two
+# lines above the AUDIT RUN fence it differs from by one flag, and "redundant" is exactly what a
+# later reader would call it. test-invocation-parity.sh does not notice: its per-verb extraction
+# loop is already satisfied by the AUDIT RUN fence, so the prose would be left telling the agent to
+# run one scenario with no command saying how.
+file="skills/pw-prove/references/step-7-verify.md"
+backup "$file"
+mutate "$file" "# SMOKE RUN" "# (removed)"
+assert_fails "First-run smoke — the SMOKE RUN command block is gone" \
+  "no longer carries a SMOKE RUN COMMAND BLOCK"
+restore "$file"
+
+# Case 28: the block survives but stops narrowing the run. Without --grep the smoke command IS the
+# full audit, and the rule costs a whole run to prove nothing -- green, and silently pointless.
+file="skills/pw-prove/references/step-7-verify.md"
+backup "$file"
+mutate "$file" ' --grep "<the scenario that traverses the most of the table>"' ''
+assert_fails "First-run smoke — the SMOKE RUN block no longer narrows with --grep" \
+  "no longer narrows the run with --grep"
+restore "$file"
+
+# Case 29: the placement anchor is renamed. Before the fail-open fix this mutation was SILENT --
+# `find()` returned -1, the comparison was skipped, and review.sh reported the placement assertion
+# as passed. A check that cannot tell "the rule moved" from "I could not find what I navigate by"
+# is a gate that looks like it gates.
+file="skills/pw-prove/references/step-7-verify.md"
+backup "$file"
+mutate "$file" "# AUDIT RUN" "# THE AUDIT"
+assert_fails "First-run smoke — the AUDIT RUN placement anchor was renamed" \
+  "the placement anchor '# AUDIT RUN' is gone"
+restore "$file"
+
+# ---------------------------------------------------------------------------
 # Scanner detection smoke — fixture-based and offline: eslint auto-download is
 # disabled via E2E_SMELL_NO_ESLINT_DOWNLOAD=1 (so counts come from the Tier-3
 # regex path) and ast-grep download via E2E_SMELL_NO_AST_GREP_DOWNLOAD=1. A

@@ -40,7 +40,7 @@
 // fingerprint. What that route delivers is the plugin's published body rather than the working
 // tree's, so it can carry the entire skill while matching no mark taken from the file under test.
 // Whether the call was served or refused is read from its RESULT — see `skillCallRefused`.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -126,7 +126,20 @@ function fingerprints(md) {
   return out;
 }
 
-const marks = fingerprints(readFileSync(skillMdPath, 'utf8'));
+// The body under test is SKILL.md TOGETHER WITH the references beside it — the same definition
+// review.sh's version-bump check and test-pw-prove-scripts.sh's body_has use. A step's reference is
+// read on demand, so an arm that opened only references/step-7-verify.md read the body; fingerprinting
+// SKILL.md alone would call that arm NOT LOADED, and would let a baseline arm that read a reference
+// pass as clean instead of BASELINE DIRTY.
+function bodyFiles(mdPath) {
+  const refDir = resolve(dirname(mdPath), 'references');
+  if (!existsSync(refDir)) return [mdPath];
+  return [mdPath, ...readdirSync(refDir).filter((f) => f.endsWith('.md')).sort().map((f) => resolve(refDir, f))];
+}
+
+const BODY_FILES = bodyFiles(skillMdPath);
+const BODY_LABEL = BODY_FILES.length > 1 ? `${skillMdPath} + ${BODY_FILES.length - 1} reference(s)` : skillMdPath;
+const marks = [...new Set(BODY_FILES.flatMap((f) => fingerprints(readFileSync(f, 'utf8'))))];
 if (marks.length === 0) {
   console.error(`FAIL: ${skillMdPath} yielded no fingerprint lines — the gate would pass everything`);
   process.exit(1);
@@ -330,12 +343,12 @@ const seedText = seeded.join('\n');
 const evidence = marks.filter((m) => !seedText.includes(m));
 const seedSupplied = marks.length - evidence.length;
 if (evidence.length === 0) {
-  console.error(`FAIL: every fingerprint line of ${skillMdPath} appears in this case's own prompt`);
+  console.error(`FAIL: every fingerprint line of ${BODY_LABEL} appears in this case's own prompt`);
   console.error('   the gate would report the prompt back as the body — there is nothing left to detect with');
   process.exit(1);
 }
 const fingerprintNote = () =>
-  `   (fingerprinted ${evidence.length} line(s) of ${skillMdPath} against ${records} transcript record(s)` +
+  `   (fingerprinted ${evidence.length} line(s) of ${BODY_LABEL} against ${records} transcript record(s)` +
   `${seedSupplied ? `; ${seedSupplied} discounted as supplied by the case prompt` : ''})`;
 
 // --- contamination --------------------------------------------------------------------------------
