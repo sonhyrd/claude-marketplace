@@ -175,13 +175,15 @@ jassert "the call names the import action and wraps the payload in params.argume
 # regression that sent nothing at all would pass this as written without it.
 jassert "no initialize handshake precedes the call" \
   'all.length === 3 && all.every((x) => x.body?.method === "tools/call")'
-# The client reads a JSON-RPC body under either wire encoding, but what it ASKS for is JSON: it
-# advertised `text/event-stream` while its parser could not read one, which is the advertisement
-# this drops. Asserted as an absence, because "includes application/json" is true of the old header
-# too and would have gone on passing.
-jassert "the request declares JSON and asks for JSON, advertising no encoding it does not want" \
+# BOTH media types, because the live deployment refuses anything less with HTTP 406 `Not Acceptable:
+# Client must accept both application/json and text/event-stream` — measured 2026-09-07 against
+# clips.paulsjob.ai, which answers a `tools/call` as `text/event-stream`. This assertion previously
+# demanded the OPPOSITE, pinning a header the endpoint rejects: the narrowing shipped green and every
+# publish 406'd, classifying as `unexpected`. Each half is asserted by NAME rather than by a
+# substring of the whole, so dropping either one goes red on its own.
+jassert "the request declares JSON and accepts both media types the transport requires" \
   'r.headers["content-type"] === "application/json" && String(r.headers.accept).includes("application/json")
-   && !String(r.headers.accept).includes("event-stream")'
+   && String(r.headers.accept).includes("text/event-stream")'
 jassert "the video travels as a base64 data URL" \
   'typeof args.data === "string" && args.data.startsWith("data:video/webm;base64,") && args.data.length > 1000'
 jassert "chapters are in manifest order, each labelled with its scenario" \
@@ -910,7 +912,10 @@ grep -qF 'agent-native vault add CLIPS_MCP_TOKEN' "$W/pf.err" \
 # find it on that stripped PATH.
 mkdir -p "$W/nofffbin"
 ln -sf "$(command -v curl)" "$W/nofffbin/curl"
-NODE_BIN=$(command -v node)
+# The REAL binary, not whatever `node` resolves to on PATH: a version-manager shim (mise, asdf, nvm)
+# re-execs through its own manager, which the stripped PATH below cannot find — so the shim dies
+# before preflight runs and the probe reads as a blocking failure that has nothing to do with ffmpeg.
+NODE_BIN=$(node -e 'console.log(process.execPath)')
 ( cd "$W" && env PROBE_HOSTING=1 BASE_URL="$ORIGIN" READY_TIMEOUT=10 HOME="$W/isolated-home" \
     PWPROVE_LEDGER="$W/ledger.jsonl" PATH="$W/nofffbin" CLIPS_MCP_TOKEN="$TOKEN" \
     PW_PROVE_CLIPS_ENDPOINT="$ENDPOINT" \

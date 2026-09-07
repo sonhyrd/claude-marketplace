@@ -165,9 +165,10 @@ let nextId = 1;
  * non-empty line is an SSE field line; anything else is returned byte-for-byte. Without that, a
  * plain body carrying a line that merely begins `data:` — an error page, a stack trace, a prose
  * 500 — would be silently reduced to that line's remainder, and this function would destroy the
- * body it exists to preserve. The shape is what was measured, so the shape is what is read: the
- * `Content-Type` of the recorded responses is not in evidence, and gating on a header nobody
- * observed would be a second unverified bet on top of the `Accept` one.
+ * body it exists to preserve. The shape is what was measured, so the shape is what is read — and
+ * it stays that way now that the `Content-Type` IS in evidence (`text/event-stream`, 2026-09-07),
+ * because the shape is the narrower test: a body that parses as a frame is one whatever the header
+ * claims, and the 406 above is proof enough that this endpoint's headers are not ours to predict.
  */
 const SSE_FIELD_LINE = /^(?:event|data|id|retry):|^:/;
 function unwrapSseBody(body) {
@@ -204,10 +205,14 @@ export async function callClipsAction(config, action, args, timeoutMs = 30_000) 
     headers: {
       Authorization: `Bearer ${config.token}`,
       'Content-Type': 'application/json',
-      // JSON, and only JSON: the client used to advertise `text/event-stream` while its parser
-      // could not read one. It can now, but what it WANTS is the plain body, and an Accept header
-      // should describe the client rather than everything it could survive.
-      Accept: 'application/json',
+      // BOTH media types, and the deployment REQUIRES both: a POST advertising only one is refused
+      // with HTTP 406 `Not Acceptable: Client must accept both application/json and
+      // text/event-stream` — the streamable-HTTP transport's own rule, measured against
+      // clips.paulsjob.ai on 2026-09-07 for `application/json` and `text/event-stream` alike. A
+      // client that narrows this reaches nothing at all: 406 is not a JSON-RPC outcome, so every
+      // call classifies as `unexpected` and the publish fails for a reason that reads as a server
+      // fault. Narrowing it once already shipped exactly that. The header is not a preference here.
+      Accept: 'application/json, text/event-stream',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
