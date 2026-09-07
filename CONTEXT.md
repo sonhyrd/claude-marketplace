@@ -320,20 +320,8 @@ the approval gate.
 ## Environment facts
 What Step 1 derives about the repository it is about to prove in — base URL, config path, test
 directory, POM inventory, existing specs, runner presence. In-memory, re-derived every run, and the
-input to every later step. Distinct from the [runtime profile](#runtime-profile), which is a file:
-the facts are what this run worked out, the profile is what an earlier run wrote down.
-
-## Runtime profile
-`.pw-prove/profile.md` in the **target** repository — the durable record of what a repository costs a
-run to learn: how a tenant resolves, which auth rung works against the [proof target](#proof-target),
-which declared env keys are actually required. Read at Step 1 as advisory context that never overrides
-a live observation, and written back at Step 3 and Step 8. An entry is admitted only if it is about
-the repository rather than the change, cost a live pass to learn, and will still be true next month.
-Two halves: a `KEY=value` header a later run **substitutes into its commands**, and prose beneath it
-carrying the reasoning a run weighs before overriding a value. Subject headings are the prose's merge
-keys, so a re-learned fact rewrites its entry rather than stacking a near-duplicate; the header is one
-block with one merge key per line. Untrusted data on the way in, and never a credential's value —
-including in the header, whose shape is exactly that of a real `.env` line.
+input to every later step. Nothing persists them between runs: a fact worth keeping is reported, not
+filed.
 
 ## Recon probe
 The persistent browser context (`scripts/probe.mjs`) that answers batched recon questions during
@@ -506,9 +494,8 @@ item is attributed to. One session, one record, written to disk before it is ret
 not prose**: an empty field is a stated gap, and a friction item carrying no attribution is
 incomplete rather than a finding. A no-progress loop noted in one is an *observation* about where a
 run circled, not the [no-progress checkpoint](#no-progress-checkpoint), which is the rule Step 7
-applies live. Distinct too from the [runtime profile](#runtime-profile), which is a file a run writes
-into the target repository for the next run to read; a distillation is written outside every
-repository, after the fact, and no run ever reads one.
+applies live. A distillation is written outside every repository, after the fact, and no run ever
+reads one.
 
 ## Friction finding
 One ranked item drawn from the [session distillations](#session-distillation): a named cost, carrying

@@ -32,7 +32,7 @@ That resolved set is `<spec set>` below. It widens what is **filmed**. It does n
 
 | Run | What it is for | What it costs |
 |---|---|---|
-| **Audit run** — no `PW_PROVE_CLIP` | Getting the spec green (the whole heal loop happens here), and producing the traces the [hermetic audit](#hermetic-audit-before-the-filming-run) classifies | Cheapest form of the run: `trace: 'on'` is in the config, so traces arrive regardless, and every dwell is skipped |
+| **Audit run** — no `PW_PROVE_CLIP` | Getting the spec green (the whole heal loop happens here), and producing the traces the [hermetic audit](#hermetic-audit-on-the-audit-run-before-anything-is-filmed) classifies | Cheapest form of the run: `trace: 'on'` is in the config, so traces arrive regardless, and every dwell is skipped |
 | **Filming run** — `PW_PROVE_CLIP=1` | The clips that get delivered | The dwells, plus video encoding |
 
 **The audit comes first because a hermetic finding is a spec edit, and a spec edit invalidates footage.** Fix it before filming and it costs one cheap re-run; fix it after and it costs the clips as well.

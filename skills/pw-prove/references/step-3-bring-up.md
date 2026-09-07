@@ -172,10 +172,10 @@ The named map answers several questions in one call and is the reason to prefer 
 
 **Interaction-dependent state** a first render can't reach (modals, post-submit views, dropdown contents): drive it with a probe batch (`click`/`fill`, then `snapshot`). Never paste raw snapshot/DOM into responses — quote only the lines you need.
 
-**Flush the profile before leaving Step 3.** Bring-up and recon are where a repository's expensive
-facts are learned, and every abort path is downstream of here — write them to `.pw-prove/profile.md`
-now, under the admission test and shape in [Step 1](step-1-dispatch.md#the-run-writes-the-profile-back), rather than at
-the end of a run that may never reach its end.
+**Note what bring-up cost before leaving Step 3.** Bring-up and recon are where a repository's
+expensive facts are learned, and every abort path is downstream of here — so carry them forward for
+the run's [`Learned:` line](step-1-dispatch.md#learned--what-this-run-paid-a-live-pass-to-find-out)
+under the admission test stated there. A run that later takes a stop still reports them.
 
 **Binding smoke check.** When the diff changes a control's *binding* (v-model, slot-injected props, controlled-component wiring) rather than its computed output, look at that one control live before the Step-7 loop — the binding layer is invisible to unit tests and to source-reading. Cheaper than the heal cycle it prevents.
 

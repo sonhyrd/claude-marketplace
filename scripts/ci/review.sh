@@ -679,15 +679,80 @@ for path in sorted(p for p in repo_files() if p.suffix == '.md'):
         if not target_path.exists():
             errors.append(f"{path}: broken local link {raw}")
 
+# --- anchors ---------------------------------------------------------------
+# The fragment used to be discarded here, so a link into a heading that had been
+# deleted stayed green. #189 removed a heading other files linked to and nothing
+# caught it. Enforcement is scoped to skills/ deliberately: the mechanism is
+# general, but failing on pre-existing debt elsewhere in docs/ would block
+# unrelated changes. Anchors outside skills/ are reported and do not fail.
+def slugify(heading):
+    # GitHub's algorithm: lowercase, drop anything that is not alphanumeric,
+    # space or hyphen, then spaces to hyphens. Runs of hyphens are NOT collapsed.
+    s = heading.strip().lower()
+    s = re.sub(r'[^a-z0-9 \-]', '', s)
+    return s.replace(' ', '-')
+
+heading_re = re.compile(r'^\#{1,6}\s+(.*?)\s*$', re.M)
+_anchor_cache = {}
+
+def anchors_of(target_path):
+    key = str(target_path)
+    if key not in _anchor_cache:
+        try:
+            body = target_path.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            _anchor_cache[key] = None
+            return None
+        slugs = set()
+        for m in heading_re.finditer(body):
+            base = slugify(m.group(1))
+            slugs.add(base)
+            # GitHub disambiguates repeats with -1, -2, ...; accept those too.
+            for n in range(1, 10):
+                slugs.add(f"{base}-{n}")
+        _anchor_cache[key] = slugs
+    return _anchor_cache[key]
+
+anchor_warnings = []
+for path in sorted(p for p in repo_files() if p.suffix == '.md'):
+    if any(part in {'.git', '.sisyphus', 'testbed', 'node_modules'} for part in path.parts):
+        continue
+    text = path.read_text(encoding='utf-8', errors='ignore')
+    for match in link_re.finditer(text):
+        raw = match.group(1)
+        if raw.startswith(('http://', 'https://', 'mailto:')):
+            continue
+        target, _, fragment = raw.partition('#')
+        if not fragment:
+            continue
+        target_path = (path.parent / unquote(target)).resolve() if target else path.resolve()
+        try:
+            target_path.relative_to(pathlib.Path('.').resolve())
+        except ValueError:
+            continue
+        if not target_path.exists() or target_path.suffix != '.md':
+            continue
+        slugs = anchors_of(target_path)
+        if slugs is None or unquote(fragment) in slugs:
+            continue
+        message = f"{path}: link to a heading that does not exist: {raw}"
+        if path.parts and path.parts[0] == 'skills':
+            errors.append(message)
+        else:
+            anchor_warnings.append(message)
+
+for w in anchor_warnings:
+    print(f"PRE-EXISTING-ANCHOR {w}")
+
 if errors:
     for error in errors:
         print(error, file=sys.stderr)
     sys.exit(1)
 PY
   then
-    ok "local markdown links resolve"
+    ok "local markdown links resolve, and anchors under skills/ resolve"
   else
-    err "broken local markdown links found"
+    err "broken local markdown links or dangling skills/ anchors found"
   fi
 else
   warn "python3 not available; skipped markdown link check"
