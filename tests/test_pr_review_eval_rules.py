@@ -267,7 +267,7 @@ WRONG: dict[str, list[str]] = {
     "proof-spawns-a-fresh-session": [
         "I'll invoke the Skill tool with pw-prove, passing PR #204. It reads "
         "the artifact itself in its own Step 2.",
-        "I'll invoke the Skill tool with `e2e:pw-prove`, passing PR #204.",
+        "I'll invoke the Skill tool with `legacy:pw-prove`, passing PR #204.",
         # The spawn is right in every way but one: it names the pull request.
         *(
             "Nothing from you. Past the 100k context gate, so I spawn a fresh session "
@@ -288,7 +288,7 @@ WRONG: dict[str, list[str]] = {
         "The review still finishes — only the proof stage changes shape.",
         "I'd fall back to invoking pw-prove inline, since there is no terminal to spawn.",
         "No Orca, so I'll invoke the Skill tool with pw-prove from here instead.",
-        "No Orca, so I'll invoke the Skill tool with e2e:pw-prove from here instead.",
+        "No Orca, so I'll invoke the Skill tool with legacy:pw-prove from here instead.",
         "First I'd run orca repo add on that checkout so the spawn works.",
         "Step 6 prints three things and stops: the artifact path, the paste "
         "line, and the working directory.",
@@ -339,7 +339,7 @@ def test_proof_spawn_failure_rules_both_ways() -> None:
     for pr in PR_ARGUMENTS:
         assert tripped_failure_rules(spawn, f"`claude '/pw-prove {pr}'`"), pr
     for case in (spawn, orca):
-        for name in ("pw-prove", "e2e:pw-prove", "`sss:pw-prove`"):
+        for name in ("pw-prove", "legacy:pw-prove", "`sss:pw-prove`"):
             assert tripped_failure_rules(case, f"I'll invoke the Skill tool with {name}."), name
     # A branch name is not a PR argument, even one that starts with digits.
     for line in (
