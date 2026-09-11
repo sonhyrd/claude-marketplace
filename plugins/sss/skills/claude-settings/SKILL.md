@@ -450,9 +450,9 @@ do by accident.
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 `scripts/statusline.sh` too, so the repo is the source of truth again. Same for
-`~/.local/bin/orca` and `scripts/orca-shim.sh` — a shim's whole job is to name paths that vary per machine, so a
-hand-added path on one box is one the next box probably wants. Copy `~/.local/bin/orca` back
-only when it is this shim: after an Orca re-install that path is the installer's symlink again,
+`~/.local/bin/orca` and `scripts/orca-shim.sh` — a shim's whole job is to name paths that vary
+per machine, so a hand-added path on one box is one the next box probably wants. Copy
+`~/.local/bin/orca` back only when it is this shim: after an Orca re-install that path is the installer's symlink again,
 and capturing it would overwrite the shim with a link to one machine's AppImage.
 
 Then capture the memory set, following the imports rather than listing filenames:

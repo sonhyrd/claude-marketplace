@@ -1,11 +1,9 @@
 # Changelog - web-search
 
 > **Removed in 0.48.0.** The `web-search` plugin was retired (#111). The operator's research
-> capability is now Agent-Reach, distributed by teamai from `sonhyrd/agent-kit`. The plugin
-> directory, its marketplace entries and its `claude-settings` roster entry are gone, as are the two
-> things that existed only for it: the skill-dependency install step and the `~/.local/bin/chromium`
-> browser shim (see `changelogs/sss.md` 1.7.1). A Host that already has the shim deployed keeps it.
-> This file is kept as a record.
+> capability is now Agent-Reach, distributed by teamai from `sonhyrd/agent-kit`. What left
+> `claude-settings` along with it is recorded in `changelogs/sss.md` 1.7.1. This file is kept as a
+> record.
 
 All notable changes to the web-search skill in this marketplace will be documented in this file.
 
