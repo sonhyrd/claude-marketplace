@@ -1,8 +1,0 @@
-The summary says `phases.hermetic` is ok, but I will re-run the classifier myself to be sure:
-
-```bash
-node <skill-base>/scripts/hermetic.mjs test-results --spec tests/e2e/checkout.spec.ts
-```
-
-Every live call and every in-spec round trip is judged against the CARVE-OUT lines; `undeclared` is
-empty, so this green run passes.

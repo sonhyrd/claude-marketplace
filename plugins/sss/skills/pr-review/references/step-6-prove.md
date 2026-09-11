@@ -2,7 +2,7 @@
 
 Moved verbatim from `SKILL.md`, whose Step 6 says when to read it. Nothing here changes the procedure `SKILL.md` states.
 
-The last stage. What the review concluded gets written down where `e2e:pw-prove` reads it, and then
+The last stage. What the review concluded gets written down where `pw-prove` reads it, and then
 a fresh session runs `pw-prove` against it. Nothing here re-reviews and nothing here re-fixes.
 
 ### 6a. Ignore the artifact path first
@@ -19,7 +19,7 @@ the POM and the HAR, so nothing downstream ever cleans it up.
 ### 6b. Write the handoff artifact
 
 `.pw-prove/handoff.json` at the repo root. **`pw-prove` owns this schema** — it is the only reader,
-and its `SKILL.md` (`plugins/e2e-skills/skills/pw-prove/SKILL.md` in this marketplace, Step 2 step 0)
+and its `SKILL.md` (Step 2 step 0 of the `pw-prove` skill `sonhyrd/agent-kit` ships)
 is where the shape is defined. Write to it; do not
 extend it. A key it does not read is a key nobody reads.
 
@@ -29,7 +29,7 @@ there is the answer with the information in it.
 
 **Asked mid-run for a field this schema does not have, name the owner and carry on** — the answer is
 where the change belongs, not the change. It is two files in two plugins plus a parity test and a
-targeted push to the fork, which is a decision of its own and not a step of this review. Say so in
+change in `sonhyrd/agent-kit`, which is a decision of its own and not a step of this review. Say so in
 one line and finish the run.
 
 - **`findings` is ordered, and the order is Step 4b's**: overlap-confirmed before single-track,
@@ -48,17 +48,21 @@ one line and finish the run.
 past it — four tracks, an aggregate report and a fix stage — so the proof runs in a **fresh
 session**, in this same checkout:
 
-- **`<NUM>` is the PR number, or the branch name in branch mode, and that is the whole prompt.**
-  `BASE` and the findings are in the artifact, which `pw-prove` reads itself in its own Step 2 — the
-  handoff is the file, not the prompt. So the spawned line is byte-identical to the one a user
-  pastes by hand, and there is one place a run's base comes from.
+- **In PR mode the prompt is `/pw-prove` and nothing else; in branch mode it is `/pw-prove <branch>`.**
+  A proof spawn never names a pull request — `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md`
+  records the amendment. Step 1 checked out the PR's head branch, and `pw-prove` with an empty
+  argument on a non-default branch that has an open PR proves that PR without asking; with an empty
+  argument anywhere else it falls to coverage-gap mode, which is why branch mode, having no PR, passes
+  the branch name. `BASE` and the findings are in the artifact, which `pw-prove` reads itself in its
+  own Step 2 — the handoff is the file, not the prompt. So the spawned line is byte-identical to the
+  one a user pastes by hand, and there is one place a run's base comes from.
 - **`--worktree active` keeps the proof in the tree Step 1 acquired** and Step 4 committed to, which
   is what makes it a proof of the reviewed code. Not a child worktree: `pw-prove` commits, pushes
   and comments on the PR, and from a child that becomes a merge-back this skill would then own.
 - **The prompt rides on `--command`**, so the session boots with it already sent. Creating a bare
   `claude` and sending the slash command afterwards is three calls with a boot race in the middle.
 - **The spawn asks nothing.** The user who invoked this skill asked for the proof, and
-  `/e2e:pw-prove` arriving as first user input is the *user-invoked* path, so `pw-prove`'s own
+  `/pw-prove` arriving as first user input is the *user-invoked* path, so `pw-prove`'s own
   confirmation gate does not fire there either. This run therefore stops for a person nowhere at
   all: `docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md` is where that trade is
   recorded rather than left to be discovered.
@@ -76,9 +80,9 @@ failure that looks from here exactly like a spawn.
 **A spawn is claimed on the handle it returned.** Read the terminal handle out of the `--json`;
 without one, no session is running whatever the command printed. Preflight proved the CLI answers,
 so a spawn that still fails here is a run-time failure rather than an unprovisioned machine, and the
-stage prints three things and stops: `.pw-prove/handoff.json`'s path, the exact `/e2e:pw-prove <NUM>`
-line, and the working directory to run it from. The artifact is on disk and a fresh
-`/e2e:pw-prove <NUM>` picks up the same findings — that standalone path is why the file is written at
+stage prints three things and stops: `.pw-prove/handoff.json`'s path, the exact `/pw-prove` line
+(`/pw-prove <branch>` in branch mode), and the working directory to run it from. The artifact is on
+disk and a fresh `/pw-prove` picks up the same findings — that standalone path is why the file is written at
 all, and taking it is not a failure of this run. **Invoking `pw-prove` inline is never the answer
 here**, on any branch: this context is exactly the one its gate turns away, so an inline attempt
 spends a turn to arrive at the same paste line.

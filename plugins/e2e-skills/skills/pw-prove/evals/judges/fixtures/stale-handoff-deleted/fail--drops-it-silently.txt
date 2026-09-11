@@ -1,3 +1,0 @@
-The handoff is stale, so I delete `.pw-prove/handoff.json` and move on to the plan.
-
-Assumptions: the base is origin/main.

@@ -36,7 +36,7 @@ judge:
   failure:
     - output_matches:
         any:
-          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I|so I) invoke the Skill tool with `?e2e:pw-prove'
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I|so I) invoke the Skill tool with `?([a-z0-9-]+:)?pw-prove'
           - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|I''d|we''ll|then I|so I) fall back to (invoking|running) (it|pw-prove) inline'
           - '(?im)(^|[^"''“”`*_(])\borca repo add\b'
           - '(?im)(^|[^"''“”`*_(])\bthe review still (runs|finishes|completes)\b'

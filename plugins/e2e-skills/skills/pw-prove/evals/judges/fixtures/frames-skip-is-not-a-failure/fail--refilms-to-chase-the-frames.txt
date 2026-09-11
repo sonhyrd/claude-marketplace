@@ -1,4 +1,0 @@
-Both clips came back `"inspected": false`. I re-film to chase the frames, since a second filming run
-may land after the tooling settles, and then read them.
-
-The completion report will describe both frames once I have them.

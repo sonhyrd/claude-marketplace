@@ -174,8 +174,8 @@ CORRECT: dict[str, list[str]] = {
         "head_sha is `git rev-parse HEAD`, read last — after every commit this "
         "run makes has landed, immediately before the file is written. On tracks: "
         "pw-prove owns this schema and is its only reader, so that change belongs "
-        "there, not here. It is two files in two plugins plus a parity test and a "
-        "push to the fork.",
+        "there, not here. It is a change in pw-prove, in sonhyrd/agent-kit, plus "
+        "a parity test.",
         "You asked for tracks as an array on each finding. That is pw-prove's "
         "call — it is the only reader of the schema, so it is the only party that "
         "can say what the field means. head_sha I read last, after every commit, "
@@ -185,13 +185,18 @@ CORRECT: dict[str, list[str]] = {
         "Nothing from you — the spawn asks nothing. pw-prove refuses above 100k "
         "tokens and this session is well past that, so I don't invoke it here. "
         'I run `orca terminal create --worktree active --command "claude '
-        "'/e2e:pw-prove 204'\" --json`, which starts a fresh session in this same "
+        "'/pw-prove'\" --json`, which starts a fresh session in this same "
         "checkout, and then I close out with the handle.",
         "The context gate is the whole reason for this step: invoking pw-prove "
         "inline from a 150k-token session is exactly what it turns away. So the "
         "proof goes to a new session in the same working tree, spawned "
-        "immediately, and I report the terminal handle rather than waiting on the "
-        "result.",
+        "immediately as `/pw-prove` with no argument, and I report the terminal "
+        "handle rather than waiting on the result.",
+        # Names the wrong spawn in order to rule it out; the failure rules match
+        # only a spawned `claude '…'` line, so this must not trip them.
+        "Nothing from you, and I spawn immediately. The 100k context gate would "
+        "refuse pw-prove here, so it goes to a fresh session in this same checkout "
+        "as `/pw-prove` — never `/pw-prove 204`, which names the pull request.",
     ],
     "orca-missing-stops-at-preflight": [
         "No. Step 1 preflights the Orca CLI before any track spawns, so on that "
@@ -228,6 +233,9 @@ CORRECT: dict[str, list[str]] = {
     ],
 }
 
+# The spellings of a pull request the orchestrator's proof guard refuses.
+PR_ARGUMENTS = ("204", "#204", "acme/app#204", "https://github.com/acme/app/pull/204")
+
 WRONG: dict[str, list[str]] = {
     "dirty-tree-keeps-user-work": [
         "I'll stash your edits, run the review, and pop them when it's done.",
@@ -257,8 +265,19 @@ WRONG: dict[str, list[str]] = {
         "`tracks` — added to each finding, now consistent across the artifact.",
     ],
     "proof-spawns-a-fresh-session": [
-        "I'll invoke the Skill tool with e2e:pw-prove, passing PR #204. It reads "
+        "I'll invoke the Skill tool with pw-prove, passing PR #204. It reads "
         "the artifact itself in its own Step 2.",
+        "I'll invoke the Skill tool with `legacy:pw-prove`, passing PR #204.",
+        # The spawn is right in every way but one: it names the pull request.
+        *(
+            "Nothing from you. Past the 100k context gate, so I spawn a fresh session "
+            f"in this same checkout immediately: `claude '/pw-prove {pr}'`."
+            for pr in PR_ARGUMENTS
+        ),
+        # Any plugin-namespaced `/<plugin>:pw-prove` is a marketplace copy rather
+        # than agent-kit's bare skill — the shape the retired `e2e` plugin had.
+        "Nothing from you. The context gate refuses above 100k, so I spawn a fresh "
+        "session in this same checkout, immediately: `claude '/sss:pw-prove'`.",
         "Want me to spawn the session now, or would you rather run the proof yourself later?",
         "I spawn the terminal and then wait for the proof to finish so I can "
         "report whether it passed.",
@@ -268,6 +287,8 @@ WRONG: dict[str, list[str]] = {
     "orca-missing-stops-at-preflight": [
         "The review still finishes — only the proof stage changes shape.",
         "I'd fall back to invoking pw-prove inline, since there is no terminal to spawn.",
+        "No Orca, so I'll invoke the Skill tool with pw-prove from here instead.",
+        "No Orca, so I'll invoke the Skill tool with legacy:pw-prove from here instead.",
         "First I'd run orca repo add on that checkout so the spawn works.",
         "Step 6 prints three things and stops: the artifact path, the paste "
         "line, and the working directory.",
@@ -308,6 +329,25 @@ def test_wrong_answers_are_caught(case_id: str) -> None:
     for answer in WRONG[case_id]:
         caught = tripped_failure_rules(case, answer) or unmet_success_rules(case, answer)
         assert caught, f"{case_id}: a wrong answer passes every rule — {answer!r}"
+
+
+def test_proof_spawn_failure_rules_both_ways() -> None:
+    # The two failure rules #113 changed, asserted on the failure clause alone:
+    # WRONG above can be caught by a missed success rule and hide a dead rule.
+    spawn = load_case("proof-spawns-a-fresh-session")
+    orca = load_case("orca-missing-stops-at-preflight")
+    for pr in PR_ARGUMENTS:
+        assert tripped_failure_rules(spawn, f"`claude '/pw-prove {pr}'`"), pr
+    for case in (spawn, orca):
+        for name in ("pw-prove", "legacy:pw-prove", "`sss:pw-prove`"):
+            assert tripped_failure_rules(case, f"I'll invoke the Skill tool with {name}."), name
+    # A branch name is not a PR argument, even one that starts with digits.
+    for line in (
+        "`claude '/pw-prove'`",
+        "`claude '/pw-prove 123-fix'`",
+        "`claude '/pw-prove 204fix'`",
+    ):
+        assert not tripped_failure_rules(spawn, line), line
 
 
 # Capitalisation is the defect that failed a correct answer at 99edd92. These

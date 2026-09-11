@@ -1,5 +1,11 @@
 # Changelog - e2e
 
+> **Removed in 0.49.0.** The `e2e` plugin was retired (#113). `pw-prove`, `e2e-reviewer` and
+> `playwright-debugger` now ship from `sonhyrd/agent-kit`, and teamai installs them under bare names
+> (`/pw-prove`). This copy still carried the har-scrub password leak that agent-kit PR #61 fixed.
+> What left `sss` along with it is recorded in `changelogs/sss.md` 1.7.2. A Host that already holds
+> the plugin keeps it until the coordinator uninstalls it. This file is kept as a record.
+
 All notable changes to the e2e plugin in this marketplace will be documented in this file.
 
 > Installed as **`e2e`**, so its skills invoke as `/e2e:pw-prove`, `/e2e:e2e-reviewer` and
