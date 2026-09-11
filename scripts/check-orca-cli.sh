@@ -13,9 +13,8 @@
 # existed. Text review cannot catch any of it, and `make validate` is static and
 # offline by design.
 #
-# Deliberately NOT part of `make validate`, for the same reason
-# check-e2e-subtree.sh is not: that suite is static and offline, and this one
-# only means anything when it can talk to a running binary.
+# Deliberately NOT part of `make validate`: that suite is static and offline, and
+# this one only means anything when it can talk to a running binary.
 #
 # Commands resolve in two tiers, because the CLI has two shapes. Most are
 # `orca <group> <verb>` -- `orchestration run-create`, `terminal read`. Some are

@@ -12,7 +12,6 @@ tests/
 ├── test_manage_codex_skills.py      # scripts/manage_codex_skills.py
 ├── test_sync_codex_plugins.py       # scripts/sync_codex_plugins.py
 ├── bash/
-│   ├── test-e2e-subtree-check.sh        # scripts/check-e2e-subtree.sh
 │   ├── test-playwright.sh               # playwright plugin scripts
 │   └── test-pr-review-handoff-parity.sh # pr-review ↔ pw-prove handoff schema (reads the installed agent-kit pw-prove)
 ├── Dockerfile.playwright            # image for the playwright tests
@@ -27,7 +26,6 @@ tests/
 | `make test-cov` | the same with a coverage report |
 | `make test-codex-skills` | Ruff, ty, format and drift checks plus the three Codex pytest files |
 | `make check-codex-plugins` | generated Codex manifests are current (no test run) |
-| `make test-e2e-subtree-check` | `tests/bash/test-e2e-subtree-check.sh` |
 | `make test-pr-review-handoff-parity` | `tests/bash/test-pr-review-handoff-parity.sh` |
 | `make test-playwright` | `tests/bash/test-playwright.sh` in Docker |
 | `make test-playwright-local` | the same on the host (needs Playwright browsers) |
@@ -39,11 +37,8 @@ it — they need Docker or a browser install, so they stay opt-in.
 Bash tests are executable and take no arguments:
 
 ```bash
-./tests/bash/test-e2e-subtree-check.sh
+./tests/bash/test-pr-review-handoff-parity.sh
 ```
-
-`test-e2e-subtree-check.sh` fetches the `e2e-fork` remote, so it needs network and is deliberately
-outside `make validate`, which is static and offline.
 
 `test-pr-review-handoff-parity.sh` reads its consumer from outside the repo: the `pw-prove` skill
 teamai installs from `sonhyrd/agent-kit` at `~/.claude/skills/pw-prove/SKILL.md`, or whatever

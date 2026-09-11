@@ -1,10 +1,14 @@
 # 1. e2e-skills as an editable, bidirectional git subtree
 
-- **Status:** Accepted, amended by
+- **Status:** Superseded. Before that, accepted, amended by
   [ADR-0005](./0005-pw-prove-unpinned-behind-a-confirmation-gate.md) — decision 5 (`pw-prove` is no
   longer pinned) and decision 3's outbound half (`git subtree push` carries the two plugin
   manifests onto a fork that ships none; outbound is a targeted push).
 - **Date:** 2026-08-03
+- **Superseded:** 2026-09-11 by [#113](https://github.com/sonhyrd/claude-marketplace/issues/113). `plugins/e2e-skills/` is deleted and the `e2e` plugin
+  is no longer published. `pw-prove`, `e2e-reviewer` and `playwright-debugger` ship from
+  [sonhyrd/agent-kit](https://github.com/sonhyrd/agent-kit) instead, and teamai installs them under
+  bare names (`/pw-prove`).
 - **Issue:** [#1](https://github.com/sonhyrd/claude-marketplace/issues/1)
 
 ## Context

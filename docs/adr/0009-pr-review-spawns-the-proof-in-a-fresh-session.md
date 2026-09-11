@@ -1,7 +1,12 @@
 # 9. `pr-review` spawns a fresh session for the proof, and stops asking
 
-- **Status:** Accepted
+- **Status:** Accepted, amended
 - **Date:** 2026-08-19
+- **Amended:** 2026-09-11 by [#113](https://github.com/sonhyrd/claude-marketplace/issues/113). The spawned skill is `pw-prove` from
+  [sonhyrd/agent-kit](https://github.com/sonhyrd/agent-kit), under its bare name, and the spawn no
+  longer names a pull request. PR mode runs `claude '/pw-prove'` with no argument, since `pw-prove`
+  resolves the checked-out branch's open PR itself. Branch mode runs `claude '/pw-prove <branch>'`.
+  The paste line matches in both. This replaces *One argument* below. Everything else stands.
 - **Issue:** [#49](https://github.com/sonhyrd/claude-marketplace/issues/49)
 - **Supersedes:** [ADR-0005](./0005-pw-prove-unpinned-behind-a-confirmation-gate.md), the
   *One human checkpoint in a long chain* consequence only. Everything else in 0005 stands.

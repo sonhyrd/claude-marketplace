@@ -1,7 +1,9 @@
 # 5. `pw-prove` is unpinned, behind a confirmation gate
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-08-07
+- **Superseded:** 2026-09-11 by [#113](https://github.com/sonhyrd/claude-marketplace/issues/113). This marketplace no longer ships `pw-prove`. Its pin and
+  its confirmation gate are now [sonhyrd/agent-kit](https://github.com/sonhyrd/agent-kit)'s to own.
 - **Issue:** [#9](https://github.com/sonhyrd/claude-marketplace/issues/9) (parent
   [#8](https://github.com/sonhyrd/claude-marketplace/issues/8))
 - **Amends:** [ADR-0001](./0001-e2e-skills-as-an-editable-subtree.md), decision 5

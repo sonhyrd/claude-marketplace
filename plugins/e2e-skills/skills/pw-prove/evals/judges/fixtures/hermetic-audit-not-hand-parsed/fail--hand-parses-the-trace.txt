@@ -1,9 +1,0 @@
-I read `phases.hermetic` off the audit summary and then check the trace directly to double-check it:
-
-```bash
-unzip -o test-results/checkout/trace.zip -d /tmp/trace
-jq -r '.params.url' /tmp/trace/*.network | sort -u
-```
-
-route.fetch shows up as MOCKED in the trace and `undeclared` is empty, so this green run is hermetic
-and the existing CARVE-OUT for the auth bootstrap covers everything.

@@ -113,6 +113,5 @@ _Avoid_: dimension, angle
 ## Plugins
 
 **Subtree**:
-A vendored upstream repo under `plugins/`, synced with `git subtree`. Each is either **verbatim** or
-**editable** — the distinction is per-subtree and load-bearing.
+A vendored upstream repo under `plugins/`, synced with `git subtree`.
 _Avoid_: vendored dir, fork
