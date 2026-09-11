@@ -2,8 +2,8 @@
 
 > **Removed in 0.48.0.** The `web-search` plugin was retired (#111). The operator's research
 > capability is now Agent-Reach, distributed by teamai from `sonhyrd/agent-kit`. What left
-> `claude-settings` along with it is recorded in `changelogs/sss.md` 1.7.1. This file is kept as a
-> record.
+> `claude-settings` along with it is recorded in `changelogs/sss.md` 1.7.1. A Host's deployed
+> `~/.local/bin/chromium` is left in place. This file is kept as a record.
 
 All notable changes to the web-search skill in this marketplace will be documented in this file.
 
