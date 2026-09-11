@@ -3,11 +3,10 @@ name: pr-review
 description: Carry a PR or branch from review to proof — four tracks at once (Standards and Spec from matt:code-review, a rule-driven file-by-file pass from sss:ocr-delegate, and an over-engineering pass from ponytail:ponytail-review) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, OCR's down to Medium, and every Complexity cut that stays inside the diff's own hunks — then pushed and the whole report published as a comment on the PR, then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result, which pw-prove runs in a fresh session spawned into an Orca terminal rather than inline in this one. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
-  Requires the `matt` and `sss` plugins from this marketplace, the `pw-prove`
-  skill from `sonhyrd/agent-kit` (installed by teamai), the `ponytail` plugin
-  from `DietrichGebert/ponytail`, and four CLIs on PATH: `gh`
-  for PR mode, `ocr` for the OCR track, the `orca` CLI for the session that runs
-  the proof, and `git`. Step 1 preflights all of them and stops the run naming
+  Requires the `matt` and `sss` plugins from this marketplace, `pw-prove` from
+  `sonhyrd/agent-kit`, the `ponytail` plugin from `DietrichGebert/ponytail`, and
+  four CLIs on PATH: `gh` for PR mode, `ocr` for the OCR track, the `orca` CLI
+  for the session that runs the proof, and `git`. Step 1 preflights all of them and stops the run naming
   the one command that installs whichever is missing, so a run that starts can
   finish at full strength.
   `/sss:claude-settings` provisions the whole set in one pass.
