@@ -65,20 +65,6 @@ resolve_local_path() {
   return 1
 }
 
-# A vendored skill can ship a package.json with no node_modules and no lockfile — installing the
-# plugin then leaves a skill that fails on first call. Install deps for any skill in $1 that is
-# in that state. Silent no-op for the plugins that carry no package.json, which is most of them.
-ensure_skill_deps() {
-  local root="$1" pkg dir mgr
-  command -v bun >/dev/null && mgr=bun || { command -v npm >/dev/null && mgr=npm || return 0; }
-  while IFS= read -r pkg; do
-    dir="$(dirname "$pkg")"
-    [ -d "$dir/node_modules" ] && continue
-    echo "+ installing dependencies for $(basename "$dir") ($mgr)"
-    attempt "deps for $(basename "$dir")" bash -c "cd \"\$1\" && $mgr install" _ "$dir"
-  done < <(find "$root" -name package.json -not -path '*/node_modules/*' 2>/dev/null)
-}
-
 have_mk=$(claude plugin marketplace list 2>/dev/null || true)
 have_pl=$(claude plugin list 2>/dev/null || true)
 
@@ -134,10 +120,6 @@ while IFS= read -r mk; do
       echo "+ installing plugin $id"
       attempt "$id" claude plugin install "$id"
     fi
-    # Only ever look inside a cache dir that exists — a dry run installed nothing.
-    for cached in "$HOME/.claude/plugins/cache/$mk/$plugin"/*/; do
-      [ -d "$cached" ] && ensure_skill_deps "$cached"
-    done
   done < <(jq -r --arg m "$mk" '.localMarketplaces[$m][]' "$roster")
 done < <(jq -r '.localMarketplaces // {} | keys[]' "$roster")
 

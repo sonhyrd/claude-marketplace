@@ -42,8 +42,7 @@
     "ponytail@ponytail": true,
     "sss@sss-marketplace": true,
     "e2e@sss-marketplace": true,
-    "matt@sss-marketplace": true,
-    "web-search@sss-marketplace": true
+    "matt@sss-marketplace": true
   },
   "localMarketplaces": {}
 }

@@ -4,6 +4,18 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.7.1] - Unreleased
+
+### Removed
+
+- `claude-settings` skill: **`web-search` is out of the plugin roster** (#111). Agent-Reach, distributed by teamai from `sonhyrd/agent-kit`, replaces it. Until now every `apply` reinstalled the plugin on a Host the coordinator had just uninstalled it from. The version moves because the plugin cache is keyed on it and apply runs from the cached skill directory: without the bump, a Host holding `sss@1.7.0` would keep running the old roster.
+- `claude-settings` skill: **the skill-dependency install step is gone**, both apply's installer and the `---DEPS---` block in `update-hosts.sh`. `web-search` was its only consumer. Kept as "generic", apply's `package.json` search would have npm-installed `e2e`'s eval fixtures.
+- `claude-settings` skill: **the browser shim is gone**. That covers `scripts/browser-shim.sh`, the apply step that deployed it (so apply's later steps are renumbered), its rationale section, its capture copy-back, and the description's "No supported browser binary found" trigger. Of the roster's plugins, only `web-search` resolved a browser by name on `PATH`. A Host that already has `~/.local/bin/chromium` deployed keeps it; it is harmless there, and this change writes nothing to any Host.
+
+### Changed
+
+- `claude-settings` skill: the plugin lists and examples name the three remaining marketplace plugins (`sss`, `e2e`, `matt`). `references/external-plugins.md` now says apply never prunes: a plugin dropped from the roster stays installed wherever it already is. Kept unchanged: the `orca` shim, the `localMarketplaces` machinery, and apply's additive behaviour.
+
 ## [1.7.0] - Unreleased
 
 ### Removed
