@@ -40,9 +40,9 @@ Bash tests are executable and take no arguments:
 ./tests/bash/test-pr-review-handoff-parity.sh
 ```
 
-`test-pr-review-handoff-parity.sh` reads its consumer from outside the repo: the `pw-prove` skill
-teamai installs from `sonhyrd/agent-kit` at `~/.claude/skills/pw-prove/SKILL.md`, or whatever
-`PW_PROVE_SKILL` names. When that file is absent the test fails loudly — it never skips.
+`test-pr-review-handoff-parity.sh` is the one exception to rule 1 below: its consumer is the
+`pw-prove` skill teamai installs from `sonhyrd/agent-kit`, outside the repo. When that file is
+absent the test fails loudly — it never skips.
 
 ## Writing a new bash test
 

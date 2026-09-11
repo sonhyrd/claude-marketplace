@@ -17,14 +17,8 @@ description: |
   `fix-stage-starts-unasked.yaml`: same shape of assertion, that a stage proceeds
   without stopping to ask.
 
-  **The spawned line names no pull request** (#113, ADR-0009's amendment). In PR
-  mode it is `claude '/pw-prove'` and nothing else: `pw-prove` resolves the
-  checked-out branch's open PR by itself. So the `failure` clause also trips on a
-  spawn carrying a PR argument — `#N`, a bare integer, `owner/repo#N` or a PR URL,
-  the spellings the orchestrator's proof guard refuses — and on a
-  plugin-namespaced `/<plugin>:pw-prove`, the retired marketplace copy's shape.
-  Both match only the spawned `claude '…'` line, so an answer that quotes the
-  wrong spawn in order to rule it out does not trip them.
+  Also fails a spawned `claude '/pw-prove <PR>'` or `/<plugin>:pw-prove` (#113,
+  ADR-0009's amendment); both rules match only the spawned `claude '…'` line.
 
 input:
   prompt: |
@@ -59,8 +53,8 @@ judge:
   failure:
     - output_matches:
         any:
-          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I) invoke the Skill tool with `?pw-prove'
-          - '(?i)claude[ \t]+[''"]/pw-prove[ \t]+(#?[0-9]+\b|[\w.-]+/[\w.-]+#[0-9]|https?://\S*/pull/[0-9])'
+          - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I) invoke the Skill tool with `?([a-z0-9-]+:)?pw-prove'
+          - '(?i)claude[ \t]+[''"]/pw-prove[ \t]+(#?[0-9]+([ \t''"`]|$)|[\w.-]+/[\w.-]+#[0-9]|https?://\S*/pull/[0-9])'
           - '(?i)claude[ \t]+[''"]/[a-z0-9-]+:pw-prove\b'
           - '(?im)(^|[^"''“”`*_(])\brun(ning)? (it|pw-prove) inline\b'
           - '(?im)(^|[^"''“”`*_(])\b(want me to|sh[ao]uld I) (spawn|proceed|run)'

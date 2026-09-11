@@ -45,6 +45,10 @@ These live as skills so they load only when you're doing the task:
   pushed, so do not cite it as precedent for how `git subtree push` behaves. Inbound is a different
   story: `d46eb83` and the `0ab1b63` sync both carry `git-subtree-dir` metadata, so `git subtree
   pull` works and is the only supported way in.
+- `disable-model-invocation: true` in a skill's frontmatter is the *only* mechanism that pins a
+  plugin skill to user-invocable-only — `skillOverrides` in `~/.claude/settings.json` is inert for
+  skills whose source is a plugin, so never "fix" a pin question by adding settings keys. The flag
+  also blocks *chained* Skill-tool launches, so a skill another skill hands off to cannot be pinned.
 - `plugins/sss/skills/skill-upper/` is **vendored verbatim** from
   [alibaba/skill-up](https://github.com/alibaba/skill-up) (`skills/skill-upper/`, upstream `24e5185`
   / release `v0.9.0`) — the one exception to `plugins/sss/` being entirely locally authored. Do not

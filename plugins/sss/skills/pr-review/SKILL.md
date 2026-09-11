@@ -9,7 +9,7 @@ compatibility: >
   for the session that runs the proof, and `git`. Step 1 preflights all of them and stops the run naming
   the one command that installs whichever is missing, so a run that starts can
   finish at full strength.
-  `/sss:claude-settings` provisions the whole set in one pass.
+  `/sss:claude-settings` provisions all but pw-prove.
 metadata:
   author: sonhyrd
   version: "1.0.0"
@@ -249,10 +249,6 @@ own business.
 "$ORCA" terminal create --worktree active --command "claude '/pw-prove'" --json            # PR mode
 "$ORCA" terminal create --worktree active --command "claude '/pw-prove <branch>'" --json   # branch mode
 ```
-
-**A proof spawn never names a pull request.** In PR mode Step 1 left the PR's head branch checked
-out, and `pw-prove` with nothing after it proves that branch's open PR on its own. Branch mode has
-no PR to find, so it passes the branch name.
 
 **Close on four things**: the artifact path, the terminal handle `terminal create` returned, the
 `$ORCA terminal read --terminal <handle>` line that shows the proof's output, and one sentence saying

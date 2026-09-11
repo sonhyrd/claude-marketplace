@@ -13,7 +13,7 @@
 #
 # The consumer ships from sonhyrd/agent-kit, not this repo: teamai installs it
 # as ~/.claude/skills/pw-prove/SKILL.md, and that installed copy is what this
-# test reads. Set PW_PROVE_SKILL to point it at an agent-kit checkout instead.
+# test reads.
 # An absent consumer FAILS the test, loudly — it never skips. A skipped parity
 # check reads exactly like a passing one, and the drift this catches is silent.
 # So an agent-kit change that renames that heading or edits the schema breaks
@@ -22,7 +22,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONSUMER="${PW_PROVE_SKILL:-$HOME/.claude/skills/pw-prove/SKILL.md}"
+CONSUMER="$HOME/.claude/skills/pw-prove/SKILL.md"
 PRODUCER="${REPO_ROOT}/plugins/sss/skills/pr-review/SKILL.md"
 CONSUMER_MARKER='Read the handoff artifact'
 PRODUCER_MARKER='Write the handoff artifact'

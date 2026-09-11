@@ -6,7 +6,9 @@
   [sonhyrd/agent-kit](https://github.com/sonhyrd/agent-kit), under its bare name, and the spawn no
   longer names a pull request. PR mode runs `claude '/pw-prove'` with no argument, since `pw-prove`
   resolves the checked-out branch's open PR itself. Branch mode runs `claude '/pw-prove <branch>'`.
-  The paste line matches in both. This replaces *One argument* below. Everything else stands.
+  The paste line matches in both. This replaces *One argument* below. Everything else stands,
+  except that ADR-0005 is itself superseded by the same issue, so every "0005 stands" or "0005's
+  reasoning still holds" below describes the time before #113.
 - **Issue:** [#49](https://github.com/sonhyrd/claude-marketplace/issues/49)
 - **Supersedes:** [ADR-0005](./0005-pw-prove-unpinned-behind-a-confirmation-gate.md), the
   *One human checkpoint in a long chain* consequence only. Everything else in 0005 stands.
