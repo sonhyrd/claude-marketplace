@@ -4,6 +4,18 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.7.2] - Unreleased
+
+### Changed
+
+- `pr-review` skill: **the proof is `pw-prove` from `sonhyrd/agent-kit`, spawned with no pull request on the line** (#113, spec #114, #115). Step 6c's fresh session runs `claude '/pw-prove'` in PR mode and `claude '/pw-prove <branch>'` in branch mode, and the paste-line fallback is the same line. It used to be `/e2e:pw-prove <NUM>`. That named this marketplace's `e2e` copy, which still carries the har-scrub password leak agent-kit PR #61 fixed, and it put the PR number on the spawn, which is the argument the orchestrator's proof guard refuses. With an empty argument, `pw-prove` resolves the checked-out branch's open PR by itself, and Step 1 has already checked that branch out. Branch mode has no PR for it to find, so it passes the branch name. [ADR-0009](../docs/adr/0009-pr-review-spawns-the-proof-in-a-fresh-session.md) carries the amendment.
+- `pr-review` skill: **preflight checks for the `pw-prove` skill, not the `e2e` plugin.** The compatibility line and `claude plugin list` no longer name `e2e`. One added line checks for `~/.claude/skills/pw-prove/SKILL.md`, and the fix table routes a missing one to `teamai pull`. Handoff-schema changes route to agent-kit instead of "the fork". The eval cases now also fail a spawn that carries a PR argument or a plugin-namespaced `pw-prove`.
+- `tests/bash/test-pr-review-handoff-parity.sh` reads the consumer schema from the teamai-installed agent-kit `pw-prove` (`PW_PROVE_SKILL` overrides the path), and fails when that file is absent.
+
+### Removed
+
+- `claude-settings` skill: **`e2e` is out of the plugin roster** (#113). `apply` no longer installs `e2e@sss-marketplace`, and the plugin lists and examples name `sss` and `matt`. Apply stays additive, so a Host that already holds `e2e` keeps it until the coordinator uninstalls it. The version moves for the same reason 1.7.1 did: apply runs from the version-keyed plugin cache.
+
 ## [1.7.1] - Unreleased
 
 ### Removed

@@ -8,7 +8,7 @@ Moved verbatim from `SKILL.md`, which says to read this before Step 1. Every ent
 - **The handoff schema is `pw-prove`'s, not ours.** Adding a field here writes a key nothing reads;
   renaming one breaks the consumer silently, because an unparseable handoff is a handoff `pw-prove`
   is told to ignore without complaint. `tests/bash/test-pr-review-handoff-parity.sh` is what
-  notices. If the contract is wrong, that is a change in `pw-prove` and a push to the fork — which
+  notices. If the contract is wrong, that is a change in `pw-prove`, in `sonhyrd/agent-kit` — which
   this run routes and does not make. **Neither half of that is edited away by a request to extend
   the schema**: an eval trial asked for one field and got the field, plus this Gotcha rewritten to
   permit it. A rule that yields to the first request it refuses was never a rule.

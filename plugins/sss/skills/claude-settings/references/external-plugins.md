@@ -81,7 +81,6 @@ baseline cannot get right — but the plugin names are fine, so they live in the
 |---|---|
 | `sss` | Locally-authored skills — `/sss:pr-review`, `/sss:claude-settings`, `/sss:autoship`, … |
 | `matt` | `mattpocock/skills` — `/matt:code-review`, `/matt:tdd`, `/matt:research`, … |
-| `e2e` | `/e2e:pw-prove`, `/e2e:e2e-reviewer`, `/e2e:playwright-debugger` |
 
 **A checkout that predates a plugin hides it.** The marketplace resolves against the working
 tree, so on a branch cut before `<plugin>` landed, `claude plugin list` reports

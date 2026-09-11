@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Tests that sss:pr-review's handoff artifact matches the schema e2e:pw-prove
+# Tests that sss:pr-review's handoff artifact matches the schema pw-prove
 # defines for it.
 #
 # pw-prove owns the schema as its only reader; pr-review is the producer and
@@ -11,16 +11,18 @@
 # ignore without complaint, so the run just quietly loses the review. This test
 # is what fails instead.
 #
-# The consumer lives under plugins/e2e-skills/, which is a subtree of the fork
-# and byte-identical to it. So a `git subtree pull` that renames that heading or
-# edits the schema breaks this test — deliberately. That is the alarm working:
-# `make check-e2e-subtree` sees an unchanged prefix and has nothing to say about
-# a contract the marketplace side no longer meets.
+# The consumer ships from sonhyrd/agent-kit, not this repo: teamai installs it
+# as ~/.claude/skills/pw-prove/SKILL.md, and that installed copy is what this
+# test reads. Set PW_PROVE_SKILL to point it at an agent-kit checkout instead.
+# An absent consumer FAILS the test, loudly — it never skips. A skipped parity
+# check reads exactly like a passing one, and the drift this catches is silent.
+# So an agent-kit change that renames that heading or edits the schema breaks
+# this test on the next run — deliberately. That is the alarm working.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONSUMER="${REPO_ROOT}/plugins/e2e-skills/skills/pw-prove/SKILL.md"
+CONSUMER="${PW_PROVE_SKILL:-$HOME/.claude/skills/pw-prove/SKILL.md}"
 PRODUCER="${REPO_ROOT}/plugins/sss/skills/pr-review/SKILL.md"
 CONSUMER_MARKER='Read the handoff artifact'
 PRODUCER_MARKER='Write the handoff artifact'

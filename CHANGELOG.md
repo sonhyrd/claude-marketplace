@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- pr-review and claude-settings skills (sss plugin → 1.7.2): **`pr-review` proves with agent-kit's `/pw-prove`, with no pull request on the spawn, and the roster no longer installs `e2e`** (#113). See `changelogs/sss.md` 1.7.2.
 - **`web-search` plugin: retired, and marketplace 0.47.0 → 0.48.0** (#111). Agent-Reach, distributed by teamai from `sonhyrd/agent-kit`, replaces it. `plugins/web-search/` and its entries in both marketplace manifests are gone. `changelogs/web-search.md` is kept as a record.
 - claude-settings skill (sss plugin → 1.7.1): **the roster no longer installs `web-search`**, and the two pieces that existed only for it, the skill-dependency install step and the browser shim, are gone; a Host's deployed `~/.local/bin/chromium` is left in place. See `changelogs/sss.md` 1.7.1 for what was removed, what was kept, and why.
 

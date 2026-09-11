@@ -29,7 +29,8 @@ Then resolve the Orca CLI. **Preference orders the candidates; evidence selects 
 | `ocr` | `npm install -g @alibaba-group/open-code-review@latest` |
 | the Orca CLI | `/sss:claude-settings` — it deploys the shim that makes `orca` resolve |
 | `gh` or `git` | this platform's package manager |
-| the `matt`, `sss` or `e2e` plugin | `claude plugin install <name>@sss-marketplace`, then restart Claude Code |
+| the `matt` or `sss` plugin | `claude plugin install <name>@sss-marketplace`, then restart Claude Code |
+| the `pw-prove` skill (`~/.claude/skills/pw-prove/SKILL.md`) | `teamai pull` — it installs the skill from `sonhyrd/agent-kit` — then restart Claude Code |
 | the `ponytail` plugin | `claude plugin marketplace add DietrichGebert/ponytail` then `claude plugin install ponytail@ponytail`, then restart Claude Code |
 
 `/sss:claude-settings` provisions the whole set in one pass, and is the answer to give when more than one line is missing.

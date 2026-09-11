@@ -41,7 +41,6 @@
     "atlassian@claude-plugins-official": true,
     "ponytail@ponytail": true,
     "sss@sss-marketplace": true,
-    "e2e@sss-marketplace": true,
     "matt@sss-marketplace": true
   },
   "localMarketplaces": {}

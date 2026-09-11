@@ -14,7 +14,7 @@ tests/
 ├── bash/
 │   ├── test-e2e-subtree-check.sh        # scripts/check-e2e-subtree.sh
 │   ├── test-playwright.sh               # playwright plugin scripts
-│   └── test-pr-review-handoff-parity.sh # pr-review ↔ pw-prove handoff schema
+│   └── test-pr-review-handoff-parity.sh # pr-review ↔ pw-prove handoff schema (reads the installed agent-kit pw-prove)
 ├── Dockerfile.playwright            # image for the playwright tests
 └── README.md
 ```
@@ -44,6 +44,10 @@ Bash tests are executable and take no arguments:
 
 `test-e2e-subtree-check.sh` fetches the `e2e-fork` remote, so it needs network and is deliberately
 outside `make validate`, which is static and offline.
+
+`test-pr-review-handoff-parity.sh` reads its consumer from outside the repo: the `pw-prove` skill
+teamai installs from `sonhyrd/agent-kit` at `~/.claude/skills/pw-prove/SKILL.md`, or whatever
+`PW_PROVE_SKILL` names. When that file is absent the test fails loudly — it never skips.
 
 ## Writing a new bash test
 

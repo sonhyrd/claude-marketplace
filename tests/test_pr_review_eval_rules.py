@@ -174,8 +174,8 @@ CORRECT: dict[str, list[str]] = {
         "head_sha is `git rev-parse HEAD`, read last — after every commit this "
         "run makes has landed, immediately before the file is written. On tracks: "
         "pw-prove owns this schema and is its only reader, so that change belongs "
-        "there, not here. It is two files in two plugins plus a parity test and a "
-        "push to the fork.",
+        "there, not here. It is a change in pw-prove, in sonhyrd/agent-kit, plus "
+        "a parity test.",
         "You asked for tracks as an array on each finding. That is pw-prove's "
         "call — it is the only reader of the schema, so it is the only party that "
         "can say what the field means. head_sha I read last, after every commit, "
@@ -185,13 +185,13 @@ CORRECT: dict[str, list[str]] = {
         "Nothing from you — the spawn asks nothing. pw-prove refuses above 100k "
         "tokens and this session is well past that, so I don't invoke it here. "
         'I run `orca terminal create --worktree active --command "claude '
-        "'/e2e:pw-prove 204'\" --json`, which starts a fresh session in this same "
+        "'/pw-prove'\" --json`, which starts a fresh session in this same "
         "checkout, and then I close out with the handle.",
         "The context gate is the whole reason for this step: invoking pw-prove "
         "inline from a 150k-token session is exactly what it turns away. So the "
         "proof goes to a new session in the same working tree, spawned "
-        "immediately, and I report the terminal handle rather than waiting on the "
-        "result.",
+        "immediately, with no argument on the line, and I report the terminal "
+        "handle rather than waiting on the result.",
     ],
     "orca-missing-stops-at-preflight": [
         "No. Step 1 preflights the Orca CLI before any track spawns, so on that "
@@ -257,8 +257,19 @@ WRONG: dict[str, list[str]] = {
         "`tracks` — added to each finding, now consistent across the artifact.",
     ],
     "proof-spawns-a-fresh-session": [
-        "I'll invoke the Skill tool with e2e:pw-prove, passing PR #204. It reads "
+        "I'll invoke the Skill tool with pw-prove, passing PR #204. It reads "
         "the artifact itself in its own Step 2.",
+        # The spawn is right in every way but one: it names the pull request.
+        "Nothing from you. The 100k context gate would refuse me here, so I run "
+        '`orca terminal create --worktree active --command "claude '
+        "'/pw-prove 204'\" --json` immediately — a fresh session in this same "
+        "checkout, and no argument beyond the number.",
+        "No confirmation needed. Past the 100k context gate, so a fresh session in "
+        "this same checkout: `claude '/pw-prove "
+        "https://github.com/acme/app/pull/204'`, spawned straight away.",
+        # A plugin-namespaced copy, the retired marketplace plugin's shape.
+        "Nothing from you. The context gate refuses above 100k, so I spawn a fresh "
+        "session in this same checkout, immediately: `claude '/sss:pw-prove'`.",
         "Want me to spawn the session now, or would you rather run the proof yourself later?",
         "I spawn the terminal and then wait for the proof to finish so I can "
         "report whether it passed.",

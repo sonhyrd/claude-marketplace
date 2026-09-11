@@ -101,7 +101,7 @@ The portable/local split is computed, not hand-maintained:
 - **Machine-local — the path only.** A marketplace added as a directory source carries a path
   (`/home/orca/work/claude-marketplace` on one box, something else on another) and that path is
   exactly what cannot be shared. The plugin *names* behind it can be, so they are captured under
-  `localMarketplaces` (`{"sss-marketplace": ["e2e", "matt", "sss"]}`) and apply
+  `localMarketplaces` (`{"sss-marketplace": ["matt", "sss"]}`) and apply
   installs them like any other. Only the path is resolved per machine, in this order:
   `$SSS_MARKETPLACE_PATH`, then the `extraKnownMarketplaces` entry already in settings, then
   **the repo containing the script itself** — running apply out of a fresh clone needs no path
@@ -112,10 +112,10 @@ The portable/local split is computed, not hand-maintained:
 **`sss-marketplace` itself is no longer one of those.** It is registered from
 `sonhyrd/claude-marketplace` as a plain `github` source, so it captures like `cloudflare` or
 `ponytail` and `localMarketplaces` is empty. That is what lets a host with no checkout — the
-`cursor-5` and `contabo` Orca environments among them — install `sss`, `e2e` and `matt` from the
+`cursor-5` and `contabo` Orca environments among them — install `sss` and `matt` from the
 baseline alone. The `localMarketplaces` machinery above stays because the scripts still support a
 directory source; nothing in the roster uses it today. Switching a machine back is `claude plugin
-marketplace remove sss-marketplace` then `add <path>`, at the cost of re-installing the three
+marketplace remove sss-marketplace` then `add <path>`, at the cost of re-installing the two
 plugins, which `remove` drops from `enabledPlugins`.
 
 A registered marketplace with nothing enabled from it is **not** captured. Otherwise every
@@ -206,7 +206,7 @@ update runs *there*. Paste this into a session on that host:
 > Update the `sss-marketplace` plugins from GitHub and verify the update actually landed.
 >
 > 1. `claude plugin marketplace update sss-marketplace`
-> 2. `claude plugin update` for each of `sss`, `e2e`, `matt` at `@sss-marketplace`
+> 2. `claude plugin update` for each of `sss`, `matt` at `@sss-marketplace`
 > 3. Confirm the marketplace clone is at the current default-branch tip:
 >    `git -C ~/.claude/plugins/marketplaces/sss-marketplace log --oneline -1`
 > 4. Confirm the cache holds the version `.claude-plugin/marketplace.json` names for each plugin:
@@ -217,7 +217,7 @@ update runs *there*. Paste this into a session on that host:
 > version number never re-fetches.
 
 A host that has never had this marketplace needs `claude plugin marketplace add
-sonhyrd/claude-marketplace` first, and then the three installs — which is what running **apply** out
+sonhyrd/claude-marketplace` first, and then the two installs — which is what running **apply** out
 of `baseline/plugins.json` does for it, with no path typed anywhere.
 
 ## User-level memory travels as a set
