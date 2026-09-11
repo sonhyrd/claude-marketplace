@@ -7,8 +7,7 @@ description: >-
   into the baseline. Use when setting up Claude Code on a new machine or VPS, when the user
   says their settings/statusline/skill overrides are out of sync between machines, when they
   want to save or restore their Claude Code configuration, or when adding a segment to the
-  statusline, or when a new machine is missing plugins that another machine has, or when
-  web-search fails with "No supported browser binary found" on a box with no browser. Also
+  statusline, or when a new machine is missing plugins that another machine has. Also
   installs the tracked plugin roster via the claude plugin CLI, and the CLI roster the sss
   skills shell out to — `ocr` for pr-review's third track, and the shim that makes `orca`
   resolve to Orca's CLI instead of its desktop launcher, which is what to reach for when a
@@ -102,7 +101,7 @@ The portable/local split is computed, not hand-maintained:
 - **Machine-local — the path only.** A marketplace added as a directory source carries a path
   (`/home/orca/work/claude-marketplace` on one box, something else on another) and that path is
   exactly what cannot be shared. The plugin *names* behind it can be, so they are captured under
-  `localMarketplaces` (`{"sss-marketplace": ["e2e", "matt", "sss", "web-search"]}`) and apply
+  `localMarketplaces` (`{"sss-marketplace": ["e2e", "matt", "sss"]}`) and apply
   installs them like any other. Only the path is resolved per machine, in this order:
   `$SSS_MARKETPLACE_PATH`, then the `extraKnownMarketplaces` entry already in settings, then
   **the repo containing the script itself** — running apply out of a fresh clone needs no path
@@ -113,11 +112,11 @@ The portable/local split is computed, not hand-maintained:
 **`sss-marketplace` itself is no longer one of those.** It is registered from
 `sonhyrd/claude-marketplace` as a plain `github` source, so it captures like `cloudflare` or
 `ponytail` and `localMarketplaces` is empty. That is what lets a host with no checkout — the
-`cursor-5` and `contabo` Orca environments among them — install `sss`, `e2e`, `matt` and
-`web-search` from the baseline alone. The `localMarketplaces` machinery above stays because the
-scripts still support a directory source; nothing in the roster uses it today. Switching a machine
-back is `claude plugin marketplace remove sss-marketplace` then `add <path>`, at the cost of
-re-installing the four plugins, which `remove` drops from `enabledPlugins`.
+`cursor-5` and `contabo` Orca environments among them — install `sss`, `e2e` and `matt` from the
+baseline alone. The `localMarketplaces` machinery above stays because the scripts still support a
+directory source; nothing in the roster uses it today. Switching a machine back is `claude plugin
+marketplace remove sss-marketplace` then `add <path>`, at the cost of re-installing the three
+plugins, which `remove` drops from `enabledPlugins`.
 
 A registered marketplace with nothing enabled from it is **not** captured. Otherwise every
 other machine clones a third-party repo to install nothing from it — the roster follows
@@ -198,13 +197,6 @@ Three things it has to work around, each of which cost a debugging pass:
   Any non-archived worktree on that host will do, because every command here is host-global rather
   than repo-scoped, so the script takes the first one rather than requiring a checkout of this repo.
 
-Node dependencies are installed for any skill shipping a `package.json` with no `node_modules`.
-`web-search` is the one in this roster and **its manifest is at `skills/web-search/package.json`,
-not at the plugin cache root** — pointing npm at the root fails `ENOENT` on one host and with npm's
-`Tracker "idealTree" already exists` on another, which reads as a broken npm rather than a wrong
-directory. `npm_config_*` is unset first for the same reason: an Orca terminal inherits those, and a
-nested `npm install` dies on that same `idealTree` error.
-
 ### The prompt to hand another host
 
 Orca-managed hosts (`orca host list` names them — `cursor-5` and `contabo` here) each run their own
@@ -214,20 +206,18 @@ update runs *there*. Paste this into a session on that host:
 > Update the `sss-marketplace` plugins from GitHub and verify the update actually landed.
 >
 > 1. `claude plugin marketplace update sss-marketplace`
-> 2. `claude plugin update` for each of `sss`, `e2e`, `matt`, `web-search` at `@sss-marketplace`
+> 2. `claude plugin update` for each of `sss`, `e2e`, `matt` at `@sss-marketplace`
 > 3. Confirm the marketplace clone is at the current default-branch tip:
 >    `git -C ~/.claude/plugins/marketplaces/sss-marketplace log --oneline -1`
 > 4. Confirm the cache holds the version `.claude-plugin/marketplace.json` names for each plugin:
 >    `ls ~/.claude/plugins/cache/sss-marketplace/*/`
-> 5. If a plugin ships a `package.json` with no `node_modules` — `web-search` does — run
->    `npm install` in its cache directory, or its first call fails on a missing `playwright`.
 >
 > Report the clone's commit and each plugin's cached version. If a cached version matches the
 > manifest but the content looks stale, say so rather than assuming the update worked: an unchanged
 > version number never re-fetches.
 
 A host that has never had this marketplace needs `claude plugin marketplace add
-sonhyrd/claude-marketplace` first, and then the four installs — which is what running **apply** out
+sonhyrd/claude-marketplace` first, and then the three installs — which is what running **apply** out
 of `baseline/plugins.json` does for it, with no path typed anywhere.
 
 ## User-level memory travels as a set
@@ -265,34 +255,6 @@ ephemeral — pointing settings at it breaks on every plugin update.
 
 So the script is copied to a stable `~/.claude/statusline-native.sh` and settings point there.
 The per-machine `settings.json` write is unavoidable; this skill automates it.
-
-## Why a chromium shim is deployed
-
-`web-search` needs a Chromium-family browser and finds one by **name on `PATH`** — its
-resolver's OS default-path tier is populated for macOS and Windows but empty on Linux, so a
-Linux box with no `chromium`/`google-chrome` on `PATH` fails every call with `No supported
-browser binary found`. That is the normal state of a VPS, where the only browser present is
-usually the Chrome that Playwright downloaded into `~/.cache/ms-playwright`, under a
-versioned path nothing looks in.
-
-`scripts/browser-shim.sh` bridges the two, deployed to `~/.local/bin/chromium` so the
-resolver's existing `"chromium"` candidate hits. Three properties matter:
-
-- **A real system browser always wins.** The shim `exec`s `/usr/bin/chromium`,
-  `google-chrome`, `/opt/google/chrome/chrome`, a snap, or a macOS `.app` before it looks at
-  any cache, so it cannot shadow a browser installed later — which is the standing hazard of
-  putting a file named `chromium` first on `PATH`.
-- **Resolution is at run time, not install time.** Playwright deletes old revisions on
-  upgrade; a symlink to `chromium-1234` becomes a dangling exec the day it becomes
-  `chromium-1250`. The shim re-picks the highest revision on every call.
-- **`chromium_headless_shell-*` is skipped** even though it speaks CDP, because it cannot run
-  headed and the `web-search` daemon may.
-
-The alternative — patching `lib/browser-bin.js` to read the Playwright cache — is the better
-*upstream* fix and the wrong one here: `plugins/web-search/` is vendored verbatim from
-`ogulcancelik/agent-skills`, and this buys the same result with no tracked deviation. Setting
-`WEB_SEARCH_BROWSER_BIN` in `settings.json` would also work but lands in `env`, which this
-skill does not sync, and would only apply inside Claude Code rather than to any shell.
 
 ## The CLI roster
 
@@ -334,8 +296,7 @@ The launcher accepts every subcommand, prints Electron startup noise, and **exit
 bare name concludes Orca is unavailable on a machine where Orca is running fine. `orca-ide --help`
 prints its own usage as `orca <command>`: the CLI already believes it owns this name.
 
-`scripts/orca-shim.sh` gives it the name, deployed to `~/.local/bin/orca`. Three properties matter,
-and the first two are the browser shim's:
+`scripts/orca-shim.sh` gives it the name, deployed to `~/.local/bin/orca`. Three properties matter:
 
 - **Resolution is at run time, not install time.** An Orca upgrade that moves the AppImage cannot
   leave a dangling exec behind, and the shim re-finds both binaries on every call.
@@ -423,36 +384,7 @@ attempts at one.
    `command -v ssh` passes on a box that has `ssh` but no key accepted by GitHub, and a check
    that cannot detect the condition is worse than reporting it after the fact.
 
-   Apply also installs Node dependencies for any newly installed skill that ships a
-   `package.json` with no `node_modules` — `web-search` vendors upstream's manifest without a
-   lockfile, so without this it installs and then fails its first call on a missing
-   `playwright`. Skills with no `package.json` are untouched, which is nearly all of them.
-
-7. **Deploy the browser shim, but only if nothing else answers.** `web-search` is the one
-   skill in the roster that needs a browser. Check first — a machine with Chrome installed
-   needs no shim:
-   ```bash
-   for b in google-chrome google-chrome-stable chrome brave brave-browser chromium \
-            chromium-browser microsoft-edge msedge; do command -v "$b" && break; done
-   ```
-   If that prints nothing (and on macOS, `/Applications/Google Chrome.app` is absent too),
-   deploy it:
-   ```bash
-   mkdir -p ~/.local/bin
-   cp "$SKILL_DIR/scripts/browser-shim.sh" ~/.local/bin/chromium
-   chmod +x ~/.local/bin/chromium
-   ```
-   Then **verify it resolves**, because a shim that exits 127 is a shim that changed nothing:
-   ```bash
-   command -v chromium && chromium --version
-   ```
-   Two failures to report rather than paper over. If `command -v chromium` finds nothing,
-   `~/.local/bin` is not on this machine's `PATH` — say so and stop, since the alternative
-   (`WEB_SEARCH_BROWSER_BIN` in `env`) is a machine-local edit this skill does not make. If
-   `--version` exits 127, the box has neither a browser nor a Playwright cache; the fix is
-   `npx playwright install chromium`, and re-running the shim then needs no redeploy.
-
-8. **Install the CLI roster, and verify each one answers.** Both are cheap to check and
+7. **Install the CLI roster, and verify each one answers.** Both are cheap to check and
    silent to be missing, which is why they are checked every apply rather than once:
 
    ```bash
@@ -476,10 +408,10 @@ attempts at one.
    the cause. Where `orca-ide` is absent entirely, Orca's CLI is not installed on this machine
    and the fix is Orca's installer, not a shim.
 
-9. **Report the baseline's commit** so the user knows what they deployed:
+8. **Report the baseline's commit** so the user knows what they deployed:
    `git -C "$SKILL_DIR" log -1 --format='%h %s' -- baseline scripts`
 
-10. Tell the user the statusline refreshes on the next assistant message, and that **plugins
+9. Tell the user the statusline refreshes on the next assistant message, and that **plugins
    need a Claude Code restart** — a newly installed plugin's skills do not appear in the
    session that installed them.
 
@@ -518,11 +450,11 @@ do by accident.
 
 If the user changed `~/.claude/statusline-native.sh` directly, copy it back to
 `scripts/statusline.sh` too, so the repo is the source of truth again. Same for
-`~/.local/bin/chromium` and `scripts/browser-shim.sh`, and for `~/.local/bin/orca` and
-`scripts/orca-shim.sh` — a shim's whole job is to name paths that vary per machine, so a
-hand-added path on one box is one the next box probably wants. Copy `~/.local/bin/orca` back
-only when it is this shim: after an Orca re-install that path is the installer's symlink again,
-and capturing it would overwrite the shim with a link to one machine's AppImage.
+`~/.local/bin/orca` and `scripts/orca-shim.sh` — a shim's whole job is to name paths that vary
+per machine, so a hand-added path on one box is one the next box probably wants. Copy
+`~/.local/bin/orca` back only when it is this shim: after an Orca re-install that path is the
+installer's symlink again, and capturing it would overwrite the shim with a link to one machine's
+AppImage.
 
 Then capture the memory set, following the imports rather than listing filenames:
 

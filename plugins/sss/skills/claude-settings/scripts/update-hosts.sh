@@ -5,18 +5,11 @@
 # machine runs `claude plugin marketplace update`. Registration is not a subscription and nothing
 # polls; before this script the pass was manual, one Orca terminal per host.
 #
-# Two properties are the reason this is a script and not a paste-able command:
-#
-#   - It reports the CLONE COMMIT and the CACHED VERSIONS rather than the CLI's success lines.
-#     `claude plugin update` prints success for a plugin whose version did not move, and the cache
-#     is keyed on the version — so "updated" and "re-read the same files" are indistinguishable
-#     from the exit code. The commit and the version list are the only evidence that separates them.
-#   - It installs Node dependencies for any skill shipping a package.json with no node_modules.
-#     `web-search` is the one in this roster, and its manifest is at skills/web-search/package.json,
-#     NOT at the plugin cache root: pointing npm at the root fails ENOENT on one host and with
-#     npm's misleading `Tracker "idealTree" already exists` on another, which reads as a corrupt
-#     npm rather than a wrong directory. It also unsets npm_config_* first — an Orca terminal
-#     inherits them, and a nested npm install fails on the same idealTree error.
+# It reports the CLONE COMMIT and the CACHED VERSIONS rather than the CLI's success lines, which
+# is the reason this is a script and not a paste-able command. `claude plugin update` prints
+# success for a plugin whose version did not move, and the cache is keyed on the version — so
+# "updated" and "re-read the same files" are indistinguishable from the exit code. The commit and
+# the version list are the only evidence that separates them.
 #
 # Read-only unless a host is out of date; safe to re-run. A host that is already current does
 # nothing but re-print its commit and versions.
@@ -70,15 +63,6 @@ echo "---COMMIT---"
 git -C ~/.claude/plugins/marketplaces/\$mkt log --oneline -1 2>&1 || echo "!! no marketplace clone"
 echo "---VERSIONS---"
 ls -d ~/.claude/plugins/cache/\$mkt/*/*/ 2>/dev/null | sed "s|.*/cache/\$mkt/||;s|/\$||" || echo "!! no cache"
-echo "---DEPS---"
-for m in ~/.claude/plugins/cache/\$mkt/*/*/skills/*/package.json; do
-  [ -e "\$m" ] || continue
-  d=\$(dirname "\$m")
-  [ -d "\$d/node_modules" ] && continue
-  echo "installing deps: \$(basename \$d)"
-  ( cd "\$d"; for v in \$(env | grep -o "^npm_[^=]*"); do unset "\$v"; done
-    npm install --no-audit --no-fund >/dev/null 2>&1 && echo "ok: \$(basename \$d)" || echo "!! npm install failed: \$(basename \$d)" )
-done
 echo "---DONE---"
 EOF
 }

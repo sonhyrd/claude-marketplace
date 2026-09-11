@@ -82,16 +82,10 @@ baseline cannot get right — but the plugin names are fine, so they live in the
 | `sss` | Locally-authored skills — `/sss:pr-review`, `/sss:claude-settings`, `/sss:autoship`, … |
 | `matt` | `mattpocock/skills` — `/matt:code-review`, `/matt:tdd`, `/matt:research`, … |
 | `e2e` | `/e2e:pw-prove`, `/e2e:e2e-reviewer`, `/e2e:playwright-debugger` |
-| `web-search` | `/web-search` — browser-backed Google/DuckDuckGo search, pages as Markdown |
-
-`web-search` vendors upstream's `package.json` with no `node_modules` and no lockfile (both
-excluded by upstream's `.gitignore`), so installing the plugin alone leaves a skill that fails
-its first call on a missing `playwright`. Apply installs deps for any newly installed skill in
-that state, so this needs no separate step.
 
 **A checkout that predates a plugin hides it.** The marketplace resolves against the working
-tree, so on a branch cut before `web-search` landed, `claude plugin list` reports
-`Plugin web-search not found in marketplace sss-marketplace` while settings still show it
+tree, so on a branch cut before `<plugin>` landed, `claude plugin list` reports
+`Plugin <plugin> not found in marketplace sss-marketplace` while settings still show it
 installed and enabled. Nothing is broken — check out `main`, or a branch based on it.
 
 ## Verifying a machine
@@ -106,7 +100,8 @@ jq '{extraKnownMarketplaces, enabledPlugins}' ~/.claude/settings.json
 `<plugin>@<marketplace>` to a boolean. The two drift apart: a marketplace can stay registered
 after its plugin is disabled, and a `false` entry can outlive the marketplace itself. When
 pruning, remove the entry from **both** keys — dropping only the `enabledPlugins` line leaves
-the source registered.
+the source registered. Apply never prunes: a plugin dropped from the roster stays installed on
+every machine that already has it until someone uninstalls it there.
 
 Note that `claude plugin list` shows only *installed* plugins, so it cannot tell you a
 marketplace is registered with nothing installed from it. `claude plugin marketplace list` is

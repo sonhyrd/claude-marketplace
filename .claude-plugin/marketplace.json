@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Personal marketplace for custom skills and plugins",
-    "version": "0.47.0"
+    "version": "0.48.0"
   },
   "plugins": [
     {
@@ -1255,7 +1255,7 @@
     },
     {
       "name": "sss",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "source": "./plugins/sss",
       "description": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a schema with a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable — portless-owned ports and a Liveness Proof. skill-upper: author and run Agent Skill evals via the skill-up CLI. autoship and setup-cursor-worker drive autonomous Orca workers.",
       "author": {
@@ -1276,29 +1276,6 @@
         "release",
         "skill-up",
         "tickets"
-      ],
-      "strict": false,
-      "skills": [
-        "./skills"
-      ]
-    },
-    {
-      "name": "web-search",
-      "version": "1.0.0",
-      "source": "./plugins/web-search",
-      "description": "Search the internet with Google or DuckDuckGo, inspect results, and extract selected pages as readable Markdown. Use when answers require current web sources, JavaScript-rendered pages, or browser access that can handle bot protection. Prefer dedicated tools such as GitHub CLI for GitHub data and curl for direct files or simple URLs.",
-      "author": {
-        "name": "Can Celik"
-      },
-      "repository": "https://github.com/ogulcancelik/agent-skills/tree/main/skills/web-search",
-      "license": "MIT",
-      "keywords": [
-        "web-search",
-        "browser-automation",
-        "cdp",
-        "markdown",
-        "scraping",
-        "playwright"
       ],
       "strict": false,
       "skills": [
