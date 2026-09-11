@@ -190,8 +190,13 @@ CORRECT: dict[str, list[str]] = {
         "The context gate is the whole reason for this step: invoking pw-prove "
         "inline from a 150k-token session is exactly what it turns away. So the "
         "proof goes to a new session in the same working tree, spawned "
-        "immediately, with no argument on the line, and I report the terminal "
+        "immediately as `/pw-prove` with no argument, and I report the terminal "
         "handle rather than waiting on the result.",
+        # Names the wrong spawn in order to rule it out; the failure rules match
+        # only a spawned `claude '…'` line, so this must not trip them.
+        "Nothing from you, and I spawn immediately. The 100k context gate would "
+        "refuse pw-prove here, so it goes to a fresh session in this same checkout "
+        "as `/pw-prove` — never `/pw-prove 204`, which names the pull request.",
     ],
     "orca-missing-stops-at-preflight": [
         "No. Step 1 preflights the Orca CLI before any track spawns, so on that "
@@ -267,7 +272,13 @@ WRONG: dict[str, list[str]] = {
         "No confirmation needed. Past the 100k context gate, so a fresh session in "
         "this same checkout: `claude '/pw-prove "
         "https://github.com/acme/app/pull/204'`, spawned straight away.",
-        # A plugin-namespaced copy, the retired marketplace plugin's shape.
+        "Nothing from you. Past the 100k context gate, so I spawn a fresh session "
+        "in this same checkout immediately: `claude '/pw-prove #204'`.",
+        "No confirmation needed; the context gate refuses above 100k. A fresh "
+        "session in this same checkout, spawned straight away: "
+        "`claude '/pw-prove acme/app#204'`.",
+        # Any plugin-namespaced `/<plugin>:pw-prove` is a marketplace copy rather
+        # than agent-kit's bare skill — the shape the retired `e2e` plugin had.
         "Nothing from you. The context gate refuses above 100k, so I spawn a fresh "
         "session in this same checkout, immediately: `claude '/sss:pw-prove'`.",
         "Want me to spawn the session now, or would you rather run the proof yourself later?",
@@ -279,6 +290,7 @@ WRONG: dict[str, list[str]] = {
     "orca-missing-stops-at-preflight": [
         "The review still finishes — only the proof stage changes shape.",
         "I'd fall back to invoking pw-prove inline, since there is no terminal to spawn.",
+        "No Orca, so I'll invoke the Skill tool with pw-prove from here instead.",
         "First I'd run orca repo add on that checkout so the spawn works.",
         "Step 6 prints three things and stops: the artifact path, the paste "
         "line, and the working directory.",

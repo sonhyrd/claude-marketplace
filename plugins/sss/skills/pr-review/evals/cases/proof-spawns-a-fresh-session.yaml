@@ -23,6 +23,8 @@ description: |
   spawn carrying a PR argument — `#N`, a bare integer, `owner/repo#N` or a PR URL,
   the spellings the orchestrator's proof guard refuses — and on a
   plugin-namespaced `/<plugin>:pw-prove`, the retired marketplace copy's shape.
+  Both match only the spawned `claude '…'` line, so an answer that quotes the
+  wrong spawn in order to rule it out does not trip them.
 
 input:
   prompt: |
@@ -53,13 +55,13 @@ judge:
     - output_matches:
         any: ['(?i)context gate', '(?i)100k', '(?i)refus', '(?i)too (heavy|large|big)', '(?i)context (limit|window)']
     - output_matches:
-        any: ['/pw-prove''', '/pw-prove`', '(?i)no argument', '(?i)nothing after it', '(?i)names? no (pull request|PR)']
+        any: ['/pw-prove''', '/pw-prove`', '/pw-prove"', '(?i)/pw-prove,? with no argument', '(?i)/pw-prove and nothing']
   failure:
     - output_matches:
         any:
           - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|then I) invoke the Skill tool with `?pw-prove'
-          - '(?i)/pw-prove[ \t]+(#?[0-9]+\b|[\w.-]+/[\w.-]+#[0-9]|https?://\S*/pull/[0-9])'
-          - '(?i)/[a-z0-9-]+:pw-prove\b'
+          - '(?i)claude[ \t]+[''"]/pw-prove[ \t]+(#?[0-9]+\b|[\w.-]+/[\w.-]+#[0-9]|https?://\S*/pull/[0-9])'
+          - '(?i)claude[ \t]+[''"]/[a-z0-9-]+:pw-prove\b'
           - '(?im)(^|[^"''“”`*_(])\brun(ning)? (it|pw-prove) inline\b'
           - '(?im)(^|[^"''“”`*_(])\b(want me to|sh[ao]uld I) (spawn|proceed|run)'
     - output_contains:
