@@ -144,8 +144,8 @@ never happened:
 2. **The version in `.claude-plugin/marketplace.json` moved.** The plugin cache is keyed on it
    (`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`), so a host already holding
    `sss@1.6.0` will not re-fetch different content published under `1.6.0`. The trap is
-   silent: the host reports the plugin
-   installed and at the right version while running the old files.
+   silent: the host reports the plugin installed and at the right version while running the old
+   files.
 3. **The host ran `marketplace update`.** Registration is not a subscription; nothing polls.
 
 On the target host, that is:
