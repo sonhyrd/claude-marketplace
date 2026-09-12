@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Personal marketplace for custom skills and plugins",
-    "version": "0.49.0"
+    "version": "0.50.0"
   },
   "plugins": [
     {
@@ -1212,30 +1212,8 @@
       ]
     },
     {
-      "name": "matt",
-      "version": "1.2.5",
-      "source": "./plugins/mattpocock-skills",
-      "description": "Matt Pocock's agent skills for real engineering — grilling, spec/ticket flows, TDD, code review, domain modelling and more. Vendored verbatim from mattpocock/skills via git subtree; exposes the 25 skills upstream's plugin.json declares, plus the in-progress `claude-handoff` and `implement-spec`.",
-      "author": {
-        "name": "Matt Pocock",
-        "url": "https://www.aihero.dev"
-      },
-      "repository": "https://github.com/mattpocock/skills",
-      "license": "MIT",
-      "keywords": [
-        "engineering",
-        "skills",
-        "tdd",
-        "code-review",
-        "grilling",
-        "domain-modeling",
-        "productivity"
-      ],
-      "strict": false
-    },
-    {
       "name": "sss",
-      "version": "1.7.2",
+      "version": "1.7.3",
       "source": "./plugins/sss",
       "description": "Personal skill bundle. jira-ticket: Story/Task/Bug tickets in the hyrd Jira (MAMAS). release-readiness: read-only report on the next release. config-schema: audit a repo's env-var reads and emit a schema with a generated .env.example and fail-fast assertions. dev-local: make a fresh worktree bootable — portless-owned ports and a Liveness Proof. skill-upper: author and run Agent Skill evals via the skill-up CLI. autoship and setup-cursor-worker drive autonomous Orca workers.",
       "author": {

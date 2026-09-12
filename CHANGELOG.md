@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`matt` plugin: retired, and marketplace 0.49.0 → 0.50.0** (#118). `sonhyrd/agent-kit` now vendors Matt Pocock's skills under bare names, with `matt-code-review` and `matt-prototype` as the two renamed ones. `plugins/mattpocock-skills/`, its entries in both marketplace manifests, the Makefile excludes, and the category-nested skill layout support in the Codex sync and structure validator (nothing else used it) are gone. `changelogs/matt.md` is kept as a record.
+- pr-review, claude-settings, autoship and setup-cursor-worker skills (sss plugin → 1.7.3): **`sss` stops calling `matt:` names, nine `skillOverrides` stop hiding agent-kit skills, and the roster no longer installs `matt`** (#118). See `changelogs/sss.md` 1.7.3 for the per-override table.
 - **`e2e` plugin: retired, and marketplace 0.48.0 → 0.49.0** (#113). `pw-prove`, `e2e-reviewer` and `playwright-debugger` now ship from `sonhyrd/agent-kit`. `plugins/e2e-skills/`, its entries in both marketplace manifests, and the subtree-divergence check are gone. `changelogs/e2e.md` is kept as a record and says why.
 - pr-review and claude-settings skills (sss plugin → 1.7.2): **`pr-review` proves with agent-kit's `/pw-prove`, with no pull request on the spawn, and the roster no longer installs `e2e`** (#113). See `changelogs/sss.md` 1.7.2.
 - **`web-search` plugin: retired, and marketplace 0.47.0 → 0.48.0** (#111). Agent-Reach, distributed by teamai from `sonhyrd/agent-kit`, replaces it. `plugins/web-search/` and its entries in both marketplace manifests are gone. `changelogs/web-search.md` is kept as a record.

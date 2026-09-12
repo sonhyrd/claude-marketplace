@@ -80,7 +80,9 @@ baseline cannot get right — but the plugin names are fine, so they live in the
 | Plugin | What it gives you |
 |---|---|
 | `sss` | Locally-authored skills — `/sss:pr-review`, `/sss:claude-settings`, `/sss:autoship`, … |
-| `matt` | `mattpocock/skills` — `/matt:code-review`, `/matt:tdd`, `/matt:research`, … |
+
+Matt Pocock's skills are no longer a plugin here. `sonhyrd/agent-kit` vendors them under bare names
+(`/tdd`, `/research`, and `/matt-code-review` for code review), and teamai installs them.
 
 **A checkout that predates a plugin hides it.** The marketplace resolves against the working
 tree, so on a branch cut before `<plugin>` landed, `claude plugin list` reports

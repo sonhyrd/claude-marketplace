@@ -1,6 +1,6 @@
 # Claude Marketplace
 
-A marketplace of Claude Code plugins — skills, MCP servers, and the vendored subtrees they build on.
+A marketplace of Claude Code plugins — skills, MCP servers, and the vendored code they build on.
 A glossary and nothing else: rules live in `CLAUDE.md`, decisions in [`docs/adr/`](./docs/adr/).
 
 ## Delegation
@@ -105,13 +105,7 @@ finished.
 _Avoid_: fix list, queue (which is the apply set in order), backlog
 
 **Axis**:
-One question a single review skill asks of a diff — `matt:code-review` asks two, Standards and Spec.
+One question a single review skill asks of a diff — `matt-code-review` asks two, Standards and Spec.
 An axis belongs to the skill that asks it; a **Track** is who ran it. Two of `pr-review`'s four
 tracks are that skill's two axes.
 _Avoid_: dimension, angle
-
-## Plugins
-
-**Subtree**:
-A vendored upstream repo under `plugins/`, synced with `git subtree`.
-_Avoid_: vendored dir, fork

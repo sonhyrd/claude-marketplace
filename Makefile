@@ -173,7 +173,6 @@ lint-shellcheck: ## Run shellcheck on all bash scripts (report only)
 	@echo "$(CYAN)Running shellcheck on bash scripts...$(NC)"
 	@echo "$(YELLOW)Checking plugin scripts...$(NC)"
 	@find plugins -path "plugins/*/skills/*" -name "*.sh" -type f \
-		-not -path "plugins/mattpocock-skills/*" \
 		-not -path "*/node_modules/*" -print0 2>/dev/null | xargs -0 -r shellcheck --color=auto || true
 	@echo "$(YELLOW)Checking repo scripts...$(NC)"
 	@find scripts -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null | xargs -0 shellcheck --color=auto || true
@@ -185,7 +184,6 @@ lint-shellcheck-strict: ## Run shellcheck on all bash scripts (fail on issues)
 	@echo "$(CYAN)Running shellcheck on bash scripts (strict mode)...$(NC)"
 	@echo "$(YELLOW)Checking plugin scripts...$(NC)"
 	@find plugins -path "plugins/*/skills/*" -name "*.sh" -type f \
-		-not -path "plugins/mattpocock-skills/*" \
 		-not -path "*/node_modules/*" -print0 2>/dev/null | xargs -0 -r shellcheck --color=auto
 	@echo "$(YELLOW)Checking repo scripts...$(NC)"
 	@find scripts -maxdepth 1 -name "*.sh" -type f -print0 2>/dev/null | xargs -0 shellcheck --color=auto

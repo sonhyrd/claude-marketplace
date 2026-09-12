@@ -101,7 +101,7 @@ The portable/local split is computed, not hand-maintained:
 - **Machine-local — the path only.** A marketplace added as a directory source carries a path
   (`/home/orca/work/claude-marketplace` on one box, something else on another) and that path is
   exactly what cannot be shared. The plugin *names* behind it can be, so they are captured under
-  `localMarketplaces` (`{"sss-marketplace": ["matt", "sss"]}`) and apply
+  `localMarketplaces` (`{"sss-marketplace": ["sss"]}`) and apply
   installs them like any other. Only the path is resolved per machine, in this order:
   `$SSS_MARKETPLACE_PATH`, then the `extraKnownMarketplaces` entry already in settings, then
   **the repo containing the script itself** — running apply out of a fresh clone needs no path
@@ -112,11 +112,11 @@ The portable/local split is computed, not hand-maintained:
 **`sss-marketplace` itself is no longer one of those.** It is registered from
 `sonhyrd/claude-marketplace` as a plain `github` source, so it captures like `cloudflare` or
 `ponytail` and `localMarketplaces` is empty. That is what lets a host with no checkout — the
-`cursor-5` and `contabo` Orca environments among them — install `sss` and `matt` from the
-baseline alone. The `localMarketplaces` machinery above stays because the scripts still support a
-directory source; nothing in the roster uses it today. Switching a machine back is `claude plugin
-marketplace remove sss-marketplace` then `add <path>`, at the cost of re-installing the two
-plugins, which `remove` drops from `enabledPlugins`.
+`cursor-5` and `contabo` Orca environments among them — install `sss` from the baseline alone.
+The `localMarketplaces` machinery above stays because the scripts still support a directory
+source; nothing in the roster uses it today. Switching a machine back is `claude plugin
+marketplace remove sss-marketplace` then `add <path>`, at the cost of re-installing `sss`, which
+`remove` drops from `enabledPlugins`.
 
 A registered marketplace with nothing enabled from it is **not** captured. Otherwise every
 other machine clones a third-party repo to install nothing from it — the roster follows
@@ -143,9 +143,9 @@ never happened:
    fetched — is not there.
 2. **The version in `.claude-plugin/marketplace.json` moved.** The plugin cache is keyed on it
    (`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`), so a host already holding
-   `sss@1.6.0` will not re-fetch different content published under `1.6.0`. This is the same trap
-   `CLAUDE.md` documents for the `matt` subtree, and it is silent: the host reports the plugin
-   installed and at the right version while running the old files.
+   `sss@1.6.0` will not re-fetch different content published under `1.6.0`. The trap is
+   silent: the host reports the plugin installed and at the right version while running the old
+   files.
 3. **The host ran `marketplace update`.** Registration is not a subscription; nothing polls.
 
 On the target host, that is:
@@ -206,7 +206,7 @@ update runs *there*. Paste this into a session on that host:
 > Update the `sss-marketplace` plugins from GitHub and verify the update actually landed.
 >
 > 1. `claude plugin marketplace update sss-marketplace`
-> 2. `claude plugin update` for each of `sss`, `matt` at `@sss-marketplace`
+> 2. `claude plugin update sss@sss-marketplace`
 > 3. Confirm the marketplace clone is at the current default-branch tip:
 >    `git -C ~/.claude/plugins/marketplaces/sss-marketplace log --oneline -1`
 > 4. Confirm the cache holds the version `.claude-plugin/marketplace.json` names for each plugin:
@@ -498,6 +498,17 @@ re-capturing is the fix, not editing the JSON.
 live settings, so an override naming a plugin skill will be picked up even though it does
 nothing. Check new entries against the plugin list before committing: pin a plugin skill with
 `disable-model-invocation: true` in its frontmatter instead.
+
+**The keys are bare names, so they land on whatever user-level skill answers to the name** —
+today that is the `sonhyrd/agent-kit` set teamai installs under `~/.claude/skills/`, plus Claude
+Code's bundled skills. A `user-invocable-only` pin also blocks chained Skill-tool calls, so pinning a
+skill another skill hands off to breaks that skill mid-run. `code-review` and `prototype` now target
+Claude Code's bundled skills; agent-kit ships its matt copies as `matt-code-review` and
+`matt-prototype`, which neither key touches.
+
+**Retiring an override means writing `"on"`, not deleting the key.** Apply deep-merges and only
+ever adds keys, so a key deleted from the baseline keeps its old value on every machine that already
+applied it. `"on"` is a valid value and equals an absent key.
 
 Then remind them: **other hosts only see what is committed and pushed to the default branch.**
 `sss-marketplace` is a `github` source on every machine now, so nothing in a working tree is live

@@ -1,7 +1,7 @@
 id: four-tracks-not-two
-title: Four concurrent tracks, overriding matt:code-review's two
+title: Four concurrent tracks, overriding matt-code-review's two
 description: |
-  Step 2. The skill loads matt:code-review inline and then sends one message with
+  Step 2. The skill loads matt-code-review inline and then sends one message with
   four agent calls — its two axes plus OCR and Complexity — so all four run
   concurrently at the same depth. This is the one instruction pr-review overrides
   in a skill it does not own.
@@ -9,7 +9,7 @@ description: |
 input:
   prompt: |
     Before you kick off the review on PR #128: how many review agents are you
-    spawning and what does each do? I was under the impression matt:code-review
+    spawning and what does each do? I was under the impression matt-code-review
     only runs two.
 
 judge:

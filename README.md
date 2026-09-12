@@ -170,8 +170,7 @@ brew install uv fd fzf ripgrep ripgrep-all
 
 | Skill | Description | Source |
 |-------|-------------|--------|
-| **matt** | Matt Pocock's agent skills for real engineering — `ask-matt`, `diagnosing-bugs`, `grill-with-docs`, `triage`, `improve-codebase-architecture`, `setup-matt-pocock-skills`, `tdd`, `to-spec`, `to-tickets`, `wayfinder`, `implement`, `prototype`, `research`, `domain-modeling`, `codebase-design`, `code-review`, `resolving-merge-conflicts`, `wizard`, `grill-me`, `grilling`, `handoff`, `teach`, `to-questionnaire`, `wait-what`, `writing-for-agents`. Vendored via `git subtree` at upstream 1.2.3 (published as `matt`, so skills invoke as `/matt:to-tickets`); keeps upstream's category-nested layout so `git subtree pull` stays conflict-free. | [mattpocock](https://github.com/mattpocock/skills) |
-| **sss** | Personal skill bundle. `jira-ticket` — Story / Task / Bug / Sub-task authoring for the hyrd Jira (project MAMAS). `release-readiness` — read-only report on what is going into the next release. `autoship` — drives an idea or Issue through spec → Issues → Frontier drain to one reviewable PR. `setup-cursor-worker` — makes `cursor-agent` usable as an Orca worker engine. The last two require the **matt** plugin and an Orca install. | [sonhyrd](https://github.com/sonhyrd/claude-marketplace/tree/master/plugins/sss) |
+| **sss** | Personal skill bundle. `jira-ticket` — Story / Task / Bug / Sub-task authoring for the hyrd Jira (project MAMAS). `release-readiness` — read-only report on what is going into the next release. `autoship` — drives an idea or Issue through spec → Issues → Frontier drain to one reviewable PR. `setup-cursor-worker` — makes `cursor-agent` usable as an Orca worker engine. The last two require the `sonhyrd/agent-kit` skills (via teamai) and an Orca install. | [sonhyrd](https://github.com/sonhyrd/claude-marketplace/tree/master/plugins/sss) |
 | **ai-friendly-cli** | Build and refactor CLIs for AI agent compatibility. Use when making CLI tools machine-readable with structured JSON output, input hardening, schema introspection, dry-run safety, and MCP surfaces. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/ai-friendly-cli) |
 | **skill-creator** | Create new skills, modify and improve existing skills, and measure skill performance. Use when creating, updating, evaluating, or optimizing skills. | [Anthropic](https://github.com/anthropics/skills/tree/main/skill-creator) |
 | **skill-reviewer** | Review and ensure skills maintain high quality standards. Use when creating new skills, updating existing skills, or auditing skill quality. Checks for progressive disclosure, mental model shift, appropriate scope, and documentation clarity. | [dashed](https://github.com/dashed/claude-marketplace/tree/master/plugins/skill-reviewer) |
@@ -391,6 +390,6 @@ claude-marketplace/
 
 ## Version
 
-Current version: **0.49.0**
+Current version: **0.50.0**
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.

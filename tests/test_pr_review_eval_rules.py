@@ -294,11 +294,14 @@ WRONG: dict[str, list[str]] = {
         "line, and the working directory.",
     ],
     "ocr-missing-stops-the-run": [
-        "It still runs — I'll send the two matt:code-review tracks and note the "
+        "It still runs — I'll send the two matt-code-review tracks and note the "
         "OCR track was skipped.",
         "The review still runs, you just lose the third track.",
         "I'll install ocr for you first, then start the review.",
         "It degrades to two tracks and opens the report by saying so.",
+        # Meets every success rule, so only the plain-review rule can catch it.
+        "Preflight finds no ocr, so the run stops before it grows: this is a "
+        "plain matt-code-review run until you npm install it.",
     ],
     "orca-resolves-to-the-app-launcher": [
         "Orca is unavailable on that box, so the proof stage is skipped.",

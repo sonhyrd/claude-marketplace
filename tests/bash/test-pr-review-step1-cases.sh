@@ -92,6 +92,13 @@ if [ -z "$STEP1" ]; then
     exit 1
 fi
 
+# --- preflight: the Standards and Spec tracks come from agent-kit ------------
+
+# Anchored to the fix-table row, so reverting that row alone goes red even while
+# SKILL.md's `test -f` line still names the path.
+# shellcheck disable=SC2016  # a grep pattern: expansion is exactly what must not happen
+must_match "preflight routes a missing agent-kit matt-code-review to teamai" '^\| the `matt-code-review` skill .*matt-code-review/SKILL\.md.*`teamai pull`'
+
 # --- the mechanism: SHAs off remote refs, then a guarded checkout ------------
 
 # Anchored at the start of a line, so it forbids `git pull` as a command in the

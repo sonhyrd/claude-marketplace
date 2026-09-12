@@ -29,11 +29,12 @@ Then resolve the Orca CLI. **Preference orders the candidates; evidence selects 
 | `ocr` | `npm install -g @alibaba-group/open-code-review@latest` |
 | the Orca CLI | `/sss:claude-settings` — it deploys the shim that makes `orca` resolve |
 | `gh` or `git` | this platform's package manager |
-| the `matt` or `sss` plugin | `claude plugin install <name>@sss-marketplace`, then restart Claude Code |
+| the `sss` plugin | `claude plugin install sss@sss-marketplace`, then restart Claude Code |
+| the `matt-code-review` skill (`~/.claude/skills/matt-code-review/SKILL.md`) | `teamai pull` — it installs the skill from `sonhyrd/agent-kit` — then restart Claude Code |
 | the `pw-prove` skill (`~/.claude/skills/pw-prove/SKILL.md`) | `teamai pull` — it installs the skill from `sonhyrd/agent-kit` — then restart Claude Code |
 | the `ponytail` plugin | `claude plugin marketplace add DietrichGebert/ponytail` then `claude plugin install ponytail@ponytail`, then restart Claude Code |
 
-`/sss:claude-settings` provisions everything but `pw-prove` (that is `teamai pull`) in one pass, and is the answer to give when more than one line is missing.
+`/sss:claude-settings` provisions everything but `matt-code-review` and `pw-prove` (both are `teamai pull`) in one pass, and is the answer to give when more than one line is missing.
 
 **Preflight reports, and provisioning is `/sss:claude-settings`'s job.** The stop names the fix and routes there; this skill runs no `npm install`, and no `orca repo add`. A review that reconfigures the machine on its way to reviewing a PR owns every side effect of that repair for the rest of the run — which is a larger promise than a review should make, and the reason repair lives in a skill the user invokes on purpose.
 

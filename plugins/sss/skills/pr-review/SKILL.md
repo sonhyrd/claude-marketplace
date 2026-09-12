@@ -1,15 +1,15 @@
 ---
 name: pr-review
-description: Carry a PR or branch from review to proof — four tracks at once (Standards and Spec from matt:code-review, a rule-driven file-by-file pass from sss:ocr-delegate, and an over-engineering pass from ponytail:ponytail-review) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, OCR's down to Medium, and every Complexity cut that stays inside the diff's own hunks — then pushed and the whole report published as a comment on the PR, then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result, which pw-prove runs in a fresh session spawned into an Orca terminal rather than inline in this one. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
+description: Carry a PR or branch from review to proof — four tracks at once (Standards and Spec from matt-code-review, a rule-driven file-by-file pass from sss:ocr-delegate, and an over-engineering pass from ponytail:ponytail-review) over one resolved diff, reported side by side with the agreements called out, then the findings applied and committed without stopping to ask — every Standards and Spec finding, OCR's down to Medium, and every Complexity cut that stays inside the diff's own hunks — then pushed and the whole report published as a comment on the PR, then translations synced when the repo has a translation config and the diff touched locales, then a Playwright proof of the result, which pw-prove runs in a fresh session spawned into an Orca terminal rather than inline in this one. Use when the user asks to review a PR, review a branch, get a second opinion on a diff, or wants a high-confidence review before merging.
 license: MIT
 compatibility: >
-  Requires the `matt` and `sss` plugins from this marketplace, `pw-prove` from
+  Requires the `sss` plugin, `matt-code-review` and `pw-prove` from
   `sonhyrd/agent-kit`, the `ponytail` plugin from `DietrichGebert/ponytail`, and
   four CLIs on PATH: `gh` for PR mode, `ocr` for the OCR track, the `orca` CLI
   for the session that runs the proof, and `git`. Step 1 preflights all of them and stops the run naming
   the one command that installs whichever is missing, so a run that starts can
   finish at full strength.
-  `/sss:claude-settings` provisions all but pw-prove.
+  `/sss:claude-settings` provisions all but the agent-kit two.
 metadata:
   author: sonhyrd
   version: "1.0.0"
@@ -21,8 +21,8 @@ Four **stages** over one diff — a read stage that reports, then write stages t
 
 | Track | Source | Asks |
 |-------|--------|------|
-| Standards | `matt:code-review` | Does the code follow this repo's documented standards and avoid the smell baseline? |
-| Spec | `matt:code-review` | Does the code do what the issue or PR body asked for? |
+| Standards | `matt-code-review` | Does the code follow this repo's documented standards and avoid the smell baseline? |
+| Spec | `matt-code-review` | Does the code do what the issue or PR body asked for? |
 | OCR | `sss:ocr-delegate` | File by file, against resolved rules, with mandatory coverage — what's wrong here? |
 | Complexity | `ponytail:ponytail-review` | What can be deleted? Reinvented stdlib, unneeded dependency, abstraction with one implementation. |
 
@@ -35,7 +35,8 @@ Read `references/step-1-prep.md` before this step.
 ```bash
 command -v gh git
 ocr --version          # OCR track — any version
-claude plugin list     # matt, sss and ponytail, all enabled
+claude plugin list     # sss and ponytail, both enabled
+test -f ~/.claude/skills/matt-code-review/SKILL.md  # matt-code-review, from sonhyrd/agent-kit via teamai
 test -f ~/.claude/skills/pw-prove/SKILL.md  # pw-prove, from sonhyrd/agent-kit via teamai
 ```
 
@@ -98,15 +99,15 @@ CFG=.github/hyrd-trans-bot.json
 git diff --name-only "$BASE"..."$HEAD_SHA" -- "$DIR" | grep '\.json$'
 ```
 
-## Step 2 — Load `matt:code-review`, fan out four
+## Step 2 — Load `matt-code-review`, fan out four
 
 Read `references/step-2-fan-out.md` before this step.
 
-Invoke the Skill tool with `matt:code-review` **inline, in this context**. It loads its own two-axis briefs and the twelve-smell baseline, and hands you the fixed point it needs — which Step 1 already resolved, so give it the `BASE` SHA and the spec source as settled facts.
+Invoke the Skill tool with `matt-code-review` **inline, in this context**. It loads its own two-axis briefs and the twelve-smell baseline, and hands you the fixed point it needs — which Step 1 already resolved, so give it the `BASE` SHA and the spec source as settled facts.
 
 Then send **one** message with **four** `general-purpose` `Agent` calls. The loaded skill's step 4, *Spawn both sub-agents in parallel*, defines two briefs — **Standards** and **Spec**; you send those two plus OCR and Complexity, so all four tracks run concurrently at the same depth. This is the one instruction `pr-review` overrides in a skill it does not own.
 
-- **Standards** and **Spec** — the two prompts `matt:code-review` step 4 specifies, verbatim, including the smell baseline it says to paste in full.
+- **Standards** and **Spec** — the two prompts `matt-code-review` step 4 specifies, verbatim, including the smell baseline it says to paste in full.
 - **OCR** — invoke the Skill tool with `sss:ocr-delegate` in range mode (`--from`/`--to`), passing the PR title and body as `--background`. Review only: finish at its Step 6 and report. Return the structured comments plus the coverage summary — total, reviewable, reviewed and skipped file counts, the coverage rate over the reviewable set, and a reason for every skipped file.
 - **Complexity** — invoke the Skill tool with `ponytail:ponytail-review` over `git diff <BASE>...<HEAD_SHA>`. Its output format is its own and is returned unedited: one line per finding, `<file>:L<line>: <tag> <what to cut>. <replacement>.` over the five tags `delete`, `stdlib`, `native`, `yagni`, `shrink`, closing on its `net: -<N> lines possible.` — or `Lean already. Ship.` when there is nothing to cut. Do not ask it for severities, and do not ask it to widen: correctness, security and performance are explicitly out of its scope, and three other tracks are already on them.
 

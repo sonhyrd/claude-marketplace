@@ -40,8 +40,7 @@
     "skill-creator@claude-plugins-official": true,
     "atlassian@claude-plugins-official": true,
     "ponytail@ponytail": true,
-    "sss@sss-marketplace": true,
-    "matt@sss-marketplace": true
+    "sss@sss-marketplace": true
   },
   "localMarketplaces": {}
 }
