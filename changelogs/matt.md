@@ -1,5 +1,11 @@
 # Changelog - matt
 
+> **Removed in 0.50.0.** The `matt` plugin was retired (#118). `sonhyrd/agent-kit` #68 vendors its
+> skills under bare names, with two renamed because Claude Code bundles its own: `code-review` →
+> `matt-code-review` and `prototype` → `matt-prototype`. teamai installs them on every Host. What
+> left `sss` along with it is recorded in `changelogs/sss.md` 1.7.3. A Host that already holds the
+> plugin keeps it until the coordinator uninstalls it. This file is kept as a record.
+
 All notable changes to the matt plugin in this marketplace will be documented in this file.
 
 > Installed as **`matt`**, so its skills invoke as `/matt:to-tickets`, `/matt:grilling`, and so on.

@@ -13,26 +13,11 @@ console = Console()
 
 def find_skill_dirs(skills_dir: Path) -> List[Path]:
     """
-    Find skill directories under a plugin's skills/ directory.
-
-    Supports both the flat layout used by most plugins (skills/<name>/SKILL.md)
-    and the category-nested layout of vendored upstream plugins such as
-    mattpocock-skills (skills/<category>/<name>/SKILL.md).
+    Find skill directories (skills/<name>/SKILL.md) under a plugin's skills/ directory.
     """
     if not skills_dir.is_dir():
         return []
-
-    found: List[Path] = []
-    for entry in sorted(skills_dir.iterdir()):
-        if not entry.is_dir():
-            continue
-        if (entry / "SKILL.md").is_file():
-            found.append(entry)
-            continue
-        for nested in sorted(entry.iterdir()):
-            if nested.is_dir() and (nested / "SKILL.md").is_file():
-                found.append(nested)
-    return found
+    return [e for e in sorted(skills_dir.iterdir()) if (e / "SKILL.md").is_file()]
 
 
 class StructureValidator:
