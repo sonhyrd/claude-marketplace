@@ -92,6 +92,10 @@ if [ -z "$STEP1" ]; then
     exit 1
 fi
 
+# --- preflight: the Standards and Spec tracks come from agent-kit ------------
+
+must_match "preflight checks the agent-kit matt-code-review skill" 'matt-code-review/SKILL.md'
+
 # --- the mechanism: SHAs off remote refs, then a guarded checkout ------------
 
 # Anchored at the start of a line, so it forbids `git pull` as a command in the

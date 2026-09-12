@@ -4,6 +4,34 @@ All notable changes to the sss plugin in this marketplace will be documented in 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.7.3] - Unreleased
+
+### Changed
+
+- `pr-review` skill: **the Standards and Spec tracks come from agent-kit's `matt-code-review`, not `matt:code-review`** (#118, spec #119, #120). `sonhyrd/agent-kit` vendors the matt plugin's skills under bare names, and it renamed `code-review` to `matt-code-review` because Claude Code bundles a `code-review` of its own. The description, compatibility, track table, Step 2 and its references all name it. Preflight checks for `~/.claude/skills/matt-code-review/SKILL.md` instead of the `matt` plugin, and the fix table routes a missing one to `teamai pull`, as 1.7.2 did for `pw-prove`. The `ocr-missing-stops-the-run` failure rule and its fixtures follow the rename. A new wrong-answer fixture meets every success rule, so only that rule can catch it, and the Step 1 prose test asserts the preflight line.
+- `claude-settings` skill: **nine `skillOverrides` stop hiding or pinning agent-kit skills.** The keys are bare names, and until now they reached only bare user-level skills, because overrides are inert for plugin skills (`matt:<name>` slipped past them). With the plugin gone, the same keys land on agent-kit's copies. Each key is written as `"on"`, not deleted, because apply deep-merges and only adds keys: a deleted key would leave the old `"off"` on every Host that already applied it. The skill doc now says so. The intent of the original 79b2d84 capture is unrecoverable, so each key is decided on what it now targets:
+
+  | Key | Old | New | Now targets | Why |
+  |---|---|---|---|---|
+  | `tdd` | `off` | `on` | agent-kit `tdd` | distributed on purpose; `implement` and `ask-matt` drive it |
+  | `triage` | `off` | `on` | agent-kit `triage` | distributed on purpose; stays user-only through its own `disable-model-invocation` |
+  | `wizard` | `off` | `on` | agent-kit `wizard` | distributed on purpose; `ask-matt` routes to it |
+  | `claude-handoff` | `off` | `on` | agent-kit `claude-handoff` | matt 1.2.5 went out of its way to make it user-invocable; `off` undid that |
+  | `to-questionnaire` | `off` | `on` | agent-kit `to-questionnaire` | distributed on purpose; user-only through its own flag |
+  | `playwright-debugger` | `off` | `on` | agent-kit `playwright-debugger` | the `e2e` copy retired in 1.7.2; agent-kit's is the only one |
+  | `domain-modeling` | `user-invocable-only` | `on` | agent-kit `domain-modeling` | `grill-with-docs`, `wayfinder` and `improve-codebase-architecture` chain into it, and a pin blocks chained Skill-tool calls (verified: *"Skill domain-modeling is disabled for model invocation in skillOverrides settings"*) |
+  | `codebase-design` | `user-invocable-only` | `on` | agent-kit `codebase-design` | `tdd` and `improve-codebase-architecture` chain into it |
+  | `research` | `user-invocable-only` | `on` | agent-kit `research` | `wayfinder` chains into it |
+  | `code-review` | `off` | unchanged | Claude Code's bundled `code-review` | agent-kit ships `matt-code-review`, which the key does not touch |
+  | `prototype` | `user-invocable-only` | unchanged | Claude Code's bundled `prototype` | agent-kit ships `matt-prototype`, which `wayfinder` chains into, so no pin is added |
+
+  These nine are the complete intersection of the baseline's keys with the skills in `~/.claude/skills` (2026-09-12); every other key misses agent-kit.
+- `autoship` and `setup-cursor-worker` skills: the prerequisite notes point at the `sonhyrd/agent-kit` skills via `teamai pull` instead of the `matt` plugin.
+
+### Removed
+
+- `claude-settings` skill: **`matt` is out of the plugin roster** (#118). `apply` no longer installs `matt@sss-marketplace`, and the plugin lists, examples and host update prompt name `sss` alone. Apply stays additive, so a Host that already holds `matt` keeps it until the coordinator uninstalls it.
+
 ## [1.7.2] - Unreleased
 
 ### Changed

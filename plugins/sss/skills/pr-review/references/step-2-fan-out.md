@@ -1,4 +1,4 @@
-# pr-review — Step 2 reference: Load `matt:code-review`, fan out four
+# pr-review — Step 2 reference: Load `matt-code-review`, fan out four
 
 Moved verbatim from `SKILL.md`, whose Step 2 says when to read it. Nothing here changes the procedure `SKILL.md` states.
 
@@ -24,6 +24,6 @@ Done when every launched track has returned, or the ones that did not are named 
 
 ## Why inline
 
-`matt:code-review` fans out on its own. Running it inside an agent of ours would put its two tracks a level below OCR's, betting that a spawned agent may itself spawn — a bet whose loss is silent, degrading a two-axis review to one context with nothing in the output saying so. Loading it here instead makes the bet unnecessary.
+`matt-code-review` fans out on its own. Running it inside an agent of ours would put its two tracks a level below OCR's, betting that a spawned agent may itself spawn — a bet whose loss is silent, degrading a two-axis review to one context with nothing in the output saying so. Loading it here instead makes the bet unnecessary.
 
 The rejected alternative was pasting its Standards and Spec briefs into this file to get four flat peers. That buys the same shape at the price of a second copy of the smell baseline, owned forever — the duplication this composition exists to avoid.

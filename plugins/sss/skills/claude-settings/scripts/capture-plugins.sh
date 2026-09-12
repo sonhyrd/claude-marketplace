@@ -8,7 +8,7 @@
 # The PLUGIN NAMES behind a directory source are portable even though the path is not, so they
 # are captured too, under localMarketplaces: {"<marketplace>": ["plugin", ...]}. Apply resolves
 # the path once per machine and installs them. Without this the roster silently stopped at the
-# marketplace boundary and a new machine came up missing sss and matt.
+# marketplace boundary and a new machine came up missing this repo's plugins.
 #
 # claude-plugins-official ships with Claude Code and never appears in extraKnownMarketplaces,
 # so its plugins have no marketplace entry to filter on. They are portable by definition:

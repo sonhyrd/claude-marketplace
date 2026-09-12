@@ -105,7 +105,7 @@ finished.
 _Avoid_: fix list, queue (which is the apply set in order), backlog
 
 **Axis**:
-One question a single review skill asks of a diff — `matt:code-review` asks two, Standards and Spec.
+One question a single review skill asks of a diff — `matt-code-review` asks two, Standards and Spec.
 An axis belongs to the skill that asks it; a **Track** is who ran it. Two of `pr-review`'s four
 tracks are that skill's two axes.
 _Avoid_: dimension, angle

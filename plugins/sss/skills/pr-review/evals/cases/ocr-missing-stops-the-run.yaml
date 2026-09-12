@@ -43,4 +43,4 @@ judge:
           - '(?im)(^|[^"''“”`*_(])\b(I''ll|I will|let me|I''d) install (it|ocr|the ocr)\b'
           - '(?im)(^|[^"''“”`*_(])\bthe review still (runs|finishes|completes)\b'
           - '(?im)(^|[^"''“”`*_(])\b(it|the run|the review) degrades to two tracks\b'
-          - '(?im)(^|[^"''“”`*_(])\bthis is a plain `?matt:code-review'
+          - '(?im)(^|[^"''“”`*_(])\bthis is a plain `?matt-code-review'
