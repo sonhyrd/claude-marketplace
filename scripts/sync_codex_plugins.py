@@ -147,10 +147,7 @@ def has_skills(plugin_dir: Path) -> bool:
     skills_dir = plugin_dir / "skills"
     if not skills_dir.is_dir():
         return False
-    for path in skills_dir.iterdir():
-        if (path / "SKILL.md").is_file():
-            return True
-    return False
+    return any((path / "SKILL.md").is_file() for path in skills_dir.iterdir())
 
 
 def has_mcp_servers(plugin_dir: Path) -> bool:
